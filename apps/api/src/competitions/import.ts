@@ -353,132 +353,138 @@ export async function importBatch(
   input: unknown,
   options: ImportOptions = {},
 ) {
-  const batch = validateInput(input);
   const client = await pool.connect();
-  const changes: {
-    entity: string;
-    id: string;
-    action: "insert" | "update";
-    removed?: string[];
-  }[] = [];
   try {
     await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-    await client.query("SELECT pg_advisory_xact_lock(22002)");
-    const old = await readCatalog(client);
-    const directory = new Map(old.colleges.map((c) => [c.id, c]));
-    for (const c of batch.colleges ?? []) directory.set(c.id, c);
-    const records = new Map(old.competitions.map((c) => [c.id, c]));
-    for (const patch of batch.competitions ?? [])
-      records.set(patch.id, mergeEdition(records.get(patch.id), patch));
-    const idsByEntity = new Map<string, string>();
-    for (const r of records.values()) {
-      validateEdition(
-        r,
-        new Set(directory.keys()),
-        options.production ?? false,
-      );
-      for (const [kind, entities] of [
-        ["stage", r.stages],
-        ["track", r.tracks],
-        ["notice", r.notices],
-      ] as const)
-        for (const entity of entities) {
-          const key = kind + ":" + entity.id;
-          if (idsByEntity.has(key)) throw new Error(key + " 重复或跨届 ID");
-          idsByEntity.set(key, r.id);
-        }
-    }
-    for (const c of batch.colleges ?? []) {
-      const prev = old.colleges.find((v) => v.id === c.id);
-      if (isDeepStrictEqual(prev, c)) continue;
-      // 学院目录变动亦会影响公开数据，禁止未经确认更改。
-      if (
-        prev &&
-        old.competitions.some((r) => r.publication === "published") &&
-        !options.confirmPublished &&
-        !options.preview
-      )
-        throw new Error("更改公开学院目录需要 --confirm-published");
-      changes.push({
-        entity: "college",
-        id: c.id,
-        action: prev ? "update" : "insert",
-      });
-      await client.query(
-        "INSERT INTO colleges(id,name,display_order) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,display_order=EXCLUDED.display_order",
-        [c.id, c.name, c.order],
-      );
-    }
-    for (const patch of batch.competitions ?? []) {
-      const r = records.get(patch.id)!;
-      const prev = old.competitions.find((c) => c.id === r.id);
-      if (isDeepStrictEqual(canonical(prev), canonical(r))) continue;
-      if (
-        prev?.publication === "published" &&
-        !options.confirmPublished &&
-        !options.preview
-      )
-        throw new Error(r.id + " 更改已发布记录需要 --confirm-published");
-      const removed: string[] = [];
-      for (const s of r.stages) {
-        const before = prev?.stages.find((v) => v.id === s.id);
-        for (const [label, previous, next] of [
-          ["hosts", before?.hosts ?? [], s.hosts],
-          ["eligibility", before?.scope.colleges ?? [], s.scope.colleges],
-          ["sources", before?.sourceIds ?? [], s.sourceIds],
-        ] as const)
-          for (const value of previous)
-            if (!next.includes(value))
-              removed.push(s.id + "." + label + ":" + value);
-      }
-      changes.push({
-        entity: "competition",
-        id: r.id,
-        action: prev ? "update" : "insert",
-        removed,
-      });
-      const { stages, tracks, notices, publication, ...summary } = r;
-      await client.query(
-        "INSERT INTO competitions(id,data,publication) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,publication=EXCLUDED.publication",
-        [r.id, summary, publication],
-      );
-      for (const n of notices)
-        await client.query(
-          "INSERT INTO notices(id,competition_id,data,published_at,checked_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,published_at=EXCLUDED.published_at,checked_at=EXCLUDED.checked_at",
-          [n.id, r.id, n, n.publishedAt, n.checkedAt],
-        );
-      for (const t of tracks)
-        await client.query(
-          "INSERT INTO tracks(id,competition_id,data) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
-          [t.id, r.id, t],
-        );
-      for (const s of stages) {
-        const { hosts, sourceIds, ...data } = s;
-        data.scope = { ...data.scope, colleges: [] };
-        await client.query(
-          "INSERT INTO stages(id,competition_id,data,display_order,registration_start,registration_end,registration_start_date,registration_end_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,display_order=EXCLUDED.display_order,registration_start=EXCLUDED.registration_start,registration_end=EXCLUDED.registration_end,registration_start_date=EXCLUDED.registration_start_date,registration_end_date=EXCLUDED.registration_end_date",
-          [
-            s.id,
-            r.id,
-            data,
-            s.order,
-            s.startsAt.precision === "instant" ? s.startsAt.value : null,
-            s.deadline.precision === "instant" ? s.deadline.value : null,
-            s.startsAt.precision === "date" ? s.startsAt.value : null,
-            s.deadline.precision === "date" ? s.deadline.value : null,
-          ],
-        );
-        await relations(client, "stage_hosts", s.id, hosts);
-        await relations(client, "stage_eligibility", s.id, s.scope.colleges);
-        await relations(client, "stage_sources", s.id, sourceIds, r.id);
-      }
-    }
+    const result = await applyImportBatch(client, input, options);
     await client.query(options.preview ? "ROLLBACK" : "COMMIT");
-    return { preview: options.preview ?? false, changes };
+    return result;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
   }
+}
+
+// 调用者持有事务；审核基线、正式写入与候选结果可在同一边界提交。
+export async function applyImportBatch(
+  client: PoolClient,
+  input: unknown,
+  options: ImportOptions = {},
+) {
+  const batch = validateInput(input);
+  const changes: {
+    entity: string;
+    id: string;
+    action: "insert" | "update";
+    removed?: string[];
+  }[] = [];
+  await client.query("SELECT pg_advisory_xact_lock(22002)");
+  const old = await readCatalog(client);
+  const directory = new Map(old.colleges.map((c) => [c.id, c]));
+  for (const c of batch.colleges ?? []) directory.set(c.id, c);
+  const records = new Map(old.competitions.map((c) => [c.id, c]));
+  for (const patch of batch.competitions ?? [])
+    records.set(patch.id, mergeEdition(records.get(patch.id), patch));
+  const idsByEntity = new Map<string, string>();
+  for (const r of records.values()) {
+    validateEdition(r, new Set(directory.keys()), options.production ?? false);
+    for (const [kind, entities] of [
+      ["stage", r.stages],
+      ["track", r.tracks],
+      ["notice", r.notices],
+    ] as const)
+      for (const entity of entities) {
+        const key = kind + ":" + entity.id;
+        if (idsByEntity.has(key)) throw new Error(key + " 重复或跨届 ID");
+        idsByEntity.set(key, r.id);
+      }
+  }
+  for (const c of batch.colleges ?? []) {
+    const prev = old.colleges.find((v) => v.id === c.id);
+    if (isDeepStrictEqual(prev, c)) continue;
+    // 学院目录变动亦会影响公开数据，禁止未经确认更改。
+    if (
+      prev &&
+      old.competitions.some((r) => r.publication === "published") &&
+      !options.confirmPublished &&
+      !options.preview
+    )
+      throw new Error("更改公开学院目录需要 --confirm-published");
+    changes.push({
+      entity: "college",
+      id: c.id,
+      action: prev ? "update" : "insert",
+    });
+    await client.query(
+      "INSERT INTO colleges(id,name,display_order) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,display_order=EXCLUDED.display_order",
+      [c.id, c.name, c.order],
+    );
+  }
+  for (const patch of batch.competitions ?? []) {
+    const r = records.get(patch.id)!;
+    const prev = old.competitions.find((c) => c.id === r.id);
+    if (isDeepStrictEqual(canonical(prev), canonical(r))) continue;
+    if (
+      prev?.publication === "published" &&
+      !options.confirmPublished &&
+      !options.preview
+    )
+      throw new Error(r.id + " 更改已发布记录需要 --confirm-published");
+    const removed: string[] = [];
+    for (const s of r.stages) {
+      const before = prev?.stages.find((v) => v.id === s.id);
+      for (const [label, previous, next] of [
+        ["hosts", before?.hosts ?? [], s.hosts],
+        ["eligibility", before?.scope.colleges ?? [], s.scope.colleges],
+        ["sources", before?.sourceIds ?? [], s.sourceIds],
+      ] as const)
+        for (const value of previous)
+          if (!next.includes(value))
+            removed.push(s.id + "." + label + ":" + value);
+    }
+    changes.push({
+      entity: "competition",
+      id: r.id,
+      action: prev ? "update" : "insert",
+      removed,
+    });
+    const { stages, tracks, notices, publication, ...summary } = r;
+    await client.query(
+      "INSERT INTO competitions(id,data,publication) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,publication=EXCLUDED.publication",
+      [r.id, summary, publication],
+    );
+    for (const n of notices)
+      await client.query(
+        "INSERT INTO notices(id,competition_id,data,published_at,checked_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,published_at=EXCLUDED.published_at,checked_at=EXCLUDED.checked_at",
+        [n.id, r.id, n, n.publishedAt, n.checkedAt],
+      );
+    for (const t of tracks)
+      await client.query(
+        "INSERT INTO tracks(id,competition_id,data) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
+        [t.id, r.id, t],
+      );
+    for (const s of stages) {
+      const { hosts, sourceIds, ...data } = s;
+      data.scope = { ...data.scope, colleges: [] };
+      await client.query(
+        "INSERT INTO stages(id,competition_id,data,display_order,registration_start,registration_end,registration_start_date,registration_end_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,display_order=EXCLUDED.display_order,registration_start=EXCLUDED.registration_start,registration_end=EXCLUDED.registration_end,registration_start_date=EXCLUDED.registration_start_date,registration_end_date=EXCLUDED.registration_end_date",
+        [
+          s.id,
+          r.id,
+          data,
+          s.order,
+          s.startsAt.precision === "instant" ? s.startsAt.value : null,
+          s.deadline.precision === "instant" ? s.deadline.value : null,
+          s.startsAt.precision === "date" ? s.startsAt.value : null,
+          s.deadline.precision === "date" ? s.deadline.value : null,
+        ],
+      );
+      await relations(client, "stage_hosts", s.id, hosts);
+      await relations(client, "stage_eligibility", s.id, s.scope.colleges);
+      await relations(client, "stage_sources", s.id, sourceIds, r.id);
+    }
+  }
+  return { preview: options.preview ?? false, changes };
 }

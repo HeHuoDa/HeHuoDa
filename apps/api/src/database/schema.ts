@@ -8,6 +8,8 @@ import {
   primaryKey,
   unique,
   foreignKey,
+  boolean,
+  customType,
 } from "drizzle-orm/pg-core";
 import type {
   EditionSummary,
@@ -104,3 +106,112 @@ export const sources = pgTable(
     }),
   ],
 );
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+export const ingestionSources = pgTable("ingestion_sources", {
+  id: text().primaryKey(),
+  data: jsonb().notNull(),
+  enabled: boolean().notNull().default(true),
+  settings: jsonb().notNull(),
+  lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
+});
+export const ingestionRuns = pgTable("ingestion_runs", {
+  id: text().primaryKey(),
+  sourceId: text("source_id")
+    .notNull()
+    .references(() => ingestionSources.id),
+  trigger: text().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  status: text().notNull(),
+  options: jsonb().notNull(),
+  cursor: jsonb().notNull(),
+  counts: jsonb().notNull(),
+  errors: jsonb().notNull(),
+});
+export const ingestionNotices = pgTable(
+  "ingestion_notices",
+  {
+    id: text().primaryKey(),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => ingestionSources.id),
+    url: text().notNull(),
+    finalUrl: text("final_url").notNull(),
+    latestVersion: text("latest_version"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    etag: text(),
+    lastModified: text("last_modified"),
+    health: text().notNull(),
+  },
+  (t) => [unique().on(t.sourceId, t.url)],
+);
+export const ingestionVersions = pgTable(
+  "ingestion_versions",
+  {
+    id: text().primaryKey(),
+    noticeId: text("notice_id")
+      .notNull()
+      .references(() => ingestionNotices.id),
+    previousVersion: text("previous_version"),
+    revision: integer().notNull(),
+    bodyHash: text("body_hash").notNull(),
+    adapterVersion: text("adapter_version").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    article: jsonb().notNull(),
+    extracted: jsonb().notNull(),
+    rawResponse: bytea("raw_response"),
+    responseHeaders: jsonb("response_headers").notNull(),
+  },
+  (t) => [unique().on(t.noticeId, t.revision)],
+);
+export const ingestionCandidates = pgTable("ingestion_candidates", {
+  id: text().primaryKey(),
+  noticeId: text("notice_id")
+    .notNull()
+    .unique()
+    .references(() => ingestionNotices.id),
+  sourceVersion: text("source_version")
+    .notNull()
+    .references(() => ingestionVersions.id),
+  revision: integer().notNull().default(1),
+  status: text().notNull(),
+  data: jsonb().notNull(),
+  reviewer: text(),
+  checkedAt: date("checked_at"),
+  reason: text(),
+  approvedFile: jsonb("approved_file"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const ingestionMappings = pgTable("ingestion_mappings", {
+  candidateId: text("candidate_id")
+    .primaryKey()
+    .references(() => ingestionCandidates.id),
+  competitionId: text("competition_id")
+    .notNull()
+    .references(() => competitions.id),
+  stageIds: jsonb("stage_ids").notNull(),
+  noticeIds: jsonb("notice_ids").notNull(),
+  trackIds: jsonb("track_ids").notNull(),
+});
+export const ingestionOperations = pgTable("ingestion_operations", {
+  id: text().primaryKey(),
+  candidateId: text("candidate_id")
+    .notNull()
+    .references(() => ingestionCandidates.id),
+  sourceVersion: text("source_version")
+    .notNull()
+    .references(() => ingestionVersions.id),
+  candidateRevision: integer("candidate_revision").notNull(),
+  kind: text().notNull(),
+  reviewer: text().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  inputHash: text("input_hash").notNull(),
+  result: jsonb().notNull(),
+});

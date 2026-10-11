@@ -9,6 +9,7 @@ import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/configure-app.js";
 
 async function writeOpenApi(): Promise<void> {
+  process.env.INGESTION_ENABLED = "false";
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
