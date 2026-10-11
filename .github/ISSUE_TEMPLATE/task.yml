@@ -1,8 +1,12 @@
 name: 开发任务
 description: 记录可实施、可验收的工程或业务任务
-title: "[Task] "
+title: "[Task][端别][层次] "
 labels: [enhancement, needs-triage]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        标题中的 `[端别]` 请替换为 `[管理端]`、`[用户端]` 或共享任务的 `[管理端/用户端]`；`[层次]` 请替换为 `[前端]` 或 `[后端]`。前后端开发分别建 Issue，确需整体交付的共享基础设施任务可用 `[前后端]`。完整约定见仓库 `docs/agents/issue-tracker.md`。
   - type: textarea
     id: context
     attributes:
