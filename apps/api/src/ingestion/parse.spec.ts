@@ -80,6 +80,47 @@ describe("候选领域解析", () => {
     );
     expect(unknown.fields.scope.kind).toBe("complex");
     expect(unknown.warnings).toContain("资格条款含未知学院名称");
+    const mixed = parseCandidate(
+      article(["由理学院、未知学院承办。", "参赛对象：理学院、未知学院学生。"]),
+      url,
+      directory,
+    );
+    expect(mixed.fields.scope).toMatchObject({ kind: "complex", colleges: [] });
+    expect(mixed.warnings).toContain("资格条款含未知学院名称");
+    expect(mixed.warnings).toContain("承办单位尚未匹配学院目录，待核对");
+    expect(
+      parseCandidate(
+        article(["参赛对象：全校学生（未知学院除外）。"]),
+        url,
+        directory,
+      ).warnings,
+    ).toContain("资格条款含未知学院名称");
+  });
+  it("显式赛道、人数和规则保存候选原文证据，不猜测各赛道归属", () => {
+    const parsed = parseCandidate(
+      article([
+        "赛道：算法挑战、应用开发。",
+        "组队要求：每组4人。",
+        "参赛规则：作品须独立完成。",
+      ]),
+      url,
+      directory,
+    );
+    expect(parsed.fields.tracks).toEqual([
+      { name: "算法挑战", mode: null, members: null, rules: null },
+      { name: "应用开发", mode: null, members: null, rules: null },
+    ]);
+    expect(parsed.fields.members).toBe("每组4人");
+    expect(parsed.fields.rules).toContain("参赛规则：作品须独立完成。");
+    expect(parsed.evidence).toContainEqual({
+      field: "tracks.0.name",
+      excerpt: "赛道：算法挑战、应用开发。",
+      paragraph: 0,
+      url,
+    });
+    expect(
+      parsed.warnings.some((warning) => warning.includes("赛道人数")),
+    ).toBe(true);
   });
   it.each([
     ["个人赛", "individual"],

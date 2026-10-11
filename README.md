@@ -245,7 +245,7 @@ pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
 
 先执行 `pnpm --filter @hehuoren/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
 
-首批来源为信息工程学院 `information-engineering`（`https://xxgc.sicau.edu.cn/xygl/tz.htm`）和生命科学学院 `life-sciences`（`https://smkx.sicau.edu.cn/xwjtz/tzgg.htm`）。仅访问这些来源的 HTTPS 同域页面，按 robots 规则采集，不下载附件、不解析报名者名单。发布单位不自动成为承办单位；参赛资格、年份冲突、多赛段时间归属及缺失时间都留待人工核对。正文、字段证据与来源版本长期保留，完整响应默认保留 30 天。
+首批来源为信息工程学院 `information-engineering`（`https://xxgc.sicau.edu.cn/xygl/tz.htm`）和生命科学学院 `life-sciences`（`https://smkx.sicau.edu.cn/xwjtz/tzgg.htm`）。仅访问这些来源的 HTTPS 同域页面，按 robots 规则采集，不下载附件、不解析报名者名单。发布单位不自动成为承办单位；参赛资格、年份冲突、多赛段时间归属及缺失时间都留待人工核对。显式赛道名称、人数要求与规则条款保存原文候选及证据；不能明确归属的赛道模式、人数和规则保持未知，由维护者在正式批次中补全。正文、字段证据与来源版本长期保留，完整响应默认保留 30 天。
 
 以下命令在根目录运行，读取 `apps/api/.env` 中的 `DATABASE_URL`：
 
@@ -279,7 +279,7 @@ pnpm --filter @hehuoren/api ingestion publish --candidate <候选ID> --baseline 
 
 拒绝使用 `reject --candidate <ID> --reviewer <维护者> --reason <原因>`；同一版本后续扫描仍保持拒绝，只有来源新版或显式 `reopen`（同样要求身份与原因）重新进入待审核。来源下线或撤回只标记需要核对，不删除或隐藏正式比赛。运行、操作查询保留审核身份、时间、版本和历史人工修改依据。
 
-API 内调度通过 `INGESTION_ENABLED=true` 启用，默认关闭，启用后每天北京时间 09:00、18:00 运行；测试与 OpenAPI 生成始终关闭采集。来源开关与预算可通过 `configure --source <来源> --enabled true|false` 设置，API 与 CLI 共享 PostgreSQL 会话锁，所有来源总并发为 1。默认每源间隔 2 秒、请求超时 15 秒、每次最多 10 页/80 次请求/10 分钟、每响应最多 2 MiB；429 尊重 Retry-After（最多 60 秒），暂时错误最多重试两次。允许配置更低请求/页数预算，超出边界直接拒绝。
+API 内调度默认每天北京时间 09:00、18:00 运行，`INGESTION_ENABLED=false` 可关闭；测试与 OpenAPI 生成始终关闭采集。来源开关与预算可通过 `configure --source <来源> --enabled true|false` 设置，API 与 CLI 共享 PostgreSQL 会话锁，所有来源总并发为 1。默认每源间隔 2 秒、请求超时 15 秒、每次最多 10 页/80 次请求/10 分钟、每响应最多 2 MiB；429 尊重 Retry-After（最多 60 秒），暂时错误最多重试两次。允许配置更低请求/页数预算，超出边界直接拒绝。
 
 | configure 参数 | 允许范围（整数）          | 默认值  |
 | -------------- | ------------------------- | ------- |

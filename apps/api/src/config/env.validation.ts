@@ -16,7 +16,7 @@ const environmentSchema = Joi.object({
     .default("development"),
   DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }),
   PORT: Joi.number().integer().min(1).max(65535).default(3001),
-  INGESTION_ENABLED: Joi.boolean().default(false),
+  INGESTION_ENABLED: Joi.boolean().default(true),
   INGESTION_RAW_DAYS: Joi.number().integer().min(1).max(365).default(30),
   INGESTION_DNS_OVERRIDES: Joi.string()
     .allow("")

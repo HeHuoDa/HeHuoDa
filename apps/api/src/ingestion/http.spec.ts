@@ -114,6 +114,10 @@ describe("有边界的 HTTP 采集", () => {
     expect(rules.delay).toBe(3000);
     expect(robotsAllowed("/info/private/a", rules.rules)).toBe(false);
     expect(robotsAllowed("/info/public/a", rules.rules)).toBe(true);
+    const unrelated = parseRobots(
+      "User-agent: *\nDisallow: /\nUser-agent: heh\nAllow: /",
+    );
+    expect(robotsAllowed("/info/a", unrelated.rules)).toBe(false);
   });
   it("重定向逐跳校验白名单、robots 路径与次数", async () => {
     const dangerous = fetcher([

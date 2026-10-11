@@ -81,6 +81,9 @@ export function parseCandidate(
     hosts: [],
     scope: { kind: "unknown", colleges: [], note: "参赛范围待核对" },
     mode: null,
+    tracks: [],
+    members: null,
+    rules: [],
     stageNames: [],
     startsAt: unknownTime(),
     deadline: unknownTime(),
@@ -96,6 +99,10 @@ export function parseCandidate(
     });
   const add = (field: string, excerpt: string, paragraph: number) =>
     evidence.push({ field, excerpt, paragraph, url });
+  const hasUnknownCollege = (text: string) => {
+    for (const college of directory) text = text.replaceAll(college.name, "");
+    return /[\p{Script=Han}A-Za-z]+学院/u.test(text.replace(/各学院/g, ""));
+  };
   article.paragraphs.forEach((paragraph, index) => {
     for (const college of directory) {
       if (
@@ -111,7 +118,8 @@ export function parseCandidate(
     }
     if (
       /承办/.test(paragraph) &&
-      !directory.some((c) => paragraph.includes(c.name))
+      (hasUnknownCollege(paragraph) ||
+        !directory.some((c) => paragraph.includes(c.name)))
     )
       warnings.push("承办单位尚未匹配学院目录，待核对");
     if (/主办(?:单位)?[：:]|由[^。；]*主办/.test(paragraph)) {
@@ -135,10 +143,12 @@ export function parseCandidate(
       const collegeIds = directory
         .filter((c) => scopeText.includes(c.name))
         .map((c) => c.id);
-      const scope =
-        /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
-          scopeText,
-        ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
+      const unknownCollege = hasUnknownCollege(scopeText);
+      const scope = unknownCollege
+        ? { kind: "complex" as const, colleges: [], note: scopeText }
+        : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
+              scopeText,
+            ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
           ? { kind: "all" as const, colleges: [], note: scopeText }
           : collegeIds.length && !/除|不含/.test(scopeText)
             ? {
@@ -159,9 +169,10 @@ export function parseCandidate(
         };
       } else fields.scope = scope;
       if (
-        /学院/.test(scopeText) &&
-        !collegeIds.length &&
-        !/全校|各学院/.test(scopeText)
+        unknownCollege ||
+        (/学院/.test(scopeText) &&
+          !collegeIds.length &&
+          !/全校|各学院/.test(scopeText))
       )
         warnings.push("资格条款含未知学院名称");
       add("scope", scopeText, index);
@@ -176,6 +187,38 @@ export function parseCandidate(
         individual && team ? "mixed" : individual ? "individual" : "team";
       fields.mode = fields.mode && fields.mode !== mode ? "mixed" : mode;
       add("mode", paragraph, index);
+    }
+    const members =
+      /(?:每组|每队|团队人数|队伍人数)[^。；]{0,30}(?:\d+|[一二三四五六七八九十]+)\s*人/.exec(
+        paragraph,
+      )?.[0];
+    if (members) {
+      if (fields.members && fields.members !== members) {
+        conflicts.push("人数要求存在多个表述，须逐赛道核对");
+        fields.members = null;
+      } else if (!conflicts.some((c) => c.startsWith("人数要求")))
+        fields.members = members;
+      add("members", paragraph, index);
+    }
+    if (
+      /参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求/.test(paragraph)
+    ) {
+      fields.rules.push(paragraph);
+      add("rules", paragraph, index);
+    }
+    for (const match of paragraph.matchAll(
+      /赛道(?:[一二三四五六七八九十\d]+)?[：:]\s*([^。；]+)/g,
+    )) {
+      const names = match[1]
+        .split(/[、，,]/)
+        .map((name) => name.trim())
+        .filter(Boolean);
+      for (const name of names) {
+        if (fields.tracks.some((track) => track.name === name)) continue;
+        const trackIndex = fields.tracks.length;
+        fields.tracks.push({ name, mode: null, members: null, rules: null });
+        add(`tracks.${trackIndex}.name`, paragraph, index);
+      }
     }
     for (const name of paragraph.match(/院赛|校赛|初赛|复赛|决赛/g) ?? [])
       if (!fields.stageNames.includes(name)) {
@@ -236,6 +279,11 @@ export function parseCandidate(
     if (fields[key].precision === "unknown") missing.push(key);
   if (article.attachments.length)
     warnings.push("附件仅记录链接，未解析或核实附件规则");
+  if (fields.tracks.length)
+    warnings.push("赛道人数、模式与规则归属须人工核对，候选不自动生成正式赛道");
+  else missing.push("tracks");
+  if (!fields.members) missing.push("members");
+  if (!fields.rules.length) missing.push("rules");
   return {
     fields,
     evidence,

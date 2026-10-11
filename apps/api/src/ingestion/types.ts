@@ -38,6 +38,14 @@ export interface CandidateFields {
     note: string;
   };
   mode: "individual" | "team" | "mixed" | null;
+  tracks: {
+    name: string;
+    mode: "individual" | "team" | "mixed" | null;
+    members: string | null;
+    rules: string | null;
+  }[];
+  members: string | null;
+  rules: string[];
   stageNames: string[];
   startsAt: TimeValue;
   deadline: TimeValue;

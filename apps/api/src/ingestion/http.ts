@@ -432,9 +432,7 @@ export function parseRobots(text: string) {
         group.delay = Math.max(group.delay, Number(value) * 1000 || 0);
     }
   }
-  const specific = groups.filter((g) =>
-    g.agents.some((a) => a !== "*" && "hehuoreningestion".includes(a)),
-  );
+  const specific = groups.filter((g) => g.agents.includes("hehuoreningestion"));
   const selected = specific.length
     ? specific
     : groups.filter((g) => g.agents.includes("*"));

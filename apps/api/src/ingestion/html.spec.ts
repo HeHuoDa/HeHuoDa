@@ -18,6 +18,7 @@ describe("来源适配器的离线页面", () => {
     expect(isCompetitionNotice("学院学术报告通知")).toBe(false);
     expect(isCompetitionNotice("程序设计竞赛报名通知")).toBe(true);
     expect(containsApplicantList("程序设计竞赛报名人员名单")).toBe(true);
+    expect(containsApplicantList("竞赛参赛名单")).toBe(true);
   });
   it("正文外的官方附件列表仍记录链接，不读取附件内容", () => {
     const html =

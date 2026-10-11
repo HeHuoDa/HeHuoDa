@@ -410,6 +410,24 @@ export async function setReviewState(
     throw new Error("须填写操作原因");
   return transaction(pool, async (client) => {
     const { candidate } = await lockCandidate(client, candidateId);
+    const repeated = (
+      await client.query(
+        "SELECT result FROM ingestion_operations WHERE candidate_id=$1 AND candidate_revision=$2 AND kind=$3 AND reviewer=$4 AND input_hash=$5",
+        [
+          candidateId,
+          candidate.revision,
+          state,
+          reviewer,
+          hash({ reason, revision: candidate.revision }),
+        ],
+      )
+    ).rows[0];
+    if (repeated) return repeated.result.summary;
+    if (
+      state === "reject" &&
+      !["pending", "approved"].includes(candidate.status)
+    )
+      throw new Error("只有待审核或已批准候选可以拒绝；已导入候选保留正式映射");
     if (state === "reopen" && candidate.status !== "rejected")
       throw new Error("只有拒绝候选需要重开");
     const revision = candidate.revision + 1;

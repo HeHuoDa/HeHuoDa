@@ -5,11 +5,11 @@ import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
-import { AppModule } from "../src/app.module.js";
 import { configureApp } from "../src/configure-app.js";
 
 async function writeOpenApi(): Promise<void> {
   process.env.INGESTION_ENABLED = "false";
+  const { AppModule } = await import("../src/app.module.js");
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),

@@ -212,6 +212,41 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         .fetched_at,
     ).toBeInstanceOf(Date);
   });
+  it("已导入候选不能被拒绝破坏发布状态，拒绝与重开重复执行不新增修订", async () => {
+    const stored = await persist();
+    const id = stored.candidateId!;
+    const rejected = await setReviewState(
+      db.pool,
+      id,
+      "reject",
+      "maintainer",
+      "待核对",
+    );
+    expect(
+      await setReviewState(db.pool, id, "reject", "maintainer", "待核对"),
+    ).toEqual(rejected);
+    const reopened = await setReviewState(
+      db.pool,
+      id,
+      "reopen",
+      "maintainer",
+      "已核对",
+    );
+    expect(
+      await setReviewState(db.pool, id, "reopen", "maintainer", "已核对"),
+    ).toEqual(reopened);
+    expect((await candidate()).revision).toBe(reopened.candidateRevision);
+    const file = correctedReview(await exportReview(db.pool, id));
+    await approveReview(db.pool, file, "maintainer");
+    await applyReview(db.pool, file, "maintainer");
+    await expect(
+      setReviewState(db.pool, id, "reject", "maintainer", "撤回"),
+    ).rejects.toThrow("已导入");
+    expect((await candidate()).status).toBe("imported");
+    const publication = await exportReview(db.pool, id);
+    await publishImported(db.pool, id, "maintainer", publication.baseline);
+    expect((await formal()).competitions[0].publication).toBe("published");
+  });
   it("并发审核和应用只提交一次正式记录与操作", async () => {
     const stored = await persist();
     const file = correctedReview(

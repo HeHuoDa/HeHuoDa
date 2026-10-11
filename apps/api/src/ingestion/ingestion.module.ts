@@ -28,7 +28,7 @@ export class IngestionScheduler implements BeforeApplicationShutdown {
   async scan() {
     if (
       this.config.get("NODE_ENV") === "test" ||
-      !this.config.get<boolean>("INGESTION_ENABLED", false)
+      !this.config.get<boolean>("INGESTION_ENABLED", true)
     )
       return;
     if (this.pending || this.stop.signal.aborted) return;

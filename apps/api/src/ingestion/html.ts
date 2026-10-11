@@ -21,7 +21,9 @@ const clean = (value: string) =>
 export const isCompetitionNotice = (title: string) =>
   /竞赛|比赛|大赛|挑战杯|创新创业|互联网\s*\+/.test(title);
 export const containsApplicantList = (title: string) =>
-  /报名(?:者|人员|学生)?(?:信息|名单|汇总)|参赛(?:者|人员)名单/.test(title);
+  /报名(?:者|人员|学生)?(?:信息|名单|汇总)|参赛(?:者|人员|学生)?名单/.test(
+    title,
+  );
 export function extractList(html: string, url: string, source: Source): Page {
   const $ = load(html);
   const rows =
