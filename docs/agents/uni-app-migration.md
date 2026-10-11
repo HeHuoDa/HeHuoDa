@@ -35,6 +35,8 @@
 
 ## 官方依据与验证原则
 
+Issue #23 的官网采集、HTML 适配、Node HTTPS、数据库锁、CLI 与定时任务均在服务端执行，迁移成本低，公开 DTO 不变。H5 继续核对 API 地址、代理/CORS、官网外链与复制回退；微信小程序需以 `uni.request` 配置 API 合法请求域名，以 `uni.setClipboardData` 提供复制，官方原文使用 `web-view` 前核实对应学院业务域名。不能在小程序客户端搬用 Node HTTPS 或浏览器 DOM 解析器，也不能把后端可访问官网当作 web-view 可打开的证据。采用服务端保留采集、客户端复用公开查询的方案；本任务未进行 uni-app 编译、微信基础库或真机验证，外链限制仍按已有官方依据及目标端实测处理。
+
 依据截至 2026-10-03 查阅的官方文档：[Vue3 平台差异](https://uniapp.dcloud.net.cn/tutorial/vue3-basics.html)、[image 图片与平台差异](https://uniapp.dcloud.io/component/image.html)、[SelectorQuery](https://uniapp.dcloud.net.cn/api/ui/nodes-info.html)。Vue 支持差异不等同于 Web DOM 可用；SelectorQuery 提供节点信息而非浏览器 focus 的等价替代。image 文档说明小程序 SVG 仅支持网络地址，因此本地 PNG 是迁移候选，不把本地 SVG 当作已验证的方案。
 
 [Lucide Vue 文档](https://lucide.dev/guide/vue)说明 Vue 组件渲染 SVG 与静态按需导入；这是 Web 渲染依据，不是微信小程序支持声明。CSS 和安全区域表中内容是适配调查项，须在项目最终选择的编译器、基础库与设备上验证后更新状态。
