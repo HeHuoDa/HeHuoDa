@@ -14,7 +14,7 @@
 
 ### Issue tracker
 
-本仓库的问题与方案记录在 GitHub Issues。参见 `docs/agents/issue-tracker.md`。
+本仓库的问题与方案记录在 GitHub Issues。标题须标明管理端／用户端及前端／后端，具体格式与跨端任务规则参见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
