@@ -90,7 +90,11 @@ export class IngestionRunner {
       ignored: 0,
       failed: 0,
     };
-    const errors: { url: string; message: string; kind?: "skipped" }[] = [];
+    const errors: {
+      url: string;
+      message: string;
+      kind?: "skipped" | "budget";
+    }[] = [];
     let cursor: Cursor = {
       pages: input.url ? [] : [source.listUrl],
       pending: input.url
@@ -173,7 +177,7 @@ export class IngestionRunner {
       if (!resumeId && !input.url && input.trigger === "scheduled") {
         const latest = (
           await lock.query(
-            "SELECT options FROM ingestion_runs WHERE source_id=$1 AND trigger='scheduled' ORDER BY started_at DESC,id DESC LIMIT 1",
+            "SELECT options FROM ingestion_runs WHERE source_id=$1 AND (trigger='scheduled' OR (trigger='resume' AND options->>'scheduledPhase' IS NOT NULL)) ORDER BY started_at DESC,id DESC LIMIT 1",
             [source.id],
           )
         ).rows[0];
@@ -184,7 +188,7 @@ export class IngestionRunner {
         if (!latest) scheduledFresh = true;
         resumeId = (
           await lock.query(
-            "SELECT r.id FROM ingestion_runs r WHERE r.source_id=$1 AND r.trigger='scheduled' AND r.status IN ('partial','interrupted','running','failed') AND r.options->>'url' IS NULL AND (jsonb_array_length(r.cursor->'pages')>0 OR jsonb_array_length(r.cursor->'pending')>0) AND NOT EXISTS (SELECT 1 FROM ingestion_runs child WHERE child.options->>'resume'=r.id::text) ORDER BY r.started_at,r.id LIMIT 1",
+            "SELECT r.id FROM ingestion_runs r WHERE r.source_id=$1 AND (r.trigger='scheduled' OR (r.trigger='resume' AND r.options->>'scheduledPhase' IS NOT NULL)) AND r.status IN ('partial','interrupted','running','failed') AND r.options->>'url' IS NULL AND (jsonb_array_length(r.cursor->'pages')>0 OR jsonb_array_length(r.cursor->'pending')>0) AND NOT EXISTS (SELECT 1 FROM ingestion_runs child WHERE child.options->>'resume'=r.id::text) ORDER BY r.started_at,r.id LIMIT 1",
             [source.id],
           )
         ).rows[0]?.id;
@@ -273,6 +277,7 @@ export class IngestionRunner {
           throw new Error("来源已停止");
       };
       let pages = 0;
+      let freshCount = 0;
       while (cursor.pages.length && pages < settings.maxPages) {
         if (
           pages > 0 &&
@@ -318,7 +323,8 @@ export class IngestionRunner {
           )
             if (existing.has(item.url)) cursor.pending.push(item);
             else fresh.push(item);
-        cursor.pending.unshift(...fresh);
+        cursor.pending.splice(freshCount, 0, ...fresh);
+        freshCount += fresh.length;
         cursor.seen.push(pageUrl);
         cursor.pages.shift();
         if (page.next) cursor.pages.push(page.next);
@@ -335,7 +341,10 @@ export class IngestionRunner {
           await checkStopped();
           if (
             !options.url &&
-            (!isCompetitionNotice(item.title) ||
+            ((item.publishedAt &&
+              (item.publishedAt < options.from ||
+                item.publishedAt > options.to)) ||
+              !isCompetitionNotice(item.title) ||
               containsApplicantList(item.title))
           ) {
             counts.ignored++;
@@ -405,8 +414,14 @@ export class IngestionRunner {
           cursor.pending.shift();
           await checkpoint();
         } catch (error) {
-          counts.failed++;
-          errors.push({ url: item.url, message: errorSummary(error) });
+          if (!(error instanceof BudgetExhaustedError)) counts.failed++;
+          errors.push({
+            url: item.url,
+            message: errorSummary(error),
+            ...(error instanceof BudgetExhaustedError
+              ? { kind: "budget" as const }
+              : {}),
+          });
           if (!input.preview && !(error instanceof BudgetExhaustedError))
             await this.pool.query(
               "UPDATE ingestion_notices SET health='needs-check' WHERE source_id=$1 AND url=$2",
@@ -456,8 +471,11 @@ export class IngestionRunner {
       errors.push({
         url: cursor.pages[0] ?? cursor.pending[0]?.url ?? source.listUrl,
         message: errorSummary(error),
+        ...(error instanceof BudgetExhaustedError
+          ? { kind: "budget" as const }
+          : {}),
       });
-      counts.failed++;
+      if (!(error instanceof BudgetExhaustedError)) counts.failed++;
       const status =
         signal?.aborted || /停止/.test(errorSummary(error))
           ? "interrupted"

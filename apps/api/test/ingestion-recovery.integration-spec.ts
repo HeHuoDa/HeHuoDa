@@ -102,6 +102,101 @@ describe("采集增量与自动恢复", () => {
     });
     expect(requests).not.toContain(url(200));
   });
+  it("手动续跑定时任务后仍由调度接续，但独立手动任务不会被接管", async () => {
+    await configureSource(db.pool, source, true, { requests: 3, maxPages: 1 });
+    const first = await scanner(
+      { [source.listUrl]: listing([100, 101, 102]) },
+      [],
+    ).scan({ sourceId: source.id, trigger: "scheduled" });
+    if (!("runId" in first) || !first.runId) throw new Error("缺少运行记录");
+    await configureSource(db.pool, source, true, { requests: 2 });
+    expect(
+      await scanner({}, []).scan({ sourceId: source.id, resume: first.runId }),
+    ).toMatchObject({ status: "partial", counts: { new: 1 } });
+    await due();
+    const requests: string[] = [];
+    expect(
+      await scanner({}, requests).scan({
+        sourceId: source.id,
+        trigger: "scheduled",
+      }),
+    ).toMatchObject({ status: "succeeded", counts: { new: 1 } });
+    expect(requests).toContain(url(102));
+    await scanner({ [source.listUrl]: listing([200]) }, []).scan({
+      sourceId: source.id,
+      from: "2026-10-01",
+      to: "2026-10-09",
+    });
+    await due();
+    const freshRequests: string[] = [];
+    await scanner({ [source.listUrl]: listing([300]) }, freshRequests).scan({
+      sourceId: source.id,
+      trigger: "scheduled",
+    });
+    expect(freshRequests).toContain(source.listUrl);
+    expect(freshRequests).not.toContain(url(200));
+  });
+  it("定时刷新窗口后滑出范围的待处理通知不消耗正文请求", async () => {
+    await configureSource(db.pool, source, true, { requests: 3, maxPages: 1 });
+    await scanner({ [source.listUrl]: listing([100, 101, 102]) }, []).scan({
+      sourceId: source.id,
+      trigger: "scheduled",
+      from: "2026-10-01",
+      to: "2026-10-09",
+    });
+    await configureSource(db.pool, source, true, { requests: 2 });
+    await due();
+    expect(
+      await scanner({}, []).scan({ sourceId: source.id, trigger: "scheduled" }),
+    ).toMatchObject({ status: "partial", counts: { new: 1 } });
+    await configureSource(db.pool, source, true, { requests: 80 });
+    await due();
+    const requests: string[] = [];
+    const result = await scanner(
+      {
+        [source.listUrl]: listing([103]).replace("2026-10-08", "2026-10-10"),
+        [url(103)]: informationArticle.replace("2026/10/08", "2026/10/10"),
+      },
+      requests,
+    ).scan({
+      sourceId: source.id,
+      trigger: "scheduled",
+      from: "2026-10-09",
+      to: "2026-10-11",
+    });
+    expect(result).toMatchObject({
+      status: "succeeded",
+      counts: { new: 1, ignored: 1 },
+    });
+    expect(requests).not.toContain(url(102));
+  });
+  it("后续页的新发现条目不能挤到首页新通知之前", async () => {
+    await configureSource(db.pool, source, true, { requests: 4 });
+    const next = `https://${source.host}/xygl/tz/1.htm`;
+    const requests: string[] = [];
+    expect(
+      await scanner(
+        { [source.listUrl]: listing([100], next), [next]: listing([101]) },
+        requests,
+      ).scan({ sourceId: source.id }),
+    ).toMatchObject({ counts: { new: 1 } });
+    expect(requests).toContain(url(100));
+    expect(requests).not.toContain(url(101));
+  });
+  it("跳过条目的标题含停止字样不会将合法采集误报为中断", async () => {
+    const bad = listing([200])
+      .replace(url(200), "https://jiaowu.sicau.edu.cn/info/1/200.htm")
+      .replace("2026年测试竞赛200", "关于停止某项竞赛的通知");
+    expect(
+      await scanner({ [source.listUrl]: listing([100]) + bad }, []).scan({
+        sourceId: source.id,
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { new: 1, ignored: 1 },
+      errors: [expect.objectContaining({ kind: "skipped" })],
+    });
+  });
   it("只有普通文章时翻页预算耗尽仍为partial，不推进失败页", async () => {
     await configureSource(db.pool, source, true, { requests: 2 });
     const next = `https://${source.host}/xygl/tz/1.htm`;
@@ -113,7 +208,12 @@ describe("采集增量与自动恢复", () => {
       await scanner({ [source.listUrl]: html }, []).scan({
         sourceId: source.id,
       }),
-    ).toMatchObject({ status: "partial", cursor: { pages: [next] } });
+    ).toMatchObject({
+      status: "partial",
+      cursor: { pages: [next] },
+      counts: { failed: 0 },
+      errors: [expect.objectContaining({ kind: "budget" })],
+    });
   });
   it("单次请求时robots后预算耗尽可恢复，不被当作官网失败", async () => {
     await configureSource(db.pool, source, true, { requests: 1 });
@@ -122,6 +222,8 @@ describe("采集增量与自动恢复", () => {
     ).toMatchObject({
       status: "partial",
       cursor: { pending: [expect.objectContaining({ url: url(100) })] },
+      counts: { failed: 0 },
+      errors: [expect.objectContaining({ kind: "budget" })],
     });
   });
   it("手动历史续跑保持原范围，已被续跑的父记录不重复执行", async () => {

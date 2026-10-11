@@ -545,7 +545,7 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     ]).scan({ sourceId: source.id });
     expect(partial).toMatchObject({
       status: "partial",
-      counts: { discovered: 1, failed: 1 },
+      counts: { discovered: 1, failed: 0 },
     });
     await db.pool.query(
       "UPDATE ingestion_sources SET settings=$2 WHERE id=$1",
