@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { readCatalog } from "../competitions/catalog.js";
 import {
   BoundedFetcher,
+  BudgetExhaustedError,
   defaultLimits,
   normalizeUrl,
   type HttpLimits,
@@ -89,7 +90,7 @@ export class IngestionRunner {
       ignored: 0,
       failed: 0,
     };
-    const errors: { url: string; message: string }[] = [];
+    const errors: { url: string; message: string; kind?: "skipped" }[] = [];
     let cursor: Cursor = {
       pages: input.url ? [] : [source.listUrl],
       pending: input.url
@@ -103,7 +104,11 @@ export class IngestionRunner {
         : [],
       seen: [],
     };
-    let options = { ...input, ...range };
+    let options: ScanOptions & {
+      from: string;
+      to: string;
+      scheduledPhase?: "fresh" | "resume";
+    } = { ...input, ...range };
     const previews: unknown[] = [];
     const checkpoint = async () => {
       if (runId)
@@ -163,32 +168,74 @@ export class IngestionRunner {
       )
         return { status: "not-due", source: source.id };
       const fetcher = this.fetcherFactory(source, settings);
-      if (input.resume) {
+      let resumeId = input.resume;
+      let scheduledFresh = true;
+      if (!resumeId && !input.url && input.trigger === "scheduled") {
+        const latest = (
+          await lock.query(
+            "SELECT options FROM ingestion_runs WHERE source_id=$1 AND trigger='scheduled' ORDER BY started_at DESC,id DESC LIMIT 1",
+            [source.id],
+          )
+        ).rows[0];
+        // 一轮新扫描、一轮恢复，避免小页数预算下首页永远挡住后续页。
+        scheduledFresh =
+          latest?.options.scheduledPhase === "resume" ||
+          (!latest?.options.scheduledPhase && !!latest?.options.resume);
+        if (!latest) scheduledFresh = true;
+        resumeId = (
+          await lock.query(
+            "SELECT r.id FROM ingestion_runs r WHERE r.source_id=$1 AND r.trigger='scheduled' AND r.status IN ('partial','interrupted','running','failed') AND r.options->>'url' IS NULL AND (jsonb_array_length(r.cursor->'pages')>0 OR jsonb_array_length(r.cursor->'pending')>0) AND NOT EXISTS (SELECT 1 FROM ingestion_runs child WHERE child.options->>'resume'=r.id::text) ORDER BY r.started_at,r.id LIMIT 1",
+            [source.id],
+          )
+        ).rows[0]?.id;
+      }
+      if (resumeId) {
         const previous = (
           await lock.query(
-            "SELECT * FROM ingestion_runs WHERE id=$1 AND source_id=$2",
-            [input.resume, source.id],
+            "SELECT r.* FROM ingestion_runs r WHERE r.id=$1 AND r.source_id=$2 AND NOT EXISTS (SELECT 1 FROM ingestion_runs child WHERE child.options->>'resume'=r.id::text)",
+            [resumeId, source.id],
           )
         ).rows[0];
         if (!previous || previous.status === "succeeded")
-          throw new Error("续跑记录不存在、来源不符或已完成");
+          throw new Error("续跑记录不存在、来源不符、已完成或已被续跑");
         options = {
           ...previous.options,
           preview: input.preview,
-          resume: input.resume,
-          trigger: "resume",
+          resume: resumeId,
+          trigger: input.trigger === "scheduled" ? "scheduled" : "resume",
         };
         cursor = previous.cursor;
+        if (input.trigger === "scheduled") {
+          options.scheduledPhase = scheduledFresh ? "fresh" : "resume";
+          if (scheduledFresh) {
+            // 新扫描继承同一待处理链，不另造重复积压；日期窗口按本轮配置刷新。
+            options = {
+              ...input,
+              ...range,
+              resume: resumeId,
+              scheduledPhase: "fresh",
+            };
+            cursor = {
+              ...cursor,
+              pages: [
+                source.listUrl,
+                ...cursor.pages.filter((page) => page !== source.listUrl),
+              ],
+              seen: cursor.seen.filter((page) => page !== source.listUrl),
+            };
+          }
+        }
       } else if (!input.url) {
         const known = await lock.query(
-          "SELECT n.url,v.article FROM ingestion_notices n JOIN ingestion_versions v ON v.id=n.latest_version WHERE n.source_id=$1 AND (v.article->>'publishedAt' IS NULL OR v.article->>'publishedAt' >= $2) ORDER BY n.fetched_at LIMIT 150",
-          [source.id, range.from],
+          "SELECT n.url,v.article FROM ingestion_notices n JOIN ingestion_versions v ON v.id=n.latest_version WHERE n.source_id=$1 AND (v.article->>'publishedAt' IS NULL OR (v.article->>'publishedAt' >= $2 AND v.article->>'publishedAt' <= $3)) ORDER BY n.fetched_at,n.id LIMIT 150",
+          [source.id, range.from, range.to],
         );
         cursor.pending = known.rows.map((row) => ({
           url: row.url,
           title: row.article.title,
           publishedAt: row.article.publishedAt,
         }));
+        if (input.trigger === "scheduled") options.scheduledPhase = "fresh";
       }
       if (!input.preview) {
         await this.pool.query(
@@ -227,6 +274,16 @@ export class IngestionRunner {
       };
       let pages = 0;
       while (cursor.pages.length && pages < settings.maxPages) {
+        if (
+          pages > 0 &&
+          fetcher.remainingRequests <= 1 &&
+          cursor.pending.some(
+            (item) =>
+              isCompetitionNotice(item.title) &&
+              !containsApplicantList(item.title),
+          )
+        )
+          break;
         await checkStopped();
         const pageUrl = cursor.pages[0];
         if (cursor.seen.includes(pageUrl)) throw new Error("分页出现循环");
@@ -234,7 +291,24 @@ export class IngestionRunner {
         if (response.status !== 200)
           throw new Error("列表 HTTP " + response.status);
         const page = extractList(response.html, response.url, source);
+        for (const skipped of page.skipped ?? []) {
+          counts.ignored++;
+          errors.push({
+            url: pageUrl,
+            message: `跳过列表条目 ${skipped.title.slice(0, 100)}：${skipped.reason}`,
+            kind: "skipped",
+          });
+        }
         counts.discovered += page.items.length;
+        const existing = new Set(
+          (
+            await lock.query(
+              "SELECT url FROM ingestion_notices WHERE source_id=$1 AND url=ANY($2::text[])",
+              [source.id, page.items.map((item) => item.url)],
+            )
+          ).rows.map((row) => row.url),
+        );
+        const fresh: ListItem[] = [];
         for (const item of page.items)
           if (
             (!item.publishedAt ||
@@ -242,7 +316,9 @@ export class IngestionRunner {
                 item.publishedAt <= options.to)) &&
             !cursor.pending.some((p) => p.url === item.url)
           )
-            cursor.pending.push(item);
+            if (existing.has(item.url)) cursor.pending.push(item);
+            else fresh.push(item);
+        cursor.pending.unshift(...fresh);
         cursor.seen.push(pageUrl);
         cursor.pages.shift();
         if (page.next) cursor.pages.push(page.next);
@@ -331,7 +407,7 @@ export class IngestionRunner {
         } catch (error) {
           counts.failed++;
           errors.push({ url: item.url, message: errorSummary(error) });
-          if (!input.preview)
+          if (!input.preview && !(error instanceof BudgetExhaustedError))
             await this.pool.query(
               "UPDATE ingestion_notices SET health='needs-check' WHERE source_id=$1 AND url=$2",
               [source.id, item.url],
@@ -348,7 +424,8 @@ export class IngestionRunner {
         }
       }
       const status =
-        signal?.aborted || errors.some((e) => /停止/.test(e.message))
+        signal?.aborted ||
+        errors.some((e) => e.kind !== "skipped" && /停止/.test(e.message))
           ? "interrupted"
           : cursor.pending.length || cursor.pages.length
             ? "partial"
@@ -384,7 +461,9 @@ export class IngestionRunner {
       const status =
         signal?.aborted || /停止/.test(errorSummary(error))
           ? "interrupted"
-          : "failed";
+          : error instanceof BudgetExhaustedError
+            ? "partial"
+            : "failed";
       if (runId)
         await this.pool.query(
           "UPDATE ingestion_runs SET status=$5,finished_at=now(),cursor=$2,counts=$3,errors=$4 WHERE id=$1",

@@ -14,6 +14,23 @@ import {
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
+  it("混合列表跳过站外转载并保留合法通知及跳过原因", () => {
+    const external = informationList.replace(
+      "../info/1043/100.htm",
+      "https://jiaowu.sicau.edu.cn/info/1/123.htm",
+    );
+    const page = extractList(
+      informationList + external,
+      sources[0].listUrl,
+      sources[0],
+    );
+    expect(page.items).toHaveLength(1);
+    expect(page).toMatchObject({
+      skipped: [
+        expect.objectContaining({ reason: expect.stringContaining("白名单") }),
+      ],
+    });
+  });
   it("普通学术新闻不进入竞赛候选，报名者信息不采集", () => {
     expect(isCompetitionNotice("学院学术报告通知")).toBe(false);
     expect(isCompetitionNotice("程序设计竞赛报名通知")).toBe(true);

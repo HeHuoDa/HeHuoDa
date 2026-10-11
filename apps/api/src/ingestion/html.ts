@@ -37,7 +37,8 @@ export function extractList(html: string, url: string, source: Source): Page {
         );
   if (!rows.length)
     throw new Error("列表选择器失效或空列表，不能视为零条新通知");
-  const items = rows.toArray().map((element) => {
+  const skipped: { title: string; reason: string }[] = [];
+  const items = rows.toArray().flatMap((element) => {
     const row = $(element);
     const anchor =
       source.id === "information-engineering"
@@ -50,24 +51,35 @@ export function extractList(html: string, url: string, source: Source): Page {
             ? anchor.find("h3").text() || anchor.text()
             : anchor.text()),
       );
-    if (!href || !title) throw new Error("通知标题或 URL 缺失");
-    const noticeUrl = normalizeUrl(new URL(href, url).toString(), source);
-    if (!/^\/info\/\d+\/\d+\.htm$/.test(new URL(noticeUrl).pathname))
-      throw new Error("通知链接结构变化，需核对适配器");
-    return {
-      url: noticeUrl,
-      title,
-      publishedAt: publishedDate(
-        row
-          .find(
-            source.id === "information-engineering"
-              ? ".spanTime"
-              : ".news-time",
-          )
-          .text(),
-      ),
-    };
+    try {
+      if (!href || !title) throw new Error("通知标题或 URL 缺失");
+      const noticeUrl = normalizeUrl(new URL(href, url).toString(), source);
+      if (!/^\/info\/\d+\/\d+\.htm$/.test(new URL(noticeUrl).pathname))
+        throw new Error("通知链接结构变化，需核对适配器");
+      return [
+        {
+          url: noticeUrl,
+          title,
+          publishedAt: publishedDate(
+            row
+              .find(
+                source.id === "information-engineering"
+                  ? ".spanTime"
+                  : ".news-time",
+              )
+              .text(),
+          ),
+        },
+      ];
+    } catch (error) {
+      skipped.push({
+        title,
+        reason: error instanceof Error ? error.message : "通知条目无效",
+      });
+      return [];
+    }
   });
+  if (!items.length) throw new Error("全部通知条目无效：" + skipped[0]?.reason);
   const pagination = $(".p_pages");
   if (!pagination.length) throw new Error("分页选择器失效，需核对适配器");
   const nextAnchor = pagination
@@ -76,6 +88,7 @@ export function extractList(html: string, url: string, source: Source): Page {
     .first();
   const next = nextAnchor.attr("href");
   return {
+    ...(skipped.length ? { skipped } : {}),
     items: [...new Map(items.map((item) => [item.url, item])).values()],
     next: next
       ? safeUrl(new URL(next, url).toString(), source).toString()

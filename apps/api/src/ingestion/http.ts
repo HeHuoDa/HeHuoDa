@@ -31,6 +31,7 @@ export const defaultLimits: HttpLimits = {
 };
 export const userAgent =
   "HeHuoRenIngestion/1.0 (public academic notices; manual review)";
+export class BudgetExhaustedError extends Error {}
 export function publicAddress(address: string): boolean {
   if (isIP(address) === 4) {
     const [a, b, c] = address.split(".").map(Number);
@@ -211,6 +212,9 @@ export class BoundedFetcher {
     rules: { allow: boolean; pattern: string }[];
     delay: number;
   } | null = null;
+  get remainingRequests() {
+    return this.limits.requests - this.used;
+  }
   constructor(
     readonly source: Source,
     readonly limits: HttpLimits = defaultLimits,
@@ -246,7 +250,7 @@ export class BoundedFetcher {
   private async pause(ms: number) {
     if (this.limits.signal?.aborted) throw new Error("采集已停止");
     if (this.now() - this.started + ms >= this.limits.durationMs)
-      throw new Error("运行时长预算耗尽");
+      throw new BudgetExhaustedError("运行时长预算耗尽");
     if (ms > 0) {
       const signal = this.limits.signal;
       if (!signal) await this.sleep(ms);
@@ -280,7 +284,8 @@ export class BoundedFetcher {
         !robotsAllowed(url.pathname + url.search, this.robots.rules)
       )
         throw new Error("robots.txt 禁止重定向路径");
-      if (this.used >= this.limits.requests) throw new Error("请求预算耗尽");
+      if (this.used >= this.limits.requests)
+        throw new BudgetExhaustedError("请求预算耗尽");
       await this.pause(
         this.lastRequest === null
           ? 0

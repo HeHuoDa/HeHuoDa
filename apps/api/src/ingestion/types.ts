@@ -11,6 +11,7 @@ export interface ListItem {
 export interface Page {
   items: ListItem[];
   next: string | null;
+  skipped?: { title: string; reason: string }[];
 }
 export interface Article {
   title: string;
