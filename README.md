@@ -237,9 +237,73 @@ pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
 
 发布须在输入对应届次写 publication: "published"；隐藏写 "hidden"。改动已发布内容（含关系和公开学院目录）执行时必须附 --confirm-published，预览无需确认。草稿变为发布亦须通过来源、赛道与时间校验。生产 NODE_ENV=production 拒绝 demo；导入失败整批回滚，不输出数据库凭据。--validate 不证明来源真实，请先人工核对。开发测试容器分别使用持久卷和独立临时数据，禁止将本地示例凭据用于生产。
 
-迁移为 apps/api/migrations/0001_competitions.sql，带事务和迁移记录，重复运行不重复建表。现有仓库尚无业务数据库，首次应用属于新增模型；回退应用时保留比赛数据，不提供自动删库回退。正式接口契约从 DTO/Swagger 生成，无需活数据库或开放端口。后台、自动采集、收藏、真实招募业务接口及认证仍待接入；比赛详情已可进入关联演示招募。
+迁移由 apps/api/migrations/ 中的 SQL 与迁移记录管理，重复运行不重复建表；回退应用时保留比赛数据，不提供自动删库回退。正式接口契约从 DTO/Swagger 生成，无需活数据库或开放端口。Issue #23 已接入后端官方通知采集与维护者审核 CLI，使用方式见下节；管理界面、收藏、真实招募业务接口及认证仍待接入。比赛详情已可进入关联演示招募。
 
 首次草稿导入后公开列表为空，需按上方命令审阅并执行 publish-reviewed.json 显式发布清单。重新导入原始草稿文件会把已发布记录改回草稿，执行须 --confirm-published；通常对已发布内容使用按 ID 的部分更新文件，而不是重跑初始草稿清单。
+
+## 官方通知采集与人工审核（Issue #23）
+
+先执行 `pnpm --filter @hehuoren/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
+
+增量恢复修复新增 `0003_ingestion_recovery_indexes.sql`，通过同一迁移命令应用；只增加续跑关系与定时运行查询索引，不修改正式比赛数据。已有数据库也须执行迁移。
+
+新扫描先处理列表发现的未知通知，再复查已有通知；已知通知复查遵守日期上下界。小请求预算时给已发现的竞赛正文保留请求机会，剩余页和通知保存在游标中。请求或时长预算耗尽显示 `partial`，诊断标为 `kind: budget`，不增加失败通知数或标记官网失联；预算不足以完成 robots、列表和正文时仍需提高预算或续跑，不承诺每轮完成。
+
+定时任务在新扫描与恢复轮之间交替：恢复轮从最早未完成的定时运行游标继续，下一轮刷新首页并继承同一待处理链，避免反复从第一页开始或重复堆积旧通知。存在积压时首页新扫描可能每两个定时触发执行一次；没有积压时每次正常扫描。自动新扫描使用本轮日期窗口，已知日期滑出范围的待处理项在请求正文前忽略；恢复轮及手动续跑保留原运行范围。手动续跑定时任务后，自动调度继续追踪最新子游标；独立手动历史任务不会被接管。已被续跑的父记录不能再次续跑，应使用最新子运行的 ID；恢复依据 PostgreSQL 记录，重启不丢失该关系。
+
+列表中的站外转载、缺字段或不支持路径逐条跳过，运行诊断记录 `kind: skipped` 和原因，合法条目仍可采集；站外页面不会发起请求。全部条目异常、分页失效、拦截页仍报告失败，不能当成没有新通知。来源停用、锁占用及拒绝访问继续沿用既有停止规则。
+
+首批来源为信息工程学院 `information-engineering`（`https://xxgc.sicau.edu.cn/xygl/tz.htm`）和生命科学学院 `life-sciences`（`https://smkx.sicau.edu.cn/xwjtz/tzgg.htm`）。仅访问这些来源的 HTTPS 同域页面，按 robots 规则采集，不下载附件、不解析报名者名单。发布单位不自动成为承办单位；参赛资格、年份冲突、多赛段时间归属及缺失时间都留待人工核对。显式赛道名称、人数要求与规则条款保存原文候选及证据；不能明确归属的赛道模式、人数和规则保持未知，由维护者在正式批次中补全。正文、字段证据与来源版本长期保留，完整响应默认保留 30 天。
+
+以下命令在根目录运行，读取 `apps/api/.env` 中的 `DATABASE_URL`：
+
+```bash
+pnpm --filter @hehuoren/api ingestion sources
+pnpm --filter @hehuoren/api ingestion scan --source information-engineering --preview
+pnpm --filter @hehuoren/api ingestion scan --source information-engineering --from 2026-07-14 --to 2026-10-11
+pnpm --filter @hehuoren/api ingestion scan --source life-sciences --url https://smkx.sicau.edu.cn/info/1061/28771.htm
+pnpm --filter @hehuoren/api ingestion runs
+pnpm --filter @hehuoren/api ingestion candidates
+pnpm --filter @hehuoren/api ingestion operations
+```
+
+不指定来源时顺序扫描两站；默认北京时间最近 90 天，指定区间最多 366 天。单 URL 重跑和 `scan --source <来源> --resume <运行ID>` 必须指定来源；续跑沿用原范围和待处理游标。置顶、未知日期或乱序列表不触发提前截断，已知近期通知使用 ETag/Last-Modified 复查；适配器版本变化会重新解析。相同 URL 和正文版本不重复生成候选；新版重新进入待审核，转载只提示关联、不自动合并。结构异常、空列表、登录/验证码、域名或地址异常停止相关来源，正式比赛保持原状。
+
+审核文件导出到被忽略的 `.data/`。已有比赛须显式指定 `--target <比赛ID>`，否则生成新草稿的稳定 ID。审核文件的 `source`、`article`、`previousArticle`、`candidate`、`formalBefore` 和版本基线用于防止过期或篡改；人工只修正 `batch`，填写 `checkedAt`（真实核对日期）和 `resolution`（修正理由、未知字段及冲突处理）。完整字段结构沿用上一节人工导入文件，不能用猜测填补缺失资格或时间。首次导出的新比赛需要补齐届次、正式来源通知和赛段，默认不具备发布条件。
+
+```bash
+pnpm --filter @hehuoren/api ingestion export --candidate <候选ID> --out ../../.data/review.json
+# 核对原文并修改审核文件后执行；<维护者> 为审核身份标识。
+pnpm --filter @hehuoren/api ingestion approve --file ../../.data/review.json --reviewer <维护者>
+pnpm --filter @hehuoren/api ingestion apply --file ../../.data/review.json --reviewer <维护者> --preview
+pnpm --filter @hehuoren/api ingestion apply --file ../../.data/review.json --reviewer <维护者>
+# 重新导出以取得导入后的 baseline；发布只改变正式记录的发布状态。
+pnpm --filter @hehuoren/api ingestion export --candidate <候选ID> --out ../../.data/after-import.json
+pnpm --filter @hehuoren/api ingestion publish --candidate <候选ID> --baseline <新导出文件的baseline> --reviewer <维护者> --preview
+pnpm --filter @hehuoren/api ingestion publish --candidate <候选ID> --baseline <同一baseline> --reviewer <维护者>
+```
+
+`scan --preview` 不写入运行、候选或正式数据；`apply --preview` 回滚正式变更并记录预览审计，`publish --preview` 回滚整个事务。审核文件绑定来源版本、候选修订及正式比赛全部关系摘要；批准和导入在同一事务内重新校验基线，过期文件、新 ID 已被占用及并发修改都会拒绝。已发布记录出现新版候选时继续公开旧数据；更新它必须先执行同一文件的 `apply --preview`，再 `apply --confirm-published`。不得通过候选导入把已发布记录退回草稿。重复执行相同审核文件及操作返回已有结果，不重复覆盖正式数据。
+
+拒绝使用 `reject --candidate <ID> --reviewer <维护者> --reason <原因>`；同一版本后续扫描仍保持拒绝，只有来源新版或显式 `reopen`（同样要求身份与原因）重新进入待审核。来源下线或撤回只标记需要核对，不删除或隐藏正式比赛。运行、操作查询保留审核身份、时间、版本和历史人工修改依据。
+
+API 内调度默认每天北京时间 09:00、18:00 运行，`INGESTION_ENABLED=false` 可关闭；测试与 OpenAPI 生成始终关闭采集。来源开关与预算可通过 `configure --source <来源> --enabled true|false` 设置，API 与 CLI 共享 PostgreSQL 会话锁，所有来源总并发为 1。默认每源间隔 2 秒、请求超时 15 秒、每次最多 10 页/80 次请求/10 分钟、每响应最多 2 MiB；429 尊重 Retry-After（最多 60 秒），暂时错误最多重试两次。允许配置更低请求/页数预算，超出边界直接拒绝。
+
+| configure 参数 | 允许范围（整数）          | 默认值  |
+| -------------- | ------------------------- | ------- |
+| `--pages`      | 1–10                      | 10      |
+| `--requests`   | 1–200                     | 80      |
+| `--interval`   | 2000–60000 毫秒           | 2000    |
+| `--timeout`    | 1000–30000 毫秒           | 15000   |
+| `--duration`   | 1000–900000 毫秒          | 600000  |
+| `--bytes`      | 1024–5242880 字节         | 2097152 |
+| `--frequency`  | 1–1440 分钟（仅约束调度） | 60      |
+
+关闭来源会在下一请求前停止；CLI 的 Ctrl+C/SIGTERM 和 API 正常退出会中止正在进行的请求并保存游标。进程意外退出后，`runs` 或下次同源扫描会在确认数据库锁已释放后恢复中断状态。预算用尽、部分失败或中断返回非零退出码，查看运行记录后续跑；不能把前 10 页视为全站已遍历。独立执行 `cleanup --days 30` 清理过期完整响应；调度启用时也会清理，`INGESTION_RAW_DAYS` 可配置 1–365 天。清理不删除正文、证据、审核或映射。
+
+请求逐跳检查域名及实际公网地址，拒绝内网、metadata、保留地址、跨域跳转和超大响应，并保持 TLS 证书验证。本机代理若将官网解析为 `198.18.*` FakeIP，会被拒绝。此时可在环境变量 `INGESTION_DNS_OVERRIDES` 配置 JSON，例如 `{"xxgc.sicau.edu.cn":["经独立核实的当前公网IP"]}`；仅允许上述两个来源域名及公网地址，请求仍以原域名校验证书并固定连接地址。不要直接复制历史 DNS 地址；官网 DNS 变化后重新核实，或修复本机 DNS 后移除此配置。
+
+源码测试使用最小 HTML 片段、模拟网络和隔离 PostgreSQL schema，CI 不依赖官网可用性。真实网站与完整通知链路验收单独执行，完整 HTML、人工修正文件和结果仅本地保留。新增迁移只增加采集表，不改公开 API 契约；回退时先关闭调度，再回退应用，保留采集与比赛数据，重启新版可继续处理。管理界面、登录站点、PDF/OCR、AI 解析、全院采集与生产部署另行安排。服务端采集不会迁移到客户端；H5 与微信小程序的来源外链、请求域名和复制适配见[迁移待办](docs/agents/uni-app-migration.md)。
 
 ## 找队友会话内演示（Issue #13）
 

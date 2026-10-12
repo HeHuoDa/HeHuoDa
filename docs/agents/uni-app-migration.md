@@ -1,5 +1,9 @@
 # uni-app 迁移提醒与集中待办
 
+## 官方通知增量恢复修复
+
+预算分配、日期窗口、定时续跑链与列表条目诊断均在后端执行，本次不新增用户端 API 或浏览器能力。H5/微信小程序继续读取已发布比赛；官网外链仍按既有跳转、web-view 与复制方案独立适配，服务端修复不证明小程序兼容。迁移成本不变，两个目标端尚未实测。
+
 ## 时间与目标
 
 项目完成后统一迁移到普通 uni-app，目标为 H5 和微信小程序。当前继续交付 Vue Web；此文登记现有适配点，不要求本次改造，也不表示相关能力全部不受支持。尚未建立 uni-app 工程或进行小程序运行验收。
@@ -34,6 +38,8 @@
 | api/http.ts 的 Axios 浏览器请求                                                                               | 同源代理与超时当前可用                       | 改为 uni.request 或请求适配器，处理域名白名单、错误与响应映射                                                | 中   |
 
 ## 官方依据与验证原则
+
+Issue #23 的官网采集、HTML 适配、Node HTTPS、数据库锁、CLI 与定时任务均在服务端执行，迁移成本低，公开 DTO 不变。H5 继续核对 API 地址、代理/CORS、官网外链与复制回退；微信小程序需以 `uni.request` 配置 API 合法请求域名，以 `uni.setClipboardData` 提供复制，官方原文使用 `web-view` 前核实对应学院业务域名。不能在小程序客户端搬用 Node HTTPS 或浏览器 DOM 解析器，也不能把后端可访问官网当作 web-view 可打开的证据。采用服务端保留采集、客户端复用公开查询的方案；本任务未进行 uni-app 编译、微信基础库或真机验证，外链限制仍按已有官方依据及目标端实测处理。
 
 依据截至 2026-10-03 查阅的官方文档：[Vue3 平台差异](https://uniapp.dcloud.net.cn/tutorial/vue3-basics.html)、[image 图片与平台差异](https://uniapp.dcloud.io/component/image.html)、[SelectorQuery](https://uniapp.dcloud.net.cn/api/ui/nodes-info.html)。Vue 支持差异不等同于 Web DOM 可用；SelectorQuery 提供节点信息而非浏览器 focus 的等价替代。image 文档说明小程序 SVG 仅支持网络地址，因此本地 PNG 是迁移候选，不把本地 SVG 当作已验证的方案。
 

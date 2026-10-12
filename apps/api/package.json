@@ -15,7 +15,8 @@
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand",
     "openapi:write": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/write-openapi.js",
     "db:migrate": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/migrate.js",
-    "data:import": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/import.js"
+    "data:import": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/import.js",
+    "ingestion": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/ingestion.js"
   },
   "dependencies": {
     "@fastify/static": "10.1.5",
@@ -23,7 +24,9 @@
     "@nestjs/config": "12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-fastify": "12.1.2",
+    "@nestjs/schedule": "12.0.2",
     "@nestjs/swagger": "12.0.2",
+    "cheerio": "1.2.0",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "dotenv": "18.0.5",

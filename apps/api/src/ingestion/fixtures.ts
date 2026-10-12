@@ -1,0 +1,6 @@
+// 手工缩减的页面结构片段，供离线测试；不保存完整官网响应。
+export const informationList = `<div id="line_u5_0"><h1 class="content-page-title"><a rel="bookmark" href="../info/1043/100.htm">2026年测试竞赛报名通知</a></h1><span class="spanTime">10-08</span></div><div class="p_pages"><a href="tz/3.htm">下页</a></div>`;
+export const lifeList = `<ul class="sub-list02 sub-list02T"><li><a class="gp-m15" href="../info/1061/100.htm"><h3>普通学术新闻</h3><span class="news-time">2026-10-08</span></a></li></ul><div class="p_pages"><a href="tzgg/92.htm">下页</a></div>`;
+export const noticeBody = `<p>主办：四川农业大学。由理学院承办。</p><p>参赛对象：全校学生。</p><p>本项竞赛为团队赛，分为初赛。</p><p>报名截止：2026年10月20日24:00。</p><p>材料提交截止：2026年10月22日。</p><p>比赛时间：2026年10月25日。</p><p><a href="/system/_content/download.jsp?urltype=news.DownloadAttachUrl&owner=1">附件：规则.docx</a></p>`;
+export const informationArticle = `<h1 class="page-title">2026年测试竞赛报名通知</h1><div class="news-meta"><time>2026/10/08 10:30</time></div><div class="news-body"><div id="vsb_content"><div class="v_news_content">${noticeBody}<script>危险脚本不属于正文</script></div></div></div>`;
+export const lifeArticle = `<h1 class="pageArticleTitle">2026年测试竞赛报名通知</h1><div class="articleAuthor"><span>发布日期：2026-10-08</span></div><div id="vsb_content_4"><div class="v_news_content">${noticeBody}</div></div>`;
