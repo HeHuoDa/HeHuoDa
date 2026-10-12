@@ -2,7 +2,9 @@
 
 四川农业大学校园比赛与项目组队平台。当前完成阶段一工程初始化、学生端共享导航与路由，登录注册前端表单，以及比赛首页、院徽筛选承办学院、比赛详情（Issue #12）。Issue #22 接入 PostgreSQL、人工核对数据导入、学院与比赛公开查询及真实 API 联调；Issue #13 实现找队友筛选、队伍详情、发布表单、比赛关联及会话内申请/举报演示；Issue #14 提供个人中心、资料编辑及联系方式授权的会话内演示；队伍管理与申请邀请仍待 #15 实现，真实认证与招募写接口尚未开发。工程包含 pnpm 工作区、Vue 健康页、NestJS/Fastify 健康接口、OpenAPI 类型生成与 CI 配置。
 
-项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙人-项目开发计划书.md)。
+Issue #23 已交付首批信息工程学院、生命科学学院的官方通知采集、候选人工审核、草稿导入与显式发布 CLI；已补充预算分配、定时续跑和诊断记录，尚无管理 HTTP 接口或管理端应用。
+
+仓库现由 [HeHuoRen-Sicau 组织](https://github.com/HeHuoRen-Sicau/HeHuoRen)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoRen-Sicau/HeHuoRen.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙人-项目开发计划书.md)。
 
 ## 技术栈
 
@@ -18,6 +20,7 @@
 | HTTP 客户端      | Axios `1.20.0`                                                                                   | Web 通过 `/api/v1` 请求 API，开发时由 Vite 代理                       |
 | API 框架与服务器 | NestJS `^12.0.1`、`@nestjs/platform-fastify` `12.1.2`、Fastify `5.12.5`                          | 模块、控制器、依赖注入与 HTTP 服务                                    |
 | 配置与请求校验   | `@nestjs/config` `12.0.1`、Joi `18.2.9`、`class-validator` `0.15.1`、`class-transformer` `0.5.1` | 环境配置校验、DTO 转换与严格请求校验                                  |
+| 通知采集与调度   | Cheerio `1.2.0`、`@nestjs/schedule` `12.0.2`                                                     | 两院公开 HTML 解析、北京时间定时扫描与持久化续跑                      |
 | 数据库与访问层   | PostgreSQL `17`、Drizzle ORM `0.45.3`、`pg` `8.23.1`                                             | 学院与比赛持久化、连接池和查询；SQL 迁移由项目脚本执行                |
 | 接口契约         | `@nestjs/swagger` `12.0.2`、`openapi-typescript` `7.13.0`                                        | 从 DTO / Swagger 生成 OpenAPI JSON，再生成 Web 使用的 TypeScript 类型 |
 | Web 测试         | Vitest `5.0.3`、`@vue/test-utils` `2.5.1`、jsdom `30.1.1`                                        | 组件、路由、状态与请求行为单元测试                                    |
@@ -114,8 +117,8 @@ HeHuoRen/
 │   │   │   ├── data/                 # 学院选择、筛选规则与历史测试演示数据
 │   │   │   ├── layouts/              # 学生端导航布局与认证品牌布局
 │   │   │   ├── router/               # Vue Router 路由与路由测试
-│   │   │   ├── stores/               # Pinia 健康状态与测试
-│   │   │   ├── views/                # 首页、比赛列表/详情、认证、健康与占位页
+│   │   │   ├── stores/               # 健康状态、队伍与个人中心会话演示及测试
+│   │   │   ├── views/                # 比赛、找队友、个人中心、认证、健康与占位页
 │   │   │   ├── App.vue              # 根组件
 │   │   │   ├── main.ts              # 应用入口，注册 Router 与 Pinia
 │   │   │   └── style.css            # 全局主题变量与 Tailwind 样式
@@ -128,12 +131,13 @@ HeHuoRen/
 │       │   ├── config/               # 环境变量校验
 │       │   ├── database/             # 数据库模块、连接池、Drizzle schema 与迁移执行
 │       │   ├── health/               # 健康检查接口
+│       │   ├── ingestion/            # 官网请求、HTML 解析、扫描续跑、审核与调度
 │       │   ├── app.module.ts         # 根模块
 │       │   ├── configure-app.ts      # API 前缀、校验、异常处理与 Swagger
 │       │   └── main.ts              # 服务启动入口
 │       ├── data/                     # 人工核对比赛数据与显式发布清单
 │       ├── migrations/               # 受版本控制的 SQL 迁移
-│       ├── scripts/                  # 数据迁移、人工导入与 OpenAPI 生成入口
+│       ├── scripts/                  # 数据迁移、人工导入、采集审核 CLI 与 OpenAPI 生成
 │       ├── test/                     # 集成/e2e 测试、固定数据与 Jest 配置
 │       ├── .env.example              # 本地环境变量示例（实际 .env 不提交）
 │       └── openapi.json              # 生成并提交的接口契约
@@ -187,7 +191,7 @@ TEST_DATABASE_URL=postgresql://hehuoren:hehuoren_test@127.0.0.1:54323/hehuoren_t
 
 PowerShell 先执行 `$env:TEST_DATABASE_URL="postgresql://hehuoren:hehuoren_test@127.0.0.1:54323/hehuoren_test"`，再运行两个数据库测试命令。测试连接数据库名须以 `_test` 结尾，且不能与开发连接相同；每套测试创建独立 schema，完成后清理。
 
-API 单元测试覆盖配置、异常过滤、严格查询校验与报名时间边界；真实 PostgreSQL 集成测试验证迁移、事务导入、稳定排序、计数及分页；集成测试使用 Fastify 注入请求；e2e 测试在本机临时端口验证真实 HTTP 与 Swagger 契约。Web 单元测试覆盖 Pinia 健康状态、学生端路由、首页嵌套、导航归属、404、健康页重试/刷新，以及认证表单校验、密码切换、验证码前置校验和服务不可用反馈。API 的 Jest ESM 模式使用 `--experimental-vm-modules`，Node 会输出对应实验功能提示。
+API 单元测试覆盖配置、异常过滤、严格查询校验、报名时间边界与官网解析/访问预算；真实 PostgreSQL 集成测试验证迁移、事务导入、排序分页，以及候选审核、版本冲突、并发锁和扫描恢复。API e2e 包含本机临时端口的真实 HTTP 健康与 Swagger 测试，以及 Fastify 注入的公开比赛查询、候选到显式发布流程；不等同浏览器端到端业务验收。Web 单元测试覆盖健康状态、路由导航、认证表单、比赛请求与状态反馈、招募和个人中心会话演示。API 的 Jest ESM 模式使用 `--experimental-vm-modules`，Node 会输出对应实验功能提示。
 
 ESLint 使用原生支持的 `eslint.config.mjs`；`eslint-config-prettier` 关闭与 Prettier 冲突的格式规则。生成文件与构建输出不参与格式检查。
 
@@ -195,7 +199,9 @@ ESLint 使用原生支持的 `eslint.config.mjs`；`eslint-config-prettier` 关�
 
 GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行完整质量检查，Action 固定为完整提交 SHA。最终 job 名为 `ci-gate`，只有 `quality` 成功时通过。配置没有路径过滤器。
 
-`auto-merge.yml` 在 PR 的 `CI` 成功后自动启用合并：仅处理本仓库面向 `main` 的非草稿 PR，核对通过 CI 的提交仍是 PR 最新提交，并使用 merge commit 保留分步提交。它遵守分支保护，不检出或执行 PR 代码。仓库需开启 Allow auto-merge；建议将 `ci-gate` 设为必需检查。该工作流合并到默认分支后才会触发；CI 会在草稿 PR 转为可审阅时重新运行，成功后再次触发自动合并。
+`quality` 已配置临时 PostgreSQL 17 service，运行数据库集成测试与真实 HTTP e2e；官网采集测试使用离线片段与模拟网络。当前没有独立 integration/e2e Job，也没有浏览器业务闭环 CI。2026-10-12 核验组织仓库：`main` 必需 `ci-gate`、分支保持最新、解决讨论且管理员同样受约束；Allow auto-merge 与 merge commit 已开启。[PR #48 的 CI](https://github.com/HeHuoRen-Sicau/HeHuoRen/actions/runs/38193253994)已通过，属于该 PR 的证据，不代表后续改动已验证。
+
+`auto-merge.yml` 在 PR 的 `CI` 成功后自动启用合并：仅处理本仓库面向 `main` 的非草稿 PR，核对通过 CI 的提交仍是 PR 最新提交，并使用 merge commit 保留分步提交。它遵守分支保护，不检出或执行 PR 代码。该工作流合并到默认分支后才会触发；CI 会在草稿 PR 转为可审阅时重新运行，成功后再次触发自动合并。
 
 合并命令执行后，工作流重新确认 PR 已合并，再显式删除来源远程分支。仅删除 SHA 仍等于通过 CI 的提交、未受保护、不是默认分支且没有其他打开的 PR 引用的本仓库分支；已删除或新增提交的分支会跳过。如果 `--auto` 只启用了等待合并，本次运行保留分支，后续延迟合并仍依赖仓库自动删除设置或人工清理。
 
