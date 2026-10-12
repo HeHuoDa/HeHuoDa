@@ -1,6 +1,6 @@
 # ADR 0002：学生端样式统一与 uni-app 迁移边界
 
-状态：Accepted · 2026-10-03 · 关联 [Issue #19](https://github.com/jingtll/HeHuoRen/issues/19)
+状态：Accepted · 2026-10-03 · 关联 [Issue #19](https://github.com/HeHuoRen-Sicau/HeHuoRen/issues/19)
 
 ## 背景
 

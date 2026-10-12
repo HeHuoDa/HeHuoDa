@@ -2,7 +2,7 @@
 
 本仓库的问题与方案记录在 GitHub Issues，使用 `gh` CLI 操作。
 
-仓库为 `jingtll/HeHuoRen`；在工作区外运行命令时显式传入 `--repo jingtll/HeHuoRen`。分诊状态与类别标签参见 [triage-labels.md](triage-labels.md)。
+仓库为 `HeHuoRen-Sicau/HeHuoRen`；在工作区外运行命令时显式传入 `--repo HeHuoRen-Sicau/HeHuoRen`。分诊状态与类别标签参见 [triage-labels.md](triage-labels.md)。
 
 ## 约定
 
@@ -46,8 +46,8 @@
 
 - `/wayfinder` 地图使用 `wayfinder:map` 标签；子任务使用 `wayfinder:research`、`wayfinder:prototype`、`wayfinder:grilling` 或 `wayfinder:task` 标签。
 - 子任务优先使用 GitHub 子 issue 关联；不可用时，在地图正文中列出任务，并在子 issue 开头标注 `Part of #<地图编号>`。
-- 子 issue 通过 `gh api repos/jingtll/HeHuoRen/issues/<地图编号>/sub_issues` 读取；创建关联时对同一端点发送 POST，传入 `sub_issue_id`。
-- 阻塞关系优先使用 GitHub 原生 issue dependencies：对 `repos/jingtll/HeHuoRen/issues/<任务编号>/dependencies/blocked_by` 发送 POST，传入 `issue_id`。关联使用 issue 的数据库 ID，通过 `gh api repos/jingtll/HeHuoRen/issues/<编号> --jq .id` 获取；不使用页面编号或 `node_id`。不可用时，在正文标注 `Blocked by: #<编号>`。
+- 子 issue 通过 `gh api repos/HeHuoRen-Sicau/HeHuoRen/issues/<地图编号>/sub_issues` 读取；创建关联时对同一端点发送 POST，传入 `sub_issue_id`。
+- 阻塞关系优先使用 GitHub 原生 issue dependencies：对 `repos/HeHuoRen-Sicau/HeHuoRen/issues/<任务编号>/dependencies/blocked_by` 发送 POST，传入 `issue_id`。关联使用 issue 的数据库 ID，通过 `gh api repos/HeHuoRen-Sicau/HeHuoRen/issues/<编号> --jq .id` 获取；不使用页面编号或 `node_id`。不可用时，在正文标注 `Blocked by: #<编号>`。
 - 查找当前可领取任务时，读取地图的开放子 issue，排除已指派或仍有开放阻塞项的任务，再按地图顺序选择。原生 `issue_dependencies_summary.blocked_by` 表示开放阻塞项数量；使用正文关联时逐一核验阻塞 issue 状态。
 - 领取任务时指派给当前用户；完成时先评论结果，再关闭 issue，并把决策摘要补充到地图。
 
