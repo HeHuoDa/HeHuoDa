@@ -118,7 +118,9 @@ function reset() {
 <template>
   <header class="mb-7">
     <p class="hhr-eyebrow">校园里的每一种可能</p>
-    <h1 class="font-serif text-3xl font-semibold">发现比赛，找到同路人</h1>
+    <h1 class="discovery-heading font-serif text-3xl font-semibold">
+      发现比赛，找到同路人
+    </h1>
     <p class="mt-3 text-sm text-muted">
       从一场比赛开始，让想法生根，让各有所长的伙伴相遇。
     </p>
@@ -134,7 +136,7 @@ function reset() {
       <template #footer>
         <form
           aria-label="比赛筛选"
-          class="grid grid-cols-[minmax(0,1fr)_auto] gap-0.5"
+          class="discovery-filters grid grid-cols-[minmax(0,1fr)_auto] gap-0.5"
           @submit.prevent="update({ q: search.trim().slice(0, 100) })"
         >
           <div class="col-span-2 flex min-w-0 gap-1.5">
@@ -148,7 +150,7 @@ function reset() {
             />
             <button
               type="submit"
-              class="hhr-button h-8 min-h-0 shrink-0 px-3 py-0 text-xs"
+              class="hhr-button discovery-search-button h-8 min-h-0 shrink-0 px-3 py-0 text-xs"
             >
               搜索
             </button>
@@ -168,7 +170,9 @@ function reset() {
               {{ label }}
             </option>
           </select>
-          <div class="flex items-center justify-end text-[11px]">
+          <div
+            class="discovery-filter-actions flex items-center justify-end text-[11px]"
+          >
             <div class="flex gap-2">
               <button
                 type="button"
@@ -330,5 +334,39 @@ function reset() {
 }
 .discovery-status-select {
   color: var(--hhr-color-muted);
+}
+@media (max-width: 767px) {
+  .discovery-heading {
+    font-size: clamp(24px, 6vw, 30px);
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+  .discovery-filters {
+    gap: 8px;
+  }
+  .discovery-filter-control,
+  .discovery-search-button {
+    height: auto;
+    min-height: 44px;
+  }
+  .discovery-filter-control {
+    font-size: 16px;
+  }
+  .discovery-search-button {
+    font-size: 14px;
+  }
+  .discovery-status-select,
+  .discovery-filter-actions {
+    grid-column: 1 / -1;
+  }
+  .discovery-filter-actions > div {
+    width: 100%;
+    gap: 12px;
+  }
+  .discovery-filter-actions button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 13px;
+  }
 }
 </style>

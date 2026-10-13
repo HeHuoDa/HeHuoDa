@@ -115,7 +115,7 @@ describe("个人中心队伍管理集成", () => {
     await wrapper.get('[data-my-team="demo-7"] button').trigger("click");
     await click("编辑招募");
     await wrapper.get("#edit-title").setValue("协作图鉴更新");
-    await wrapper.get("dialog form").trigger("submit");
+    await click("保存演示招募");
     await flushPromises();
     expect(wrapper.find("dialog").exists()).toBe(false);
     await router.push("/teams/demo-7");

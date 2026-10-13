@@ -216,4 +216,41 @@ function reset() {
 .college-emblem--white-artwork {
   background: var(--hhr-color-brand);
 }
+@media (max-width: 767px) {
+  .college-picker--compact {
+    padding: 12px;
+  }
+  .college-picker--compact .college-reset {
+    min-height: 44px;
+    font-size: 13px;
+  }
+  .college-picker--compact #college-scroll-hint,
+  .college-picker--compact > [role="status"] {
+    margin-block: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .college-picker--compact .college-entry {
+    height: auto;
+    min-height: 80px;
+    gap: 4px;
+    padding: 4px 2px;
+  }
+  .college-picker--compact .college-name {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .college-picker--compact .college-scroll {
+    height: 200px;
+  }
+  .college-picker--compact .college-footer {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+}
+@media (max-width: 359px) {
+  .college-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 </style>
