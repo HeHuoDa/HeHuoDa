@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, useId, watch } from "vue";
 import { useTeamClock } from "../data/team-clock";
 import {
   DEMO_PARTICIPANT,
@@ -39,6 +39,7 @@ const feedback = ref("");
 const editor = ref<TeamDraft>();
 const errors = ref<Record<string, string>>({});
 const form = ref<HTMLFormElement>();
+const editFormId = useId();
 const confirmation = ref<{ title: string; run: () => string }>();
 const successor = ref("");
 watch(
@@ -175,7 +176,7 @@ function preview(value: string) {
         <RouterLink
           v-else
           to="/profile?section=teams"
-          class="text-sm text-brand"
+          class="inline-flex min-h-11 items-center text-sm text-brand"
           >管理队伍</RouterLink
         >
       </article>
@@ -463,16 +464,18 @@ function preview(value: string) {
     ><p class="mb-4 text-sm">
       本次操作只更新会话内示例。关闭或解散将使待处理申请与邀请失效；退出或移除后联系方式立即隐藏。
     </p>
-    <button type="button" class="hhr-button" @click="execute">
-      确认操作
-    </button></ProfileTeamDialog
+    <template #actions>
+      <button type="button" class="hhr-button" @click="execute">
+        确认操作
+      </button>
+    </template></ProfileTeamDialog
   >
   <ProfileTeamDialog
     v-if="editor"
     title="编辑演示招募"
     @close="editor = undefined"
   >
-    <form ref="form" novalidate @submit.prevent="save">
+    <form :id="editFormId" ref="form" novalidate @submit.prevent="save">
       <div
         v-for="field in [
           { key: 'title', label: '招募标题', max: 60 },
@@ -563,8 +566,12 @@ function preview(value: string) {
       >
         请修正字段错误后重试。
       </p>
-      <button type="submit" class="hhr-button">保存演示招募</button>
     </form>
+    <template #actions>
+      <button type="submit" :form="editFormId" class="hhr-button">
+        保存演示招募
+      </button>
+    </template>
   </ProfileTeamDialog>
 </template>
 <style scoped>
@@ -595,6 +602,11 @@ function preview(value: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+@media (max-width: 767px) {
+  .management-actions .hhr-input {
+    font-size: 16px;
+  }
 }
 .management-detail {
   margin-top: 20px;

@@ -91,6 +91,10 @@ H5 迁移后回归页面生命周期、筛选状态恢复和反馈布局；微�
 
 H5 迁移后回归分区参数、History/刷新、dialog 的 showModal/cancel、Tab 循环与 DOM 焦点恢复、datetime-local 的北京时间输入、Tailwind 样式与底部安全区域。微信小程序使用平台页面参数与导航、平台弹层/input/textarea/picker 和支持的图标资源，DOM focus、HTMLDialogElement 与浏览器 History 均须替换，逐端独立验收；截止仍按北京时间解析，邀请确认规则与授权条件保留。预计成本中，依据沿用前文官方 picker、Vue3 平台差异与请求适配文档；本次未建立 uni-app 工程或进行微信小程序编译/真机验证。
 
+## 用户端手机样式优化
+
+手机端样式优化统一可编辑字段为 16px，放大独立操作点击区，并调整 320px 的学院网格和个人入口布局。`ProfileTeamDialog` 沿用资料编辑的固定标题/操作区与内部滚动，保存按钮通过 HTML `form` 属性关联中间表单。H5 需回归 Safari 字段聚焦、真实键盘与地址栏变化、安全区和表单提交；微信小程序采用平台弹层、scroll-view、picker 与组件事件，将外置提交按钮改为显式提交事件，不依赖 HTML form 关联。颜色及字号调整迁移成本低，弹窗和表单交互适配成本中；浏览器窄屏模拟不能替代目标端编译和真机验收。
+
 ## Issue #32：资料编辑弹窗
 
 `ProfileView.vue` 使用原生 `dialog/showModal/cancel`、DOM focus 与 Tab 循环、`document.body.style.overflow` 背景滚动锁；固定标题和操作区，表单内部滚动，使用 `100dvh` 与底部安全区域。草稿、七项资料校验和 Pinia 会话状态可复用，未新增写 API 或持久化。

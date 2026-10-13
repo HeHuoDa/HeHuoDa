@@ -45,17 +45,24 @@ function trap(event: KeyboardEvent) {
     @cancel.prevent="emit('close')"
     @keydown="trap"
   >
-    <h2 id="management-dialog-title" class="mb-4 font-serif text-xl">
-      {{ title }}
-    </h2>
-    <slot />
-    <button
-      type="button"
-      class="hhr-button hhr-button--secondary mt-4"
-      @click="emit('close')"
-    >
-      取消并关闭
-    </button>
+    <div class="management-dialog-layout">
+      <header class="management-dialog-heading">
+        <h2 id="management-dialog-title" class="font-serif text-xl">
+          {{ title }}
+        </h2>
+      </header>
+      <div class="management-dialog-body"><slot /></div>
+      <footer class="management-dialog-actions">
+        <slot name="actions" />
+        <button
+          type="button"
+          class="hhr-button hhr-button--secondary"
+          @click="emit('close')"
+        >
+          取消并关闭
+        </button>
+      </footer>
+    </div>
   </dialog>
 </template>
 <style scoped>
@@ -64,12 +71,48 @@ function trap(event: KeyboardEvent) {
   width: calc(100% - 32px);
   max-width: 640px;
   max-height: calc(100dvh - 32px);
-  overflow: auto;
-  padding: 24px;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid var(--hhr-color-line);
   border-radius: var(--hhr-radius-panel);
   background: var(--hhr-color-surface);
   color: var(--hhr-color-ink);
+}
+.management-dialog-layout {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 34px);
+}
+.management-dialog-heading,
+.management-dialog-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+}
+.management-dialog-heading {
+  border-bottom: 1px solid var(--hhr-color-line);
+}
+.management-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px;
+}
+.management-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--hhr-color-line);
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+@media (max-width: 600px) {
+  .management-dialog-heading,
+  .management-dialog-body,
+  .management-dialog-actions {
+    padding-inline: 16px;
+  }
+  .management-dialog-actions :deep(button) {
+    flex: 1;
+  }
 }
 .management-dialog::backdrop {
   background: rgb(24 62 48 / 35%);
