@@ -90,3 +90,9 @@ H5 迁移后回归页面生命周期、筛选状态恢复和反馈布局；微�
 采用共享 Pinia 会话演示，申请、邀请和成员分别维护；名额、截止、角色和授权校验可复用。仅 Web 前端示例，不新增业务写 API、认证或服务器事务及并发保障。个人中心使用内嵌管理面板和原生 dialog；旧 URL 以 Vue Router redirect 保留 query/hash，成员变化通过派生状态即时隐藏联系方式示例。
 
 H5 迁移后回归分区参数、History/刷新、dialog 的 showModal/cancel、Tab 循环与 DOM 焦点恢复、datetime-local 的北京时间输入、Tailwind 样式与底部安全区域。微信小程序使用平台页面参数与导航、平台弹层/input/textarea/picker 和支持的图标资源，DOM focus、HTMLDialogElement 与浏览器 History 均须替换，逐端独立验收；截止仍按北京时间解析，邀请确认规则与授权条件保留。预计成本中，依据沿用前文官方 picker、Vue3 平台差异与请求适配文档；本次未建立 uni-app 工程或进行微信小程序编译/真机验证。
+
+## Issue #32：资料编辑弹窗
+
+`ProfileView.vue` 使用原生 `dialog/showModal/cancel`、DOM focus 与 Tab 循环、`document.body.style.overflow` 背景滚动锁；固定标题和操作区，表单内部滚动，使用 `100dvh` 与底部安全区域。草稿、七项资料校验和 Pinia 会话状态可复用，未新增写 API 或持久化。
+
+H5 迁移后需回归模态隔离、遮罩不关闭、Escape 丢弃草稿、焦点回返、软键盘与长表单滚动。微信小程序改用平台弹层、表单 focus 状态和 scroll-view，替换 DOM 焦点与 body 滚动锁，并验证平台背景滚动隔离与安全区域。官方 [Vue3 平台差异](https://uniapp.dcloud.net.cn/tutorial/vue3-api.html)说明非 H5 的 ref 不能取得内置组件实例，不能直接沿用 HTMLDialogElement 或 HTMLElement 操作。预计适配成本中；当前浏览器验收仅证明 Web 行为，H5 迁移和微信小程序编译/真机验收仍待执行。

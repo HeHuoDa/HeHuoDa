@@ -10,6 +10,20 @@ import {
 } from "../data/profile-demo";
 import ProfileView from "./ProfileView.vue";
 
+// jsdom 不实现原生模态行为；背景隔离与真实键盘路径另在浏览器验证。
+Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+  configurable: true,
+  value() {
+    this.open = true;
+  },
+});
+Object.defineProperty(HTMLDialogElement.prototype, "close", {
+  configurable: true,
+  value() {
+    this.open = false;
+  },
+});
+
 describe("个人中心会话内演示", () => {
   let wrapper: ReturnType<typeof mount>;
   afterEach(() => {
@@ -117,7 +131,7 @@ describe("个人中心会话内演示", () => {
     ).toBe(false);
     await wrapper.get("header button").trigger("click");
     await wrapper.get("#profile-nickname").setValue("取消的资料");
-    await wrapper.get("form").trigger("keydown", { key: "Escape" });
+    await wrapper.get("dialog").trigger("cancel");
     await flushPromises();
     expect(wrapper.find("form").exists()).toBe(false);
     expect(document.activeElement?.textContent?.trim()).toBe("编辑资料");
@@ -134,6 +148,83 @@ describe("个人中心会话内演示", () => {
         .checked,
     ).toBe(false);
     expect(wrapper.text()).toContain("未确认的受邀者和已退出成员不能查看");
+  });
+  it("打开模态弹窗、保留页面布局，聚焦昵称且 Tab 在弹窗内循环", async () => {
+    await visit();
+    const overflow = document.body.style.overflow;
+    await wrapper.get("header button").trigger("click");
+    await flushPromises();
+    expect((wrapper.get("dialog").element as HTMLDialogElement).open).toBe(
+      true,
+    );
+    expect(wrapper.get("header button").isVisible()).toBe(true);
+    expect(wrapper.find("section form").exists()).toBe(false);
+    expect(document.activeElement?.id).toBe("profile-nickname");
+    expect(document.body.style.overflow).toBe("hidden");
+    const controls = wrapper.findAll(
+      "dialog button, dialog input, dialog select, dialog textarea",
+    );
+    (controls.at(-1)!.element as HTMLElement).focus();
+    await wrapper.get("dialog").trigger("keydown", { key: "Tab" });
+    expect(document.activeElement).toBe(controls[0]!.element);
+    await wrapper
+      .get("dialog")
+      .trigger("keydown", { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(controls.at(-1)!.element);
+    await wrapper.get("dialog").trigger("click");
+    expect(wrapper.find("dialog").exists()).toBe(true);
+    await wrapper.get("dialog").trigger("cancel");
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.get("header button").element);
+    expect(document.body.style.overflow).toBe(overflow);
+  });
+  it.each(["取消编辑", "关闭", "Escape"])(
+    "%s 丢弃草稿，再次打开已保存资料并清除错误",
+    async (action) => {
+      const { pinia } = await visit();
+      await wrapper.get("header button").trigger("click");
+      await wrapper.get("#profile-nickname").setValue("已保存资料");
+      await wrapper.get("form").trigger("submit");
+      await flushPromises();
+      expect(wrapper.find("dialog").exists()).toBe(false);
+      expect(document.activeElement).toBe(wrapper.get("header button").element);
+      await wrapper.get("header button").trigger("click");
+      await wrapper.get("#profile-nickname").setValue(" ");
+      await wrapper.get("#profile-bio").setValue("未保存简介");
+      await wrapper.get("form").trigger("submit");
+      if (action === "Escape") await wrapper.get("dialog").trigger("cancel");
+      else
+        await wrapper
+          .findAll("dialog button")
+          .find((button) => button.text() === action)!
+          .trigger("click");
+      await flushPromises();
+      expect(wrapper.find("dialog").exists()).toBe(false);
+      expect(useProfileDemoStore(pinia).profile.nickname).toBe("已保存资料");
+      await wrapper.get("header button").trigger("click");
+      expect(
+        (wrapper.get("#profile-nickname").element as HTMLInputElement).value,
+      ).toBe("已保存资料");
+      expect(
+        (wrapper.get("#profile-bio").element as HTMLTextAreaElement).value,
+      ).not.toBe("未保存简介");
+      expect(wrapper.find('[aria-invalid="true"]').exists()).toBe(false);
+    },
+  );
+  it("分区切换与页面卸载清理弹窗和背景滚动锁", async () => {
+    const { router } = await visit();
+    const overflow = document.body.style.overflow;
+    await wrapper.get("header button").trigger("click");
+    await flushPromises();
+    await router.push("/profile?section=teams");
+    await flushPromises();
+    expect(wrapper.find("dialog").exists()).toBe(false);
+    expect(document.body.style.overflow).toBe(overflow);
+    await router.push("/profile");
+    await wrapper.get("header button").trigger("click");
+    await flushPromises();
+    wrapper.unmount();
+    expect(document.body.style.overflow).toBe(overflow);
   });
   it("资料校验覆盖稳定学院 ID、年级、技能及简介边界", () => {
     const valid = initialProfile();
