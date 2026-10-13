@@ -7,7 +7,7 @@ const store = useTeamDemoStore();
     <button
       type="button"
       class="hhr-button hhr-button--secondary"
-      title="清除当前会话内的新建招募和申请，恢复初始演示数据"
+      title="重置队伍、申请、邀请、资料与授权，恢复初始演示数据"
       @click="store.reset()"
     >
       重置演示

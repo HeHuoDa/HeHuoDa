@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from "vue";
 import { useRoute } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
+import ProfileTeams from "../components/ProfileTeams.vue";
 import type { AppIconName } from "../components/app-icons";
 import { colleges } from "../data/colleges";
 import {
@@ -355,85 +356,7 @@ function authorizationChanged() {
       class="profile-lower"
       :class="{ 'profile-lower--single': section !== 'profile' }"
     >
-      <section class="profile-panel">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="font-serif text-xl">
-            {{
-              section === "applications"
-                ? "申请与邀请"
-                : section === "teams"
-                  ? "我的队伍"
-                  : "正在一起做的事"
-            }}
-          </h2>
-          <span class="profile-sample-label">样式示例</span>
-        </div>
-        <div
-          v-if="section !== 'applications'"
-          class="profile-team-list"
-          aria-label="队伍样式示例，非真实成员关系"
-        >
-          <article
-            v-for="team in [
-              {
-                name: '校园植物观察图鉴',
-                description: '把校园里的绿色，记录成一本图鉴',
-                icon: 'leaf',
-              },
-              {
-                name: '学习资料整理计划',
-                description: '整理学习资料，分享每一次收获',
-                icon: 'book',
-              },
-            ] as const"
-            :key="team.name"
-            class="profile-list-item"
-          >
-            <span class="profile-list-thumb"
-              ><AppIcon :name="team.icon" class="size-5"
-            /></span>
-            <div class="min-w-0 flex-1">
-              <h3 class="text-sm font-semibold">{{ team.name }}</h3>
-              <p class="mt-1 text-xs text-muted">{{ team.description }}</p>
-            </div>
-            <span class="profile-tag">示例</span>
-          </article>
-        </div>
-        <div
-          v-else
-          class="profile-team-list"
-          aria-label="申请邀请样式示例，非真实申请或邀请"
-        >
-          <article class="profile-list-item">
-            <span class="profile-list-thumb"
-              ><AppIcon name="mail" class="size-5"
-            /></span>
-            <div class="min-w-0 flex-1">
-              <h3 class="text-sm font-semibold">收到的邀请</h3>
-              <p class="mt-1 text-xs text-muted">
-                在这里了解伙伴发来的组队邀请
-              </p>
-            </div>
-            <span class="profile-tag">示例</span>
-          </article>
-          <article class="profile-list-item">
-            <span class="profile-list-thumb"
-              ><AppIcon name="team" class="size-5"
-            /></span>
-            <div class="min-w-0 flex-1">
-              <h3 class="text-sm font-semibold">发出的申请</h3>
-              <p class="mt-1 text-xs text-muted">在这里回看申请的队伍与项目</p>
-            </div>
-            <span class="profile-tag">示例</span>
-          </article>
-        </div>
-        <p class="profile-notice">
-          {{
-            section === "applications" ? "申请与邀请待开发" : "我的队伍待开发"
-          }}
-          · 仅展示样式，暂无真实记录或管理操作。
-        </p>
-      </section>
+      <ProfileTeams :section="section" />
       <section
         v-if="section === 'profile'"
         class="profile-panel"

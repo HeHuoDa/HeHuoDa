@@ -12,6 +12,7 @@ import {
   recruitmentStatus,
   teamTime,
   type Role,
+  DEMO_PARTICIPANT,
 } from "../data/team-demo";
 import { formatTime } from "../data/competition-discovery";
 const route = useRoute(),
@@ -26,6 +27,14 @@ const status = computed(() =>
         !!store.applications[team.value.id],
       )
     : undefined,
+);
+const invited = computed(() =>
+  store.records.some(
+    (a) =>
+      a.teamId === team.value?.id &&
+      a.applicantId === DEMO_PARTICIPANT.id &&
+      a.state === "INVITED",
+  ),
 );
 const track = computed(() =>
   team.value?.competition?.tracks.find((t) => t.id === team.value?.trackId),
@@ -163,7 +172,15 @@ function submit(role: string, note: string) {
         <section class="hhr-panel">
           <h2 class="font-serif text-xl font-semibold">招募与申请</h2>
           <p class="mt-3 text-sm">招募截止：{{ teamTime(team.deadline) }}</p>
-          <p class="mt-3 text-sm font-semibold">{{ status?.label }}</p>
+          <p class="mt-3 text-sm font-semibold">
+            {{ invited ? "演示已邀请，等待确认入队" : status?.label }}
+          </p>
+          <RouterLink
+            v-if="invited"
+            to="/profile?section=applications"
+            class="mt-2 inline-flex min-h-11 items-center text-sm text-brand"
+            >前往我的申请与邀请</RouterLink
+          >
           <p class="mt-3 text-xs leading-6 text-muted">
             平台组队不等于官方比赛报名；关联比赛不代表参赛资格通过。公开页面不展示真实联系方式。
           </p>
@@ -174,7 +191,13 @@ function submit(role: string, note: string) {
               :disabled="!status?.available"
               @click="action = 'apply'"
             >
-              {{ status?.available ? "演示申请" : status?.label }}</button
+              {{
+                status?.available
+                  ? "演示申请"
+                  : invited
+                    ? "演示已邀请"
+                    : status?.label
+              }}</button
             ><button
               type="button"
               class="hhr-button hhr-button--secondary"

@@ -28,20 +28,6 @@ const navigation: {
     icon: "users",
   },
   {
-    section: "my-teams",
-    label: "我的队伍",
-    mobile: "队伍",
-    to: "/my/teams",
-    icon: "team",
-  },
-  {
-    section: "applications",
-    label: "申请与邀请",
-    mobile: "申请",
-    to: "/my/applications",
-    icon: "mail",
-  },
-  {
     section: "favorites",
     label: "我的收藏",
     to: "/my/favorites",
@@ -55,8 +41,8 @@ const navigation: {
   },
   {
     section: "profile",
-    label: "个人中心",
-    mobile: "个人中心",
+    label: "我的",
+    mobile: "我的",
     to: "/profile",
     icon: "user",
   },
