@@ -24,6 +24,8 @@
 
 本仓库的问题与方案记录在 GitHub Issues。创建或更新 Issue 前，先向用户展示完整标题、正文、标签和依赖关系；用户明确确认该内容及发布后再执行。产品方向或交互方式的确认不等于发布确认。标题须标明管理端／用户端及前端／后端，具体格式与跨端任务规则参见 `docs/agents/issue-tracker.md`。
 
+用户要求“提交并 PR”时，默认包含关联 Issue 的交付收尾评论与符合完成条件时的关闭，无需另行请求确认；按 [PR 交付收尾流程](docs/agents/pull-requests.md#关联-issue-交付收尾)核验、执行并报告真实状态。
+
 ### Triage labels
 
 分诊、生成方案与拆分任务时，遵循 `docs/agents/triage-labels.md`。本项目停用 `ready-for-agent`，以后也不添加该标签；需求明确或技能建议使用该标签时仍遵循本项目约定。
