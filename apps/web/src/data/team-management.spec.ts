@@ -5,6 +5,19 @@ import { useProfileDemoStore } from "./profile-demo";
 
 describe("队伍、申请与邀请会话状态", () => {
   beforeEach(() => setActivePinia(createPinia()));
+  it("关闭后不能借暂停恢复重新开放，相关邀请已失效", () => {
+    const s = useTeamDemoStore(),
+      t = s.teams.find((t) => t.id === "demo-7")!;
+    expect(s.manage(t.id, "closed")).toContain("已完成");
+    expect(s.manage(t.id, "paused")).toContain("不能暂停或恢复");
+    expect(s.manage(t.id, "open")).toContain("不能暂停或恢复");
+    expect(t.state).toBe("closed");
+    expect(
+      s.records
+        .filter((a) => a.teamId === t.id)
+        .every((a) => a.state === "INVALID"),
+    ).toBe(true);
+  });
   it("申请与发出邀请均不增加成员，邀请不预占名额", () => {
     const s = useTeamDemoStore(),
       t = s.teams.find((t) => t.id === "demo-7")!;

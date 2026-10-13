@@ -73,6 +73,21 @@ describe("个人中心队伍管理集成", () => {
       ).toBe(false);
     },
   );
+  it("关闭招募后不再提供暂停或恢复入口", async () => {
+    await visit("/profile?section=teams");
+    await wrapper.get('[data-my-team="demo-7"] button').trigger("click");
+    await click("关闭招募");
+    await click("确认操作");
+    expect(
+      wrapper
+        .findAll("button")
+        .some((b) => ["暂停招募", "恢复招募"].includes(b.text())),
+    ).toBe(false);
+    expect(wrapper.get('[data-my-team="demo-7"]').text()).toContain("已关闭");
+    expect(wrapper.get('[data-incoming="incoming-2"]').text()).toContain(
+      "已失效",
+    );
+  });
   it("拒绝需确认，取消不变；邀请和撤销保留记录不加人", async () => {
     await visit("/profile?section=teams");
     await wrapper.get('[data-my-team="demo-7"] button').trigger("click");

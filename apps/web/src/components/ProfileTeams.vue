@@ -270,6 +270,7 @@ function preview(value: string) {
           ><button type="button" class="hhr-button" @click="beginEdit">
             编辑招募</button
           ><button
+            v-if="team.state !== 'closed'"
             type="button"
             class="hhr-button hhr-button--secondary"
             @click="manage(team.state === 'paused' ? 'open' : 'paused')"

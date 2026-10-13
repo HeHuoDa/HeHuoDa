@@ -532,6 +532,8 @@ export const useTeamDemoStore = defineStore("team-demo", () => {
       delete contactAuthorizations.value[me.id];
     } else {
       if (!me.captain) return "操作失败：仅队长可执行此操作。";
+      if (t.state === "closed" && (action === "open" || action === "paused"))
+        return "操作失败：招募已关闭，不能暂停或恢复。";
       if (action === "transfer") {
         const next = t.members.find((m) => m.id === memberId && m.id !== me.id);
         if (!next) return "操作失败：请选择其他有效成员。";
