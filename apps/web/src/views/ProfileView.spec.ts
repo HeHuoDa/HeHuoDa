@@ -29,9 +29,9 @@ describe("个人中心会话内演示", () => {
   }
   it("直接访问、非法及重复分区规范化，保留无关参数", async () => {
     const { router } = await visit("/profile?section=teams&source=test");
-    expect(wrapper.text()).toContain("我的队伍待开发");
+    expect(wrapper.text()).toContain("植物摄影小组");
     await router.push("/profile?section=applications");
-    expect(wrapper.text()).toContain("申请与邀请待开发");
+    expect(wrapper.text()).toContain("已邀请");
     await router.push("/profile?section=bad&source=test");
     expect(router.currentRoute.value.fullPath).toBe("/profile?source=test");
     expect(wrapper.text()).toContain("禾小苗");
@@ -44,10 +44,10 @@ describe("个人中心会话内演示", () => {
     await router.push("/profile?section=applications");
     router.back();
     await flushPromises();
-    expect(wrapper.text()).toContain("我的队伍待开发");
+    expect(wrapper.text()).toContain("植物摄影小组");
     router.forward();
     await flushPromises();
-    expect(wrapper.text()).toContain("申请与邀请待开发");
+    expect(wrapper.text()).toContain("已邀请");
     for (const url of [
       "/my/teams",
       "/my/applications",
@@ -60,27 +60,16 @@ describe("个人中心会话内演示", () => {
       expect(router.resolve(url).matched.length).toBeGreaterThan(0);
     }
   });
-  it("首页入口精简，未实现的队伍与申请仅展示样式", async () => {
+  it("首页保留四个快捷入口并展示共享队伍，业务操作归属分区", async () => {
     const { router } = await visit();
     expect(wrapper.find(".profile-sections").exists()).toBe(false);
     expect(wrapper.findAll(".profile-shortcut")).toHaveLength(4);
-    expect(wrapper.findAll("button").map((b) => b.text())).toEqual([
-      "编辑资料",
-      "重置示例",
-    ]);
-    expect(
-      wrapper.findAll(".profile-team-list a, .profile-team-list button"),
-    ).toHaveLength(0);
-    expect(wrapper.text()).toContain("样式示例");
-    expect(wrapper.text()).not.toContain("队长");
-    expect(wrapper.text()).not.toContain("原有队伍入口");
+    expect(wrapper.text()).toContain("植物摄影小组");
+    expect(wrapper.text()).toContain("普通成员");
     await router.push("/profile?section=applications");
     expect(wrapper.findAll(".profile-shortcut")).toHaveLength(0);
     expect(wrapper.get(".profile-sections").text()).toContain("返回个人中心");
-    expect(
-      wrapper.findAll(".profile-team-list a, .profile-team-list button"),
-    ).toHaveLength(0);
-    expect(wrapper.text()).toContain("申请与邀请待开发");
+    expect(wrapper.text()).toContain("确认入队");
   });
   it("空白昵称阻止保存，错误关联控件并聚焦", async () => {
     await visit();

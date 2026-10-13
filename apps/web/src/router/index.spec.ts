@@ -15,8 +15,6 @@ import { createAppRouter } from "./index";
 vi.mock("../api/health", () => ({ healthApi: { getHealth: vi.fn() } }));
 
 const pages = [
-  ["/my/teams", "我的队伍", "my-teams"],
-  ["/my/applications", "申请与邀请", "applications"],
   ["/my/favorites", "我的收藏", "favorites"],
   ["/notifications", "站内通知", "notifications"],
 ] as const;
@@ -168,7 +166,7 @@ describe("学生端路由", () => {
         wrapper!
           .get('nav[aria-label="移动端主导航"] a[aria-current="page"]')
           .text(),
-      ).toBe("个人中心");
+      ).toBe("我的");
     },
   );
 
@@ -181,12 +179,12 @@ describe("学生端路由", () => {
       wrapper!
         .get('nav[aria-label="学生端主导航"] a[aria-current="page"]')
         .text(),
-    ).toBe("个人中心");
+    ).toBe("我的");
     expect(
       wrapper!
         .get('nav[aria-label="移动端主导航"] a[aria-current="page"]')
         .text(),
-    ).toBe("个人中心");
+    ).toBe("我的");
     for (const path of [
       "/my/favorites",
       "/notifications",

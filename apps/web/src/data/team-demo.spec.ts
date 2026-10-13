@@ -56,7 +56,7 @@ describe("招募演示领域行为", () => {
     expect(team.members).toHaveLength(1);
     expect(team.goal).toBe(draft().goal);
     s.reset();
-    expect(s.applications).toEqual({});
+    expect(s.records.some((a) => a.id.startsWith("application-"))).toBe(false);
     expect(s.teams.some((t) => t.id === team.id)).toBe(false);
   });
   it("时间始终按北京时间解析并拒绝无效日历日期", () => {

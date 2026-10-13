@@ -134,7 +134,11 @@ describe("找队友页面、会话与真实比赛查询", () => {
     expect(wrapper.text()).toContain("演示申请待处理");
     expect(wrapper.text()).toContain("没有送达真实队长");
     expect(store.teams[0]!.members).toHaveLength(original);
-    expect(Object.keys(store.applications)).toHaveLength(1);
+    expect(
+      store.records.filter(
+        (a) => a.teamId === "demo-1" && a.state === "PENDING",
+      ),
+    ).toHaveLength(1);
     await wrapper
       .findAll("button")
       .find((b) => b.text() === "演示举报")!
@@ -148,10 +152,10 @@ describe("找队友页面、会话与真实比赛查询", () => {
       .findAll("button")
       .find((b) => b.text() === "重置演示")!
       .trigger("click");
-    expect(store.applications).toEqual({});
+    expect(store.applications["demo-1"]).toBeUndefined();
   });
   it.each([
-    ["demo-3", "已暂停"],
+    ["demo-3", "演示申请待处理"],
     ["demo-4", "已关闭"],
     ["demo-5", "已满员"],
     ["demo-6", "已截止"],

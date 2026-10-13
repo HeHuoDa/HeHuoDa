@@ -84,3 +84,9 @@ H5 迁移后回归页面生命周期、筛选状态恢复和反馈布局；微�
 个人中心样式调整沿用静态列表和网格，未引入新浏览器 API。队伍图标统一使用 Lucide Handshake，新增 Leaf、BookOpen、ShieldCheck、Pencil 均静态导入；H5 需验证图标渲染，微信小程序应替换为支持的 SVG 图片或平台图标资源，不能直接依赖 Vue 动态 SVG 组件。
 
 2026-10-09 资料与招募表单已移除学习时长输入与校验，个人中心保留七项资料；此变更减少跨端表单适配字段，不新增平台 API。静态队伍/申请样式未实现成员管理与邀请确认，后续 #15 仍需独立验证跨页面状态与授权展示清理。
+
+## Issue #15：队伍管理与申请邀请
+
+采用共享 Pinia 会话演示，申请、邀请和成员分别维护；名额、截止、角色和授权校验可复用。仅 Web 前端示例，不新增业务写 API、认证或服务器事务及并发保障。个人中心使用内嵌管理面板和原生 dialog；旧 URL 以 Vue Router redirect 保留 query/hash，成员变化通过派生状态即时隐藏联系方式示例。
+
+H5 迁移后回归分区参数、History/刷新、dialog 的 showModal/cancel、Tab 循环与 DOM 焦点恢复、datetime-local 的北京时间输入、Tailwind 样式与底部安全区域。微信小程序使用平台页面参数与导航、平台弹层/input/textarea/picker 和支持的图标资源，DOM focus、HTMLDialogElement 与浏览器 History 均须替换，逐端独立验收；截止仍按北京时间解析，邀请确认规则与授权条件保留。预计成本中，依据沿用前文官方 picker、Vue3 平台差异与请求适配文档；本次未建立 uni-app 工程或进行微信小程序编译/真机验证。

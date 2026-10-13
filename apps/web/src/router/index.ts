@@ -91,7 +91,11 @@ export const routes: RouteRecordRaw[] = [
       {
         path: "my/teams",
         name: "my-teams",
-        component: placeholder,
+        redirect: (to) => ({
+          path: "/profile",
+          query: { ...to.query, section: "teams" },
+          hash: to.hash,
+        }),
         meta: {
           title: "我的队伍",
           navigation: "my-teams",
@@ -101,7 +105,11 @@ export const routes: RouteRecordRaw[] = [
       {
         path: "my/applications",
         name: "applications",
-        component: placeholder,
+        redirect: (to) => ({
+          path: "/profile",
+          query: { ...to.query, section: "applications" },
+          hash: to.hash,
+        }),
         meta: {
           title: "申请与邀请",
           navigation: "applications",
