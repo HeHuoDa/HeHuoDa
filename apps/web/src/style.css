@@ -7,7 +7,7 @@
   --hhr-color-brand-hover: #183e30;
   --hhr-color-brand-soft: #eaf2e9;
   --hhr-color-ink: #243d32;
-  --hhr-color-muted: #7b867e;
+  --hhr-color-muted: #5e6d63;
   --hhr-color-page: #f7f8f4;
   --hhr-color-surface: #fff;
   --hhr-color-line: #e7ebe3;
@@ -214,6 +214,9 @@
     border-radius: var(--hhr-radius-control);
     color: var(--hhr-color-muted);
     font-size: 11px;
+  }
+  .hhr-input {
+    font-size: 16px;
   }
   .student-bottom-nav .is-current {
     background: var(--hhr-color-brand-soft);

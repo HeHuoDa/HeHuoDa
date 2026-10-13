@@ -458,8 +458,11 @@ function authorizationChanged() {
         重置示例
       </button>
       <div class="flex gap-4">
-        <RouterLink to="/login" class="text-brand">登录</RouterLink
-        ><RouterLink to="/register" class="text-brand">注册</RouterLink>
+        <RouterLink to="/login" class="profile-auth-link text-brand"
+          >登录</RouterLink
+        ><RouterLink to="/register" class="profile-auth-link text-brand"
+          >注册</RouterLink
+        >
       </div>
     </footer>
   </div>
@@ -603,6 +606,14 @@ function authorizationChanged() {
   text-decoration: underline;
   text-underline-offset: 3px;
   padding: 8px 0;
+  min-height: 44px;
+}
+.profile-auth-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .profile-panel {
@@ -626,12 +637,16 @@ function authorizationChanged() {
 }
 .profile-sections {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--hhr-color-line);
   padding-bottom: 12px;
 }
 .profile-sections a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   padding: 10px 12px;
   border-radius: var(--hhr-radius-control);
   font-size: 13px;
@@ -735,7 +750,7 @@ function authorizationChanged() {
     font-size: 23px;
   }
   .profile-identity p {
-    font-size: 10px;
+    font-size: 13px;
   }
   .profile-stats {
     margin-top: 18px;
@@ -757,14 +772,30 @@ function authorizationChanged() {
   }
   .profile-edit-button {
     padding: 8px 10px;
-    min-height: 40px;
-    font-size: 11px;
+    min-height: 44px;
+    font-size: 13px;
   }
   .profile-sections {
     gap: 2px;
   }
   .profile-sections a {
     padding-inline: 10px;
+  }
+}
+@media (max-width: 359px) {
+  .profile-shortcuts {
+    grid-template-columns: 1fr;
+  }
+  .profile-identity {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .profile-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+  .profile-stats > div:nth-child(3) {
+    border-left: 0;
   }
 }
 </style>

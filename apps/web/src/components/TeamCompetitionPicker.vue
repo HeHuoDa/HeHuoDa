@@ -113,7 +113,7 @@ onUnmounted(() => {
     <p class="mt-2 text-xs leading-6 text-muted">
       普通项目可直接发布。真实比赛资料来自公开接口；关联比赛不代表参赛资格通过。
     </p>
-    <div class="mt-3 flex gap-2">
+    <div class="mt-3 flex flex-col gap-2 sm:flex-row">
       <div class="min-w-0 flex-1">
         <label for="competition-search" class="text-sm">查找比赛</label
         ><input
@@ -125,7 +125,7 @@ onUnmounted(() => {
           @keydown.enter.prevent="search"
         />
       </div>
-      <button type="button" class="hhr-button self-end" @click="search">
+      <button type="button" class="hhr-button sm:self-end" @click="search">
         查询比赛
       </button>
     </div>
