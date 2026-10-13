@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
 import ProfileTeams from "../components/ProfileTeams.vue";
@@ -32,7 +32,9 @@ const draft = ref<DemoProfile>({ ...store.profile });
 const errors = ref<Partial<Record<keyof DemoProfile, string>>>({});
 const feedback = ref("");
 const editor = ref<HTMLFormElement>();
+const dialog = ref<HTMLDialogElement>();
 const editButton = ref<HTMLButtonElement>();
+let previousOverflow: string | undefined;
 const links: {
   label: string;
   description: string;
@@ -91,13 +93,49 @@ async function startEdit() {
   feedback.value = "";
   editing.value = true;
   await nextTick();
+  if (!editing.value || !dialog.value) return;
+  dialog.value.showModal();
+  previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
   editor.value?.querySelector<HTMLInputElement>("input")?.focus();
 }
+function restoreScroll() {
+  if (previousOverflow === undefined) return;
+  document.body.style.overflow = previousOverflow;
+  previousOverflow = undefined;
+}
 async function finishEdit() {
+  dialog.value?.close();
   editing.value = false;
+  draft.value = { ...store.profile };
+  errors.value = {};
+  restoreScroll();
   await nextTick();
   editButton.value?.focus();
 }
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== "Tab") return;
+  const controls = dialog.value?.querySelectorAll<HTMLElement>(
+    "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+  );
+  if (!controls?.length) return;
+  const first = controls[0]!;
+  const last = controls[controls.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+watch(section, () => {
+  if (editing.value) void finishEdit();
+});
+onBeforeUnmount(() => {
+  dialog.value?.close();
+  restoreScroll();
+});
 async function save() {
   errors.value = validateProfile(draft.value);
   if (Object.keys(errors.value).length) {
@@ -132,7 +170,7 @@ function authorizationChanged() {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h1 class="font-serif text-3xl font-semibold">个人中心</h1>
         <button
-          v-if="section === 'profile' && !editing"
+          v-if="section === 'profile'"
           ref="editButton"
           type="button"
           class="hhr-button hhr-button--secondary profile-edit-button"
@@ -214,116 +252,132 @@ function authorizationChanged() {
           </div>
         </div>
       </section>
-      <section
+      <dialog
         v-if="editing"
-        class="profile-panel mt-5"
+        ref="dialog"
+        class="profile-edit-dialog"
         aria-labelledby="profile-edit-title"
+        aria-describedby="profile-edit-description"
+        @cancel.prevent="finishEdit"
+        @keydown="trapFocus"
       >
         <form
           ref="editor"
+          class="profile-editor"
           novalidate
           @submit.prevent="save"
-          @keydown.esc.prevent="finishEdit"
         >
-          <h2 id="profile-edit-title" class="font-serif text-xl">
-            编辑示例资料
-          </h2>
-          <p class="my-3 text-xs text-muted">
-            请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
-            ID；均为自填信息。
-          </p>
-          <div class="profile-form">
-            <div v-for="field in fields" :key="field.key">
-              <label :for="'profile-' + field.key" class="auth-label">{{
-                field.label
-              }}</label>
-              <input
-                :id="'profile-' + field.key"
-                v-model="draft[field.key]"
-                class="hhr-input"
-                :maxlength="field.max"
-                :aria-invalid="!!errors[field.key]"
-                :aria-describedby="'profile-' + field.key + '-help'"
-                :inputmode="field.key === 'grade' ? 'numeric' : 'text'"
-              />
-              <p
-                :id="'profile-' + field.key + '-help'"
-                class="mt-1 text-xs"
-                :class="errors[field.key] ? 'text-danger' : 'text-muted'"
-                :role="errors[field.key] ? 'alert' : undefined"
-              >
-                {{ errors[field.key] || field.hint }}
-              </p>
-            </div>
-            <div>
-              <label for="profile-campus" class="auth-label"
-                >校区（自填示例）</label
-              ><select
-                id="profile-campus"
-                v-model="draft.campus"
-                class="hhr-input"
-                :aria-invalid="!!errors.campus"
-                aria-describedby="profile-campus-help"
-              >
-                <option value="">请选择</option>
-                <option v-for="campus in campusOptions" :key="campus">
-                  {{ campus }}
-                </option>
-              </select>
-              <p
-                id="profile-campus-help"
-                class="text-xs text-danger"
-                role="alert"
-              >
-                {{ errors.campus }}
-              </p>
-            </div>
-            <div>
-              <label for="profile-collegeId" class="auth-label"
-                >学院（本地业务目录）</label
-              ><select
-                id="profile-collegeId"
-                v-model="draft.collegeId"
-                class="hhr-input"
-                :aria-invalid="!!errors.collegeId"
-                aria-describedby="profile-college-help"
-              >
-                <option value="">请选择</option>
-                <option
-                  v-for="college in colleges"
-                  :key="college.id"
-                  :value="college.id"
-                >
-                  {{ college.name }}
-                </option>
-              </select>
-              <p
-                id="profile-college-help"
-                class="text-xs text-danger"
-                role="alert"
-              >
-                {{ errors.collegeId }}
-              </p>
-            </div>
+          <div class="profile-editor-heading">
+            <h2 id="profile-edit-title" class="font-serif text-xl">
+              编辑示例资料
+            </h2>
+            <button
+              type="button"
+              class="hhr-button hhr-button--secondary"
+              aria-label="关闭编辑资料"
+              @click="finishEdit"
+            >
+              关闭
+            </button>
           </div>
-          <label for="profile-bio" class="auth-label mt-4"
-            >简介（选填，最多 200 字）</label
-          ><textarea
-            id="profile-bio"
-            v-model="draft.bio"
-            rows="4"
-            maxlength="200"
-            class="hhr-input"
-            :aria-invalid="!!errors.bio"
-            aria-describedby="profile-bio-help"
-          />
-          <p id="profile-bio-help" class="text-xs text-danger" role="alert">
-            {{ errors.bio }}
-          </p>
-          <p class="my-4 text-xs text-muted">
-            保存仅更新会话内前端演示，不表示服务器保存。
-          </p>
-          <div class="flex flex-wrap gap-3">
+          <div class="profile-editor-body">
+            <p id="profile-edit-description" class="mb-4 text-xs text-muted">
+              请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
+              ID；均为自填信息。
+            </p>
+            <div class="profile-form">
+              <div v-for="field in fields" :key="field.key">
+                <label :for="'profile-' + field.key" class="auth-label">{{
+                  field.label
+                }}</label>
+                <input
+                  :id="'profile-' + field.key"
+                  v-model="draft[field.key]"
+                  class="hhr-input"
+                  :maxlength="field.max"
+                  :aria-invalid="!!errors[field.key]"
+                  :aria-describedby="'profile-' + field.key + '-help'"
+                  :inputmode="field.key === 'grade' ? 'numeric' : 'text'"
+                />
+                <p
+                  :id="'profile-' + field.key + '-help'"
+                  class="mt-1 text-xs"
+                  :class="errors[field.key] ? 'text-danger' : 'text-muted'"
+                  :role="errors[field.key] ? 'alert' : undefined"
+                >
+                  {{ errors[field.key] || field.hint }}
+                </p>
+              </div>
+              <div>
+                <label for="profile-campus" class="auth-label"
+                  >校区（自填示例）</label
+                ><select
+                  id="profile-campus"
+                  v-model="draft.campus"
+                  class="hhr-input"
+                  :aria-invalid="!!errors.campus"
+                  aria-describedby="profile-campus-help"
+                >
+                  <option value="">请选择</option>
+                  <option v-for="campus in campusOptions" :key="campus">
+                    {{ campus }}
+                  </option>
+                </select>
+                <p
+                  id="profile-campus-help"
+                  class="text-xs text-danger"
+                  role="alert"
+                >
+                  {{ errors.campus }}
+                </p>
+              </div>
+              <div>
+                <label for="profile-collegeId" class="auth-label"
+                  >学院（本地业务目录）</label
+                ><select
+                  id="profile-collegeId"
+                  v-model="draft.collegeId"
+                  class="hhr-input"
+                  :aria-invalid="!!errors.collegeId"
+                  aria-describedby="profile-college-help"
+                >
+                  <option value="">请选择</option>
+                  <option
+                    v-for="college in colleges"
+                    :key="college.id"
+                    :value="college.id"
+                  >
+                    {{ college.name }}
+                  </option>
+                </select>
+                <p
+                  id="profile-college-help"
+                  class="text-xs text-danger"
+                  role="alert"
+                >
+                  {{ errors.collegeId }}
+                </p>
+              </div>
+            </div>
+            <label for="profile-bio" class="auth-label mt-4"
+              >简介（选填，最多 200 字）</label
+            ><textarea
+              id="profile-bio"
+              v-model="draft.bio"
+              rows="4"
+              maxlength="200"
+              class="hhr-input"
+              :aria-invalid="!!errors.bio"
+              aria-describedby="profile-bio-help"
+            />
+            <p id="profile-bio-help" class="text-xs text-danger" role="alert">
+              {{ errors.bio }}
+            </p>
+            <p class="my-4 text-xs text-muted">
+              保存仅更新会话内前端演示，不表示服务器保存。
+            </p>
+          </div>
+          <div class="profile-editor-actions flex flex-wrap gap-3">
             <button type="submit" class="hhr-button">保存示例资料</button
             ><button
               type="button"
@@ -334,7 +388,7 @@ function authorizationChanged() {
             </button>
           </div>
         </form>
-      </section>
+      </dialog>
     </template>
     <div v-if="section === 'profile'" class="profile-shortcuts">
       <RouterLink
@@ -411,6 +465,58 @@ function authorizationChanged() {
   </div>
 </template>
 <style scoped>
+.profile-edit-dialog {
+  margin: auto;
+  width: calc(100% - 32px);
+  max-width: 680px;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--hhr-color-line);
+  border-radius: var(--hhr-radius-panel);
+  background: var(--hhr-color-surface);
+  color: var(--hhr-color-ink);
+}
+.profile-edit-dialog::backdrop {
+  background: rgb(24 62 48 / 35%);
+}
+.profile-editor {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 34px);
+}
+.profile-editor-heading,
+.profile-editor-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+}
+.profile-editor-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--hhr-color-line);
+}
+.profile-editor-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 0;
+}
+.profile-editor-actions {
+  border-top: 1px solid var(--hhr-color-line);
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+@media (max-width: 600px) {
+  .profile-editor-heading,
+  .profile-editor-actions,
+  .profile-editor-body {
+    padding-inline: 16px;
+  }
+  .profile-editor-actions > button {
+    flex: 1;
+  }
+}
 .profile-heading {
   margin-bottom: 28px;
 }
