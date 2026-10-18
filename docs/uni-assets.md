@@ -12,13 +12,13 @@
 
 ## 来源与再生成
 
-图标来自 `@lucide/vue` 1.51.0 的实际静态节点，固定输入位于 `apps/uni/scripts/icon-sources.json`。生成字体保留 24×24 坐标、1.5px 描边和圆头；通过字体实现颜色继承，不把动态 Vue SVG 或内联 SVG 放入微信模板。字体以 base64 内嵌在现有 `base.css` 中，原生底栏使用同源的普通/选中态 PNG；不访问外网图标服务，不引入额外样式生成链。
+图标来自 `@lucide/vue` 1.51.0 的 House、Users、Handshake、Leaf、BookOpen、ShieldCheck、Pencil、Mail、Star、Bell、UserRound 静态节点，依次对应上述业务名称。正式字体保留 24×24 坐标、1.5px 描边和圆头；通过字体实现颜色继承，不把动态 Vue SVG 或内联 SVG 放入微信模板。字体以 base64 内嵌在现有 `base.css` 中，原生底栏使用同源的普通/选中态 PNG；不访问外网图标服务，不引入额外样式生成链。
 
 Lucide 的 ISC 与 Feather 派生 MIT 通知保留于根目录 `third-party-notices/lucide-LICENSE.txt`，同时随 `static/licenses/lucide-LICENSE.txt` 进入构建产物。Logo 沿用用户提供的禾伙搭品牌图；院徽沿用旧 Web 已收录的学院展示资源及原有学院稳定 ID、白色图案标记。它们不因技术迁移而变成 Lucide 的 ISC/MIT 授权资源，也不新增学校授权声明。
 
-`apps/uni/scripts/generate-assets.py` 只在维护资源时运行，输入为固定图标节点和旧端生产图片，不是应用运行依赖。工具环境为 Python 3.13、Pillow 12.0.0、fonttools 4.61.0、skia-python 144.0.post2。修改图标时同步固定输入与业务名称/字形映射；修改底栏主题色后重新生成 PNG。
+一次性图片/字体生成脚本、中间输入、工具环境与验收输出仅留本地 `apps/uni/.local/`，不进入应用构建或 Git。仓库保留正式字体、PNG、业务映射、许可证和维护型源码测试；构建不要求安装 Python。后续更新图标时按以上固定版本、来源节点、坐标和描边生成资源，同步业务名称/字形映射；修改底栏主题色后同步普通/选中 PNG。
 
-生成步骤为：运行 `py -3 apps/uni/scripts/generate-assets.py`，再用现有 Prettier 格式化 `apps/uni/src/styles/base.css`。生成器将字体栅格化，与每个原始 SVG 节点的直接描边逐像素比较，拒绝平均 alpha 差异超过阈值的输出，防止路径填充转换破坏空心形状。无需 Python 的日常 CI 沿用 `node --test`：检查业务名称、本地图标、PNG、资源预算，并执行真实 Vue 图片错误/换源与加载语义测试。
+资源更新时逐项核对原图和目标字形，防止空心形状被填实；院徽转码保持原比例和白色图案标记。日常 CI 沿用 `node --test`：检查固定业务名称契约、本地图标、PNG、资源预算，并执行真实 Vue 图片错误/换源与加载语义测试，不读取本地中间输入。
 
 ## 资源预算与平台边界
 

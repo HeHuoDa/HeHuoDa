@@ -14,11 +14,22 @@ const read = (path) => readFileSync(resolve(root, path), "utf8");
 const pages = JSON.parse(read("src/pages.json"));
 
 test("业务名称覆盖固定来源，未知/原型名称提供可见回退", () => {
-  const sources = JSON.parse(read("scripts/icon-sources.json"));
-  assert.deepEqual(Object.keys(appIcons), Object.keys(sources));
+  const names = [
+    "home",
+    "users",
+    "team",
+    "leaf",
+    "book",
+    "shield",
+    "pencil",
+    "mail",
+    "star",
+    "bell",
+    "user",
+  ];
+  assert.deepEqual(Object.keys(appIcons), names);
   assert.equal(new Set(Object.values(appIcons)).size, 11);
-  for (const name of Object.keys(sources))
-    assert.notEqual(resolveIcon(name), "?");
+  for (const name of names) assert.notEqual(resolveIcon(name), "?");
   for (const name of ["unknown", "", "constructor", "__proto__", "toString"])
     assert.equal(resolveIcon(name), "?");
   const css = read("src/styles/base.css");
