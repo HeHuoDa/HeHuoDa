@@ -1,0 +1,13 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": { "navigationBarTitleText": "禾伙搭" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#faf9f5",
+    "backgroundColor": "#faf9f5"
+  }
+}
