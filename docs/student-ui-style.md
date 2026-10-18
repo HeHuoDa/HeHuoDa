@@ -61,6 +61,8 @@
 
 组件类内部同样遵守该约定：`.hhr-button`、`.hhr-input` 的 `min-height` 写 44px，内边距与间距写 rem，边框与圆角写 px。页面自定义触控区用 `min-h-[44px]` 这类 px 任意值，不要用会随视口缩小的 `h-11`。
 
+资源尺寸例外：`AppIcon`、`ProjectLogo`、`CollegeEmblem` 与 `LoadingIndicator` 的 `size` 使用 px，保持图标与文字、40px 品牌 Logo 的比例不随 H5 根字号变化；资源周围的布局间距仍用 rem。调用方可以按页面明确传入尺寸，触控区域继续保证至少 44px。资源显示与生成契约见[统一资源](uni-assets.md)。
+
 ### 字号刻度
 
 | 工具类          | 值   | 用途                     |

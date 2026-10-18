@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import AppIcon from "../../components/AppIcon.vue";
+import { appIcons } from "../../components/app-icons";
+import ProjectLogo from "../../components/ProjectLogo.vue";
+import CollegeEmblem from "../../components/CollegeEmblem.vue";
+import ResourceImage from "../../components/ResourceImage.vue";
+import LoadingIndicator from "../../components/LoadingIndicator.vue";
+import { colleges } from "../../data/colleges";
 
 /**
  * 样式基线页：逐项渲染主题色、字号层级、按钮状态、徽标、表单与状态块。
@@ -55,6 +62,67 @@ const teamName = ref("");
       <text class="mt-2 block text-body text-muted">
         禾苗绿、暖白与谷物黄的用户端基线。页面只消费语义工具类，不重复定义色值。
       </text>
+
+      <view class="hhr-panel mt-6">
+        <text class="block text-title-sm font-semibold text-ink"
+          >图标与品牌资源</text
+        >
+        <view
+          class="mt-4 flex flex-wrap items-center gap-4"
+          data-testid="icon-gallery"
+        >
+          <view
+            v-for="(_, name) in appIcons"
+            :key="name"
+            class="flex flex-col items-center gap-2 text-brand"
+          >
+            <AppIcon :name="name" :label="name" />
+            <text class="text-caption text-muted">{{ name }}</text>
+          </view>
+          <view class="flex flex-col items-center gap-2">
+            <AppIcon name="unknown" label="未知图标" />
+            <text class="text-caption text-muted">未知名称</text>
+          </view>
+        </view>
+        <view class="mt-4 flex flex-wrap items-center gap-4">
+          <ProjectLogo :decorative="false" />
+          <LoadingIndicator label="正在加载" class="text-brand" />
+          <AppIcon name="star" :size="16" class="text-muted" label="未收藏" />
+          <AppIcon
+            name="star"
+            :size="32"
+            class="text-accent-ink"
+            label="已收藏"
+          />
+          <AppIcon
+            name="shield"
+            color="var(--hhr-color-danger)"
+            label="权限提示"
+          />
+          <ResourceImage
+            src="/static/missing-image.png"
+            label="损坏图片示例"
+            fallback="图片暂缺"
+          />
+        </view>
+        <view
+          class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3"
+          data-testid="college-gallery"
+        >
+          <view
+            v-for="college in colleges"
+            :key="college.id"
+            class="flex min-w-0 items-center gap-2"
+          >
+            <CollegeEmblem :college-id="college.id" :decorative="true" />
+            <text class="text-caption text-ink">{{ college.name }}</text>
+          </view>
+          <view class="flex min-w-0 items-center gap-2">
+            <CollegeEmblem college-id="unknown" />
+            <text class="text-caption text-ink">未知学院</text>
+          </view>
+        </view>
+      </view>
 
       <view class="hhr-panel mt-6">
         <text class="block text-title-sm font-semibold text-ink">品牌色</text>

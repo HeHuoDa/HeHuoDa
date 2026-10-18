@@ -81,7 +81,50 @@ desktop.ini
 /docs/issue-*-browser-check.*
 /docs/issue-*-build-*.json
 
-# Generated uni-app platform configuration (source template is tracked)
+# uni-app generated configuration (keep templates and public source config)
 /apps/uni/src/manifest.json
-/apps/uni/src/project.private.config.json
-/apps/uni/unpackage/
+/apps/uni/**/project.private.config.json
+
+# uni-app/HBuilderX output, local tools, caches and development artifacts.
+# dist/, node_modules/, .vite/, .cache/, coverage/ and test-results/ are
+# already ignored above at every depth. Keep src/, static/, uni_modules/,
+# nativeplugins/, maintained scripts/tests and license notices tracked.
+/apps/uni/**/unpackage/
+/apps/uni/**/.hbuilderx/
+/apps/uni/**/.uni/
+/apps/uni/**/.uniapp/
+/apps/uni/**/.dcloud/
+/apps/uni/**/.local/
+/apps/uni/**/.scratch/
+/apps/uni/**/.artifacts/
+/apps/uni/**/.temp/
+/apps/uni/**/.tmp/
+/apps/uni/tmp/
+/apps/uni/temp/
+/apps/uni/artifacts/
+/apps/uni/reports/
+/apps/uni/screenshots/
+/apps/uni/recordings/
+/apps/uni/traces/
+/apps/uni/downloads/
+/apps/uni/vite.config.*.timestamp-*
+
+# Optional local image/font tooling environments and bytecode
+/apps/uni/**/__pycache__/
+/apps/uni/**/*.py[cod]
+/apps/uni/**/.venv/
+/apps/uni/venv/
+/apps/uni/**/.pytest_cache/
+/apps/uni/**/.mypy_cache/
+/apps/uni/**/.ruff_cache/
+
+# Packaged application/upload output and patch/editor leftovers
+/apps/uni/**/*.wxapkg
+/apps/uni/**/*.wgt
+/apps/uni/**/*.wgtu
+/apps/uni/**/*.apk
+/apps/uni/**/*.aab
+/apps/uni/**/*.ipa
+/apps/uni/**/*.bak
+/apps/uni/**/*.orig
+/apps/uni/**/*.rej

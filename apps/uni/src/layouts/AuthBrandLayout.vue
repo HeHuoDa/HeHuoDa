@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ProjectLogo from "../components/ProjectLogo.vue";
 /**
  * 认证品牌布局：品牌标识、品牌故事与表单区容器。
  * 只负责布局与返回入口，登录/注册表单由认证任务实现。
@@ -14,12 +15,7 @@
         open-type="switchTab"
         aria-label="禾伙搭，返回首页"
       >
-        <image
-          class="project-logo"
-          src="/static/hehuoda-logo.png"
-          alt=""
-          mode="aspectFit"
-        />
+        <ProjectLogo />
         <view class="brand-copy">
           <text class="brand-name">禾伙搭</text>
           <text class="brand-subtitle">校园比赛与项目组队平台</text>
@@ -79,13 +75,6 @@
   align-self: flex-start;
   align-items: center;
   gap: 0.75rem;
-}
-
-.project-logo {
-  display: block;
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
 }
 
 .brand-copy {
