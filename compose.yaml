@@ -1,27 +1,29 @@
+name: hehuoda
+
 services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_USER: hehuoren
-      POSTGRES_PASSWORD: hehuoren_local
-      POSTGRES_DB: hehuoren
+      POSTGRES_USER: hehuoda
+      POSTGRES_PASSWORD: hehuoda_local
+      POSTGRES_DB: hehuoda
     ports: ["127.0.0.1:54322:5432"]
     volumes: [competition-data:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hehuoren -d hehuoren"]
+      test: ["CMD-SHELL", "pg_isready -U hehuoda -d hehuoda"]
       interval: 5s
       timeout: 5s
       retries: 10
   test-db:
     image: postgres:17
     environment:
-      POSTGRES_USER: hehuoren
-      POSTGRES_PASSWORD: hehuoren_test
-      POSTGRES_DB: hehuoren_test
+      POSTGRES_USER: hehuoda
+      POSTGRES_PASSWORD: hehuoda_test
+      POSTGRES_DB: hehuoda_test
     ports: ["127.0.0.1:54323:5432"]
     tmpfs: [/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hehuoren -d hehuoren_test"]
+      test: ["CMD-SHELL", "pg_isready -U hehuoda -d hehuoda_test"]
       interval: 5s
       timeout: 5s
       retries: 10

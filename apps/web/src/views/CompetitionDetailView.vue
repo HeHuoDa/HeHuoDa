@@ -2,7 +2,7 @@
 import { ref, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import axios from "axios";
-import type { CompetitionDetail } from "@hehuoren/api-types";
+import type { CompetitionDetail } from "@hehuoda/api-types";
 import { competitionApi, originLabels } from "../api/competitions";
 import {
   collegeNames,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import type { CompetitionDetail, CompetitionList } from "@hehuoren/api-types";
+import type { CompetitionDetail, CompetitionList } from "@hehuoda/api-types";
 import { competitionApi, originLabels } from "../api/competitions";
 import { formatTime } from "../data/competition-discovery";
 const props = defineProps<{

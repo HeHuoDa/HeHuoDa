@@ -1,7 +1,7 @@
 import type { LocationQuery, LocationQueryRaw } from "vue-router";
 import { colleges } from "./colleges";
 import type { CollegeSelection } from "./college-selection";
-import type { Time, CompetitionScope } from "@hehuoren/api-types";
+import type { Time, CompetitionScope } from "@hehuoda/api-types";
 
 export const statuses = {
   upcoming: "尚未开始",

@@ -2,7 +2,7 @@ import type {
   College,
   CompetitionDetail,
   CompetitionList,
-} from "@hehuoren/api-types";
+} from "@hehuoda/api-types";
 import { http } from "./http";
 import type { Filters } from "../data/competition-discovery";
 export const competitionApi = {

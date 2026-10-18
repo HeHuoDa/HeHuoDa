@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useProfileDemoStore } from "./profile-demo";
-import type { CompetitionDetail } from "@hehuoren/api-types";
+import type { CompetitionDetail } from "@hehuoda/api-types";
 import type { LocationQuery, LocationQueryRaw } from "vue-router";
 
 export const projectTypes = {

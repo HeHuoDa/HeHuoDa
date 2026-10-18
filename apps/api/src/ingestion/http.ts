@@ -30,7 +30,7 @@ export const defaultLimits: HttpLimits = {
   bytes: 2 * 1024 * 1024,
 };
 export const userAgent =
-  "HeHuoRenIngestion/1.0 (public academic notices; manual review)";
+  "HeHuoDaIngestion/1.0 (public academic notices; manual review)";
 export class BudgetExhaustedError extends Error {}
 export function publicAddress(address: string): boolean {
   if (isIP(address) === 4) {
@@ -437,7 +437,7 @@ export function parseRobots(text: string) {
         group.delay = Math.max(group.delay, Number(value) * 1000 || 0);
     }
   }
-  const specific = groups.filter((g) => g.agents.includes("hehuoreningestion"));
+  const specific = groups.filter((g) => g.agents.includes("hehuodaingestion"));
   const selected = specific.length
     ? specific
     : groups.filter((g) => g.agents.includes("*"));

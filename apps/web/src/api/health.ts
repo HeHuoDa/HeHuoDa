@@ -1,4 +1,4 @@
-import type { HealthResponse } from "@hehuoren/api-types";
+import type { HealthResponse } from "@hehuoda/api-types";
 import { http } from "./http";
 export const healthApi = {
   async getHealth(): Promise<HealthResponse> {

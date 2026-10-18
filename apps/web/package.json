@@ -1,5 +1,5 @@
 {
-  "name": "@hehuoren/web",
+  "name": "@hehuoda/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@hehuoren/api-types": "workspace:*",
+    "@hehuoda/api-types": "workspace:*",
     "@lucide/vue": "1.51.0",
     "axios": "1.20.0",
     "pinia": "4.0.3",
