@@ -2,7 +2,7 @@ import type {
   CompetitionDetail,
   CompetitionList,
   Time,
-} from "@hehuoren/api-types";
+} from "@hehuoda/api-types";
 import { colleges } from "../data/colleges";
 import { competitions, DEMO_NOW } from "../data/competitions";
 import { filterEntries, stageStatus } from "../data/competition-demo";

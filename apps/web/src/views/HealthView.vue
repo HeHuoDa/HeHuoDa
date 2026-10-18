@@ -22,11 +22,11 @@ onMounted(() => {
     class="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-12"
   >
     <header class="mb-8">
-      <p class="hhr-eyebrow">HEHUOREN</p>
+      <p class="hhr-eyebrow">HEHUODA</p>
       <div class="brand-link">
         <ProjectLogo />
         <h1 class="font-serif text-[28px] font-semibold tracking-tight">
-          禾伙人
+          禾伙搭
         </h1>
       </div>
       <p class="mt-3 text-sm leading-7 text-muted">校园比赛与项目组队平台</p>

@@ -1,20 +1,20 @@
 {
-  "name": "hehuoren",
+  "name": "hehuoda",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "engines": {
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @hehuoren/api --filter @hehuoren/web dev",
+    "dev": "pnpm --parallel --filter @hehuoda/api --filter @hehuoda/web dev",
     "lint": "pnpm -r --if-present lint",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",
-    "api:generate": "pnpm --filter @hehuoren/api openapi:write && pnpm --filter @hehuoren/api-types generate",
+    "api:generate": "pnpm --filter @hehuoda/api openapi:write && pnpm --filter @hehuoda/api-types generate",
     "build": "pnpm -r --if-present build",
     "test:unit": "pnpm -r --if-present test:unit",
-    "test:integration": "pnpm --filter @hehuoren/api test:integration",
-    "test:e2e": "pnpm --filter @hehuoren/api test:e2e"
+    "test:integration": "pnpm --filter @hehuoda/api test:integration",
+    "test:e2e": "pnpm --filter @hehuoda/api test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

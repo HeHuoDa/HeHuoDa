@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import type { CompetitionList } from "@hehuoren/api-types";
+import type { CompetitionList } from "@hehuoda/api-types";
 import CollegePicker from "../components/CollegePicker.vue";
 import { colleges } from "../data/colleges";
 import { competitionApi, originLabels } from "../api/competitions";

@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory } from "vue-router";
-import type { CompetitionDetail, CompetitionList } from "@hehuoren/api-types";
+import type { CompetitionDetail, CompetitionList } from "@hehuoda/api-types";
 import App from "../App.vue";
 import { createAppRouter } from "../router";
 import { competitionApi } from "../api/competitions";

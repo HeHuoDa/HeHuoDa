@@ -6,7 +6,7 @@
 
 ## 背景与决策
 
-禾伙人的前后端将共同演进，接口契约需要同步且可重复生成。阶段一采用 pnpm 单仓工作区：Vue 3、Pinia、Vant 和 Tailwind 构成 Web；NestJS 与 Fastify 构成 API；OpenAPI 生成仅含类型的共享包，Web 通过 `workspace:*` 消费。
+禾伙搭的前后端将共同演进，接口契约需要同步且可重复生成。阶段一采用 pnpm 单仓工作区：Vue 3、Pinia、Vant 和 Tailwind 构成 Web；NestJS 与 Fastify 构成 API；OpenAPI 生成仅含类型的共享包，Web 通过 `workspace:*` 消费。
 
 选择单仓以便接口修改、类型生成和前端适配进入同一次审查，代价是工具链升级与质量门禁需要协调。Pinia 管理页面共享状态，接口契约由 API 的 DTO 与 Swagger 定义，避免前端手写一套平行类型。
 

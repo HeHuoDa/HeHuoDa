@@ -6,7 +6,7 @@ import type {
   College,
   CompetitionDetail,
   CompetitionList,
-} from "@hehuoren/api-types";
+} from "@hehuoda/api-types";
 import App from "../App.vue";
 import { createAppRouter } from "../router";
 import { competitionApi } from "../api/competitions";

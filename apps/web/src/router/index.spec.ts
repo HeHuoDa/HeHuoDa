@@ -100,7 +100,7 @@ describe("学生端路由", () => {
       const router = await visit(path);
       expect(wrapper!.get("h1").text()).toBe(title);
       expect(wrapper!.text()).toContain("待开发");
-      expect(document.title).toBe(`${title} · 禾伙人`);
+      expect(document.title).toBe(`${title} · 禾伙搭`);
       expect(router.currentRoute.value.name).toBe(name);
       expect(healthApi.getHealth).not.toHaveBeenCalled();
     },
@@ -128,7 +128,7 @@ describe("学生端路由", () => {
     async (path, title, count) => {
       await visit(path);
       expect(wrapper!.get("h1").text()).toBe(title);
-      expect(document.title).toBe(`${title} · 禾伙人`);
+      expect(document.title).toBe(`${title} · 禾伙搭`);
       expect(wrapper!.findAll("input")).toHaveLength(count);
       expect(wrapper!.find(".student-shell").exists()).toBe(false);
       expect(wrapper!.text()).not.toContain("待开发");
@@ -173,7 +173,7 @@ describe("学生端路由", () => {
   it("个人中心提供资料与分区、收藏、通知和账号入口，并统一高亮个人中心", async () => {
     await visit("/profile");
     expect(wrapper!.get("h1").text()).toBe("个人中心");
-    expect(document.title).toBe("个人中心 · 禾伙人");
+    expect(document.title).toBe("个人中心 · 禾伙搭");
     expect(wrapper!.find(".placeholder-panel").exists()).toBe(false);
     expect(
       wrapper!

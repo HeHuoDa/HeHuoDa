@@ -224,7 +224,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
       return { path: to.path, query, hash: to.hash, replace: true };
   });
   instance.afterEach((to) => {
-    document.title = `${to.meta.title} · 禾伙人`;
+    document.title = `${to.meta.title} · 禾伙搭`;
   });
   return instance;
 }

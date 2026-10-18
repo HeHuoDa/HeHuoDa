@@ -109,7 +109,7 @@ describe("有边界的 HTTP 采集", () => {
     const forbidden = fetcher([response(403)]);
     await expect(forbidden.fetcher.checkRobots()).rejects.toThrow("拒绝");
     const rules = parseRobots(
-      "User-agent: *\nDisallow: /\nUser-agent: HeHuoRenIngestion\nDisallow: /info/\nAllow: /info/public/\nCrawl-delay: 3",
+      "User-agent: *\nDisallow: /\nUser-agent: HeHuoDaIngestion\nDisallow: /info/\nAllow: /info/public/\nCrawl-delay: 3",
     );
     expect(rules.delay).toBe(3000);
     expect(robotsAllowed("/info/private/a", rules.rules)).toBe(false);

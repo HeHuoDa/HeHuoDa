@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter, stringifyQuery } from "vue-router";
-import type { CompetitionDetail } from "@hehuoren/api-types";
+import type { CompetitionDetail } from "@hehuoda/api-types";
 import { competitionApi } from "../api/competitions";
 import TeamDemoReset from "../components/TeamDemoReset.vue";
 import { useTeamClock } from "../data/team-clock";
