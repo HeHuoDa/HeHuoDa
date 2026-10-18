@@ -3,11 +3,15 @@
     {
       "path": "pages/index/index",
       "style": { "navigationBarTitleText": "禾伙搭" }
+    },
+    {
+      "path": "pages/style/index",
+      "style": { "navigationBarTitleText": "样式基线" }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarBackgroundColor": "#faf9f5",
-    "backgroundColor": "#faf9f5"
+    "navigationBarBackgroundColor": "#f7f8f4",
+    "backgroundColor": "#f7f8f4"
   }
 }

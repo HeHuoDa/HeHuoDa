@@ -1,0 +1,104 @@
+/*
+ * 用户端主题唯一入口。
+ *
+ * 色值、字体与圆角沿用旧 Web 的 --hhr-* 变量（apps/web/src/style.css），
+ * 用户端不再维护第二套品牌色；改色只改这里，页面通过语义工具类消费。
+ * 字号层级是新客户端的语义刻度，与旧 Web 的 Tailwind 默认字号一一对应，
+ * 单位策略与映射表见 docs/student-ui-style.md。
+ */
+:root {
+  /* 禾苗绿主色、暖白背景、谷物黄点缀 */
+  --hhr-color-brand: #27644b;
+  --hhr-color-brand-hover: #183e30;
+  --hhr-color-brand-soft: #eaf2e9;
+  --hhr-color-ink: #243d32;
+  --hhr-color-muted: #5e6d63;
+  --hhr-color-page: #f7f8f4;
+  --hhr-color-surface: #fff;
+  --hhr-color-line: #e7ebe3;
+  --hhr-color-accent: #e9bd56;
+  --hhr-color-accent-soft: #fff4d9;
+  --hhr-color-accent-ink: #947127;
+  --hhr-color-danger: #b85a49;
+  --hhr-color-danger-soft: #faeee9;
+  --hhr-color-focus: #d7af55;
+  --hhr-color-input-line: #dfe5da;
+
+  --hhr-font-body:
+    "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --hhr-font-display: "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+
+  /* 圆角用 px：控件外观不随视口缩放，两端保持同一视觉比例 */
+  --hhr-radius-control: 9px;
+  --hhr-radius-badge: 5px;
+  --hhr-radius-card: 15px;
+  --hhr-radius-panel: 18px;
+
+  --hhr-duration: 180ms;
+}
+
+/*
+ * 语义工具类：bg-brand、text-ink、border-line、rounded-panel。
+ * inline 模式把变量值内联进工具类，颜色仍指向 --hhr-*，换主题只需改一处。
+ */
+@theme inline {
+  --color-brand: var(--hhr-color-brand);
+  --color-brand-hover: var(--hhr-color-brand-hover);
+  --color-brand-soft: var(--hhr-color-brand-soft);
+  --color-ink: var(--hhr-color-ink);
+  --color-muted: var(--hhr-color-muted);
+  --color-page: var(--hhr-color-page);
+  --color-surface: var(--hhr-color-surface);
+  --color-line: var(--hhr-color-line);
+  --color-accent: var(--hhr-color-accent);
+  --color-accent-soft: var(--hhr-color-accent-soft);
+  --color-accent-ink: var(--hhr-color-accent-ink);
+  --color-danger: var(--hhr-color-danger);
+  --color-danger-soft: var(--hhr-color-danger-soft);
+  --color-focus: var(--hhr-color-focus);
+  --color-input-line: var(--hhr-color-input-line);
+
+  --font-sans: var(--hhr-font-body);
+  --font-serif: var(--hhr-font-display);
+
+  --radius-control: var(--hhr-radius-control);
+  --radius-badge: var(--hhr-radius-badge);
+  --radius-card: var(--hhr-radius-card);
+  --radius-panel: var(--hhr-radius-panel);
+}
+
+/*
+ * 字号刻度与断点。字号写 px 而不是 rem：uni-app H5 会按视口宽度缩放根字号，
+ * rem 字号在 320px 宽会缩到约 12px；固定 px 保证两端字号一致且不缩水。
+ * 断点同样固定 px。尺寸与间距继续用 rem，由 weapp-tailwindcss 换算成小程序 rpx。
+ */
+@theme {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+
+  /* 11px 引导文字与徽标 */
+  --text-eyebrow: 11px;
+  --text-eyebrow--line-height: 1.5;
+  /* 12px 辅助说明、错误提示 */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.6;
+  /* 13px 按钮、标签、次级操作 */
+  --text-label: 13px;
+  --text-label--line-height: 1.5;
+  /* 14px 正文 */
+  --text-body: 14px;
+  --text-body--line-height: 1.65;
+  /* 16px 表单输入与重点正文，H5 聚焦不触发 iOS 自动放大 */
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 1.6;
+  /* 18px 卡片标题 */
+  --text-title-sm: 18px;
+  --text-title-sm--line-height: 1.5;
+  /* 21px 页面标题，对应旧顶栏品牌字号 */
+  --text-title: 21px;
+  --text-title--line-height: 1.4;
+  /* 28px 首屏标题，移动端收敛旧 Web 的 clamp(38px, 4.5vw, 60px) */
+  --text-display: 28px;
+  --text-display--line-height: 1.35;
+}
