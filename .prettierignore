@@ -31,3 +31,6 @@ docs/issue-*-validation.md
 docs/issue-*-*-results.json
 docs/issue-*-browser-check.*
 docs/issue-*-build-*.json
+
+apps/uni/src/manifest.json
+apps/uni/unpackage/

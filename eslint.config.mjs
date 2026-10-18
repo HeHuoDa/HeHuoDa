@@ -11,6 +11,7 @@ export default tseslint.config(
       "**/dist-openapi/**",
       "**/coverage/**",
       "**/src/generated/**",
+      "apps/uni/unpackage/**",
     ],
   },
   js.configs.recommended,
@@ -21,11 +22,20 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["apps/web/**/*.vue"],
+    files: ["apps/web/**/*.vue", "apps/uni/**/*.vue"],
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
   {
-    files: ["apps/api/**/*.ts", "packages/**/*.ts", "**/*.config.*"],
+    files: ["apps/uni/**/*.vue"],
+    rules: { "vue/multi-word-component-names": "off" },
+  },
+  {
+    files: [
+      "apps/api/**/*.ts",
+      "packages/**/*.ts",
+      "**/*.config.*",
+      "apps/uni/scripts/**/*.mjs",
+    ],
     languageOptions: { globals: globals.node },
   },
   prettier,

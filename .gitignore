@@ -80,3 +80,8 @@ desktop.ini
 /docs/issue-*-*-results.json
 /docs/issue-*-browser-check.*
 /docs/issue-*-build-*.json
+
+# Generated uni-app platform configuration (source template is tracked)
+/apps/uni/src/manifest.json
+/apps/uni/src/project.private.config.json
+/apps/uni/unpackage/
