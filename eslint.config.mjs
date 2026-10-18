@@ -29,7 +29,16 @@ export default tseslint.config(
     files: ["apps/uni/**/*.vue"],
     rules: { "vue/multi-word-component-names": "off" },
     // uni 由 uni-app 运行时注入，类型来自 @dcloudio/types
-    languageOptions: { globals: { uni: "readonly" } },
+    languageOptions: {
+      globals: { uni: "readonly", getCurrentPages: "readonly" },
+    },
+  },
+  {
+    files: ["apps/uni/**/*.ts"],
+    // uni 与页面栈 API 由 uni-app 运行时注入，类型来自 @dcloudio/types
+    languageOptions: {
+      globals: { uni: "readonly", getCurrentPages: "readonly" },
+    },
   },
   {
     files: [

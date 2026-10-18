@@ -25,7 +25,10 @@ page {
   /* 页面容器：统一左右留白、底部安全区与长文本换行。 */
   .hhr-page {
     box-sizing: border-box;
-    min-height: 100vh;
+    /* 减去原生导航栏与 tabBar 占位，避免 H5 出现多余滚动 */
+    min-height: calc(
+      100vh - var(--window-top, 0px) - var(--window-bottom, 0px)
+    );
     padding: 1.5rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
     overflow-wrap: anywhere;
   }
@@ -35,6 +38,57 @@ page {
     max-width: 40rem;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  /*
+   * 底部主导航占位。H5 的 tabBar 是固定层，用 uni 注入的 --window-bottom
+   * 让正文不被遮挡；小程序 tabBar 在 webview 之外，该变量为 0。
+   */
+  .hhr-page.hhr-page--tab {
+    padding-bottom: calc(
+      1.5rem + var(--window-bottom, 0px) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  /* 认证卡片：移动端 20px / 24px，桌面 32px，与旧 Web 认证面板一致 */
+  .hhr-panel.hhr-auth-panel {
+    padding: 1.5rem 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .hhr-panel.hhr-auth-panel {
+      padding: 2rem;
+    }
+  }
+
+  /* 预留页面板：与旧 Web .placeholder-panel 的留白和最小高度一致 */
+  .hhr-panel.hhr-placeholder {
+    min-height: 320px;
+    padding: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .hhr-panel.hhr-placeholder {
+      min-height: 340px;
+      padding: 2.5rem;
+    }
+  }
+
+  /* 认证页底部的登录/注册互跳，与旧 Web .auth-switch 一致 */
+  .hhr-auth-switch {
+    margin-top: 1.125rem;
+    color: var(--hhr-color-muted);
+    font-size: var(--text-label);
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .hhr-auth-switch__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--hhr-color-brand);
+    font-weight: 600;
   }
 
   /* 内容面板与卡片 */
