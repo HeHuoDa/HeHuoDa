@@ -4,7 +4,7 @@
 
 Issue #23 已交付首批信息工程学院、生命科学学院的官方通知采集、候选人工审核、草稿导入与显式发布 CLI；已补充预算分配、定时续跑和诊断记录，尚无管理 HTTP 接口或管理端应用。
 
-仓库现由 [HeHuoRen-Sicau 组织](https://github.com/HeHuoRen-Sicau/HeHuoRen)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoRen-Sicau/HeHuoRen.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
+仓库现由 [HeHuoDa 组织](https://github.com/HeHuoDa/HeHuoDa)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoDa/HeHuoDa.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
 
 ## 技术栈
 
@@ -44,6 +44,8 @@ pnpm install --frozen-lockfile
 
 ## 本地开发
 
+Compose 项目名固定为 `hehuoda`，新建数据库、用户及测试库使用同名品牌标识。已有持久化数据库不会随配置文本改名；切换前须先备份旧库，在隔离环境恢复并核验，再调整运行连接。不要通过删除数据卷处理改名后的认证失败。改动配置不代表已有数据库已迁移。
+
 在仓库根目录复制环境变量示例：
 
 ```bash
@@ -58,10 +60,10 @@ Copy-Item apps/api/.env.example apps/api/.env
 
 ```bash
 docker compose up -d --wait
-pnpm --filter @hehuoren/api db:migrate
-pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
-pnpm --filter @hehuoren/api data:import data/publish-reviewed.json --preview
-pnpm --filter @hehuoren/api data:import data/publish-reviewed.json
+pnpm --filter @hehuoda/api db:migrate
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json
+pnpm --filter @hehuoda/api data:import data/publish-reviewed.json --preview
+pnpm --filter @hehuoda/api data:import data/publish-reviewed.json
 pnpm dev
 ```
 
@@ -107,9 +109,9 @@ API 默认只监听本机。开发端口冲突时可设置 API 的 PORT 和 Web 
 以下展示已纳入版本控制的主要目录与关键文件，省略依赖、构建输出和本地验收产物：
 
 ```text
-HeHuoRen/
+HeHuoDa/
 ├── apps/
-│   ├── web/                          # @hehuoren/web：学生端 Web 应用
+│   ├── web/                          # @hehuoda/web：学生端 Web 应用
 │   │   ├── src/
 │   │   │   ├── api/                  # Axios 客户端、健康与比赛 API 请求
 │   │   │   ├── assets/               # 生产 Logo 与学院院徽
@@ -124,7 +126,7 @@ HeHuoRen/
 │   │   │   └── style.css            # 全局主题变量与 Tailwind 样式
 │   │   ├── vite.config.ts            # Vue / Tailwind 插件与开发 API 代理
 │   │   └── vitest.config.ts          # Web 单元测试配置
-│   └── api/                          # @hehuoren/api：NestJS / Fastify 服务
+│   └── api/                          # @hehuoda/api：NestJS / Fastify 服务
 │       ├── src/
 │       │   ├── common/               # 错误 DTO、异常过滤器与全局校验管道
 │       │   ├── competitions/         # 学院/比赛查询、DTO、仓储、时间与导入规则
@@ -142,7 +144,7 @@ HeHuoRen/
 │       ├── .env.example              # 本地环境变量示例（实际 .env 不提交）
 │       └── openapi.json              # 生成并提交的接口契约
 ├── packages/
-│   └── api-types/                    # @hehuoren/api-types：共享类型，无运行时代码
+│   └── api-types/                    # @hehuoda/api-types：共享类型，无运行时代码
 │       └── src/
 │           ├── generated/schema.d.ts # 从 OpenAPI 自动生成，禁止手工编辑
 │           └── index.ts              # 共享类型导出入口
@@ -185,11 +187,11 @@ git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/s
 pnpm typecheck
 pnpm build
 pnpm test:unit
-TEST_DATABASE_URL=postgresql://hehuoren:hehuoren_test@127.0.0.1:54323/hehuoren_test pnpm test:integration
-TEST_DATABASE_URL=postgresql://hehuoren:hehuoren_test@127.0.0.1:54323/hehuoren_test pnpm test:e2e
+TEST_DATABASE_URL=postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test pnpm test:integration
+TEST_DATABASE_URL=postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test pnpm test:e2e
 ```
 
-PowerShell 先执行 `$env:TEST_DATABASE_URL="postgresql://hehuoren:hehuoren_test@127.0.0.1:54323/hehuoren_test"`，再运行两个数据库测试命令。测试连接数据库名须以 `_test` 结尾，且不能与开发连接相同；每套测试创建独立 schema，完成后清理。
+PowerShell 先执行 `$env:TEST_DATABASE_URL="postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test"`，再运行两个数据库测试命令。测试连接数据库名须以 `_test` 结尾，且不能与开发连接相同；每套测试创建独立 schema，完成后清理。
 
 API 单元测试覆盖配置、异常过滤、严格查询校验、报名时间边界与官网解析/访问预算；真实 PostgreSQL 集成测试验证迁移、事务导入、排序分页，以及候选审核、版本冲突、并发锁和扫描恢复。API e2e 包含本机临时端口的真实 HTTP 健康与 Swagger 测试，以及 Fastify 注入的公开比赛查询、候选到显式发布流程；不等同浏览器端到端业务验收。Web 单元测试覆盖健康状态、路由导航、认证表单、比赛请求与状态反馈、招募和个人中心会话演示。API 的 Jest ESM 模式使用 `--experimental-vm-modules`，Node 会输出对应实验功能提示。
 
@@ -199,7 +201,7 @@ ESLint 使用原生支持的 `eslint.config.mjs`；`eslint-config-prettier` 关�
 
 GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行完整质量检查，Action 固定为完整提交 SHA。最终 job 名为 `ci-gate`，只有 `quality` 成功时通过。配置没有路径过滤器。
 
-`quality` 已配置临时 PostgreSQL 17 service，运行数据库集成测试与真实 HTTP e2e；官网采集测试使用离线片段与模拟网络。当前没有独立 integration/e2e Job，也没有浏览器业务闭环 CI。2026-10-12 核验组织仓库：`main` 必需 `ci-gate`、分支保持最新、解决讨论且管理员同样受约束；Allow auto-merge 与 merge commit 已开启。[PR #48 的 CI](https://github.com/HeHuoRen-Sicau/HeHuoRen/actions/runs/38193253994)已通过，属于该 PR 的证据，不代表后续改动已验证。
+`quality` 已配置临时 PostgreSQL 17 service，运行数据库集成测试与真实 HTTP e2e；官网采集测试使用离线片段与模拟网络。当前没有独立 integration/e2e Job，也没有浏览器业务闭环 CI。2026-10-12 核验组织仓库：`main` 必需 `ci-gate`、分支保持最新、解决讨论且管理员同样受约束；Allow auto-merge 与 merge commit 已开启。[PR #48 的 CI](https://github.com/HeHuoDa/HeHuoDa/actions/runs/38193253994)已通过，属于该 PR 的证据，不代表后续改动已验证。
 
 `auto-merge.yml` 在 PR 的 `CI` 成功后自动启用合并：仅处理本仓库面向 `main` 的非草稿 PR，核对通过 CI 的提交仍是 PR 最新提交，并使用 merge commit 保留分步提交。它遵守分支保护，不检出或执行 PR 代码。该工作流合并到默认分支后才会触发；CI 会在草稿 PR 转为可审阅时重新运行，成功后再次触发自动合并。
 
@@ -234,9 +236,9 @@ URL query 约定：`hosts` 为稳定学院 ID 的逗号列表或 `all`，缺省�
 人工数据位于 apps/api/data/reviewed-competitions.json：27 个稳定学院 ID、4 个非演示届次，默认草稿。2026-10-04 重新读取六条官网通知；挑战杯校团委附件需验证码，未验证附件规则，保留未知字段及提醒。复赛/院赛日期用 date 精度，24:00 等价保存为次日 00:00 的精确瞬间并保留原文说明。统计建模通知明确的是材料截止，不自动当作报名截止。
 
 ```bash
-pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json --validate
-pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json --preview
-pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --validate
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --preview
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json
 ```
 
 --validate 仅验证文件结构；--preview 在数据库事务内验证引用、发布条件与数据库约束，输出新增/更新和解除关系，再回滚。导入以稳定 ID 更新，缺失实体不删除；承办学院、范围学院和赛段来源缺省保留、数组完整替换、空数组清空。部分更新文件仍采用 colleges/competitions 根结构及各对象 id。未知时间为 { precision: "unknown", value: null }，清除时间须显式写该对象。
@@ -249,7 +251,7 @@ pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
 
 ## 官方通知采集与人工审核（Issue #23）
 
-先执行 `pnpm --filter @hehuoren/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
+先执行 `pnpm --filter @hehuoda/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
 
 增量恢复修复新增 `0003_ingestion_recovery_indexes.sql`，通过同一迁移命令应用；只增加续跑关系与定时运行查询索引，不修改正式比赛数据。已有数据库也须执行迁移。
 
@@ -264,13 +266,13 @@ pnpm --filter @hehuoren/api data:import data/reviewed-competitions.json
 以下命令在根目录运行，读取 `apps/api/.env` 中的 `DATABASE_URL`：
 
 ```bash
-pnpm --filter @hehuoren/api ingestion sources
-pnpm --filter @hehuoren/api ingestion scan --source information-engineering --preview
-pnpm --filter @hehuoren/api ingestion scan --source information-engineering --from 2026-07-14 --to 2026-10-11
-pnpm --filter @hehuoren/api ingestion scan --source life-sciences --url https://smkx.sicau.edu.cn/info/1061/28771.htm
-pnpm --filter @hehuoren/api ingestion runs
-pnpm --filter @hehuoren/api ingestion candidates
-pnpm --filter @hehuoren/api ingestion operations
+pnpm --filter @hehuoda/api ingestion sources
+pnpm --filter @hehuoda/api ingestion scan --source information-engineering --preview
+pnpm --filter @hehuoda/api ingestion scan --source information-engineering --from 2026-07-14 --to 2026-10-11
+pnpm --filter @hehuoda/api ingestion scan --source life-sciences --url https://smkx.sicau.edu.cn/info/1061/28771.htm
+pnpm --filter @hehuoda/api ingestion runs
+pnpm --filter @hehuoda/api ingestion candidates
+pnpm --filter @hehuoda/api ingestion operations
 ```
 
 不指定来源时顺序扫描两站；默认北京时间最近 90 天，指定区间最多 366 天。单 URL 重跑和 `scan --source <来源> --resume <运行ID>` 必须指定来源；续跑沿用原范围和待处理游标。置顶、未知日期或乱序列表不触发提前截断，已知近期通知使用 ETag/Last-Modified 复查；适配器版本变化会重新解析。相同 URL 和正文版本不重复生成候选；新版重新进入待审核，转载只提示关联、不自动合并。结构异常、空列表、登录/验证码、域名或地址异常停止相关来源，正式比赛保持原状。
@@ -278,15 +280,15 @@ pnpm --filter @hehuoren/api ingestion operations
 审核文件导出到被忽略的 `.data/`。已有比赛须显式指定 `--target <比赛ID>`，否则生成新草稿的稳定 ID。审核文件的 `source`、`article`、`previousArticle`、`candidate`、`formalBefore` 和版本基线用于防止过期或篡改；人工只修正 `batch`，填写 `checkedAt`（真实核对日期）和 `resolution`（修正理由、未知字段及冲突处理）。完整字段结构沿用上一节人工导入文件，不能用猜测填补缺失资格或时间。首次导出的新比赛需要补齐届次、正式来源通知和赛段，默认不具备发布条件。
 
 ```bash
-pnpm --filter @hehuoren/api ingestion export --candidate <候选ID> --out ../../.data/review.json
+pnpm --filter @hehuoda/api ingestion export --candidate <候选ID> --out ../../.data/review.json
 # 核对原文并修改审核文件后执行；<维护者> 为审核身份标识。
-pnpm --filter @hehuoren/api ingestion approve --file ../../.data/review.json --reviewer <维护者>
-pnpm --filter @hehuoren/api ingestion apply --file ../../.data/review.json --reviewer <维护者> --preview
-pnpm --filter @hehuoren/api ingestion apply --file ../../.data/review.json --reviewer <维护者>
+pnpm --filter @hehuoda/api ingestion approve --file ../../.data/review.json --reviewer <维护者>
+pnpm --filter @hehuoda/api ingestion apply --file ../../.data/review.json --reviewer <维护者> --preview
+pnpm --filter @hehuoda/api ingestion apply --file ../../.data/review.json --reviewer <维护者>
 # 重新导出以取得导入后的 baseline；发布只改变正式记录的发布状态。
-pnpm --filter @hehuoren/api ingestion export --candidate <候选ID> --out ../../.data/after-import.json
-pnpm --filter @hehuoren/api ingestion publish --candidate <候选ID> --baseline <新导出文件的baseline> --reviewer <维护者> --preview
-pnpm --filter @hehuoren/api ingestion publish --candidate <候选ID> --baseline <同一baseline> --reviewer <维护者>
+pnpm --filter @hehuoda/api ingestion export --candidate <候选ID> --out ../../.data/after-import.json
+pnpm --filter @hehuoda/api ingestion publish --candidate <候选ID> --baseline <新导出文件的baseline> --reviewer <维护者> --preview
+pnpm --filter @hehuoda/api ingestion publish --candidate <候选ID> --baseline <同一baseline> --reviewer <维护者>
 ```
 
 `scan --preview` 不写入运行、候选或正式数据；`apply --preview` 回滚正式变更并记录预览审计，`publish --preview` 回滚整个事务。审核文件绑定来源版本、候选修订及正式比赛全部关系摘要；批准和导入在同一事务内重新校验基线，过期文件、新 ID 已被占用及并发修改都会拒绝。已发布记录出现新版候选时继续公开旧数据；更新它必须先执行同一文件的 `apply --preview`，再 `apply --confirm-published`。不得通过候选导入把已发布记录退回草稿。重复执行相同审核文件及操作返回已有结果，不重复覆盖正式数据。
