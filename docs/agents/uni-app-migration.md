@@ -55,6 +55,47 @@
 
 本轮证据：H5 生产构建在 320 / 375 / 390 / 430px 逐项读取计算样式（品牌色、字号刻度、按钮正常/禁用/加载/危险、徽标、输入框 16px、44px 触控区、条件类切换、长标题与长按钮换行、无横向溢出）；mp-weixin 构建产物确认 `page` 基础样式、`--text-*` 的 px 值、rem→rpx 换算、`[disabled]` 规则与 `min-width` 媒体查询。浏览器模拟与编译通过不代表微信运行或真机正常。
 
+## Issue #60：导航骨架与旧地址映射
+
+用户端已建立可挂接业务页面的导航骨架，决策与取舍见 [ADR 0005](../adr/0005-uni-navigation-shell.md)。
+
+- 页面注册与标题：`apps/uni/src/pages.json` 注册 12 个页面；`src/navigation/routes.ts` 是路径、标题、主导航类型、旧 Web 来源与开发状态的唯一注册表。`scripts/navigation-contract.test.mjs` 校验两处双向一致、标题同源、`tabBar` 三项与注册表一致、旧路由清单完整。
+- 主导航：原生 `tabBar` 三项（首页 / 找队友 / 我的）用 `switchTab`；普通页面用 `navigateTo` / `redirectTo`；`backOrHome()` 在页面栈只有一页时回首页。跳转只经 `src/navigation/navigate.ts`，页面与组件不直接调用 `uni.navigate*`，也不读写 `document.title` 或浏览器 History。
+- 旧地址映射：`sourceRoutes` 登记旧 Web 全部路由，`resolveSourceAddress()` 解析静态路径、`:id` 动态段与个人中心分区；未迁移项（`/health`）写明原因。`/my/teams`、`/my/applications` 固定映射到「我的」的队伍/申请分区。
+- 个人中心分区：`switchTab` 不支持 query，`openProfileSection(section, query)` 通过一次性 Pinia 状态交接分区与附加参数，旧地址解析结果分别保留 `section` 与 `query`。目标页先在 `onLoad` 解析深链，再消费交接；`onShow` 与后续监听处理已挂载页面，附加参数存入页面 `routeQuery`。字符串数组会复制，消费后清空交接，避免被调用方修改或残留到下一次进入。非法分区回落到资料区并显示提示，`section` 只接受 `teams` / `applications`。
+- 参数规则：缺失、空白、重复冲突与非法业务 ID 都有明确提示；业务 ID 允许字母、数字与连字符，最长 64。uni-app H5 会把 `?id=a&id=b` 合并为 `"a,b"` 再交给 `onLoad`（已在本轮 H5 产物实测），因此单值参数按逗号拆分后判定：取值一致接受，不一致判为冲突。参数只用于定位内容，不代表身份或权限。
+- 预留页：三个主页、比赛/队伍详情、发布招募、收藏、通知与登录注册先交付“待开发”占位、标题、说明和入口链，页面任务替换内容；认证页只搭品牌布局（`src/layouts/AuthBrandLayout.vue`），表单与未开放反馈留给 #67。
+- H5 兜底：启动时检查一次 hash 是否命中注册表，未命中转到 404（`src/navigation/h5-entry.ts`，`#ifdef H5`，小程序产物不含该分支）。
+- 两端共用：按用户在本轮审查后的决定，H5 与微信小程序保持相同页面、组件与原生导航实现，接受与旧 Web 顶栏、侧栏、详情页底部导航的差异；本轮修复不新增 H5 专用布局。`scripts/profile-navigation.test.mjs` 执行真实个人中心 setup 并按平台顺序触发替身生命周期，覆盖首次/再次分区交接、附加参数消费和平台导航兜底；它不替代微信开发者工具或真机验证。
+
+### 源路由映射清单
+
+| 旧 Web 路由              | 新客户端页面                                    | 说明                                      |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------- |
+| `/`                      | `pages/index/index`                             | 旧入口重定向到首页                        |
+| `/home`                  | `pages/index/index`                             | 筛选参数由 #68 在目标页解析               |
+| `/home/competitions/:id` | `pages/home/competition`                        | `id` 为稳定业务 ID                        |
+| `/teams`                 | `pages/teams/index`                             | 筛选参数由 #70 在目标页解析               |
+| `/teams/new`             | `pages/teams/new`                               | #72                                       |
+| `/teams/:id`             | `pages/teams/detail`                            | `id` 为稳定业务 ID，详情由 #71            |
+| `/my/teams`              | `pages/profile/index`（`section=teams`）        | 旧地址固定映射到队伍分区                  |
+| `/my/applications`       | `pages/profile/index`（`section=applications`） | 旧地址固定映射到申请分区                  |
+| `/my/favorites`          | `pages/my/favorites`                            | #75                                       |
+| `/notifications`         | `pages/notifications/index`                     | #76                                       |
+| `/profile`               | `pages/profile/index`                           | `section` 只接受 `teams` / `applications` |
+| `/login`、`/register`    | `pages/auth/login`、`pages/auth/register`       | #67                                       |
+| `/health`                | 不建页面                                        | 服务端公开接口，由 #63 / #78 接入         |
+| 未匹配地址               | `pages/not-found/index`                         | 应用内解析与 H5 未知 hash 入口均转到该页  |
+
+### 平台差异与待验证项
+
+- 旧 Web 在移动端有顶栏与底部三栏导航，详情页也保留底部导航；新客户端用原生导航栏与 `tabBar` 替代，非 tab 页面不显示底部导航。这是平台导航的标准形态，不能通过自定义布局完全复刻。
+- `tabBar` 目前只有文字，没有旧 Web 的图标与浅绿选中块；图标资源、尺寸与选中态属 #62，平台边框与高度不可定制。
+- H5 浏览器标签标题为 `navigationBarTitleText`，不再拼接“· 禾伙搭”；统一标题后缀与 pathname 旧地址、刷新、浏览器返回由 #82 验证。
+- 个人中心分区在当前会话内保留，再次点击“我的”不会强制回到资料区，与旧 Web 每次进入 `/profile` 重置略有差异。
+- 本轮 H5 证据：320 / 375 / 390 / 430px 对照旧 Web 的收藏、通知、登录、注册与 404 页，标题字号 30px / 行高 36px、正文 14px / 行高 28px、面板留白 24px（404 为 22px）、无横向溢出；交互检查覆盖主导航切换、详情入口、空页面栈返回首页、缺失/非法/重复冲突参数、分区深链与非法分区回落、登录注册互跳、H5 未知 hash 兜底。截图与脚本仅保留本地。
+- mp-weixin 仅完成编译检查：`app.json` 的 `pages` 与 `tabBar`、页面 WXML、`--window-bottom: 0px` 与 rem→rpx 产物；微信开发者工具运行、真机、键盘、安全区域与系统大字号转 #85。编译通过不能证明平台运行正常。
+
 ## 官方通知增量恢复修复
 
 预算分配、日期窗口、定时续跑链与列表条目诊断均在后端执行，本次不新增用户端 API 或浏览器能力。H5/微信小程序继续读取已发布比赛；官网外链仍按既有跳转、web-view 与复制方案独立适配，服务端修复不证明小程序兼容。迁移成本不变，两个目标端尚未实测。

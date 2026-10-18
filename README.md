@@ -44,7 +44,9 @@ pnpm install --frozen-lockfile
 
 ## uni-app 用户端（迁移中）
 
-`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前工程入口用于验证 Pinia 计数、输入绑定、共享类型消费与品牌主题；业务迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前已建立导航骨架：首页 / 找队友 / 我的三项原生 `tabBar`，比赛与队伍详情、发布招募、收藏、通知、登录注册与 404 预留页；页面标题来自 `pages.json`，跳转统一走 `src/navigation/navigate.ts`。业务内容仍由后续页面任务接入，迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+
+导航注册表在 `apps/uni/src/navigation/routes.ts`：新增页面只需在 `pages.json` 注册并补一条定义，`test:unit` 会校验两处一致、标题同源与旧地址映射完整。旧个人中心地址 `/my/teams`、`/my/applications` 映射到「我的」的队伍/申请分区；平台主导航用 `switchTab`，普通页面用 `navigateTo`，不依赖浏览器 History 或 `document.title`。H5 未知 hash 入口启动时转到 404；pathname 旧地址、刷新与浏览器返回由 #82 验证。决策见 [ADR 0005](docs/adr/0005-uni-navigation-shell.md)。
 
 样式入口为 `apps/uni/src/app.css`，主题变量在 `src/styles/theme.css`，页面根节点与 `.hhr-*` 组件类在 `src/styles/base.css`；页面只消费语义工具类（`bg-brand`、`text-ink`、`rounded-panel`）。字号、触控下限与断点用 px，间距与宽高用 rem（构建时换算 rpx），理由与组件类清单见[学生端全局样式](docs/student-ui-style.md#uni-app-用户端样式迁移中)。H5 的 `/#/pages/style/index` 与小程序「样式基线」页逐项渲染主题色、字号层级、按钮四态与状态块，用于样式回归。
 
