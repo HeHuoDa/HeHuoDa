@@ -78,15 +78,20 @@
 
 ### 组件类
 
-| 类名                                                        | 说明                                                                         |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `hhr-page` / `hhr-page__inner`                              | 页面容器：24px / 20px 留白、底部安全区、长文本换行、最大 640px               |
-| `hhr-panel` / `hhr-card` / `hhr-eyebrow`                    | 面板、卡片与小字号引导文字                                                   |
-| `hhr-button`                                                | 主要按钮；`--secondary`、`--soft`、`--danger`、`--inline` 切换外观           |
-| `hhr-button` 状态                                           | `[disabled]` / `.is-disabled` 半透明禁用；`.is-loading` + `hhr-spinner` 加载 |
-| `hhr-badge`                                                 | 状态标签；`--warning`、`--muted`、`--danger`                                 |
-| `hhr-field` / `hhr-label` / `hhr-input` / `hhr-field-error` | 表单字段、16px 输入框与错误提示                                              |
-| `hhr-state` / `hhr-state--error` / `hhr-notice`             | 空态、加载、失败状态块与提醒条                                               |
+| 类名                                                        | 说明                                                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `hhr-page` / `hhr-page__inner`                              | 页面容器：24px / 20px 留白、底部安全区、长文本换行、最大 640px；最小高度扣除原生导航栏与 tabBar |
+| `hhr-page--tab`                                             | tab 页面底部按 uni 注入的 `--window-bottom` 预留 tabBar 空间                                    |
+| `hhr-panel` / `hhr-card` / `hhr-eyebrow`                    | 面板、卡片与小字号引导文字                                                                      |
+| `hhr-placeholder`                                           | 预留页面板：24px / 40px 留白与 320 / 340px 最小高度，对齐旧 Web 占位页                          |
+| `hhr-auth-panel` / `hhr-auth-switch`                        | 认证卡片留白与登录/注册互跳容器；链接保持 44px 触控区                                           |
+| `hhr-button`                                                | 主要按钮；`--secondary`、`--soft`、`--danger`、`--inline` 切换外观                              |
+| `hhr-button` 状态                                           | `[disabled]` / `.is-disabled` 半透明禁用；`.is-loading` + `hhr-spinner` 加载                    |
+| `hhr-badge`                                                 | 状态标签；`--warning`、`--muted`、`--danger`                                                    |
+| `hhr-field` / `hhr-label` / `hhr-input` / `hhr-field-error` | 表单字段、16px 输入框与错误提示                                                                 |
+| `hhr-state` / `hhr-state--error` / `hhr-notice`             | 空态、加载、失败状态块与提醒条                                                                  |
+
+页面级布局（学生端导航骨架、认证品牌布局）放在 `src/pages/**` 与 `src/layouts/**` 的 scoped 样式里，只使用 `--hhr-*` 变量；共享面板留白与状态类才进入 `base.css`。原生 `tabBar` 的高度、边框与选中样式由平台决定，不能通过页面样式复刻旧 Web 的底部导航。
 
 ### 两端差异与验证边界
 
