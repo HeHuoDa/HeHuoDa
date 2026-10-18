@@ -71,6 +71,12 @@
       "style": {
         "navigationBarTitleText": "样式基线"
       }
+    },
+    {
+      "path": "pages/health/index",
+      "style": {
+        "navigationBarTitleText": "服务状态"
+      }
     }
   ],
   "tabBar": {
