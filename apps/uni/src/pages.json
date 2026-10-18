@@ -2,51 +2,75 @@
   "pages": [
     {
       "path": "pages/index/index",
-      "style": { "navigationBarTitleText": "首页" }
+      "style": {
+        "navigationBarTitleText": "首页"
+      }
     },
     {
       "path": "pages/teams/index",
-      "style": { "navigationBarTitleText": "找队友" }
+      "style": {
+        "navigationBarTitleText": "找队友"
+      }
     },
     {
       "path": "pages/profile/index",
-      "style": { "navigationBarTitleText": "个人中心" }
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
     },
     {
       "path": "pages/home/competition",
-      "style": { "navigationBarTitleText": "比赛详情" }
+      "style": {
+        "navigationBarTitleText": "比赛详情"
+      }
     },
     {
       "path": "pages/teams/detail",
-      "style": { "navigationBarTitleText": "队伍详情" }
+      "style": {
+        "navigationBarTitleText": "队伍详情"
+      }
     },
     {
       "path": "pages/teams/new",
-      "style": { "navigationBarTitleText": "发布招募" }
+      "style": {
+        "navigationBarTitleText": "发布招募"
+      }
     },
     {
       "path": "pages/my/favorites",
-      "style": { "navigationBarTitleText": "我的收藏" }
+      "style": {
+        "navigationBarTitleText": "我的收藏"
+      }
     },
     {
       "path": "pages/notifications/index",
-      "style": { "navigationBarTitleText": "站内通知" }
+      "style": {
+        "navigationBarTitleText": "站内通知"
+      }
     },
     {
       "path": "pages/auth/login",
-      "style": { "navigationBarTitleText": "登录" }
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
     },
     {
       "path": "pages/auth/register",
-      "style": { "navigationBarTitleText": "注册" }
+      "style": {
+        "navigationBarTitleText": "注册"
+      }
     },
     {
       "path": "pages/not-found/index",
-      "style": { "navigationBarTitleText": "页面不存在" }
+      "style": {
+        "navigationBarTitleText": "页面不存在"
+      }
     },
     {
       "path": "pages/style/index",
-      "style": { "navigationBarTitleText": "样式基线" }
+      "style": {
+        "navigationBarTitleText": "样式基线"
+      }
     }
   ],
   "tabBar": {
@@ -55,9 +79,24 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "black",
     "list": [
-      { "pagePath": "pages/index/index", "text": "首页" },
-      { "pagePath": "pages/teams/index", "text": "找队友" },
-      { "pagePath": "pages/profile/index", "text": "我的" }
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/icons/home-muted.png",
+        "selectedIconPath": "static/icons/home-brand.png"
+      },
+      {
+        "pagePath": "pages/teams/index",
+        "text": "找队友",
+        "iconPath": "static/icons/users-muted.png",
+        "selectedIconPath": "static/icons/users-brand.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/icons/user-muted.png",
+        "selectedIconPath": "static/icons/user-brand.png"
+      }
     ]
   },
   "globalStyle": {
