@@ -1,10 +1,10 @@
-# 禾伙人
+# 禾伙搭
 
 四川农业大学校园比赛与项目组队平台。当前完成阶段一工程初始化、学生端共享导航与路由，登录注册前端表单，以及比赛首页、院徽筛选承办学院、比赛详情（Issue #12）。Issue #22 接入 PostgreSQL、人工核对数据导入、学院与比赛公开查询及真实 API 联调；Issue #13 实现找队友筛选、队伍详情、发布表单、比赛关联及会话内申请/举报演示；Issue #14 提供个人中心、资料编辑及联系方式授权的会话内演示；Issue #15 完成个人中心内队长管理、申请邀请及成员变更的会话演示，真实认证与招募写接口尚未开发。工程包含 pnpm 工作区、Vue 健康页、NestJS/Fastify 健康接口、OpenAPI 类型生成与 CI 配置。
 
 Issue #23 已交付首批信息工程学院、生命科学学院的官方通知采集、候选人工审核、草稿导入与显式发布 CLI；已补充预算分配、定时续跑和诊断记录，尚无管理 HTTP 接口或管理端应用。
 
-仓库现由 [HeHuoRen-Sicau 组织](https://github.com/HeHuoRen-Sicau/HeHuoRen)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoRen-Sicau/HeHuoRen.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙人-项目开发计划书.md)。
+仓库现由 [HeHuoRen-Sicau 组织](https://github.com/HeHuoRen-Sicau/HeHuoRen)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoRen-Sicau/HeHuoRen.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
 
 ## 技术栈
 
@@ -150,7 +150,7 @@ HeHuoRen/
 │   ├── adr/                          # 架构决策及其演进记录
 │   ├── agents/                       # Issue、领域文档、分诊与跨端迁移约定
 │   ├── student-ui-style.md           # 学生端全局样式约定
-│   └── 禾伙人-项目开发计划书.md      # 业务范围、阶段安排与进度
+│   └── 禾伙搭-项目开发计划书.md      # 业务范围、阶段安排与进度
 ├── .github/                          # Issue / PR 模板与 CI、自动合并工作流
 ├── third-party-notices/              # 第三方资源许可证
 ├── AGENTS.md                         # 仓库 Agent 指引

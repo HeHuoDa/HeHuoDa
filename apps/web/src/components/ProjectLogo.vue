@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import logoUrl from "../assets/hehuoren-logo.png";
+import logoUrl from "../assets/hehuoda-logo.png";
 </script>
 
 <template>

@@ -13,7 +13,7 @@ export function configureApp(app: INestApplication): OpenAPIObject {
   app.useGlobalFilters(new ApiExceptionFilter());
 
   const config = new DocumentBuilder()
-    .setTitle("禾伙人 API")
+    .setTitle("禾伙搭 API")
     .setVersion("1.0")
     .build();
   const document = SwaggerModule.createDocument(app, config);

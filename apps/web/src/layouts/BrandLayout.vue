@@ -22,11 +22,11 @@ const authentication = computed(
       <RouterLink
         to="/home"
         class="brand-link self-start"
-        aria-label="禾伙人，返回首页"
+        aria-label="禾伙搭，返回首页"
       >
         <ProjectLogo />
         <span
-          ><strong class="font-serif text-xl">禾伙人</strong
+          ><strong class="font-serif text-xl">禾伙搭</strong
           ><small class="block text-xs text-muted"
             >校园比赛与项目组队平台</small
           ></span

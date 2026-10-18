@@ -435,7 +435,7 @@ function authorizationChanged() {
         <div class="profile-setting-row">
           <AppIcon name="leaf" class="size-5 text-brand" /><span
             class="flex-1 text-sm"
-            >关于禾伙人<small class="mt-1 block text-xs text-muted"
+            >关于禾伙搭<small class="mt-1 block text-xs text-muted"
               >一起成长，各有所长。</small
             ></span
           >

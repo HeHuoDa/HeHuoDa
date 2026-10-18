@@ -64,7 +64,7 @@ function current(section: NavigationSection, mobile = false) {
       <RouterLink to="/home" class="brand-link">
         <ProjectLogo />
         <span
-          ><strong class="font-serif text-xl">禾伙人</strong
+          ><strong class="font-serif text-xl">禾伙搭</strong
           ><small class="block text-xs text-muted"
             >一起成长，各有所长</small
           ></span
@@ -95,7 +95,7 @@ function current(section: NavigationSection, mobile = false) {
       <header class="student-topbar">
         <RouterLink to="/home" class="brand-link topbar-brand">
           <ProjectLogo />
-          <span class="topbar-brand-name">禾伙人</span>
+          <span class="topbar-brand-name">禾伙搭</span>
         </RouterLink>
         <nav aria-label="顶栏快捷入口" class="topbar-actions">
           <RouterLink
