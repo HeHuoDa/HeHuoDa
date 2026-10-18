@@ -252,7 +252,7 @@ GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行�
 
 Issue #19 完整移除 Vant；现采用 Tailwind 为主、少量普通 CSS、按复用与行为需要封装组件。图标使用 `@lucide/vue` 1.51.0，经 `AppIcon.vue` 统一入口静态按需导入，许可证与渲染适配见[图标来源](third-party-notices/lucide-LICENSE.txt)和[样式约定](docs/student-ui-style.md)。认证、健康状态与导航保持既有行为。
 
-项目完成后统一迁移到普通 uni-app，目标 H5、微信小程序。当前继续交付 Web，未搭建跨端工程；开发时持续识别、解释并记录影响，参见[迁移提醒与待办](docs/agents/uni-app-migration.md)。验证结果与构建体积对比记录在 PR；验收文档和截图仅保留本地。
+项目采用普通 uni-app，目标 H5、微信小程序。旧 Web 继续交付，apps/uni 工程已建立并开始逐页迁移；开发时持续识别、解释并记录影响，参见[迁移提醒与待办](docs/agents/uni-app-migration.md)。验证结果与构建体积对比记录在 PR；验收文档和截图仅保留本地。
 
 图标与加载组件位于 `apps/web/src/components/`，分别为 `AppIcon.vue`、`app-icons.ts` 和 `LoadingIndicator.vue`，复用既有认证与学院组件。
 
