@@ -44,7 +44,9 @@ pnpm install --frozen-lockfile
 
 ## uni-app 用户端（迁移中）
 
-`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前只有用于验证 Pinia 计数、输入绑定和共享类型消费的工程入口；业务迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前工程入口用于验证 Pinia 计数、输入绑定、共享类型消费与品牌主题；业务迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+
+样式入口为 `apps/uni/src/app.css`，主题变量在 `src/styles/theme.css`，页面根节点与 `.hhr-*` 组件类在 `src/styles/base.css`；页面只消费语义工具类（`bg-brand`、`text-ink`、`rounded-panel`）。字号、触控下限与断点用 px，间距与宽高用 rem（构建时换算 rpx），理由与组件类清单见[学生端全局样式](docs/student-ui-style.md#uni-app-用户端样式迁移中)。H5 的 `/#/pages/style/index` 与小程序「样式基线」页逐项渲染主题色、字号层级、按钮四态与状态块，用于样式回归。
 
 在根目录完成冻结安装后执行：
 
