@@ -8,7 +8,7 @@ Issue #23 已交付首批信息工程学院、生命科学学院的官方通知�
 
 ## 技术栈
 
-项目采用 **pnpm workspace 单仓（Monorepo）**，包含 Web 应用、API 服务和共享接口类型包。以下版本来自各工作区的 `package.json` 与 `compose.yaml`；保留依赖声明的 `^` / `~` 范围，实际安装版本以 `pnpm-lock.yaml` 为准。
+项目采用 **pnpm workspace 单仓（Monorepo）**，包含现有 Web 应用、迁移中的 uni-app 用户端、API 服务和共享接口类型包。以下版本来自各工作区的 `package.json` 与 `compose.yaml`；保留依赖声明的 `^` / `~` 范围，实际安装版本以 `pnpm-lock.yaml` 为准。
 
 | 层次             | 技术与版本                                                                                       | 项目用途                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
@@ -28,7 +28,7 @@ Issue #23 已交付首批信息工程学院、生命科学学院的官方通知�
 | 代码质量与协作   | ESLint `10.11.0`、Prettier `3.9.9`、GitHub Actions                                               | 静态检查、格式统一与 CI 质量门禁                                      |
 | 本地数据库环境   | Docker Compose，`postgres:17` 镜像                                                               | 开发数据库持久卷与独立临时测试数据库；尚未提供 Web / API 容器化部署   |
 
-当前交付普通 Web 应用，真实认证、招募与申请仍待开发。后续统一迁移到普通 uni-app（H5、微信小程序）：Vue Router 的 History 路由、Axios 浏览器请求、DOM / 浏览器 API、Lucide SVG 与 Tailwind Web CSS 均需逐项适配和实测，不能直接视为小程序兼容。迁移任务与替代方案见[迁移提醒与待办](docs/agents/uni-app-migration.md)。
+当前旧 Web 继续运行，普通 uni-app（H5、微信小程序）已建立工程入口并开始逐页迁移；真实认证、招募与申请写接口仍待开发。迁移中，Vue Router 的 History 路由、Axios 浏览器请求、DOM / 浏览器 API、Lucide SVG 与 Tailwind Web CSS 均需逐项适配和实测，不能直接视为小程序兼容。迁移任务与替代方案见[迁移提醒与待办](docs/agents/uni-app-migration.md)。
 
 ## 环境
 
@@ -41,6 +41,39 @@ pnpm install --frozen-lockfile
 ```
 
 安装 Node 时如未包含 Corepack，请先按 [Corepack 官方说明](https://github.com/nodejs/corepack#manual-installs)安装。
+
+## uni-app 用户端（迁移中）
+
+`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前只有用于验证 Pinia 计数、输入绑定和共享类型消费的工程入口；业务迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+
+在根目录完成冻结安装后执行：
+
+```bash
+pnpm --filter @hehuoda/uni dev:h5
+pnpm --filter @hehuoda/uni dev:mp-weixin
+pnpm --filter @hehuoda/uni lint
+pnpm --filter @hehuoda/uni typecheck
+pnpm --filter @hehuoda/uni check:toolchain
+pnpm --filter @hehuoda/uni test:unit
+pnpm --filter @hehuoda/uni build:h5
+pnpm --filter @hehuoda/uni build:mp-weixin
+```
+
+H5 开发地址默认 [http://127.0.0.1:5174/](http://127.0.0.1:5174/)，端口冲突时以实际输出为准。H5 生产构建在 `apps/uni/dist/build/h5`；小程序开发/生产产物分别在 `dist/dev/mp-weixin`、`dist/build/mp-weixin`。根 `pnpm lint/typecheck/build/test:unit` 自动纳入新包，`build` 同时检查配套版本并构建两端。
+
+客户端直接锁定 Vue / `@vue/runtime-core` **3.5.42**、Pinia **3.0.4**、Tailwind CSS **4.3.3**、weapp-tailwindcss **5.6.3**；DCloud 整组锁定 **3.0.0-5020420260813003**（编译器 5.24），Vite **5.2.8**、TypeScript **6.0.3**、vue-tsc **3.3.11**，Node / pnpm 沿用根约束。这些是应用安装与编译工具版本；DCloud 仍将两端 `vue` 导入映射到内嵌 **3.4.21** 运行时，不能据此宣称支持全部 Vue 3.5 API。`check:toolchain` 分别核对这两层及内部 renderer 的实际 peer 宿主；后续页面引入新 API 时须核对目标运行时。
+
+保持 pnpm 默认隔离布局。`pnpm-workspace.yaml` 的精确版本 `packageExtensions` 仅为三项 DCloud 内部依赖补充 Vue 3.4.21 宿主，使其 server-renderer 3.4.21 与运行时配套，不过滤或放宽 peer 检查。H5 配置将 devtools-api 入口解析到真实路径，避免软链使传递依赖丢失包边界；小程序保留官方平台适配。旧 Web 继续使用自己的 Vue/Pinia/Vite。
+
+### 平台配置与验收边界
+
+复制 `apps/uni/.env.example` 到同目录 `.env`，由账号准备任务 #58 就绪后填入 `UNI_MP_WEIXIN_APPID`。开发/构建脚本将已提交的 `manifest.template.json` 与受控环境合成为忽略的 `src/manifest.json`，不要手工修改生成文件。禁止提交真实平台配置或本地环境文件；修改配置后重启构建。
+
+AppID 未就绪时允许本地 H5 与小程序编译，脚本明确标记“本地编译”；DCloud 自动生成的 `touristappid` 不是正式平台配置，不能用它证明微信运行或用于发布。`UNI_RELEASE=true` 时缺少 AppID、使用游客 ID 或格式非法均拒绝执行；格式检查也不代表账号有效或审核通过。保留 `urlCheck=true`，不关闭合法域名检查。
+
+H5 页面当前不发业务请求，`api-types` 以类型导入消费；统一请求及真实健康查询由 #63、契约联调由 #78 接入。加载/网络失败状态由对应任务实现，不能把本页静态入口当业务页面验收。微信开发者工具、合法域名、设备键盘和安全区域及真机全流程由 #58/#85 后续验证。
+
+Vite 5 已退出上游当前维护范围，5.2.8 存在已公开的开发服务器安全问题；当前保留 DCloud 指定配套用于复现，并仅默认监听本机，不作为生产服务器。构建兼容与安全维护分别判断，发布准入前需核查受影响依赖和修复方案，不能以双端构建通过代替安全评估。依据：[Vite 维护政策](https://vite.dev/releases)、[开发服务器公告](https://github.com/vitejs/vite/security/advisories/GHSA-x574-m823-4x7w)。
 
 ## 本地开发
 
