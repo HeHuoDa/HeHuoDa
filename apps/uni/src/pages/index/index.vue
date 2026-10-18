@@ -5,6 +5,10 @@ import { useWorkspaceStore } from "../../stores/workspace";
 
 const store = useWorkspaceStore();
 const { count, input } = storeToRefs(store);
+
+function openStyleBaseline() {
+  uni.navigateTo({ url: "/pages/style/index" });
+}
 </script>
 
 <template>
@@ -44,6 +48,13 @@ const { count, input } = storeToRefs(store);
           {{ input || "尚未输入" }}
         </text>
       </view>
+
+      <button
+        class="hhr-button hhr-button--secondary mt-5"
+        @click="openStyleBaseline"
+      >
+        查看样式基线
+      </button>
 
       <text class="mt-6 block break-all text-caption text-muted">
         本地工程验证 · Vue 运行时 {{ version }}

@@ -3,6 +3,10 @@
     {
       "path": "pages/index/index",
       "style": { "navigationBarTitleText": "禾伙搭" }
+    },
+    {
+      "path": "pages/style/index",
+      "style": { "navigationBarTitleText": "样式基线" }
     }
   ],
   "globalStyle": {

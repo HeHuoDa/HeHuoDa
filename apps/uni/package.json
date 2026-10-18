@@ -10,7 +10,7 @@
     "build:mp-weixin": "node scripts/run-uni.mjs build mp-weixin",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
-    "test:unit": "node --test scripts/platform-config.test.mjs",
+    "test:unit": "node --test",
     "check:toolchain": "node scripts/check-toolchain.mjs"
   },
   "dependencies": {
