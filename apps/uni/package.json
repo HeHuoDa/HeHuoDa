@@ -21,7 +21,8 @@
     "@hehuoda/api-types": "workspace:*",
     "pinia": "3.0.4",
     "vue": "3.5.42",
-    "vue-router": "4.4.4"
+    "vue-router": "4.4.4",
+    "@hehuoda/client-domain": "workspace:*"
   },
   "devDependencies": {
     "@dcloudio/types": "3.4.31",
