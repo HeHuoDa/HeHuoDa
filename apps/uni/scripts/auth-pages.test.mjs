@@ -1,0 +1,79 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { preprocess } from "./component-host.mjs";
+
+const read = (path) =>
+  readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
+
+test("登录注册页只组合品牌布局与共用表单，不各自复制规则", () => {
+  for (const page of ["pages/auth/login.vue", "pages/auth/register.vue"]) {
+    const source = read(page);
+    // 页面只负责挂载，校验与提交行为只在 AuthForm 中实现一份。
+    assert.doesNotMatch(
+      source,
+      /AUTH_MESSAGES|validateField|validateValues/,
+      `${page} 不应复制校验规则`,
+    );
+    assert.match(source, /<AuthForm mode="(login|register)" \/>/, page);
+    assert.match(source, /<AuthBrandLayout>/, page);
+    // 占位内容随本票移除，不再宣称“待开发”。
+    assert.doesNotMatch(source, /待开发|将在后续任务迁移/, page);
+  }
+});
+
+test("认证表单在微信分支不使用 DOM 查询、浏览器表单与 dialog", () => {
+  for (const file of ["components/AuthForm.vue", "forms/auth-form.ts"]) {
+    const weixin = preprocess(read(file), "MP-WEIXIN")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert.doesNotMatch(
+      weixin,
+      /\b(?:document|window|localStorage|sessionStorage)\s*\.|querySelector|<form|showModal|history\./,
+      file,
+    );
+  }
+});
+
+test("提交只绑定提交按钮与单行输入 confirm，显隐和发送验证码不触发表单动作", () => {
+  const source = read("components/AuthForm.vue");
+  const template = source.slice(
+    source.indexOf("<template>"),
+    source.indexOf("</template>"),
+  );
+  // 不使用 HTML form 元素：显隐与发送验证码在结构上无法触发提交。
+  assert.doesNotMatch(template, /<form|@submit|type="submit"/);
+  // 提交入口只有三处：提交按钮点击（不含发送验证码）、密码框（仅登录）与验证码框的 confirm。
+  assert.match(template, /@click="submit"/, "提交按钮");
+  assert.match(
+    template,
+    /@confirm="registering \? undefined : submit\(\)"/,
+    "登录密码框 Enter",
+  );
+  assert.match(template, /@confirm="submit\(\)"/, "验证码框 Enter");
+  const enterHandlers = [...template.matchAll(/@confirm="([^"]*)"/g)].map(
+    ([, handler]) => handler,
+  );
+  assert.deepEqual(
+    enterHandlers.map((handler) => /submit\(\)/.test(handler)),
+    [true, true],
+    "只有密码框与验证码框可用 Enter 提交",
+  );
+  // 发送验证码只调用 sendCode，不调用 submit。
+  assert.match(template, /@click="sendCode"/);
+  assert.doesNotMatch(
+    template,
+    /@click="sendCode[^"]*submit/,
+    "发送验证码不得触发提交",
+  );
+});
+
+test("认证表单反馈区承担 role=status，切换链接可键盘操作", () => {
+  const source = read("components/AuthForm.vue");
+  assert.match(source, /role="status"/);
+  assert.match(source, /aria-live="polite"/);
+  // 微信没有 aria-live 与浏览器键盘事件，链接用点击 + 键盘触发同一入口。
+  assert.match(source, /@keydown\.enter\.prevent="switchMode"/);
+  assert.match(source, /@click="switchMode"/);
+  assert.match(source, /role="link"/);
+});
