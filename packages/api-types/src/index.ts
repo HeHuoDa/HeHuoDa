@@ -1,4 +1,5 @@
 import type { paths, components } from "./generated/schema.js";
+export type ApiError = components["schemas"]["ApiErrorDto"];
 export type HealthResponse =
   paths["/api/v1/health"]["get"]["responses"][200]["content"]["application/json"];
 export type College = components["schemas"]["CollegeDto"];

@@ -23,7 +23,8 @@ export type PageRouteName =
   | "login"
   | "register"
   | "not-found"
-  | "style";
+  | "style"
+  | "health";
 export type RouteName = TabRouteName | PageRouteName;
 
 export interface RouteDefinition {
@@ -140,6 +141,15 @@ export const routeRegistry = {
     source: "*",
     description: "这个地址没有对应的页面，回到首页继续看看吧。",
   },
+  health: {
+    name: "health",
+    path: "/pages/health/index",
+    title: "服务状态",
+    kind: "page",
+    status: "baseline",
+    source: "/health",
+    description: "检查服务进程连接状态。",
+  },
   style: {
     name: "style",
     path: "/pages/style/index",
@@ -216,8 +226,8 @@ export const sourceRoutes: readonly SourceRoute[] = [
   { source: "/register", target: "register" },
   {
     source: "/health",
-    target: null,
-    note: "服务端公开接口，由统一请求与契约集成任务接入，不建页面",
+    target: "health",
+    note: "独立健康页，通过统一请求入口检查服务进程。",
   },
   { source: "*", target: "not-found", note: "未知地址与非法入口的兜底页" },
 ];
