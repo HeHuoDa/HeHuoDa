@@ -4,11 +4,11 @@
 
 ## Agent skills
 
-### 禁用 Superpowers
+### 技能限制与 Matt 工作流例外
 
-本项目禁用整个 Superpowers 技能包。处理本仓库任务时，不加载、调用或遵循该包的技能及其工作流；即使全局技能目录仍列出这些技能，也按本项目规则跳过。使用其他技能时，遇到对 Superpowers 的依赖也跳过该依赖。
+本项目默认禁用 Superpowers 技能包中的工作流。**Matt 工作流是明确例外**：用户调用 `ask-matt` 或 Matt 工作流时，允许按其路由加载、调用并遵循相关技能及其直接依赖；该例外优先于下方禁用清单中重名的技能。使用其他技能时，遇到不属于 Matt 工作流的 Superpowers 依赖仍跳过该依赖。
 
-禁用范围包括所有 `superpowers:*` 技能，以及无此前缀的包内技能：`using-superpowers`、`brainstorming`、`writing-plans`、`executing-plans`、`dispatching-parallel-agents`、`subagent-driven-development`、`test-driven-development`、`systematic-debugging`、`using-git-worktrees`、`verification-before-completion`、`requesting-code-review`、`receiving-code-review`、`finishing-a-development-branch`、`writing-skills`。
+例外覆盖 `ask-matt` 中定义或其流程直接调用的相关技能，例如 `grill-with-docs`、`grilling`、`domain-modeling`、`to-spec`、`to-tickets`、`implement`、`implement-spec`、`tdd`、`code-review`、`pr`、`retro`、`prototype`、`handoff`、`wayfinder`、`triage`、`research`、`codebase-design`、`wizard` 及流程明确要求的上下文工具。除该例外外，禁用范围包括所有 `superpowers:*` 技能，以及无此前缀的包内技能：`using-superpowers`、`brainstorming`、`writing-plans`、`executing-plans`、`dispatching-parallel-agents`、`subagent-driven-development`、`test-driven-development`、`systematic-debugging`、`using-git-worktrees`、`verification-before-completion`、`requesting-code-review`、`receiving-code-review`、`finishing-a-development-branch`、`writing-skills`。
 
 按用户需求和本仓库约定直接开展工作，其他技能仍按任务需要使用。
 
