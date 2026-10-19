@@ -56,7 +56,7 @@ export const routeRegistry = {
     path: "/pages/teams/index",
     title: "找队友",
     kind: "tab",
-    status: "placeholder",
+    status: "baseline",
     source: "/teams",
     description: "按项目与角色发现招募，寻找志同道合的伙伴。",
   },

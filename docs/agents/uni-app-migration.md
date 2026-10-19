@@ -1,5 +1,23 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #70：找队友列表与招募筛选
+
+`pages/teams/index.vue` 只消费 #64 的共享会话队伍，不建招募后端接口、不持久化。筛选字段沿用源 `TeamFilters`（`q/type/role/mode/status/competition/page`），`TEAM_PAGE_SIZE=4`；源规则没有学院字段，因此**不使用** #66 的 `CollegePicker`，也不凭旧 Web 组件依赖新增学院筛选。状态判定复用 `recruitmentStatus`（解散 → 关闭 → 暂停 → 截止 → 满员 → 招募中），比赛报名状态与招募状态分别计算。
+
+`stores/team-list-controller.ts` 持有筛选、页码、演示时钟与关联比赛查询，页面只做渲染与生命周期。分页越界时 `reconcilePage()` 把纠正值**回写** `filters.page`（对应旧 Web `router.replace` 语义），保证进详情携带的页码一定有效；`navigation/team-query.ts` 把 `TeamFilters` 归一为单值 query（`teamRouteQuery` / `parseTeamRouteQuery`），解决 `writeTeamFilters` 返回 `string | string[] | undefined` 与 `openPage` 单值参数不兼容。
+
+关联比赛按五态呈现：`idle`（无条件或隐藏时中断）、`loading`、`ready`、`missing`（404，文案「不存在或已隐藏」，只给清除条件，不提供无意义的重试）、`error`（网络/超时/5xx，展示请求编号并允许重试）。两类失败都不伪造比赛、不阻断列表。请求用代次校验丢弃迟到响应；`cancel()` 只中断在途请求，仅 `loading` 回落 `idle`，已落定状态不被抹掉；页面重新显示时只对 `idle` 补发请求。
+
+导航沿用 #68/#69：H5 与微信都不新增浏览器 History 层，筛选与页码存在页面实例内；进详情/发布用规范 query，`returnToTeams()` 在上一页是列表时 `navigateBack`，空栈时通过 `openTabWithQuery("teams")` 一次性交接，由列表 `onShow` 消费。**H5 地址栏不同步筛选**：实测在已存在的 tab 页上只改 hash query 不会重跑 `onLoad`（uni H5 tab 页实例复用），应用内一律走 Pinia 交接；地址栏可分享/刷新恢复属 #82。
+
+跨端与旧 Web 的可感知差异：`FormPicker` 始终渲染可见标签，旧 Web 手机端为 `sr-only`，按触控可读性取舍；H5 为原生 `select`，微信为 `picker`（弹层），交互形态不同。布局移动优先：搜索行 + 4 个下拉 2 列（≥640px 4 列）、卡片 <900px 单列 ≥900px 双列，页面自身留白写固定 px。重置演示在分页下方，按钮旁**可见**说明「重置会恢复队伍、申请、邀请，以及资料与联系方式授权」，因为 `session.reset()` 同时重置资料与授权，不再只靠 `title` 提示。
+
+已知基线问题（非本票引入）：`base.css` 的 `.hhr-button` / `.hhr-input` 内边距用 rem，而 uni H5 在 768–960px 区间把根字号放大到约 33–38px，共享控件在该区间会变高（按钮 62–70px）。320/375/390/430px 与 1024/1440px 不受影响，旧 Web 无此现象。属 #61 单位策略的跨页影响，需单独决定是否改为 px，本票未改共享样式。
+
+验证：`scripts/team-list.test.mjs` 覆盖固定时钟六态、多条件筛选与排序分页、页码回写与越界往返、比赛五态与取消/迟到响应、时钟幂等、发布后立即可见、重置恢复，并编译真实 SFC 跑生命周期（参数恢复、跳转携带有效页、隐藏中断）。H5 本地用隔离 PostgreSQL + `pnpm --filter @hehuoda/api dev` 验证关联比赛真实查询：存在 → 资料文案、不存在 ID → `missing`、请求中止 → `error` 并可重试恢复；`?competition=` 直接进入时 H5 因 tab 页实例复用需硬刷新才重跑 `onLoad`，属上述地址栏限制。320/375/390/430px 无横向溢出，长标题换行不撑破卡片，第 2 页进详情返回仍第 2 页。截图与脚本仅保留本地。
+
+本票完成 H5 与 mp-weixin 构建、控制器/页面/导航测试；微信开发者工具运行、真实控件与 picker 弹层、请求合法域名、系统大字号、安全区与 iOS/Android 真机仍由 #85 验证，双端编译通过不代表微信运行或发布完成。
+
 ## Issue #69：比赛详情、赛段定位与关联招募入口
 
 `apps/uni/src/pages/home/competition.vue` 通过现有 `uni.request` 客户端独立查询 `CompetitionDetail`，不复制列表对象或回退到演示数据。详情控制器在换比赛、隐藏及卸载时取消请求并隔离迟到响应；404、网络/超时/5xx 和加载状态分别呈现，重试前清空旧内容。届次、赛道、赛段、来源、北京时间及日期精度沿共享规则展示，报名与材料截止分别说明。
