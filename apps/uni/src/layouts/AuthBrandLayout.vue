@@ -52,17 +52,20 @@ import ProjectLogo from "../components/ProjectLogo.vue";
 /*
  * 移动优先：320–430px 与旧 Web 认证页同一结构（品牌、故事、表单卡片）。
  * 桌面端在 768px 以上切为两列，沿用旧 Web 的 1080px / 460px 与 80px 间距。
+ *
+ * 间距写固定 px（对照迁移例外，见 docs/student-ui-style.md 与 AuthForm.vue）：
+ * uni-app H5 会随视口缩放根字号，rem 会让 20px / 24px 留白在各档宽度波动。
  */
 .auth-layout {
   box-sizing: border-box;
   display: grid;
   align-content: start;
-  gap: 1.25rem;
+  gap: 20px;
   width: 100%;
   max-width: 500px;
   min-height: calc(100vh - var(--window-top, 0px));
   margin: 0 auto;
-  padding: 1.5rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 .auth-header {
@@ -74,7 +77,7 @@ import ProjectLogo from "../components/ProjectLogo.vue";
   display: flex;
   align-self: flex-start;
   align-items: center;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .brand-copy {
@@ -103,7 +106,7 @@ import ProjectLogo from "../components/ProjectLogo.vue";
 }
 
 .auth-story__title {
-  margin-block: 1.5rem;
+  margin-block: 24px;
   color: var(--hhr-color-brand);
   font-family: var(--hhr-font-display);
   font-size: clamp(38px, 4.5vw, 60px);
@@ -120,7 +123,7 @@ import ProjectLogo from "../components/ProjectLogo.vue";
 .auth-story__line {
   width: 64px;
   height: 3px;
-  margin-block: 2rem 1.125rem;
+  margin-block: 32px 18px;
   background-color: var(--hhr-color-accent);
 }
 
@@ -139,7 +142,7 @@ import ProjectLogo from "../components/ProjectLogo.vue";
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  margin-bottom: 0.75rem;
+  margin-bottom: 12px;
   color: var(--hhr-color-brand);
   font-size: 14px;
 }
@@ -149,9 +152,9 @@ import ProjectLogo from "../components/ProjectLogo.vue";
     grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
     align-content: center;
     align-items: center;
-    gap: 5rem;
+    gap: 80px;
     max-width: 1080px;
-    padding: 3rem 2.5rem;
+    padding: 48px 40px;
   }
 
   .auth-story {

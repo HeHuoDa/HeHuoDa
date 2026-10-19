@@ -1,5 +1,17 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #67：登录注册表单与未开放服务反馈
+
+本票交付 `pages/auth/login.vue`、`pages/auth/register.vue` 与共用 `components/AuthForm.vue`，规则集中在 `forms/auth-form.ts`（纯函数，`scripts/auth-form.test.mjs` 覆盖校验矩阵与首错顺序）。认证与验证码服务仍未开放：合法提交只提示“认证服务暂未开放”，发送验证码只校验邮箱后提示“验证码服务暂未开放”，不请求接口、不建立会话、不写存储、不生成倒计时。
+
+与旧 Web `AuthView.vue` 的结构差异：**不使用 HTML form 元素**。H5 下 `FormButton` 渲染为 `view[role=button]`，没有原生 submit 语义，提交只绑定在提交按钮 `@click` 与输入框 `confirm`（密码框仅登录、验证码框），显隐与发送验证码在结构上无法触发提交；代价是旧 Web 中“表单内任意 Enter 提交”在只填部分字段时不再触发。`role=status`/`aria-live` 只在 H5 有效，微信读屏另行验证，交 #85。
+
+跨端清空：密码、确认密码与验证码在页面 `onShow` 时清空，邮箱与昵称保留续填；登录/注册互跳沿用 `replacePage`（`redirectTo`），返回不会回到带密码的表单。`redirectTo` 后页面实例会重建，`onShow` 清空主要覆盖切后台回前台与页面栈返回场景，两条路径均已实测。
+
+样式对齐前的注意点：认证页间距必须写固定 px。uni-app H5 按视口缩放根字号（375px 宽时 1rem = 15.36px），rem 会让 20px 留白缩到 19.2px、430px 涨到约 22px，与旧 Web 出现可见差异；此为对照迁移例外，与 #65 表单、#63 健康页一致。320px 下旧 Web 自身横向溢出（`scrollWidth` 320 > 可视 305），新客户端无溢出，属已知有意差异。
+
+适配成本低。H5 五档视口与旧 Web 逐项数值一致（375/390/430/1440），PASS；微信真实键盘类型、验证码输入法行为、读屏反馈与安全区仍交 #85。
+
 ## Issue #65：复用表单与受控弹层
 
 本票交付基础组件与完整组件 fixture，业务整页继续归 #67/#71/#72/#73/#74。输入/密码显隐、选择/日期时间、草稿与保存取消接口见[组件契约](../uni-forms.md)。不新增认证、持久化或业务写 API。
@@ -53,7 +65,7 @@ H5 需检查资源回归页、认证 Logo 和三项底栏的正常/选中状态�
 | 收藏                     | `/my/favorites` 当前为占位                                     | #75 直接实现 #33 明确需求，不复制占位页            |
 | 站内通知                 | `/notifications` 当前为占位                                    | #76 直接实现 #34 明确需求，不复制占位页            |
 | 关于                     | `ProfileView.vue` 中“关于禾伙搭”入口，无独立有效页面           | #77 直接实现 #35 明确需求                          |
-| 登录注册及未开放反馈     | `/login`、`/register`、`AuthView.vue`                          | #67                                                |
+| 登录注册及未开放反馈     | `/login`、`/register`、`AuthView.vue`                          | #67 已迁移表单与未开放提示                         |
 | 健康查询                 | `/health`、`HealthView.vue`、`api/http.ts`                     | #63 统一请求；#78 公开契约集成                     |
 | 失效入口                 | `NotFoundView.vue`、兜底路由                                   | #60；#82                                           |
 | 共享控件与资源           | `components/`、`style.css`、`assets/`                          | #61 主题、#62 图像图标、#65 表单弹层、#66 学院选择 |
