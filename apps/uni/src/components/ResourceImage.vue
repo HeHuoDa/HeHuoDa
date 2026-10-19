@@ -94,7 +94,13 @@ watch(
 .resource-image__fallback--initial {
   color: var(--hhr-color-brand);
   font-family: var(--hhr-font-display);
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 28px;
   font-weight: 600;
+}
+@media (max-width: 767px) {
+  .resource-image__fallback--initial {
+    font-size: 18px;
+  }
 }
 </style>

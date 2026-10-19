@@ -115,6 +115,7 @@ function keydown(
       <text class="college-heading">选择学院</text>
       <button
         class="hhr-button college-reset"
+        hover-class="none"
         :class="
           selection === 'all'
             ? 'hhr-button--soft is-all'
@@ -151,6 +152,7 @@ function keydown(
         }}</text>
         <button
           class="hhr-button hhr-button--secondary"
+          hover-class="none"
           role="button"
           :tabindex="0"
           @click="emit('retry')"
@@ -167,6 +169,7 @@ function keydown(
         >
           <button
             class="hhr-button college-entry"
+            hover-class="none"
             :class="{ 'is-selected': selectedIds.includes(college.id) }"
             role="button"
             :tabindex="0"
