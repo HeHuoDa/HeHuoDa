@@ -17,7 +17,11 @@ export function withQuery(
   query: Record<string, QueryValue> = {},
 ): string {
   const search = Object.entries(query)
-    .filter(([, value]) => value !== undefined && `${value}` !== "")
+    // hosts="" 表示显式未选择学院，不能清洗成缺省的全校范围。
+    .filter(
+      ([key, value]) =>
+        value !== undefined && (key === "hosts" || `${value}` !== ""),
+    )
     .map(
       ([key, value]) =>
         `${encodeURIComponent(key)}=${encodeURIComponent(`${value}`)}`,
@@ -77,4 +81,25 @@ export function openProfileSection(
 ): void {
   useNavigationStore().requestProfileSection(section, query);
   openTab("profile");
+}
+
+/** switchTab 不能携带 query；首页返回条件与关联招募用同一个一次性交接入口。 */
+export function openTabWithQuery(
+  name: "home" | "teams",
+  query: RouteQuery,
+): void {
+  useNavigationStore().requestTabQuery(name, query);
+  openTab(name);
+}
+
+export function returnToCompetitions(query: RouteQuery): void {
+  const pages = getCurrentPages();
+  if (
+    pages.length > 1 &&
+    pages[pages.length - 2].route === routePath("home").slice(1)
+  ) {
+    uni.navigateBack({ delta: 1 });
+    return;
+  }
+  openTabWithQuery("home", query);
 }

@@ -1,58 +1,521 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
-import ParamFeedback from "../../components/ParamFeedback.vue";
-import PlaceholderPage from "../../components/PlaceholderPage.vue";
-import { backOrHome, openTab } from "../../navigation/navigate";
+import { computed, nextTick, reactive, ref } from "vue";
+import { onHide, onLoad, onReady, onShow, onUnload } from "@dcloudio/uni-app";
 import {
+  collegeNames,
+  formatTime,
+  formatEvaluatedAt,
+  materialDeadlineLabel,
+  parseFilters,
+  writeFilters,
+  scopeLabel,
+  statuses,
+} from "@hehuoda/client-domain/competition-discovery";
+import CompetitionSourceAction from "../../components/CompetitionSourceAction.vue";
+import FormButton from "../../components/FormButton.vue";
+import { competitionApi } from "../../api/competitions";
+import {
+  createDetailController,
+  initialDetailState,
+} from "../../stores/detail-controller";
+import {
+  openTabWithQuery,
+  returnToCompetitions,
+} from "../../navigation/navigate";
+import { resolveStageTarget } from "../../navigation/competition-detail";
+import {
+  copyRouteQuery,
   paramMessage,
   parseBusinessId,
-  type ParamIssue,
+  type RouteQuery,
 } from "../../navigation/params";
 
+const state = reactive(initialDetailState());
+const controller = createDetailController(state, competitionApi);
 const id = ref("");
-const issue = ref<ParamIssue | null>(null);
-const message = computed(() =>
-  issue.value ? paramMessage(issue.value, "比赛") : "",
-);
+const parameterError = ref("");
+const stageFeedback = ref("");
+const competition = computed(() => state.detail);
+const originLabels = {
+  official: "官方通知",
+  historical: "官方历史信息",
+  demo: "虚构交互样例",
+};
+const noticeLabels = {
+  registration: "报名通知",
+  supplement: "补充通知",
+  award: "获奖公示",
+  news: "新闻回顾",
+};
+let stage: unknown;
+let sourceQuery: RouteQuery = {};
+let ready = false;
+let visible = false;
+let positioning = 0;
 
+async function locate() {
+  if (!ready || !visible || !state.detail) return;
+  const current = ++positioning;
+  const target = resolveStageTarget(state.detail, stage);
+  stageFeedback.value = target.message;
+  if (!target.selector) return;
+  await nextTick();
+  if (current !== positioning || !visible || state.status !== "ready") return;
+  uni.pageScrollTo({
+    selector: target.selector,
+    duration: 0,
+    fail() {
+      if (current === positioning && visible)
+        stageFeedback.value =
+          "暂时无法自动定位赛段，请在下方查看完整赛段说明。";
+    },
+  });
+}
+async function load() {
+  if (!id.value) return;
+  const current = ++positioning;
+  stageFeedback.value = "";
+  await controller.load(id.value);
+  if (current === positioning) await locate();
+}
+function leave() {
+  visible = false;
+  ++positioning;
+  controller.cancel();
+}
+function returnToList() {
+  returnToCompetitions(sourceQuery);
+}
 onLoad((query) => {
+  ++positioning;
+  controller.cancel();
+  state.detail = null;
+  state.status = "idle";
   const parsed = parseBusinessId(query?.id);
-  if (parsed.issue) {
-    issue.value = parsed.issue;
-    return;
-  }
-  id.value = parsed.value;
+  parameterError.value = parsed.issue ? paramMessage(parsed.issue, "比赛") : "";
+  id.value = parsed.issue ? "" : parsed.value;
+  stage = query?.stage;
+  sourceQuery = copyRouteQuery(writeFilters({}, parseFilters(query ?? {})));
 });
+onShow(() => {
+  visible = true;
+  if (state.status === "idle") void load();
+});
+onReady(() => {
+  ready = true;
+  void locate();
+});
+onHide(leave);
+onUnload(leave);
 </script>
 
 <template>
-  <view class="hhr-page">
-    <view class="hhr-page__inner">
-      <ParamFeedback v-if="issue" title="无法打开比赛详情" :message="message">
-        <button
-          class="hhr-button hhr-button--secondary hhr-button--inline"
-          @click="openTab('home')"
-        >
-          去找比赛
-        </button>
-      </ParamFeedback>
-      <PlaceholderPage
-        v-else
-        title="比赛详情"
-        description="比赛规则、赛道与关联招募将在这里展示。"
-        :note="`业务 ID：${id} · 参数只用于定位内容，不代表身份或权限。`"
+  <view class="hhr-page detail-page">
+    <view class="detail-inner">
+      <view class="detail-navigation"
+        ><FormButton variant="reveal" @click="returnToList"
+          >← 返回比赛列表</FormButton
+        ></view
       >
-        <button class="hhr-button hhr-button--inline" @click="backOrHome">
-          返回上一页
-        </button>
-        <button
-          class="hhr-button hhr-button--secondary hhr-button--inline"
-          @click="openTab('home')"
+      <view v-if="parameterError" class="hhr-panel detail-panel" role="alert">
+        <text class="detail-title">无法打开比赛详情</text
+        ><text class="detail-paragraph">{{ parameterError }}</text>
+      </view>
+      <view
+        v-else-if="state.status === 'loading' || state.status === 'idle'"
+        class="hhr-panel detail-panel"
+        role="status"
+        >正在加载比赛详情…</view
+      >
+      <view
+        v-else-if="state.status === 'error'"
+        class="hhr-panel detail-panel"
+        role="alert"
+      >
+        <text class="detail-paragraph">{{ state.error }}</text>
+        <text v-if="state.requestId" class="detail-note"
+          >请求编号：{{ state.requestId }}</text
         >
-          返回首页
-        </button>
-      </PlaceholderPage>
+        <FormButton class="detail-retry" @click="load">重试加载</FormButton>
+      </view>
+      <view
+        v-else-if="state.status === 'missing'"
+        class="hhr-panel detail-panel"
+      >
+        <text class="detail-title">比赛不存在</text
+        ><text class="detail-paragraph muted"
+          >未找到这项比赛，比赛可能未公开或链接已失效。请返回列表重新选择。</text
+        >
+      </view>
+      <template v-else-if="competition">
+        <view class="detail-header">
+          <view class="detail-tags"
+            ><text class="hhr-badge">{{ competition.category }}</text
+            ><text class="hhr-badge hhr-badge--muted">{{
+              originLabels[competition.origin]
+            }}</text></view
+          >
+          <text class="detail-edition muted">{{ competition.edition }}</text>
+          <text class="detail-title">{{ competition.name }}</text>
+          <text class="detail-paragraph"
+            >主办 / 组织单位：{{ competition.organizer }}</text
+          >
+          <text class="detail-note"
+            >状态计算时间：{{
+              formatEvaluatedAt(competition.evaluatedAt)
+            }}（北京时间）。报名时段内不保证名额或资格通过；最新安排请核对官方通知。</text
+          >
+        </view>
+        <text
+          v-if="stageFeedback"
+          class="detail-location-feedback"
+          role="status"
+          >{{ stageFeedback }}</text
+        >
+        <view class="detail-sections">
+          <view class="hhr-panel detail-panel">
+            <text class="detail-heading" role="heading" aria-level="2"
+              >赛道与人数要求</text
+            >
+            <text
+              v-if="!competition.tracks.length"
+              class="detail-paragraph muted"
+              >赛道与人数要求待公布，请核对官方通知。</text
+            >
+            <view
+              v-for="track in competition.tracks"
+              :key="track.id"
+              class="detail-article"
+            >
+              <text class="detail-subheading">{{ track.name }}</text
+              ><text class="detail-members">{{ track.members }}</text>
+              <text class="detail-rules muted">{{ track.rules }}</text
+              ><text v-if="track.mode === 'individual'" class="detail-small"
+                >个人赛，无需组队。</text
+              >
+            </view>
+          </view>
+          <view class="detail-stages">
+            <text class="detail-heading" role="heading" aria-level="2"
+              >赛段与报名说明</text
+            >
+            <text
+              v-if="!competition.stages.length"
+              class="detail-paragraph muted"
+              >赛段安排待公布，请核对官方通知。</text
+            >
+            <view
+              v-for="(item, index) in competition.stages"
+              :id="`competition-stage-${index}`"
+              :key="item.id"
+              class="hhr-panel detail-panel"
+            >
+              <view class="detail-stage-header"
+                ><text class="detail-subheading">{{ item.name }}</text
+                ><text class="hhr-badge">{{
+                  statuses[item.status]
+                }}</text></view
+              >
+              <text class="detail-paragraph"
+                >组织单位：{{ item.organizer }}</text
+              >
+              <text class="detail-fact"
+                >承办学院：{{ collegeNames(item.hosts) }}</text
+              >
+              <text class="detail-fact"
+                >参赛范围：{{ scopeLabel(item.scope) }}</text
+              >
+              <text class="detail-rules muted">{{ item.scope.note }}</text>
+              <view class="detail-times">
+                <text class="muted">报名开始</text
+                ><text>{{
+                  item.conflict ? "时间待核对" : formatTime(item.startsAt)
+                }}</text>
+                <text class="muted">报名截止</text
+                ><text>{{
+                  item.conflict ? "时间待核对" : formatTime(item.deadline)
+                }}</text>
+                <text class="muted">材料提交</text
+                ><text>{{
+                  materialDeadlineLabel(
+                    item.materialsAt,
+                    competition.evaluatedAt,
+                  )
+                }}</text>
+                <text class="muted">比赛时间</text
+                ><text>{{ formatTime(item.eventAt) }}</text>
+              </view>
+              <text v-if="item.timeNote" class="detail-note">{{
+                item.timeNote
+              }}</text>
+              <text class="detail-registration-title">如何报名</text
+              ><text class="detail-registration">{{ item.registration }}</text>
+              <text class="detail-disclaimer"
+                >平台组队不等于官方报名；学院范围匹配不表示已通过全部资格审核。</text
+              >
+              <view class="detail-stage-sources"
+                ><CompetitionSourceAction
+                  v-for="source in competition.notices.filter((n) =>
+                    item.sourceIds.includes(n.id),
+                  )"
+                  :key="source.id"
+                  :notice="source"
+                  compact
+              /></view>
+            </view>
+          </view>
+          <view class="hhr-panel detail-panel">
+            <text class="detail-heading" role="heading" aria-level="2"
+              >来源与信息核对</text
+            >
+            <text
+              v-if="!competition.notices.length"
+              class="detail-paragraph muted"
+              >{{
+                competition.origin === "demo"
+                  ? "此记录为虚构交互样例，没有官方来源或真实报名入口。"
+                  : "暂未记录来源通知，请向组织单位核对报名安排。"
+              }}</text
+            >
+            <view
+              v-for="notice in competition.notices"
+              :key="notice.id"
+              class="detail-article"
+            >
+              <text class="detail-registration-title">{{ notice.title }}</text>
+              <text class="detail-small muted"
+                >{{ notice.publisher }} · {{ noticeLabels[notice.kind] }}</text
+              >
+              <text class="detail-source-date muted"
+                >{{
+                  notice.publishedAt
+                    ? "发布：" + notice.publishedAt
+                    : "发布日期未注明"
+                }}
+                ·
+                {{
+                  notice.checkedAt
+                    ? "核对：" + notice.checkedAt
+                    : "核对日期未记录"
+                }}</text
+              >
+              <CompetitionSourceAction :notice="notice" />
+            </view>
+          </view>
+          <view class="hhr-panel detail-panel">
+            <text class="detail-heading" role="heading" aria-level="2"
+              >后续入口</text
+            >
+            <text class="detail-paragraph muted"
+              >查看关联比赛的演示招募；收藏记录将在后续接入。平台组队不等于官方报名。</text
+            >
+            <view class="detail-actions"
+              ><FormButton variant="secondary" disabled
+                >收藏 · 待接入</FormButton
+              ><FormButton
+                variant="secondary"
+                @click="
+                  openTabWithQuery('teams', { competition: competition.id })
+                "
+                >查看关联演示招募</FormButton
+              ></view
+            >
+          </view>
+        </view>
+      </template>
     </view>
   </view>
 </template>
+
+<style scoped>
+/* 固定 px 对齐旧 Web 正文字号与留白；导航沿用 ADR 0005 的双端原生导航。 */
+.detail-page {
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  font-size: 14px;
+  line-height: 1.65;
+}
+.detail-inner {
+  max-width: 1020px;
+  margin: 0 auto;
+}
+.detail-navigation {
+  margin-bottom: 20px;
+}
+.detail-navigation :deep(.hhr-button) {
+  display: inline-flex;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  min-height: 44px;
+  font-size: 14px;
+}
+.detail-panel {
+  padding: 22px;
+  min-width: 0;
+}
+.detail-header {
+  margin-bottom: 28px;
+}
+.detail-tags,
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-tags {
+  margin-bottom: 12px;
+}
+.detail-tags .hhr-badge,
+.detail-stage-header .hhr-badge {
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: normal;
+}
+.detail-edition {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.detail-title {
+  display: block;
+  font-family: var(--hhr-font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.625;
+}
+.detail-heading {
+  display: block;
+  font-family: var(--hhr-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.detail-subheading {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+}
+.detail-paragraph {
+  display: block;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.detail-fact {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.detail-note {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--hhr-color-muted);
+}
+.detail-sections {
+  display: grid;
+  gap: 20px;
+}
+.detail-stages {
+  display: grid;
+  gap: 12px;
+}
+.detail-article {
+  margin-top: 16px;
+  border-top: 1px solid var(--hhr-color-line);
+  padding-top: 16px;
+}
+.detail-members {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--hhr-color-brand);
+}
+.detail-rules,
+.detail-registration {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 28px;
+}
+.detail-small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.detail-stage-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.detail-times {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 16px 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--hhr-color-line);
+  border-bottom: 1px solid var(--hhr-color-line);
+  font-size: 14px;
+  line-height: 20px;
+}
+.detail-registration-title {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.detail-disclaimer {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--hhr-color-brand);
+}
+.detail-stage-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+.detail-source-date {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.detail-actions {
+  margin-top: 12px;
+}
+.detail-actions :deep(.hhr-button) {
+  display: inline-flex;
+  width: auto;
+  font-size: 13px;
+}
+.detail-retry {
+  margin-top: 16px;
+}
+.detail-location-feedback {
+  display: block;
+  margin-bottom: 20px;
+  color: var(--hhr-color-brand);
+  font-size: 14px;
+}
+.muted {
+  color: var(--hhr-color-muted);
+}
+@media (min-width: 768px) {
+  .detail-page {
+    padding: 40px;
+  }
+}
+</style>

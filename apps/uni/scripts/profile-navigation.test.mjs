@@ -61,6 +61,46 @@ const { default: Profile } = await import(
 );
 const { openProfileSection, backOrHome, openTab } =
   await import("../src/navigation/navigate.ts");
+const { openTabWithQuery, returnToCompetitions, withQuery } =
+  await import("../src/navigation/navigate.ts");
+
+test("比赛返回复用首页栈，空栈交接筛选；关联招募只传比赛 ID且只消费一次", () => {
+  setActivePinia(createPinia());
+  const originalUni = globalThis.uni;
+  const originalPages = globalThis.getCurrentPages;
+  const calls = [];
+  globalThis.uni = {
+    switchTab: ({ url }) => calls.push(url),
+    navigateBack: () => calls.push("back"),
+  };
+  try {
+    globalThis.getCurrentPages = () => [{ route: "pages/index/index" }, {}];
+    returnToCompetitions({ hosts: "all", q: "创新", page: "2" });
+    assert.deepEqual(calls, ["back"]);
+    globalThis.getCurrentPages = () => [{}];
+    returnToCompetitions({ hosts: "", q: "创新", page: "2" });
+    const navigation = useNavigationStore();
+    assert.deepEqual(navigation.consumeTabQuery("home"), {
+      hosts: "",
+      q: "创新",
+      page: "2",
+    });
+    assert.equal(navigation.consumeTabQuery("home"), null);
+    openTabWithQuery("teams", { competition: "competition-a" });
+    assert.equal(calls.at(-1), "/pages/teams/index");
+    assert.deepEqual(navigation.consumeTabQuery("teams"), {
+      competition: "competition-a",
+    });
+    assert.equal(navigation.consumeTabQuery("teams"), null);
+    assert.equal(
+      withQuery("/detail", { hosts: "", id: "a" }),
+      "/detail?hosts=&id=a",
+    );
+  } finally {
+    globalThis.uni = originalUni;
+    globalThis.getCurrentPages = originalPages;
+  }
+});
 
 function mountProfile(query = {}) {
   hooks.load.length = 0;
