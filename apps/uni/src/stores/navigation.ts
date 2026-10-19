@@ -20,6 +20,18 @@ interface ProfileNavigation {
  */
 export const useNavigationStore = defineStore("navigation", () => {
   const pendingProfileNavigation = ref<ProfileNavigation | null>(null);
+  const pendingTabQueries = ref<Partial<Record<"home" | "teams", RouteQuery>>>(
+    {},
+  );
+
+  function requestTabQuery(name: "home" | "teams", query: RouteQuery) {
+    pendingTabQueries.value[name] = copyRouteQuery(query);
+  }
+  function consumeTabQuery(name: "home" | "teams"): RouteQuery | null {
+    const query = pendingTabQueries.value[name] ?? null;
+    delete pendingTabQueries.value[name];
+    return query;
+  }
 
   function requestProfileSection(
     section: ProfileSection,
@@ -37,6 +49,8 @@ export const useNavigationStore = defineStore("navigation", () => {
   }
 
   return {
+    requestTabQuery,
+    consumeTabQuery,
     pendingProfileNavigation,
     requestProfileSection,
     consumeProfileNavigation,

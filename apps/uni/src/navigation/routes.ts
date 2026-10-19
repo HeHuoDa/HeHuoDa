@@ -74,9 +74,9 @@ export const routeRegistry = {
     path: "/pages/home/competition",
     title: "比赛详情",
     kind: "page",
-    status: "placeholder",
+    status: "baseline",
     source: "/home/competitions/:id",
-    description: "比赛规则、赛道与关联招募将在这里展示。",
+    description: "查看比赛届次、赛道、赛段和来源通知，进入关联演示招募。",
   },
   "team-detail": {
     name: "team-detail",

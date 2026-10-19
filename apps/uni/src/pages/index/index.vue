@@ -7,6 +7,7 @@ import {
   formatEvaluatedAt,
   materialDeadlineLabel,
   parseFilters,
+  writeFilters,
   scopeLabel,
   statuses,
   type Filters,
@@ -21,10 +22,12 @@ import {
   initialDiscoveryState,
 } from "../../stores/discovery-controller";
 import { openPage } from "../../navigation/navigate";
+import { useNavigationStore } from "../../stores/navigation";
 
 const state = reactive(initialDiscoveryState());
 const controller = createDiscoveryController(state, competitionApi);
 const search = ref("");
+const navigation = useNavigationStore();
 const options = [
   { value: "", label: "全部状态" },
   ...Object.entries(statuses).map(([value, label]) => ({ value, label })),
@@ -59,6 +62,14 @@ onLoad((query) => {
   search.value = state.filters.q;
 });
 onShow(() => {
+  const query = navigation.consumeTabQuery("home");
+  if (query) {
+    controller.cancel();
+    state.filters = parseFilters(query);
+    search.value = state.filters.q;
+    void controller.load();
+    return;
+  }
   void controller.resume();
 });
 onHide(controller.cancel);
@@ -196,6 +207,7 @@ onUnload(controller.cancel);
                 class="discovery-card-title"
                 @click="
                   openPage('competition-detail', {
+                    ...writeFilters({}, state.filters),
                     id: competition.id,
                     stage: stage.id,
                   })
