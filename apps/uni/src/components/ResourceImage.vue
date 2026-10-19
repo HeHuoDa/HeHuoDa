@@ -9,6 +9,8 @@ const props = withDefaults(
     decorative?: boolean;
     whiteArtwork?: boolean;
     size?: number;
+    initial?: boolean;
+    smallSize?: number;
   }>(),
   {
     src: null,
@@ -16,9 +18,15 @@ const props = withDefaults(
     decorative: false,
     whiteArtwork: false,
     size: 40,
+    smallSize: undefined,
   },
 );
 const failed = ref(false);
+const emit = defineEmits<{ error: [] }>();
+function fail() {
+  failed.value = true;
+  emit("error");
+}
 watch(
   () => props.src,
   () => {
@@ -31,7 +39,10 @@ watch(
   <view
     class="resource-image"
     :class="{ 'resource-image--white': whiteArtwork && src && !failed }"
-    :style="{ width: `${size}px`, height: `${size}px` }"
+    :style="{
+      '--resource-image-size': `${size}px`,
+      '--resource-image-small-size': `${smallSize ?? size}px`,
+    }"
     :aria-hidden="decorative"
     :aria-label="decorative ? undefined : label"
     :role="decorative ? undefined : 'img'"
@@ -43,14 +54,21 @@ watch(
       :alt="decorative ? '' : label"
       mode="aspectFit"
       :draggable="false"
-      @error="failed = true"
+      @error="fail"
     />
-    <text v-else class="resource-image__fallback">{{ fallback }}</text>
+    <text
+      v-else
+      class="resource-image__fallback"
+      :class="{ 'resource-image__fallback--initial': initial }"
+      >{{ fallback }}</text
+    >
   </view>
 </template>
 
 <style scoped>
 .resource-image {
+  width: var(--resource-image-size);
+  height: var(--resource-image-size);
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -75,5 +93,21 @@ watch(
   line-height: 1.2;
   overflow-wrap: anywhere;
   text-align: center;
+}
+.resource-image__fallback--initial {
+  color: var(--hhr-color-brand);
+  font-family: var(--hhr-font-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+@media (max-width: 767px) {
+  .resource-image {
+    width: var(--resource-image-small-size);
+    height: var(--resource-image-small-size);
+  }
+  .resource-image__fallback--initial {
+    font-size: 18px;
+  }
 }
 </style>

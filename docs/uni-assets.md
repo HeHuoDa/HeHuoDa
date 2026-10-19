@@ -7,7 +7,7 @@
 - `AppIcon`：沿用 `home/users/team/leaf/book/shield/pencil/mail/star/bell/user`。`size` 为 px，默认 24；默认继承当前文字颜色，支持主题工具类和显式 `color`。状态由调用方决定，不自行改变收藏、授权等业务状态。未知名称显示 `?`，包括原型链属性名称。默认装饰模式，独立图标传 `label`，操作名称和至少 44px 的触控区域仍由按钮或导航负责。
 - `ProjectLogo`：40px 等比显示完整 Logo，默认装饰模式，独立使用传 `:decorative="false"`。本地 160px PNG 支持 40px 下 4 倍密度；大尺寸品牌展示另准备派生资源，不放大该缩略图代替原图。
 - `CollegeEmblem`：以 `collegeId` 查本地目录，默认 40px；27 个稳定 ID、25 张院徽，农业工程学院和土木工程学院仍无独立院徽。缺失、未知和加载失败显示学院名称；白色透明院徽保留主题绿底。选择器外圈、内图尺寸和选中态由 #66 的容器按旧端布局实现，此组件不承担筛选行为。
-- `ResourceImage`：`mode="aspectFit"`，不裁剪或拉伸；`src` 为空不创建图片，错误后显示 `fallback`，切换 `src` 重置失败状态并重试。`label` 必填；与可见学院名称或品牌名并排时启用 `decorative` 避免重复朗读。
+- `ResourceImage`：`mode="aspectFit"`，不裁剪或拉伸；`src` 为空不创建图片，错误后显示 `fallback`，切换 `src` 重置失败状态并重试。`label` 必填；与可见学院名称或品牌名并排时启用 `decorative` 避免重复朗读。`size` 为默认像素尺寸，`smallSize` 可单独指定小于 768px 时的像素尺寸，未传时沿用 `size`；尺寸落在资源组件自身，不通过微信额外组件宿主的百分比高度计算。
 - `LoadingIndicator`：20px、2px 圆环、继承颜色，默认装饰模式；独立使用传 `label` 提供状态语义。H5 尊重 `prefers-reduced-motion`；微信对媒体查询和辅助技术的实际支持交 #85 验证。
 
 ## 来源与再生成
