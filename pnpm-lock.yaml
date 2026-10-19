@@ -134,6 +134,9 @@ importers:
       '@hehuoda/api-types':
         specifier: workspace:*
         version: link:../../packages/api-types
+      '@hehuoda/client-domain':
+        specifier: workspace:*
+        version: link:../../packages/client-domain
       pinia:
         specifier: 3.0.4
         version: 3.0.4(typescript@6.0.3)(vue@3.5.42(typescript@6.0.3))
@@ -183,6 +186,9 @@ importers:
       '@hehuoda/api-types':
         specifier: workspace:*
         version: link:../../packages/api-types
+      '@hehuoda/client-domain':
+        specifier: workspace:*
+        version: link:../../packages/client-domain
       '@lucide/vue':
         specifier: 1.51.0
         version: 1.51.0(vue@3.5.43(typescript@6.0.3))
@@ -241,6 +247,16 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/client-domain:
+    dependencies:
+      '@hehuoda/api-types':
+        specifier: workspace:*
+        version: link:../api-types
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
 packages:
 

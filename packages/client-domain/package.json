@@ -1,0 +1,26 @@
+{
+  "name": "@hehuoda/client-domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./colleges": "./src/colleges.ts",
+    "./college-selection": "./src/college-selection.ts",
+    "./query": "./src/query.ts",
+    "./competition-discovery": "./src/competition-discovery.ts",
+    "./profile": "./src/profile.ts",
+    "./team": "./src/team.ts",
+    "./team-session": "./src/team-session.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test:unit": "node --test"
+  },
+  "dependencies": {
+    "@hehuoda/api-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}
