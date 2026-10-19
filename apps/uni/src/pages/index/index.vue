@@ -13,6 +13,7 @@ import {
 } from "@hehuoda/client-domain/competition-discovery";
 import CollegePicker from "../../components/CollegePicker.vue";
 import FormButton from "../../components/FormButton.vue";
+import FormInput from "../../components/FormInput.vue";
 import FormPicker from "../../components/FormPicker.vue";
 import { competitionApi } from "../../api/competitions";
 import {
@@ -89,13 +90,12 @@ onUnload(controller.cancel);
           <template #footer>
             <view class="discovery-filters" role="search" aria-label="比赛筛选">
               <view class="discovery-search">
-                <input
+                <FormInput
+                  id="competition-search"
                   v-model="search"
-                  class="hhr-input discovery-input"
-                  type="text"
-                  confirm-type="search"
-                  maxlength="100"
-                  aria-label="搜索比赛"
+                  label="搜索比赛"
+                  class="discovery-search-field"
+                  :maxlength="100"
                   placeholder="搜索比赛名称、届次"
                   @confirm="submit"
                 />
@@ -308,14 +308,9 @@ onUnload(controller.cancel);
   gap: 6px;
   grid-column: 1 / -1;
 }
-.discovery-input {
-  box-sizing: border-box;
+.discovery-search-field {
   flex: 1;
   min-width: 0;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 8px;
-  font-size: 12px;
 }
 .discovery-search-button {
   width: auto;
@@ -515,7 +510,6 @@ onUnload(controller.cancel);
   .discovery-filters {
     gap: 8px;
   }
-  .discovery-input,
   .discovery-filters :deep(.hhr-input) {
     height: 44px;
     min-height: 44px;
