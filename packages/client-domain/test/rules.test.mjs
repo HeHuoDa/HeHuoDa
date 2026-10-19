@@ -44,6 +44,25 @@ function session() {
   return { state, actions, profile, profileActions };
 }
 
+test("北京时间展示不依赖 Intl，非法日期保持明确失败", () => {
+  const original = globalThis.Intl;
+  try {
+    globalThis.Intl = undefined;
+    assert.equal(
+      teamTime("2026-10-18T16:00:00Z"),
+      "2026/10/19 00:00（北京时间）",
+    );
+    assert.equal(formatEvaluatedAt("2026-12-31T16:00:00Z"), "2027/01/01 00:00");
+    assert.throws(() => teamTime("invalid"), RangeError);
+    assert.throws(
+      () => formatTime({ precision: "instant", value: "invalid" }),
+      RangeError,
+    );
+  } finally {
+    globalThis.Intl = original;
+  }
+});
+
 test("纯入口可在没有浏览器、Router 和平台全局的 Node 环境执行", () => {
   for (const name of ["window", "document", "uni", "localStorage"])
     assert.equal(typeof globalThis[name], "undefined");

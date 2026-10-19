@@ -4,6 +4,15 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createPinia } from "pinia";
 import { computed, effectScope, nextTick, version } from "vue";
 import { useSessionStore } from "../src/stores/session.ts";
+import { colleges } from "../src/data/colleges.ts";
+import { colleges as pureColleges } from "@hehuoda/client-domain/colleges";
+
+test("uni 资源目录与共享规则学院 ID、名称及顺序一致", () => {
+  assert.deepEqual(
+    colleges.map(({ id, name }) => ({ id, name })),
+    pureColleges,
+  );
+});
 
 test("两个页面消费者共用应用内唯一会话，成员与申请/邀请派生数据同步", async () => {
   const pinia = createPinia();
@@ -125,4 +134,22 @@ test("运行时使用目标 Vue 与 Pinia，纯规则依赖图不包含框架和
       /\b(?:window|document|setInterval|setTimeout|localStorage|sessionStorage)\s*[.(]/,
     );
   }
+  const application = new URL("../src/", import.meta.url);
+  for (const filename of readdirSync(application, { recursive: true })) {
+    if (!/\.(?:ts|vue)$/.test(filename)) continue;
+    const source = readFileSync(
+      new URL(filename.replaceAll("\\", "/"), application),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      source,
+      /(?:from\s*|import\s*\()["'][^"']*(?:apps\/web|@hehuoda\/web)/,
+    );
+  }
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL("../../../packages/client-domain/package.json", import.meta.url),
+    ),
+  );
+  assert.deepEqual(Object.keys(manifest.dependencies), ["@hehuoda/api-types"]);
 });
