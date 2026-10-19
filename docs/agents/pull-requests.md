@@ -37,10 +37,31 @@
 此流程用于 uni-app 微信小程序构建后检查微信运行时行为。它不替代 H5 检查，也不等同于真机、生产服务或发布验收。判断命中上方触发条件时，收尾人员先向用户提供明确提示，例如：“本次改动影响 mp-weixin 运行时；可以按[微信开发者工具人工验收流程](#微信开发者工具人工验收按需)打开并验证。是否现在执行？”用户要求执行时继续；用户未执行或当前环境不可用时，记录原因与剩余验证，不擅自声称通过。
 
 1. **固定被测版本。** 确认当前任务 worktree、分支和待验收提交；在这个 worktree 编译 mp-weixin，使用对应输出目录打开项目。不能拿另一个 worktree 或旧构建目录代替。记录 commit、构建命令、成功结果及产物路径。
-2. **检查开发者工具连接。** 使用本机安装版本附带的官方 CLI/自动化技能说明和工具接口，先检查工具版本、登录/授权状态及服务端口实际监听情况；不要假定端口号固定。需要用户在开发者工具中允许连接、启用服务端口或正常重启时，明确提示用户执行，并在用户反馈后重新检查连接。不得读取或输出登录令牌、密钥等凭证，也不绕过官方授权。
-3. **核实项目与运行环境。** 打开本次 mp-weixin 构建产物，确认项目路径/AppID对应当前任务，并记录基础库版本、模拟设备、屏幕与可用窗口尺寸。沿用项目安全配置，例如保留合法域名校验；除非任务明确要求，不为方便测试关闭校验或改成真实业务写入。
-4. **按改动执行真实交互。** 在模拟器页面操作真实控件，检查受影响的默认/边界/错误与恢复行为、点按/键盘（平台支持时）、滚动、页面切换和资源显示。用界面操作完成状态变更，不直接篡改页面数据来伪造通过。若自动化需定位自定义组件内部控件，先取得对应自定义组件实例，再通过官方自动化接口查询内部节点；宿主节点被点到不代表内部按钮已操作。错误图、网络错误和模拟错误事件分别如实标注。
-5. **读取运行反馈并保存证据。** 检查相关页面状态和模拟器 console；按错误级别/关键词筛选得到空结果时，只报告“该筛选无匹配项”，不要称日志完全为空。保存必要截图、运行记录与环境信息到项目忽略的本地验收目录，文件名标明任务和构建/提交，检查产物不会进入待提交变更。遇到缺陷先修复，再重新编译并重跑受影响场景。
-6. **收尾时分层报告。** PR/Issue 记录实际设备模拟器、DevTools/基础库版本、页面与操作、结果、截图位置和未覆盖项，并分别表述源码/构建检查、模拟器、真机及生产状态。模拟器通过只证明本次工具与构建环境下的运行；真机、系统版本、辅助技术、线上域名/服务等未实际验证就列为后续事项。需要人工完成的登录、扫码或工具设置说明具体阻塞动作。
+2. **准备 AppID 与构建产物。** 从仓库根目录运行 `pnpm --filter @hehuoda/uni build:mp-weixin`。AppID 的项目配置入口是 `apps/uni/.env` 里的 `UNI_MP_WEIXIN_APPID`；以 `apps/uni/.env.example` 为模板，仅在 `.env` 不存在时复制，不能覆盖已有本地设置。账号准备任务 #58 完成后填入对应小程序 AppID。当前 Windows 开发机留存的可复用配置在 `.worktrees/issue-64/apps/uni/.env.local`，其中同一变量也会被 Vite 读取；此路径是本机工作区备忘，其他开发机或清理 worktree 后不保证存在。需要查账号可管理的 ID 时，走官方 `get_user_appids --type miniprogram`，不要猜值。检查生成的 `apps/uni/src/manifest.json` 及构建产物 `apps/uni/dist/build/mp-weixin/project.config.json` 是否对应目标 AppID；生成文件和 `.env*` 均忽略且不得提交。构建未配置 ID 时会使用 DCloud `touristappid`，只能证明本地编译，不能用于 DevTools 账号运行验收。
+3. **检查并调用开发者工具。** 当前 Windows 开发机已验证安装目录 `D:\微信web开发者工具`，官方技能 CLI 为 `D:\微信web开发者工具\wechatide.cmd`，桌面程序为 `D:\微信web开发者工具\微信开发者工具.exe`。这些是本机定位提示；工具移位时先用 `Get-Command wechatide`，再查官方 wechatide-skill 的安装目录与运行前检查，不要自行拼凑 CLI 参数。使用项目内已经安装的官方 wechatide-skill/连接工具，并按它当前 frontmatter `version` 传版本号。PowerShell 命令示例（在仓库根目录执行）：
+
+   ```powershell
+   $wechatide = 'D:\微信web开发者工具\wechatide.cmd'
+   $skillVersion = '0.3.9' # 示例值；以本机 wechatide-skill/SKILL.md 的 version 为准
+   $projectPath = (Resolve-Path 'apps/uni/dist/build/mp-weixin').Path
+
+   & $wechatide -c Codex check_wechatide_status --skill-version $skillVersion
+   & $wechatide -c Codex open_project_window --project $projectPath --window-mode liteMode
+   ```
+
+   `-c` 的 `Codex` 必须与官方授权客户端名称一致；改用 MCP/注册工具时使用同一客户端授权。首次状态检查须确认版本关系兼容、`loginExpired: false`，并处理 `tokenRequired` 门禁；若需令牌，不从项目配置或本机文件翻找，按官方授权流程停下并请用户处理。若登录过期，调用 `login --type window` 后由用户扫码，并依官方异步任务流程等到最终成功；不要把“二维码已显示”当作已登录。`open_project_window` 默认 `liteMode` 只开模拟器，需编辑器/调试器时用 `fullMode`。不要使用发布/上传命令代替打开验收。
+4. **处理连接失败。** 只有官方命令不可用时才进入官方安装诊断；命令可用但端口连接失败时，在微信开发者工具“设置 → 安全设置”核对“服务端口”是否开启以及当前显示端口，不要假定固定端口。遇到授权弹窗、启用端口或扫码登录，由用户在开发者工具里完成。若工具仍持有旧端口，先请用户保存其他窗口工作，再正常退出并重新启动工具，然后重跑状态检查；不强杀进程、不绕过授权，也不读取或输出令牌/密钥。连接稳定后，确认项目窗口对应本次绝对构建路径。
+5. **按改动执行真实交互。** 在已打开的模拟器内，先按 `apps/uni/src/pages.json` 找目标页，再从 automator scene 调用 `simulator_open_page`、`automation_element_action`（真实点击/输入/触摸）、`automation_page_action`（查询节点/页面状态）；需要刷新时调用 `simulator_refresh`。示例：
+
+   ```powershell
+   & $wechatide -c Codex simulator_open_page --project $projectPath --page 'pages/example/index'
+   & $wechatide -c Codex automation_element_action --project $projectPath --selector '.submit-button' --action tap
+   & $wechatide -c Codex simulator_screenshot --project $projectPath --path 'docs/screenshots/local-wechat.png'
+   & $wechatide -c Codex get_simulator_console --project $projectPath --command 'grep -i error'
+   ```
+
+   示例页面和选择器要换成当前源码实际值；调用前用对应 scene 的官方 `--help` / `tools.yaml` 核对参数。`simulator_refresh` 成功仅表示触发刷新，不代表编译或行为通过；完整编译证据来自前面的 uni build。用真实界面操作完成状态变化，不直接篡改 page data。若需查询自定义组件内部控件，先取得自定义组件实例再查其内部节点；只点中宿主不能算点中了内部按钮。错误图片请求、资源错误事件注入和静态缺图回退分别记录。
+6. **读取运行反馈并保存证据。** 检查页面状态、必要的截图及模拟器 console。按错误级别/关键词筛选为空时，只报告“该筛选无匹配项”，不要称日志完全为空。记录 DevTools 版本、基础库、模拟器机型、屏幕/窗口尺寸、worktree 与 commit、项目路径、实际操作和结果。截图、脚本、运行 JSON 留在 `.gitignore` 覆盖的本地验收目录，提交前确认没有进入 diff。发现缺陷先修复，再重新构建并重跑受影响场景。
+7. **收尾时分层报告。** PR/Issue 记录构建命令和产物、AppID 来源变量（不复制值）、运行环境、页面/操作/结果、console 筛选条件、截图位置及未覆盖项；区分源码/构建、微信模拟器、真机与生产状态。模拟器通过仅证明本次工具和构建下行为；真机、系统版本、辅助技术、线上域名/服务等未实际验证时列为后续事项。人工完成的登录、扫码或工具设置要写明用户做了什么、随后如何复核。需要联网/写入的业务流程未被当前 Issue 授权时，不用模拟器验收扩大测试范围。
 
 首次接触或工具行为变化时优先阅读已安装微信开发者工具的官方技能及配套自动化文档，使用其当前支持的命令和授权路径；不把某一台机器的可执行文件路径、端口、CLI 子命令或 SDK 版本写成全项目常量。截图、临时脚本、运行结果留在本地；可复用的源码测试及正式项目文档按常规提交边界处理。
