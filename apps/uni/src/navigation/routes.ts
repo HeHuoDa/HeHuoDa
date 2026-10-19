@@ -47,7 +47,7 @@ export const routeRegistry = {
     path: "/pages/index/index",
     title: "首页",
     kind: "tab",
-    status: "placeholder",
+    status: "baseline",
     source: "/home",
     description: "在这里发现校园比赛与项目，找到一起成长的伙伴。",
   },
