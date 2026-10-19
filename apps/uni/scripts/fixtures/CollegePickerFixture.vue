@@ -36,6 +36,7 @@ function invalid() {
         JSON.stringify(selection)
       }}</text>
       <CollegePicker
+        id="compact-colleges"
         v-model="selection"
         compact
         :status="status"
@@ -53,6 +54,7 @@ function invalid() {
       </CollegePicker>
       <view class="fixture-gap" />
       <CollegePicker
+        id="regular-colleges"
         v-model="selection"
         :status="status"
         :catalog="mismatched ? [] : colleges"

@@ -10,7 +10,7 @@ const props = withDefaults(
     whiteArtwork?: boolean;
     size?: number;
     initial?: boolean;
-    fill?: boolean;
+    smallSize?: number;
   }>(),
   {
     src: null,
@@ -18,6 +18,7 @@ const props = withDefaults(
     decorative: false,
     whiteArtwork: false,
     size: 40,
+    smallSize: undefined,
   },
 );
 const failed = ref(false);
@@ -39,8 +40,8 @@ watch(
     class="resource-image"
     :class="{ 'resource-image--white': whiteArtwork && src && !failed }"
     :style="{
-      width: fill ? '100%' : `${size}px`,
-      height: fill ? '100%' : `${size}px`,
+      '--resource-image-size': `${size}px`,
+      '--resource-image-small-size': `${smallSize ?? size}px`,
     }"
     :aria-hidden="decorative"
     :aria-label="decorative ? undefined : label"
@@ -66,6 +67,8 @@ watch(
 
 <style scoped>
 .resource-image {
+  width: var(--resource-image-size);
+  height: var(--resource-image-size);
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -99,6 +102,10 @@ watch(
   font-weight: 600;
 }
 @media (max-width: 767px) {
+  .resource-image {
+    width: var(--resource-image-small-size);
+    height: var(--resource-image-small-size);
+  }
   .resource-image__fallback--initial {
     font-size: 18px;
   }

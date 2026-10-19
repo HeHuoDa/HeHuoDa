@@ -229,7 +229,9 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
     const resource = app.find((node) =>
       String(node.props.class).includes("resource-image"),
     );
-    assert.equal(resource.props.style.width, "100%");
+    // 子组件内部必须有确定像素尺寸，不能依赖小程序额外宿主的百分比高度。
+    assert.equal(resource.props.style["--resource-image-size"], "40px");
+    assert.equal(resource.props.style["--resource-image-small-size"], "28px");
     app.find((node) => node.type === "image").props.onError();
     await nextTick();
     assert.doesNotMatch(frame().props.class, /college-emblem--white/);

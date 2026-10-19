@@ -43,9 +43,9 @@ watch(
       "
       :initial="picker"
       :white-artwork="college?.whiteArtwork"
-      :size="size"
+      :size="picker ? (compact ? 26 : 40) : size"
+      :small-size="picker ? (compact ? 26 : 28) : size"
       :decorative="decorative"
-      fill
       @error="failed = true"
     />
   </view>
