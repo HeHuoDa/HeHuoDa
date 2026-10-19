@@ -1,5 +1,15 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #68：首页比赛发现与真实公开查询
+
+首页 `pages/index/index.vue` 消费 #66 的学院组件、共享领域筛选/北京时间规则和 #63 的 `uni.request` 适配器。`api/competition-client.ts` 负责公开目录与列表契约，`stores/discovery-controller.ts` 负责页面实例内目录复用、筛选重置页码、服务端分页纠正、重试与请求代次隔离。目录 ID/名称/顺序核对通过后才请求比赛；显式空学院传 `hosts=`，失败不降级为静态数据或空结果。目录与筛选不持久化。
+
+`onHide/onUnload` 中取消请求并使旧响应失效，`onShow` 恢复被中断的查询；已完成结果、筛选和页码在首页实例内保留。卡片通过统一导航传递真实比赛 ID 与赛段 ID，详情内容由 #69 交付；浏览器刷新、地址恢复仍由 #82 集成。
+
+按用户确认沿用 ADR 0005 的双端原生导航，保留首页内容中的学院筛选栏和比赛卡片，不恢复旧 Web 全站侧栏。内容使用相同主题、字号和固定 px 留白，宽屏保留 340px 学院栏；卡片标题操作区至少 44px，较旧 Web 单行标题增加触控空间。搜索复用 FormInput，H5 标签与确认键落在真实输入控件上；状态筛选使用现有 FormPicker：H5 为可键盘操作的原生 select，微信为 picker；空字符串是合法的“全部状态”，不插入同值占位选项。请求参数使用 encodeURIComponent 编码，不依赖浏览器 URLSearchParams、Router、DOM 或 AbortController。
+
+H5 浏览器模拟与双端编译分别验收。微信 picker、真实网络/合法域名、键盘、安全区、系统字号与真机行为仍需 #85 独立检查；可按 PR 约定调用微信开发者工具人工验收流程，构建通过不代表已完成运行验收。请求/分页状态适配成本低至中，原生导航的已接受差异见 ADR 0005。
+
 ## Issue #67：登录注册表单与未开放服务反馈
 
 本票交付 `pages/auth/login.vue`、`pages/auth/register.vue` 与共用 `components/AuthForm.vue`，规则集中在 `forms/auth-form.ts`（纯函数，`scripts/auth-form.test.mjs` 覆盖校验矩阵与首错顺序）。认证与验证码服务仍未开放：合法提交只提示“认证服务暂未开放”，发送验证码只校验邮箱后提示“验证码服务暂未开放”，不请求接口、不建立会话、不写存储、不生成倒计时。

@@ -45,7 +45,15 @@ export default defineComponent({
         },
         props.mode === "selector"
           ? [
-              h("option", { value: "", disabled: true }, props.placeholder),
+              ...(props.options.some((item) => item.value === "")
+                ? []
+                : [
+                    h(
+                      "option",
+                      { value: "", disabled: true },
+                      props.placeholder,
+                    ),
+                  ]),
               ...props.options.map((item) =>
                 h("option", { value: item.value }, item.label),
               ),

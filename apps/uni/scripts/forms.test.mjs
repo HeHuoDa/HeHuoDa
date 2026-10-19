@@ -88,6 +88,28 @@ test("H5 按钮 Enter/Space 与点击可操作，加载/禁用不触发", async 
   app.unmount();
 });
 
+test("H5 选择器的空值业务选项不会被占位选项遮挡", async () => {
+  const app = await mount(
+    "../src/forms/NativePicker.h5.vue",
+    {
+      mode: "selector",
+      modelValue: "",
+      options: [
+        { value: "", label: "全部状态" },
+        { value: "open", label: "报名时段内" },
+      ],
+    },
+    "H5",
+  );
+  const select = app.find((node) => node.type === "select");
+  const emptyOptions = select.children.filter(
+    (node) => node.type === "option" && node.props.value === "",
+  );
+  assert.equal(emptyOptions.length, 1);
+  assert.equal(emptyOptions[0].props.disabled, undefined);
+  app.unmount();
+});
+
 test("微信选择器按稳定值返回，取消/禁用不改变值", async () => {
   const values = [];
   let cancels = 0;

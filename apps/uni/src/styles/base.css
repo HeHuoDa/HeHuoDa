@@ -346,7 +346,9 @@ page {
   @media (hover: hover) {
     .hhr-button:not([disabled]):not(.is-disabled):not(.is-loading):not(
         .hhr-button--secondary
-      ):not(.hhr-button--soft):not(.hhr-button--danger):hover {
+      ):not(.hhr-button--soft):not(.hhr-button--danger):not(
+        .hhr-button--reveal
+      ):hover {
       background-color: var(--hhr-color-brand-hover);
     }
 
