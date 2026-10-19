@@ -1,5 +1,15 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #65：复用表单与受控弹层
+
+本票交付基础组件与完整组件 fixture，业务整页继续归 #67/#71/#72/#73/#74。输入/密码显隐、选择/日期时间、草稿与保存取消接口见[组件契约](../uni-forms.md)。不新增认证、持久化或业务写 API。
+
+H5 采用条件编译的真实输入/选择控件和独立浏览器弹层适配器，补齐标签/错误关联、Tab/Escape、焦点恢复、背景 inert 与 visualViewport；DOM 查询只存在于 H5 适配器。微信使用原生 input/textarea/picker/button、scroll-view、键盘高度监听与页面隐藏取消；不使用浏览器 dialog、body 锁或 HTML form 属性。微信 picker 不支持程序化 focus，首错通过滚动和错误文本定位；微信原生返回会离页并丢弃草稿，不宣称可拦截返回。tab 页面弹层期间暂时隐藏原生 tabBar，关闭时恢复。
+
+日期和时间分别选择，组合无时区的北京时间字符串，再由共享 `deadlineInstant` 严格转为 UTC+8 时间戳；输入原值和密码不做隐式 trim。窄屏下日期时间换行，标题/操作固定、中部滚动，底部保留安全区。弹层内控件须 `adjustPosition=false`，由弹层统一响应键盘高度，避免重复顶起。
+
+适配成本中。H5/微信编译和平台替身测试不能证明微信实际键盘、原生 textarea 层级、控件聚焦、日期面板和 tabBar 运行效果；iOS/Android、移动 Safari 动态地址栏/软键盘、微信真实基础库和安全区仍交 #85。官方依据和本地 fixture 用法见组件契约，后续消费页面须完成自己的整页对照与业务验收。
+
 ## Issue #64：共享规则与内存会话入口
 
 纯规则迁入 `packages/client-domain`，公开入口、源规则/测试映射及状态拥有者见[共享包说明](../../packages/client-domain/README.md)。Web 保留 Pinia 4 适配，新客户端通过 `apps/uni/src/stores/session.ts` 的 `useSessionStore()` 使用本应用唯一 Pinia 3；共享包只依赖公开 DTO 类型，uni 不导入旧 Web 源码。资料、队伍/申请/邀请/授权及派生索引在应用内共用，整组 `reset()` 恢复示例并关闭授权，后续收藏/通知可注册重置动作。此处是会话演示，不接真实认证、业务写 API 或存储。

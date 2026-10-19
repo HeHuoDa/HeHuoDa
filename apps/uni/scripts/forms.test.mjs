@@ -3,6 +3,37 @@ import { test } from "node:test";
 import { nextTick } from "vue";
 import { mount, textOf } from "./component-host.mjs";
 import { deadlineInstant } from "@hehuoda/client-domain/team";
+import { readFileSync, readdirSync } from "node:fs";
+import { preprocess } from "./component-host.mjs";
+
+test("小程序可达源码排除 H5 DOM 适配器，公共组件无浏览器弹层与滚动锁", () => {
+  const root = new URL("../src/", import.meta.url);
+  for (const file of readdirSync(root, { recursive: true })) {
+    const normalized = file.replaceAll("\\", "/");
+    if (
+      !/\.(vue|ts)$/.test(file) ||
+      normalized.includes("/.local/") ||
+      normalized.startsWith(".local/")
+    )
+      continue;
+    const source = readFileSync(new URL(normalized, root), "utf8");
+    if (normalized.endsWith(".h5.vue") || normalized === "forms/dialog-h5.ts")
+      continue;
+    const weixin = preprocess(source, "MP-WEIXIN")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert.doesNotMatch(
+      weixin,
+      /(?:NativePicker\.h5|NativeTextControl\.h5|dialog-h5)/,
+      normalized,
+    );
+    assert.doesNotMatch(
+      weixin,
+      /\b(?:document|window)\s*\.|HTMLDialogElement|\.showModal\(|querySelector|body\.style/,
+      normalized,
+    );
+  }
+});
 
 test("输入组件传递密码原值，显隐不提交，禁用及错误关联有效", async () => {
   const values = [];

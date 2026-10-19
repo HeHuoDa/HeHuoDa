@@ -446,7 +446,7 @@ page {
     gap: 12px;
   }
   .hhr-datetime-fields > view {
-    flex: 1 1 120px;
+    flex: 1 1 150px;
   }
   .hhr-dialog-overlay {
     position: fixed;
@@ -473,7 +473,6 @@ page {
     width: calc(100% - 32px);
     max-width: 680px;
     height: calc(100% - 32px);
-    max-height: 720px;
     overflow: hidden;
     border: 1px solid var(--hhr-color-line);
     border-radius: var(--hhr-radius-panel);
