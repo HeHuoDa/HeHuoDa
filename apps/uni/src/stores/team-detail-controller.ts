@@ -46,16 +46,22 @@ export function createTeamDetailController(
     const record =
       records.find((a) => ["PENDING", "INVITED"].includes(a.state)) ??
       records.at(-1);
-    const pending = !!record && ["PENDING", "INVITED"].includes(record.state);
+    const hasOpenApplication =
+      !!record && ["PENDING", "INVITED"].includes(record.state);
     const invited = record?.state === "INVITED";
+    const status = team
+      ? applicationStatus(team, state.now, hasOpenApplication)
+      : { available: false, label: "队伍不存在" };
+    if (status.available && !team?.roles.length) {
+      status.available = false;
+      status.label = "暂无角色需求";
+    }
     return {
       team,
       record,
-      pending,
+      canWithdraw: hasOpenApplication,
       invited,
-      status: team
-        ? applicationStatus(team, state.now, pending)
-        : { available: false, label: "队伍不存在" },
+      status,
       invitationProblem: invited
         ? session.invitationProblem(record, state.now)
         : "",
@@ -83,7 +89,7 @@ export function createTeamDetailController(
     if (
       !current.team ||
       (action === "apply" && !current.status.available) ||
-      (action === "withdraw" && !current.pending) ||
+      (action === "withdraw" && !current.canWithdraw) ||
       (["accept", "decline"].includes(action) && !current.invited) ||
       (action === "accept" && !!current.invitationProblem)
     )

@@ -231,7 +231,7 @@ watch(team, (value) => {
                   }}</FormButton
                 >
                 <FormButton
-                  v-if="view.pending"
+                  v-if="view.canWithdraw"
                   variant="secondary"
                   @click="controller.begin('withdraw')"
                   >撤回申请</FormButton
