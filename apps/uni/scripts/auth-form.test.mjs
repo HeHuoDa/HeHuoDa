@@ -112,6 +112,21 @@ test("不新增密码字符组合限制：纯数字与纯符号都按长度规�
   }
 });
 
+test("多字段同时非法逐项提示，不因邮箱为空吞掉验证码错误", () => {
+  const errors = validateValues(
+    "register",
+    registration({ email: "", code: "   " }),
+  );
+  assert.deepEqual(errors, {
+    email: AUTH_MESSAGES.emailRequired,
+    code: AUTH_MESSAGES.codeRequired,
+  });
+  assert.equal(
+    Object.keys(validateValues("register", emptyAuthValues())).length,
+    5,
+  );
+});
+
 test("提交时首错按字段顺序定位", () => {
   assert.equal(firstErrorField("register", emptyAuthValues()), "nickname");
   assert.equal(

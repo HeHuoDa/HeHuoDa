@@ -8,7 +8,6 @@ import {
   clearSensitive,
   emptyAuthValues,
   feedbackMessage,
-  firstErrorField,
   linkedFields,
   revalidateFields,
   validateField,
@@ -92,8 +91,10 @@ function submit() {
   if (submitting.value) return;
   feedback.value = "";
   clearErrors();
-  Object.assign(errors, validateValues(props.mode, values));
-  const invalid = firstErrorField(props.mode, values);
+  const result = validateValues(props.mode, values);
+  Object.assign(errors, result);
+  const invalid =
+    visibleFields(props.mode).find((field) => result[field]) ?? "";
   if (invalid) {
     void focusAt(invalid);
     return;
