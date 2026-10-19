@@ -2,6 +2,7 @@ import type {
   College,
   CompetitionList,
   CompetitionEntry,
+  CompetitionDetail,
 } from "@hehuoda/api-types";
 import {
   parseFilters,
@@ -85,9 +86,66 @@ export function isCompetitionList(v: unknown): v is CompetitionList {
     date(v.evaluatedAt)
   );
 }
+export function isCompetitionDetail(v: unknown): v is CompetitionDetail {
+  if (
+    !object(v) ||
+    !Array.isArray(v.stages) ||
+    !Array.isArray(v.tracks) ||
+    !Array.isArray(v.notices) ||
+    !date(v.evaluatedAt)
+  )
+    return false;
+  const textFields = (o: Record<string, unknown>, keys: string[]) =>
+    keys.every((key) => typeof o[key] === "string");
+  const unique = (items: unknown[]) =>
+    new Set(items.map((item) => (object(item) ? item.id : null))).size ===
+    items.length;
+  if (
+    !textFields(v, ["id", "name", "edition", "category", "organizer"]) ||
+    !["official", "historical", "demo"].includes(String(v.origin))
+  )
+    return false;
+  return (
+    unique(v.tracks) &&
+    unique(v.stages) &&
+    unique(v.notices) &&
+    v.tracks.every(
+      (t) =>
+        object(t) &&
+        textFields(t, ["id", "name", "members", "rules"]) &&
+        ["individual", "team", "mixed"].includes(String(t.mode)),
+    ) &&
+    v.stages.every(
+      (s) =>
+        object(s) &&
+        entry({ competition: v, stage: s }) &&
+        textFields(s, ["organizer", "timeNote", "registration"]) &&
+        integer(s.order) &&
+        strings(s.sourceIds) &&
+        time(s.startsAt) &&
+        time(s.eventAt),
+    ) &&
+    v.notices.every(
+      (n) =>
+        object(n) &&
+        textFields(n, ["id", "title", "publisher", "url"]) &&
+        (n.publishedAt === null || typeof n.publishedAt === "string") &&
+        (n.checkedAt === null || typeof n.checkedAt === "string") &&
+        ["registration", "supplement", "award", "news"].includes(
+          String(n.kind),
+        ),
+    )
+  );
+}
 /** 不使用 URLSearchParams，H5 与微信通过相同 uni.request 入口发送。 */
 export function createCompetitionApi(http: HttpClient) {
   return {
+    detail(id: string) {
+      return http.get(
+        `/competitions/${encodeURIComponent(id)}`,
+        isCompetitionDetail,
+      );
+    },
     colleges: () => http.get("/colleges", isCollegeDirectory),
     list(filters: Filters) {
       const f = parseFilters({
