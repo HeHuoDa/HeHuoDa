@@ -4,11 +4,11 @@
 
 ## Agent skills
 
-### 禁用 Superpowers
+### 技能限制与 Matt 工作流例外
 
-本项目禁用整个 Superpowers 技能包。处理本仓库任务时，不加载、调用或遵循该包的技能及其工作流；即使全局技能目录仍列出这些技能，也按本项目规则跳过。使用其他技能时，遇到对 Superpowers 的依赖也跳过该依赖。
+本项目默认禁用 Superpowers 技能包中的工作流。**Matt 工作流是明确例外**：用户调用 `ask-matt` 或 Matt 工作流时，允许按其路由加载、调用并遵循相关技能及其直接依赖；该例外优先于下方禁用清单中重名的技能。使用其他技能时，遇到不属于 Matt 工作流的 Superpowers 依赖仍跳过该依赖。
 
-禁用范围包括所有 `superpowers:*` 技能，以及无此前缀的包内技能：`using-superpowers`、`brainstorming`、`writing-plans`、`executing-plans`、`dispatching-parallel-agents`、`subagent-driven-development`、`test-driven-development`、`systematic-debugging`、`using-git-worktrees`、`verification-before-completion`、`requesting-code-review`、`receiving-code-review`、`finishing-a-development-branch`、`writing-skills`。
+例外覆盖 `ask-matt` 中定义或其流程直接调用的相关技能，例如 `grill-with-docs`、`grilling`、`domain-modeling`、`to-spec`、`to-tickets`、`implement`、`implement-spec`、`tdd`、`code-review`、`pr`、`retro`、`prototype`、`handoff`、`wayfinder`、`triage`、`research`、`codebase-design`、`wizard` 及流程明确要求的上下文工具。除该例外外，禁用范围包括所有 `superpowers:*` 技能，以及无此前缀的包内技能：`using-superpowers`、`brainstorming`、`writing-plans`、`executing-plans`、`dispatching-parallel-agents`、`subagent-driven-development`、`test-driven-development`、`systematic-debugging`、`using-git-worktrees`、`verification-before-completion`、`requesting-code-review`、`receiving-code-review`、`finishing-a-development-branch`、`writing-skills`。
 
 按用户需求和本仓库约定直接开展工作，其他技能仍按任务需要使用。
 
@@ -46,7 +46,7 @@
 
 ### uni-app 迁移提醒
 
-项目完成后统一迁移到普通 uni-app，目标 H5、微信小程序。当前继续交付 Web；开发选型及实现时须持续识别、解释和提醒跨端影响，说明具体 API/组件/样式、两个目标端的限制与待验证事项、替代方案或适配工作，并在方案、Issue 或 PR 记录采用方案和迁移成本。重要待办集中维护于 [docs/agents/uni-app-migration.md](docs/agents/uni-app-migration.md)，按官方依据和实测判断，不以 Web 成功推断小程序兼容。
+项目完成后统一迁移到普通 uni-app，目标 H5、微信小程序。当前继续交付 Web；开发选型及实现时须持续识别、解释和提醒跨端影响，说明具体 API/组件/样式、两个目标端的限制与待验证事项、替代方案或适配工作，并在方案、Issue 或 PR 记录采用方案和迁移成本。重要待办集中维护于 [docs/agents/uni-app-migration.md](docs/agents/uni-app-migration.md)，按官方依据和实测判断，不以 Web 成功推断小程序兼容。uni-app／mp-weixin 迁移或平台特有交互进入开发收尾时，应按 [微信开发者工具人工验收流程](docs/agents/pull-requests.md#微信开发者工具人工验收按需)判断是否适用，并人工提示用户可调用；它是按需的模拟器验收，不代替真机检查。
 
 ### 开发产物提交边界
 
