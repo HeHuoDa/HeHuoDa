@@ -321,7 +321,7 @@ watch(team, (value) => {
   padding: 24px 20px calc(32px + env(safe-area-inset-bottom, 0px));
 }
 .team-detail-inner {
-  max-width: 1080px;
+  max-width: 1020px;
 }
 .return-link {
   display: flex;
