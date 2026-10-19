@@ -11,7 +11,7 @@ defineProps<{
     <text v-if="compact" class="source-publisher"
       >{{ notice.publisher }}原文 · 待接入</text
     >
-    <text v-else class="source-url" selectable>{{ notice.url }}</text>
+    <text v-else class="source-url">{{ notice.url }}</text>
     <button
       v-if="!compact"
       class="hhr-button hhr-button--secondary hhr-button--inline source-button"
