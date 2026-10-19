@@ -22,6 +22,11 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
+    // 只有显式 H5 适配器可使用浏览器对象，公共 uni 组件继续受限。
+    files: ["apps/uni/src/forms/*.h5.vue", "apps/uni/src/forms/*-h5.ts"],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     files: ["apps/web/**/*.vue", "apps/uni/**/*.vue"],
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
