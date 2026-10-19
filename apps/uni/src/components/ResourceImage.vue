@@ -9,6 +9,8 @@ const props = withDefaults(
     decorative?: boolean;
     whiteArtwork?: boolean;
     size?: number;
+    initial?: boolean;
+    fill?: boolean;
   }>(),
   {
     src: null,
@@ -19,6 +21,11 @@ const props = withDefaults(
   },
 );
 const failed = ref(false);
+const emit = defineEmits<{ error: [] }>();
+function fail() {
+  failed.value = true;
+  emit("error");
+}
 watch(
   () => props.src,
   () => {
@@ -31,7 +38,10 @@ watch(
   <view
     class="resource-image"
     :class="{ 'resource-image--white': whiteArtwork && src && !failed }"
-    :style="{ width: `${size}px`, height: `${size}px` }"
+    :style="{
+      width: fill ? '100%' : `${size}px`,
+      height: fill ? '100%' : `${size}px`,
+    }"
     :aria-hidden="decorative"
     :aria-label="decorative ? undefined : label"
     :role="decorative ? undefined : 'img'"
@@ -43,9 +53,14 @@ watch(
       :alt="decorative ? '' : label"
       mode="aspectFit"
       :draggable="false"
-      @error="failed = true"
+      @error="fail"
     />
-    <text v-else class="resource-image__fallback">{{ fallback }}</text>
+    <text
+      v-else
+      class="resource-image__fallback"
+      :class="{ 'resource-image__fallback--initial': initial }"
+      >{{ fallback }}</text
+    >
   </view>
 </template>
 
@@ -75,5 +90,11 @@ watch(
   line-height: 1.2;
   overflow-wrap: anywhere;
   text-align: center;
+}
+.resource-image__fallback--initial {
+  color: var(--hhr-color-brand);
+  font-family: var(--hhr-font-display);
+  font-size: 18px;
+  font-weight: 600;
 }
 </style>
