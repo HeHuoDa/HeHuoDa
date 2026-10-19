@@ -3,20 +3,32 @@ import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import ParamFeedback from "../../components/ParamFeedback.vue";
 import PlaceholderPage from "../../components/PlaceholderPage.vue";
-import { backOrHome, openTab } from "../../navigation/navigate";
+import { backOrHome, returnToTeams } from "../../navigation/navigate";
 import {
   paramMessage,
   parseBusinessId,
   type ParamIssue,
+  type RouteQuery,
 } from "../../navigation/params";
+import {
+  parseTeamRouteQuery,
+  teamRouteQuery,
+} from "../../navigation/team-query";
 
 const id = ref("");
 const issue = ref<ParamIssue | null>(null);
 const message = computed(() =>
   issue.value ? paramMessage(issue.value, "队伍") : "",
 );
+// 列表筛选随参数带进来，返回时原样交回，避免详情页承担筛选规则。
+let sourceQuery: RouteQuery = {};
+
+function returnToList() {
+  returnToTeams(sourceQuery);
+}
 
 onLoad((query) => {
+  sourceQuery = teamRouteQuery(parseTeamRouteQuery(query ?? {}));
   const parsed = parseBusinessId(query?.id);
   if (parsed.issue) {
     issue.value = parsed.issue;
@@ -32,7 +44,7 @@ onLoad((query) => {
       <ParamFeedback v-if="issue" title="无法打开队伍详情" :message="message">
         <button
           class="hhr-button hhr-button--secondary hhr-button--inline"
-          @click="openTab('teams')"
+          @click="returnToList"
         >
           去找队伍
         </button>
@@ -48,7 +60,7 @@ onLoad((query) => {
         </button>
         <button
           class="hhr-button hhr-button--secondary hhr-button--inline"
-          @click="openTab('teams')"
+          @click="returnToList"
         >
           返回找队友
         </button>
