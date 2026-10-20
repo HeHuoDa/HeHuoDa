@@ -1,5 +1,26 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #74：个人中心队伍管理与申请邀请处理
+
+`pages/profile/index.vue` 的 `teams` 分区由 `ProfileTeams` 替换 #73 的只读队伍区，`applications` 分区由 `ProfileApplications` 替换占位页；两处仍读同一个 `useSessionStore`，找队友列表、公开详情、发布流程与个人中心共享同一份队伍、申请、邀请与授权，没有第二套业务集合。分区仍由 `openProfileSection` + `onShow` 消费一次性意图，`switchTab` 不拼 query，`/my/teams`、`/my/applications` 的旧地址继续交给现有 registry／#82，本票没有新增 recordId 深链协议。
+
+`stores/profile-team-controller.ts` 只持有界面状态（分区、选中队伍、编辑草稿、字段错误、首错目标、确认上下文、反馈与演示时钟），队伍动作全部调用 `@hehuoda/client-domain/team-session` 的既有实现（`processApplication`／`respond`／`editTeam`／`manage`／`canViewContact`／`invitationProblem`），未修改领域规则、未新增业务 HTTP 契约或持久化。确认在打开时绑定 teamId／recordId／memberId 及当时的对象身份，提交前与实时会话比对，因此会话 `reset()` 后同 ID 的新对象不会被旧确认或旧草稿操作；权限、记录状态、名额、截止与角色需求由动作层再次校验，隐藏按钮不是唯一约束。自己的申请与邀请在 `applications` 分区，队长收到的申请与发出的邀请在选中队伍的管理详情，与旧 Web 的组织方式一致。
+
+编辑复用 `draftFromTeam` 与 `validateDraft`，字段与发布页一致但没有比赛／赛道选择器：`editTeam` 不覆盖 `competition`／`trackId`，草稿保留既有比赛数据，切项目类型不会静默清空关联；把普通项目改成比赛项目会得到「请选择有效的比赛届次」，需要回到发布流程新建招募。失败保留草稿并定位首错，取消丢弃本次改动，重新打开读取最新队伍。
+
+H5 与微信共用源码，差异按已确认边界保留：
+
+- 旧 Web 的队伍列表、成员详情、申请列表与编辑表单是同一页面内的内联面板，这里改为「列表 + 选中队伍详情」，编辑与确认走 #65 的受控弹层；确认文案写明具体目标与后果，遮罩不取消，取消不产生业务变更。
+- 旧端 checkbox 改为原生 `switch`（同 #73 的授权开关），沿用主题品牌变量并补 `role`／`aria-checked`／`tabindex` 与 Space/Enter；移交使用 `FormPicker`（H5 原生 select、微信 picker），不是旧端的 select。
+- 关闭招募后隐藏「关闭招募」入口，与「不能暂停或恢复」一致；旧端保留可重复点击的关闭按钮。
+- 旧端「边界预览」下拉（满员／到期／暂停／无队伍等，选中即重置会话）不迁移：它会在产品页面提供清空会话的隐藏开关，且 A06 的竞争条件已由固定时钟 + 独立 Pinia fixture 的行为测试覆盖，空态在真实操作路径（退出、解散、撤回）下同样可达。
+- 内容最大宽度沿用现有页面壳（640px），旧 Web 的管理面板更宽；面板留白、成员行与按钮间距写固定 px，见学生端样式约定的 #74 例外。
+- 隐藏／卸载、切换分区、切换选中队伍与会话统一重置都会关闭确认、丢弃草稿与选择；页面隐藏时停止演示时钟，回到前台重新读取实时会话。
+
+验证：`scripts/profile-team-management.test.mjs` 覆盖队长／成员边界、取消与重复确认、邀请／拒绝／撤销、撤回／接受／拒绝、打开确认后满员／到期／暂停／关闭／解散／角色移除／邀请失效的现场校验、移交后失权与旧确认越权、退出／移除／解散的授权清理、编辑校验与首错、容量与截止边界、取消重开与比赛关联保留、reset 同 ID、会话新队伍、空态与分区清理。`scripts/profile-team-page.test.mjs` 编译真实页面跑生命周期（时钟启停、隐藏清理、卸载后不再响应重置），并挂载真实组件验证按钮可见性与确认、编辑、授权、移交、接受邀请的交互契约。
+
+本地 H5 用真实 Chrome 在 320／375／390／430px 与 1440px 走通「选中队伍 → 编辑 → 关闭招募」与申请分区：无横向滚动（`scrollWidth == clientWidth`），无小于 44px 的按钮，长队名在 320px 正常换行；编辑弹层清空地点后首错提示出现、`aria-invalid=true`、目标字段滚动到弹层可视区顶部，Escape 关闭后焦点回到「编辑招募」。截图与脚本仅保留本地。H5 与 mp-weixin 构建均通过，但微信开发者工具运行、真实 picker／switch 外观与命中范围、系统大字号、安全区、软键盘与 iOS/Android 真机仍交 #85；双端编译通过不代表微信运行或发布完成。本票未触及比赛公开查询，不涉及 API 与数据库。
+
 ## Issue #73：个人资料编辑与联系方式授权
 
 `pages/profile/index.vue` 的资料分区通过 `ProfileOverview` 展示旧 Web 的资料卡、七项编辑表单、快捷入口和授权说明，继续复用 `useSessionStore`、`@hehuoda/client-domain/profile` 与 #65 的控件/草稿/受控弹层。不新增资料写 API、浏览器存储或真实联系方式。保存先校验再 trim，技能去重并用顿号连接；失败保留草稿并定位首错，取消、切换分区、页面隐藏和统一重置丢弃草稿。`resetProfile()` 只恢复资料和未授权状态，保留队伍/申请；整组 `reset()` 仍由既有会话入口负责。当前演示用户的队伍成员昵称通过会话 `memberNickname()` 读取最新资料，其他成员保持原名。
