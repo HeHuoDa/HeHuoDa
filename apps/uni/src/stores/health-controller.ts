@@ -1,5 +1,9 @@
 import type { HealthResponse } from "@hehuoda/api-types";
-import { RequestError, type PendingRequest } from "../api/http.ts";
+import {
+  RequestError,
+  requestErrorMessage,
+  type PendingRequest,
+} from "../api/http.ts";
 
 export interface HealthState {
   state: "idle" | "loading" | "online" | "offline";
@@ -39,10 +43,10 @@ export function createHealthController(
         }
         state.requestId =
           error instanceof RequestError ? error.requestId : null;
-        state.errorMessage =
-          error instanceof RequestError
-            ? error.message
-            : "暂时无法连接服务，请稍后重试。";
+        state.errorMessage = requestErrorMessage(
+          error,
+          "暂时无法连接服务，请稍后重试。",
+        );
         state.state = "offline";
       } finally {
         if (current === generation) pending = null;

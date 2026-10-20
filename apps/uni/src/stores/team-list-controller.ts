@@ -14,7 +14,11 @@ import {
   type Team,
   type TeamFilters,
 } from "@hehuoda/client-domain/team";
-import { RequestError, type PendingRequest } from "../api/http.ts";
+import {
+  RequestError,
+  requestErrorMessage,
+  type PendingRequest,
+} from "../api/http.ts";
 import type { RouteQuery } from "../navigation/params.ts";
 
 export type CompetitionStatus =
@@ -163,7 +167,7 @@ export function createTeamListController(
       state.competitionStatus = "error";
       state.competitionError =
         error instanceof RequestError
-          ? `关联比赛加载失败：${error.message}`
+          ? `关联比赛加载失败：${requestErrorMessage(error)}`
           : "关联比赛加载失败，请检查网络后重试。";
       state.competitionRequestId =
         error instanceof RequestError ? error.requestId : null;

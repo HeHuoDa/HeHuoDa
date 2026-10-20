@@ -1,5 +1,9 @@
 import type { CompetitionDetail } from "@hehuoda/api-types";
-import { RequestError, type PendingRequest } from "../api/http.ts";
+import {
+  RequestError,
+  requestErrorMessage,
+  type PendingRequest,
+} from "../api/http.ts";
 
 export interface DetailState {
   status: "idle" | "loading" | "ready" | "missing" | "error";
@@ -48,10 +52,10 @@ export function createDetailController(
         error instanceof RequestError && error.statusCode === 404
           ? "missing"
           : "error";
-      state.error =
-        error instanceof RequestError
-          ? error.message
-          : "比赛详情加载失败，请检查网络后重试。";
+      state.error = requestErrorMessage(
+        error,
+        "比赛详情加载失败，请检查网络后重试。",
+      );
       state.requestId = error instanceof RequestError ? error.requestId : null;
     } finally {
       if (current === generation) request = null;
