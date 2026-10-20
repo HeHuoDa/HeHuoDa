@@ -31,12 +31,12 @@ export function withQuery(
 }
 
 /** 切换主导航；switchTab 不支持参数，需要分区时用 openProfileSection。 */
-export function openTab(name: TabRouteName): void {
+export function openTab(name: TabRouteName, onFailure?: () => void): void {
   uni.switchTab({
     url: routePath(name),
     fail: () => {
       // tabBar 配置异常时至少保证能到目标页，不留在空白页。
-      uni.reLaunch({ url: routePath(name) });
+      uni.reLaunch({ url: routePath(name), fail: onFailure });
     },
   });
 }
@@ -78,9 +78,19 @@ export function openNotFound(): void {
 export function openProfileSection(
   section: ProfileSection,
   query: RouteQuery = {},
+  onFailure?: () => void,
 ): void {
   useNavigationStore().requestProfileSection(section, query);
-  openTab("profile");
+  // H5 对当前 tab 再次 switchTab 可能只触发 onHide；可见页直接消费交接。
+  if (
+    typeof getCurrentPages === "function" &&
+    getCurrentPages().at(-1)?.route === routePath("profile").slice(1)
+  )
+    return;
+  openTab("profile", () => {
+    useNavigationStore().clearProfileNavigation();
+    onFailure?.();
+  });
 }
 
 /** switchTab 不能携带 query；首页返回条件与关联招募用同一个一次性交接入口。 */

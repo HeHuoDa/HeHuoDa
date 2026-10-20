@@ -16,7 +16,10 @@ import FormPicker from "./FormPicker.vue";
 import ProfileTeamConfirmDialog from "./ProfileTeamConfirmDialog.vue";
 import ProfileTeamEditor from "./ProfileTeamEditor.vue";
 
-const props = defineProps<{ controller: ProfileTeamController }>();
+const props = defineProps<{
+  controller: ProfileTeamController;
+  highlightId?: string;
+}>();
 const session = useSessionStore();
 const controller = props.controller;
 const state = controller.state;
@@ -114,7 +117,13 @@ function invitationHint(recordId: string) {
     </view>
     <view
       v-if="team"
+      :id="`team-target-${session.teams.findIndex((t) => t.id === team?.id)}`"
       class="hhr-panel management-detail"
+      :class="{
+        'notification-focus':
+          highlightId ===
+          `team-target-${session.teams.findIndex((t) => t.id === team?.id)}`,
+      }"
       aria-label="队伍管理详情"
     >
       <text class="detail-title"
@@ -232,9 +241,15 @@ function invitationHint(recordId: string) {
         <text v-if="!teamRecords.length" class="teams-copy">暂无申请。</text>
         <view
           v-for="record in teamRecords"
+          :id="`incoming-target-${session.records.findIndex((r) => r.id === record.id)}`"
           :key="record.id"
           class="record"
           :data-incoming="record.id"
+          :class="{
+            'notification-focus':
+              highlightId ===
+              `incoming-target-${session.records.findIndex((r) => r.id === record.id)}`,
+          }"
         >
           <text class="record-title"
             >{{ record.nickname }} · {{ record.role }} ·
@@ -300,6 +315,10 @@ function invitationHint(recordId: string) {
 </template>
 
 <style scoped>
+.notification-focus {
+  outline: 2px solid var(--hhr-color-focus);
+  outline-offset: 2px;
+}
 .profile-teams {
   display: grid;
   gap: 16px;

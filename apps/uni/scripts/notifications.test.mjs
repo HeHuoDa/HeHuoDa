@@ -6,7 +6,7 @@ import {
   initialTeamState,
   createTeamActions,
 } from "@hehuoda/client-domain/team-session";
-import { DEMO_PARTICIPANT, draftFromTeam } from "@hehuoda/client-domain/team";
+import { draftFromTeam } from "@hehuoda/client-domain/team";
 import {
   captureNotificationBaseline,
   createNotificationActions,
