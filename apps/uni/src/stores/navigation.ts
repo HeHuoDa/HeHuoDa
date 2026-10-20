@@ -48,11 +48,16 @@ export const useNavigationStore = defineStore("navigation", () => {
     return pending;
   }
 
+  function clearProfileNavigation() {
+    pendingProfileNavigation.value = null;
+  }
+
   return {
     requestTabQuery,
     consumeTabQuery,
     pendingProfileNavigation,
     requestProfileSection,
     consumeProfileNavigation,
+    clearProfileNavigation,
   };
 });
