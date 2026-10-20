@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { createResourceController } from "./resource";
 
 describe("管理查询公开边界", () => {
+  it("空列表不伪装失败，查询失败清理旧数据并可重新加载", async () => {
+    const controller = createResourceController<string>();
+    const pending = controller.load(() =>
+      Promise.resolve({ items: [], total: 0 }),
+    );
+    expect(controller.state.status).toBe("loading");
+    await pending;
+    expect(controller.state.status).toBe("ready");
+    expect(controller.state.items).toEqual([]);
+    await controller.load(() => Promise.reject(new Error("network")));
+    expect(controller.state.status).toBe("error");
+    expect(controller.state.error).toContain("请求失败");
+    expect(controller.state.items).toEqual([]);
+    await controller.load(() => Promise.resolve({ items: ["恢复"], total: 1 }));
+    expect(controller.state.status).toBe("ready");
+    expect(controller.state.items).toEqual(["恢复"]);
+  });
   it("切换查询立即清理旧数据，迟到列表和详情不能覆盖新视图", async () => {
     let resolveOld!: (value: { items: string[]; total: number }) => void;
     const controller = createResourceController<string>();
