@@ -57,6 +57,13 @@ test("资料编辑取消不写回，校验首错保留草稿，保存规范化�
     toggle.props.onChange({ detail: { value: false } });
     await nextTick();
     assert.equal(session.contactShared, false);
+    toggle.props.onKeydown({ key: " ", preventDefault() {} });
+    await nextTick();
+    assert.equal(session.contactShared, true);
+    assert.equal(toggle.props["aria-checked"], true);
+    toggle.props.onKeydown({ key: "Enter", preventDefault() {} });
+    await nextTick();
+    assert.equal(session.contactShared, false);
     await click("编辑资料");
     await input("profile-nickname", "不保存");
     await click("取消并关闭");

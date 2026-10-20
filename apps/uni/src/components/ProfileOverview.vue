@@ -120,6 +120,15 @@ function authorize(event: unknown) {
     ? "已开启授权演示，仅在所有者授权且双方均为同队有效成员时允许展示；未提供真实联系方式。"
     : "已关闭授权演示，联系方式不共享。";
 }
+function authorizationKey(event: {
+  key?: string;
+  repeat?: boolean;
+  preventDefault?: () => void;
+}) {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault?.();
+  if (!event.repeat) authorize({ detail: { value: !session.contactShared } });
+}
 // 外部统一重置、页面切换均丢弃编辑草稿，避免旧资料再次写回。
 const unregister = session.registerReset("profile-editor", () => {
   cancel();
@@ -230,10 +239,15 @@ onBeforeUnmount(unregister);
           >
           <switch
             id="profile-contact"
+            class="profile-contact-switch"
             :checked="session.contactShared"
-            color="#245c46"
+            color="var(--hhr-color-brand)"
+            role="switch"
+            tabindex="0"
+            :aria-checked="session.contactShared"
             aria-label="允许同队有效成员查看（演示）"
             @change="authorize"
+            @keydown="authorizationKey"
           />
         </view>
         <view class="profile-setting-row">
@@ -455,6 +469,12 @@ onBeforeUnmount(unregister);
   align-items: center;
   gap: 13px;
   padding: 18px 0;
+}
+.profile-contact-switch {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 44px;
 }
 .profile-setting-row:first-of-type {
   margin-top: 16px;
