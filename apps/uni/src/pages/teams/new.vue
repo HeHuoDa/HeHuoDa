@@ -348,6 +348,11 @@ onUnmounted(dispose);
                 <text class="hhr-form-error" role="alert">{{
                   state.searchError
                 }}</text>
+                <text
+                  v-if="state.searchRequestId"
+                  class="picker-copy picker-request-id"
+                  >请求编号：{{ state.searchRequestId }}</text
+                >
                 <FormButton
                   variant="secondary"
                   @click="controller.retrySearch()"
@@ -389,6 +394,11 @@ onUnmounted(dispose);
                 <text class="hhr-form-error" role="alert">{{
                   state.selectionError
                 }}</text>
+                <text
+                  v-if="state.selectionRequestId"
+                  class="picker-copy picker-request-id"
+                  >请求编号：{{ state.selectionRequestId }}</text
+                >
                 <FormButton
                   variant="secondary"
                   @click="controller.select(state.selectedId)"
@@ -621,6 +631,10 @@ onUnmounted(dispose);
   display: grid;
   gap: 8px;
   margin: 12px 0;
+}
+.picker-request-id {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 .competition-picker :deep(.hhr-button) {
   width: auto;

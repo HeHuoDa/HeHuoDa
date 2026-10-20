@@ -31,6 +31,23 @@ export class RequestError extends Error {
   }
 }
 
+/** 页面统一使用安全反馈，原始 code/message/requestId/details 仍保留在错误对象中。 */
+export function requestErrorMessage(
+  error: unknown,
+  fallback = "加载失败，请稍后重试。",
+): string {
+  if (!(error instanceof RequestError)) return fallback;
+  if (error.kind === "http") {
+    if (error.statusCode === 400) return "请求参数无效，请调整条件后重试。";
+    if (error.statusCode === 404) return "请求的资源不存在或未公开。";
+    if (error.statusCode === 429) return "请求过于频繁，请稍后重试。";
+    if (error.statusCode !== null && error.statusCode >= 500)
+      return "服务暂时不可用，请稍后重试。";
+    return "请求失败，请稍后重试。";
+  }
+  return error.message;
+}
+
 export interface PendingRequest<T> {
   promise: Promise<T>;
   cancel(): void;

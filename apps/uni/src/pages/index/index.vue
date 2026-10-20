@@ -296,7 +296,7 @@ onUnload(controller.cancel);
   font-family: var(--hhr-font-display);
   font-size: 30px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.2;
 }
 .discovery-intro {
   display: block;
@@ -517,6 +517,7 @@ onUnload(controller.cancel);
 @media (max-width: 767px) {
   .discovery-heading {
     font-size: clamp(24px, 6vw, 30px);
+    line-height: 1.5;
     text-wrap: balance;
   }
   .discovery-filters {

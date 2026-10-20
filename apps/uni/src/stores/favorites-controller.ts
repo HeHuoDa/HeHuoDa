@@ -1,5 +1,9 @@
 import type { CompetitionDetail } from "@hehuoda/api-types";
-import { RequestError, type PendingRequest } from "../api/http.ts";
+import {
+  RequestError,
+  requestErrorMessage,
+  type PendingRequest,
+} from "../api/http.ts";
 import type { FavoriteRecord } from "./session.ts";
 
 export interface FavoriteRow extends FavoriteRecord {
@@ -59,10 +63,10 @@ export function createFavoritesController(
             error instanceof RequestError && error.statusCode === 404
               ? "missing"
               : "error";
-          row.error =
-            error instanceof RequestError
-              ? error.message
-              : "比赛加载失败，请检查网络后重试。";
+          row.error = requestErrorMessage(
+            error,
+            "比赛加载失败，请检查网络后重试。",
+          );
           row.requestId =
             error instanceof RequestError ? error.requestId : null;
         } finally {
