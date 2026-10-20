@@ -11,9 +11,11 @@ import { resolveSourceAddress } from "../src/navigation/routes.ts";
 
 // 执行真实页面 setup，再按平台顺序触发生命周期；子组件不参与导航状态测试。
 const lifecycleUrl = `data:text/javascript,${encodeURIComponent(`
-  export const hooks = { load: [], show: [] };
+  export const hooks = { load: [], show: [], hide: [], unload: [] };
   export const onLoad = callback => hooks.load.push(callback);
   export const onShow = callback => hooks.show.push(callback);
+  export const onHide = callback => hooks.hide.push(callback);
+  export const onUnload = callback => hooks.unload.push(callback);
 `)}`;
 const { hooks } = await import(lifecycleUrl);
 const loader = registerHooks({
@@ -35,6 +37,9 @@ const loader = registerHooks({
   },
 });
 after(() => loader.deregister());
+// 个人中心可见时启动演示时钟；本文件只验证导航交接，用替身避免真实定时器挂住进程。
+globalThis.setInterval = () => 1;
+globalThis.clearInterval = () => {};
 const pageUrl = new URL("../src/pages/profile/index.vue", import.meta.url);
 const { descriptor } = parse(readFileSync(pageUrl, "utf8"));
 const compiled = compileScript(descriptor, { id: "profile-navigation-test" });
@@ -99,11 +104,20 @@ test("比赛返回复用首页栈，空栈交接筛选；关联招募只传比�
 function mountProfile(query = {}) {
   hooks.load.length = 0;
   hooks.show.length = 0;
+  hooks.hide.length = 0;
+  hooks.unload.length = 0;
   const scope = effectScope();
   const page = scope.run(() => Profile.setup({}, { expose() {} }));
   hooks.load.forEach((callback) => callback(query));
   hooks.show.forEach((callback) => callback());
-  return { page, stop: () => scope.stop() };
+  return {
+    page,
+    stop: () => {
+      hooks.hide.forEach((callback) => callback());
+      hooks.unload.forEach((callback) => callback());
+      scope.stop();
+    },
+  };
 }
 
 test("首次进入个人中心：页面加载不会覆盖交接分区，意图只消费一次", () => {
