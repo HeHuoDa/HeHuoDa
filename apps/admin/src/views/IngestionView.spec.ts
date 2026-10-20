@@ -60,6 +60,61 @@ async function setup(
   return { wrapper, router };
 }
 describe("候选审核公开交互", () => {
+  it("切换对象后旧审核迟到409不会锁住新材料", async () => {
+    let rejectOld!: (reason: Error) => void;
+    const { wrapper, router } = await setup("example-candidate-2", {
+      ...exampleReview,
+      change: () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    });
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "批准候选 · 确认预览")!
+      .trigger("click");
+    await flushPromises();
+    await wrapper.get("#action-reason").setValue("核查理由");
+    await wrapper.get("form.editor-form").trigger("submit");
+    await router.push("/ingestion/candidates/example-candidate-6?preview=1");
+    await flushPromises();
+    rejectOld(new ConsoleError(409, "old stale"));
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("本轮确认已失效");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((b) => b.text() === "批准候选 · 确认预览")!
+        .attributes("disabled"),
+    ).toBeUndefined();
+    wrapper.unmount();
+  });
+  it("切换对象后旧预览迟到409不会锁住新材料", async () => {
+    let rejectOld!: (reason: Error) => void;
+    const { wrapper, router } = await setup("example-candidate-2", {
+      ...exampleReview,
+      preview: () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    });
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await router.push("/ingestion/candidates/example-candidate-6?preview=1");
+    await flushPromises();
+    rejectOld(new ConsoleError(409, "old stale"));
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("本轮确认已失效");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((b) => b.text() === "批准候选 · 确认预览")!
+        .attributes("disabled"),
+    ).toBeUndefined();
+    wrapper.unmount();
+  });
   it("旧版本材料迟到不覆盖新版本视图", async () => {
     let resolveOld!: (value: ReviewRecord) => void;
     const { wrapper, router } = await setup("example-candidate-2", {

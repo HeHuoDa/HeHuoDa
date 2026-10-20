@@ -253,13 +253,14 @@ async function makePreview(kind: "import" | "publish") {
       preview.value = { kind, key, receipt, error: "" };
     }
   } catch (cause) {
-    if (cause instanceof ConsoleError && cause.status === 409) {
-      stale.value = true;
-      confirmedMaterial = null;
-      confirmedReceipt = undefined;
+    if (epoch === previewEpoch && contentKey.value === key) {
+      if (cause instanceof ConsoleError && cause.status === 409) {
+        stale.value = true;
+        confirmedMaterial = null;
+        confirmedReceipt = undefined;
+      }
+      if (preview.value?.key === key) preview.value.error = errorMessage(cause);
     }
-    if (epoch === previewEpoch && preview.value?.key === key)
-      preview.value.error = errorMessage(cause);
   } finally {
     if (epoch === previewEpoch) pending.value = false;
   }
@@ -294,6 +295,7 @@ async function confirm(next: ReviewAction) {
   dialog.value = true;
 }
 async function execute(reason: string) {
+  const executingEpoch = loadEpoch;
   if (stale.value) throw new ConsoleError(409, "stale");
   if (!confirmedMaterial) return;
   if (
@@ -318,12 +320,14 @@ async function execute(reason: string) {
       },
     );
   } catch (cause) {
-    preview.value = null;
-    acknowledged.value = false;
-    if (cause instanceof ConsoleError && cause.status === 409) {
-      stale.value = true;
-      confirmedMaterial = null;
-      confirmedReceipt = undefined;
+    if (executingEpoch === loadEpoch) {
+      preview.value = null;
+      acknowledged.value = false;
+      if (cause instanceof ConsoleError && cause.status === 409) {
+        stale.value = true;
+        confirmedMaterial = null;
+        confirmedReceipt = undefined;
+      }
     }
     throw cause;
   }
