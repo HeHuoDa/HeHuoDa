@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, reactive, toRefs } from "vue";
+import { DEMO_PARTICIPANT } from "@hehuoda/client-domain/team";
 import {
   initialProfileState,
   createProfileActions,
@@ -33,11 +34,17 @@ export const useSessionStore = defineStore("business-session", () => {
     teamActions.reset();
     for (const handler of resetHandlers.values()) handler();
   }
+  function memberNickname(id: string, fallback: string) {
+    return id === DEMO_PARTICIPANT.id
+      ? profileState.profile.nickname
+      : fallback;
+  }
   return {
     ...toRefs(profileState),
     ...toRefs(teamState),
     applications: computed(() => pendingApplications(teamState)),
     saveProfile: profileActions.save,
+    memberNickname,
     resetProfile: profileActions.reset,
     ...teamActions,
     reset,

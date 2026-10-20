@@ -193,7 +193,9 @@ watch(team, (value) => {
                   v-for="member in team.members"
                   :key="member.id"
                   class="member-row"
-                  ><text>{{ member.nickname }}</text
+                  ><text>{{
+                    session.memberNickname(member.id, member.nickname)
+                  }}</text
                   ><text class="member-role"
                     >{{ member.captain ? "队长" : "成员" }} ·
                     {{ member.role }}</text

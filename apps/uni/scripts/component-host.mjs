@@ -40,6 +40,7 @@ export async function component(file, platform = "MP-WEIXIN") {
       "textarea",
       "button",
       "picker",
+      "switch",
       "scroll-view",
     ].includes(tag);
   const { descriptor } = parse(source, {
@@ -60,6 +61,7 @@ export async function component(file, platform = "MP-WEIXIN") {
             "textarea",
             "button",
             "picker",
+            "switch",
             "scroll-view",
           ].includes(tag),
       },

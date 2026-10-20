@@ -6,6 +6,68 @@ import { computed, effectScope, nextTick, version } from "vue";
 import { useSessionStore } from "../src/stores/session.ts";
 import { colleges } from "../src/data/colleges.ts";
 import { colleges as pureColleges } from "@hehuoda/client-domain/colleges";
+import { DEMO_PARTICIPANT } from "@hehuoda/client-domain/team";
+
+test("个人资料昵称跨页展示，既有与新建队伍均按当前资料读取，不改变其他成员", () => {
+  const store = useSessionStore(createPinia());
+  store.saveProfile({ ...store.profile, nickname: "新的伙伴" });
+  assert.equal(store.memberNickname(DEMO_PARTICIPANT.id, "旧昵称"), "新的伙伴");
+  assert.equal(store.memberNickname("someone-else", "其他成员"), "其他成员");
+  store.resetProfile();
+  assert.equal(store.memberNickname(DEMO_PARTICIPANT.id, "旧昵称"), "禾小苗");
+});
+
+test("联系方式须授权且双方有效同队，邀请未确认、退出、移除和解散立即失效", () => {
+  const store = useSessionStore(createPinia());
+  const invitation = store.records.find((a) => a.id === "history-0");
+  const invitedTeam = store.teams.find((t) => t.id === invitation.teamId);
+  const peer = invitedTeam.members[0].id;
+  assert.equal(
+    store.canViewContact(invitedTeam.id, DEMO_PARTICIPANT.id, peer),
+    false,
+  );
+  store.contactShared = true;
+  assert.equal(
+    store.canViewContact(invitedTeam.id, DEMO_PARTICIPANT.id, peer),
+    false,
+  );
+  store.respond("history-0", "accept");
+  assert.equal(
+    store.canViewContact(invitedTeam.id, DEMO_PARTICIPANT.id, peer),
+    true,
+  );
+  store.contactShared = false;
+  assert.equal(
+    store.canViewContact(invitedTeam.id, DEMO_PARTICIPANT.id, peer),
+    false,
+  );
+  store.contactShared = true;
+  store.manage(invitedTeam.id, "leave");
+  assert.equal(
+    store.canViewContact(invitedTeam.id, DEMO_PARTICIPANT.id, peer),
+    false,
+  );
+  const ledTeam = store.teams.find((t) =>
+    t.members.some((m) => m.id === DEMO_PARTICIPANT.id && m.captain),
+  );
+  const member = ledTeam.members.find((m) => m.id !== DEMO_PARTICIPANT.id);
+  assert.equal(
+    store.canViewContact(ledTeam.id, DEMO_PARTICIPANT.id, member.id),
+    true,
+  );
+  store.manage(ledTeam.id, "remove", member.id);
+  assert.equal(
+    store.canViewContact(ledTeam.id, DEMO_PARTICIPANT.id, member.id),
+    false,
+  );
+  store.manage(ledTeam.id, "dissolve");
+  assert.equal(
+    store.canViewContact(ledTeam.id, DEMO_PARTICIPANT.id, DEMO_PARTICIPANT.id),
+    false,
+  );
+  store.reset();
+  assert.equal(store.contactShared, false);
+});
 
 test("uni 资源目录与共享规则学院 ID、名称及顺序一致", () => {
   assert.deepEqual(

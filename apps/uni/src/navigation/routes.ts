@@ -65,7 +65,7 @@ export const routeRegistry = {
     path: "/pages/profile/index",
     title: "个人中心",
     kind: "tab",
-    status: "placeholder",
+    status: "baseline",
     source: "/profile",
     description: "查看示例资料、编辑个人介绍与技能，了解联系方式授权。",
   },

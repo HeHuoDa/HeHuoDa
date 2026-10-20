@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import PlaceholderPage from "../../components/PlaceholderPage.vue";
 import ProfileTeamsReadOnly from "../../components/ProfileTeamsReadOnly.vue";
+import ProfileOverview from "../../components/ProfileOverview.vue";
 import FormButton from "../../components/FormButton.vue";
 import { useSessionStore } from "../../stores/session";
 import { DEMO_PARTICIPANT } from "@hehuoda/client-domain/team";
@@ -88,6 +89,7 @@ function showProfile() {
           >返回个人资料</FormButton
         >
       </template>
+      <ProfileOverview v-else-if="section === 'profile'" />
       <PlaceholderPage
         v-else
         :title="current.title"
@@ -129,11 +131,7 @@ function showProfile() {
         >
           注册
         </button>
-        <button
-          v-if="section !== 'profile'"
-          class="hhr-button hhr-button--inline"
-          @click="showProfile"
-        >
+        <button class="hhr-button hhr-button--inline" @click="showProfile">
           返回个人资料
         </button>
       </PlaceholderPage>
