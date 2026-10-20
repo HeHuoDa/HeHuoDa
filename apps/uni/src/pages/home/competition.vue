@@ -13,6 +13,7 @@ import {
 } from "@hehuoda/client-domain/competition-discovery";
 import CompetitionSourceAction from "../../components/CompetitionSourceAction.vue";
 import FormButton from "../../components/FormButton.vue";
+import { useSessionStore } from "../../stores/session";
 import { competitionApi } from "../../api/competitions";
 import {
   createDetailController,
@@ -31,6 +32,19 @@ import {
 } from "../../navigation/params";
 
 const state = reactive(initialDetailState());
+const session = useSessionStore();
+const favoriteFeedback = ref("");
+function toggleFavorite() {
+  if (!state.detail) return;
+  const target = state.detail.id;
+  if (session.isFavorite(target)) {
+    session.removeFavorite(target);
+    favoriteFeedback.value = "已取消收藏。";
+  } else {
+    session.addFavorite(target);
+    favoriteFeedback.value = "已收藏，仅在当前会话保留。";
+  }
+}
 const controller = createDetailController(state, competitionApi);
 const id = ref("");
 const parameterError = ref("");
@@ -80,6 +94,7 @@ async function load() {
 }
 function leave() {
   visible = false;
+  favoriteFeedback.value = "";
   ++positioning;
   controller.cancel();
 }
@@ -304,14 +319,30 @@ onUnload(leave);
           </view>
           <view class="hhr-panel detail-panel">
             <text class="detail-heading" role="heading" aria-level="2"
-              >后续入口</text
+              >收藏与组队</text
             >
             <text class="detail-paragraph muted"
-              >查看关联比赛的演示招募；收藏记录将在后续接入。平台组队不等于官方报名。</text
+              >收藏仅在当前会话保留，刷新、冷启动或重置后清空。平台组队不等于官方报名。</text
+            >
+            <text
+              v-if="favoriteFeedback"
+              class="detail-paragraph"
+              role="status"
+              aria-live="polite"
+              >{{ favoriteFeedback }}</text
             >
             <view class="detail-actions"
-              ><FormButton variant="secondary" disabled
-                >收藏 · 待接入</FormButton
+              ><FormButton
+                :variant="
+                  session.isFavorite(competition.id) ? 'soft' : 'secondary'
+                "
+                :aria-pressed="session.isFavorite(competition.id)"
+                @click="toggleFavorite"
+                >{{
+                  session.isFavorite(competition.id)
+                    ? "已收藏 · 取消收藏"
+                    : "收藏比赛"
+                }}</FormButton
               ><FormButton
                 variant="secondary"
                 @click="

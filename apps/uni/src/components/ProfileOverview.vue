@@ -18,6 +18,14 @@ import FormButton from "./FormButton.vue";
 import ProfileTeamsReadOnly from "./ProfileTeamsReadOnly.vue";
 
 const session = useSessionStore();
+const stats = computed(() => [
+  ...["我的队伍", "待处理邀请", "我的申请"].map((label) => ({
+    label,
+    count: "—",
+    note: "待接入",
+  })),
+  { label: "收藏比赛", count: session.favoriteCount, note: "当前会话" },
+]);
 const feedback = ref("");
 const focusField = ref("");
 const {
@@ -195,15 +203,11 @@ onBeforeUnmount(unregister);
       <text class="block mt-5 whitespace-pre-wrap text-sm text-muted">{{
         session.profile.bio || "还没有填写简介，期待和伙伴一起成长。"
       }}</text>
-      <view class="profile-stats" aria-label="个人业务统计尚未接入">
-        <view
-          v-for="label in ['我的队伍', '待处理邀请', '我的申请', '收藏比赛']"
-          :key="label"
-          class="profile-stat"
-        >
-          <text class="profile-stat-number">—</text
-          ><text class="block text-xs text-muted">{{ label }}</text
-          ><text class="block text-xs text-muted">待接入</text>
+      <view class="profile-stats" aria-label="个人业务统计，收藏为当前会话数量">
+        <view v-for="stat in stats" :key="stat.label" class="profile-stat">
+          <text class="profile-stat-number">{{ stat.count }}</text
+          ><text class="block text-xs text-muted">{{ stat.label }}</text
+          ><text class="block text-xs text-muted">{{ stat.note }}</text>
         </view>
       </view>
     </view>
