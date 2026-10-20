@@ -6,8 +6,51 @@ import IngestionControlView from "./IngestionControlView.vue";
 import {
   exampleControl,
   ingestionControlKey,
+  IngestionControlError,
 } from "../console/ingestion-control";
 import { ConsoleError } from "../console/resource";
+it.each([
+  ["disabled", "来源已停用"],
+  ["running", "执行中"],
+  ["locked", "锁占用"],
+  ["failed", "执行失败"],
+] as const)("续跑服务拒绝 %s 显示对应原因", async (code, label) => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/ingestion/runs/:id", component: IngestionControlView }],
+  });
+  await router.push("/ingestion/runs/example-run-1?preview=1");
+  const wrapper = mount(IngestionControlView, {
+    global: {
+      plugins: [router, ElementPlus],
+      provide: {
+        [ingestionControlKey as symbol]: {
+          ...exampleControl,
+          resume: async () => {
+            throw new IngestionControlError(code);
+          },
+        },
+      },
+    },
+    attachTo: document.body,
+  });
+  await flushPromises();
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "确认续跑原范围")!
+    .trigger("click");
+  await flushPromises();
+  const input = document.querySelector<HTMLTextAreaElement>("#action-reason")!;
+  input.value = "核对续跑";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  document
+    .querySelector<HTMLFormElement>("form.editor-form")!
+    .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await flushPromises();
+  expect(wrapper.text()).toContain(label);
+  wrapper.unmount();
+  document.body.innerHTML = "";
+});
 it("配置409保留未保存数值并锁定；示例续跑只提交原运行ID，不修改范围", async () => {
   let resumeId = "";
   const router = createRouter({

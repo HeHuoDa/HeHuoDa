@@ -26,6 +26,7 @@ import {
   runStates,
   availabilityLabels,
   canResume,
+  IngestionControlError,
   type SourceConfig,
   type IngestionRun,
   type ScanInput,
@@ -256,6 +257,10 @@ async function execute(reason: string) {
       }
     }
   } catch (cause) {
+    if (current === epoch && cause instanceof IngestionControlError) {
+      error.value = cause.message;
+      if (cause.reason !== "failed") stale.value = true;
+    }
     if (
       current === epoch &&
       cause instanceof ConsoleError &&
@@ -621,3 +626,26 @@ watch(() => route.fullPath, load, { immediate: true });
     />
   </div>
 </template>
+<style scoped>
+.console-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.console-page p,
+.console-page li {
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.console-page h3 {
+  margin: 20px 0 12px;
+}
+select {
+  border: 1px solid #cbd7cf;
+  border-radius: 6px;
+  padding: 9px;
+  min-width: 0;
+  color: #243d32;
+  background: white;
+}
+</style>

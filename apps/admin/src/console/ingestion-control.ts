@@ -163,6 +163,20 @@ export interface IngestionControlService {
 }
 export const ingestionControlKey: InjectionKey<IngestionControlService> =
   Symbol("ingestion-control");
+// 由未来 HTTP 适配器映射已核实的服务端原因，不预设 #39 的响应字段。
+export class IngestionControlError extends Error {
+  constructor(public reason: "disabled" | "running" | "locked" | "failed") {
+    super(
+      {
+        disabled:
+          "来源已停用，将在下一次请求前停止；未受理续跑，请重新查询来源。",
+        running: "该运行或来源正在执行中，未重复受理，请查看当前运行。",
+        locked: "采集锁占用，未受理请求，请稍后重新查询并确认。",
+        failed: "执行失败，请查询请求及运行错误，核对后再重试。",
+      }[reason],
+    );
+  }
+}
 const unavailable = async (): Promise<never> => {
   throw new ServiceUnavailable(
     "采集管理服务未开放，未保存配置、扫描或续跑；浏览器不会抓取官网或执行 CLI。",
@@ -207,7 +221,7 @@ export const runExamples: IngestionRun[] = Array.from(
       changed: 3,
       unchanged: 55,
       ignored: 5,
-      failed: 5,
+      failed: i % 5 === 2 ? 0 : 5,
     },
     errors:
       i % 5 === 2
@@ -227,8 +241,8 @@ export const runExamples: IngestionRun[] = Array.from(
       pending: i % 5 === 2 ? 0 : 8,
       seen: 80,
     },
-    previousRunId: i === 0 ? "example-run-6" : null,
-    nextRunId: i === 5 ? "example-run-1" : null,
+    previousRunId: i === 0 ? "example-run-11" : null,
+    nextRunId: i === 10 ? "example-run-1" : null,
   }),
 );
 export const exampleControl: IngestionControlService = {
