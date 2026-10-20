@@ -181,14 +181,13 @@ onShow(() => {
     void controller.select(state.selectedId);
 });
 onHide(hide);
-onUnload(() => {
+function dispose() {
   hide();
   unregisterReset();
-});
-onUnmounted(() => {
-  hide();
-  unregisterReset();
-});
+}
+// 页面栈卸载与 HMR/组件卸载均清理；重复调用安全。
+onUnload(dispose);
+onUnmounted(dispose);
 </script>
 
 <template>
@@ -539,16 +538,17 @@ onUnmounted(() => {
 }
 .publish-panel :deep(.hhr-input) {
   padding: 11px 12px;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1.65;
 }
 .publish-panel :deep(.hhr-form-textarea) {
   box-sizing: border-box;
-  height: 96px;
-  min-height: 96px;
+  height: calc(4.95em + 24px);
+  min-height: calc(4.95em + 24px);
 }
 .field-goal :deep(.hhr-form-textarea) {
-  height: 168px;
-  min-height: 168px;
+  height: calc(9.9em + 24px);
+  min-height: calc(9.9em + 24px);
 }
 .roles-field {
   margin-bottom: 20px;
@@ -679,6 +679,11 @@ onUnmounted(() => {
 @media (min-width: 768px) {
   .publish-page {
     padding: 40px;
+  }
+}
+@media (max-width: 767px) {
+  .publish-panel :deep(.hhr-input) {
+    font-size: 16px;
   }
 }
 </style>

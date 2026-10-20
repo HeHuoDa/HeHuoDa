@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import {
-  createRequire,
-  registerHooks,
-  stripTypeScriptTypes,
-} from "node:module";
+import { registerHooks, stripTypeScriptTypes } from "node:module";
 import { extname } from "node:path";
 import { after, test } from "node:test";
-import { pathToFileURL } from "node:url";
 import { createPinia, setActivePinia } from "pinia";
 import { effectScope, nextTick } from "vue";
 import { compileScript, parse } from "vue/compiler-sfc";
@@ -21,7 +16,6 @@ const lifecycleUrl = `data:text/javascript,${encodeURIComponent(`
   export const onShow = callback => hooks.show.push(callback);
 `)}`;
 const { hooks } = await import(lifecycleUrl);
-const require = createRequire(import.meta.url);
 const loader = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@dcloudio/uni-app") {
@@ -50,9 +44,9 @@ const source = stripTypeScriptTypes(compiled.content).replace(
     const url = specifier.startsWith(".")
       ? new URL(extname(specifier) ? specifier : `${specifier}.ts`, pageUrl)
           .href
-      : specifier === "vue"
-        ? pathToFileURL(require.resolve("vue")).href
-        : specifier;
+      : specifier === "@dcloudio/uni-app"
+        ? specifier
+        : import.meta.resolve(specifier);
     return `from ${quote}${url}${quote}`;
   },
 );
