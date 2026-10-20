@@ -21,10 +21,10 @@ const studentUrl = import.meta.env.VITE_STUDENT_URL;
 const menu = [
   { to: "/", text: "工作台", icon: LayoutDashboard },
   { to: "/competitions", text: "比赛管理", icon: Trophy },
-  { to: "/reviews", text: "通知审核", icon: ClipboardCheck },
+  { to: "/ingestion/candidates", text: "候选审核", icon: ClipboardCheck },
   { to: "/sources", text: "采集来源", icon: Radio },
   { to: "/runs", text: "采集运行", icon: Play },
-  { to: "/notifications", text: "通知管理", icon: Bell },
+  { to: "/ingestion/notices", text: "通知版本", icon: Bell },
   { to: "/users", text: "用户管理", icon: Users },
   { to: "/recruitments", text: "招募治理", icon: ListChecks },
   { to: "/reports", text: "举报管理", icon: Flag },

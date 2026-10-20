@@ -6,6 +6,7 @@ const props = defineProps<{
   title: string;
   execute: (reason: string, conclusion: string) => Promise<void>;
   needsConclusion?: boolean;
+  blocked?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 const reason = ref(""),
@@ -25,7 +26,7 @@ function close() {
   if (!pending.value) emit("update:modelValue", false);
 }
 async function submit() {
-  if (pending.value) return;
+  if (pending.value || props.blocked) return;
   error.value = "";
   if (!reason.value.trim() || reason.value.trim().length > 1000) {
     error.value = "请填写理由（1–1000 字）";
@@ -68,7 +69,7 @@ async function submit() {
         ><ElSelect
           id="action-conclusion"
           v-model="conclusion"
-          :disabled="pending"
+          :disabled="pending || blocked"
           aria-label="处理结论"
           ><ElOption
             label="属实，另行评估治理措施"
@@ -96,7 +97,7 @@ async function submit() {
           type="primary"
           native-type="submit"
           :loading="pending"
-          :disabled="pending"
+          :disabled="pending || blocked"
           >确认{{ title }}</ElButton
         >
       </div>

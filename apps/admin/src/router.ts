@@ -2,6 +2,24 @@ import { createRouter, createWebHistory } from "vue-router";
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    ...(["candidates", "notices"] as const).flatMap((kind) => [
+      {
+        path: `/ingestion/${kind}`,
+        component: () => import("./views/IngestionView.vue"),
+        meta: {
+          title: kind === "candidates" ? "候选审核" : "通知版本追溯",
+          ingestion: kind,
+        },
+      },
+      {
+        path: `/ingestion/${kind}/:id`,
+        component: () => import("./views/IngestionView.vue"),
+        meta: {
+          title: kind === "candidates" ? "候选审核详情" : "通知版本详情",
+          ingestion: kind,
+        },
+      },
+    ]),
     ...(["users", "recruitments", "reports"] as const).flatMap((kind) => [
       {
         path: `/${kind}`,
@@ -41,8 +59,7 @@ export const router = createRouter({
     },
     {
       path: "/reviews",
-      component: () => import("./views/PendingView.vue"),
-      meta: { title: "通知审核" },
+      redirect: "/ingestion/candidates",
     },
     {
       path: "/sources",
