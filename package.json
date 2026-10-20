@@ -14,7 +14,8 @@
     "build": "pnpm -r --if-present build",
     "test:unit": "pnpm -r --if-present test:unit",
     "test:integration": "pnpm --filter @hehuoda/api test:integration",
-    "test:e2e": "pnpm --filter @hehuoda/api test:e2e"
+    "test:e2e": "pnpm --filter @hehuoda/api test:e2e",
+    "dev:admin": "pnpm --filter @hehuoda/admin dev"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
