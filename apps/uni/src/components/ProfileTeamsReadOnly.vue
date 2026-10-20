@@ -47,7 +47,6 @@ const captainCount = computed(
         >查看队伍详情</FormButton
       >
     </view>
-    <FormButton @click="openPage('team-new')">发布招募</FormButton>
   </view>
 </template>
 <style scoped>

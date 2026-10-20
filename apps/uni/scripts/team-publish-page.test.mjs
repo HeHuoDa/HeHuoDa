@@ -115,6 +115,7 @@ test("我的队伍真实组件从单一会话派生数量；发布、人数变�
   const app = await mount("../src/components/ProfileTeamsReadOnly.vue");
   try {
     assert.match(textOf(app.container), /共 2 支 · 带领 1 支 · 加入 1 支/);
+    assert.doesNotMatch(textOf(app.container), /发布招募|重置会话演示/);
     const team = session.publish({
       title: "只读列表验收",
       type: "other",
