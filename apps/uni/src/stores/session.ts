@@ -11,10 +11,15 @@ import {
   pendingApplications,
 } from "@hehuoda/client-domain/team-session";
 
+export interface FavoriteRecord {
+  id: string;
+  order: number;
+}
+
 /** One in-memory business session per app Pinia. No storage, network or router. */
 export const useSessionStore = defineStore("business-session", () => {
   // 仅保留稳定 ID 与本次收藏顺序；详情、失败状态不参与收藏计数。
-  const favorites = ref<{ id: string; order: number }[]>([]);
+  const favorites = ref<FavoriteRecord[]>([]);
   let favoriteOrder = 0;
   const isFavorite = (id: string) =>
     favorites.value.some((item) => item.id === id);

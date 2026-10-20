@@ -1,10 +1,7 @@
 import type { CompetitionDetail } from "@hehuoda/api-types";
 import { RequestError, type PendingRequest } from "../api/http.ts";
+import type { FavoriteRecord } from "./session.ts";
 
-interface FavoriteRecord {
-  id: string;
-  order: number;
-}
 export interface FavoriteRow extends FavoriteRecord {
   status: "idle" | "loading" | "ready" | "missing" | "error";
   detail: CompetitionDetail | null;
