@@ -10,7 +10,10 @@ import type { ProfileTeamController } from "../stores/profile-team-controller";
 import FormButton from "./FormButton.vue";
 import ProfileTeamConfirmDialog from "./ProfileTeamConfirmDialog.vue";
 
-const props = defineProps<{ controller: ProfileTeamController }>();
+const props = defineProps<{
+  controller: ProfileTeamController;
+  highlightId?: string;
+}>();
 const session = useSessionStore();
 const controller = props.controller;
 const state = controller.state;
@@ -53,8 +56,14 @@ function problem(record: TeamApplication) {
     </view>
     <view
       v-for="record in records"
+      :id="`application-target-${session.records.findIndex((r) => r.id === record.id)}`"
       :key="record.id"
       class="hhr-panel record"
+      :class="{
+        'notification-focus':
+          highlightId ===
+          `application-target-${session.records.findIndex((r) => r.id === record.id)}`,
+      }"
       :data-application="record.id"
     >
       <text class="record-title">{{ teamTitle(record) }}</text>
@@ -100,6 +109,10 @@ function problem(record: TeamApplication) {
 </template>
 
 <style scoped>
+.notification-focus {
+  outline: 2px solid var(--hhr-color-focus);
+  outline-offset: 2px;
+}
 .profile-applications {
   display: grid;
   gap: 16px;

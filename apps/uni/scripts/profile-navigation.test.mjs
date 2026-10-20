@@ -8,6 +8,7 @@ import { effectScope, nextTick } from "vue";
 import { compileScript, parse } from "vue/compiler-sfc";
 import { useNavigationStore } from "../src/stores/navigation.ts";
 import { resolveSourceAddress } from "../src/navigation/routes.ts";
+import { useSessionStore } from "../src/stores/session.ts";
 
 // 执行真实页面 setup，再按平台顺序触发生命周期；子组件不参与导航状态测试。
 const lifecycleUrl = `data:text/javascript,${encodeURIComponent(`
@@ -237,5 +238,68 @@ test("可控平台分支：主导航失败回退，无历史回首页，有历�
     else globalThis.uni = previousUni;
     if (previousPages === undefined) delete globalThis.getCurrentPages;
     else globalThis.getCurrentPages = previousPages;
+  }
+});
+
+test("通知交接选中队伍并定位具体申请，重置清意图且旧异步定位不会执行", async () => {
+  setActivePinia(createPinia());
+  const previousUni = globalThis.uni;
+  const scrolls = [];
+  globalThis.uni = {
+    pageScrollTo: (options) => scrolls.push(options.selector),
+  };
+  const navigation = useNavigationStore();
+  navigation.requestProfileSection("teams", {
+    teamId: "demo-7",
+    recordId: "incoming-1",
+    revision: "0",
+  });
+  const mounted = mountProfile();
+  try {
+    await nextTick();
+    await nextTick();
+    assert.equal(mounted.page.state.selectedId, "demo-7");
+    assert.deepEqual(scrolls, ["#incoming-target-2"]);
+    assert.equal(mounted.page.highlightId.value, "incoming-target-2");
+    assert.deepEqual(mounted.page.routeQuery.value, {});
+    hooks.show.forEach((fn) => fn());
+    await nextTick();
+    assert.equal(scrolls.length, 1);
+    navigation.requestProfileSection("applications", {
+      recordId: "own-pending",
+      revision: "0",
+    });
+    useSessionStore().reset();
+    await nextTick();
+    assert.equal(navigation.pendingProfileNavigation, null);
+    assert.equal(scrolls.length, 1);
+    assert.equal(mounted.page.highlightId.value, "");
+  } finally {
+    mounted.stop();
+    globalThis.uni = previousUni;
+  }
+});
+
+test("已位于个人中心时只交接新目标，不重复 switchTab 触发隐藏生命周期", async () => {
+  setActivePinia(createPinia());
+  const previousUni = globalThis.uni;
+  const previousPages = globalThis.getCurrentPages;
+  let switches = 0;
+  globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
+  globalThis.uni = { switchTab: () => switches++, pageScrollTo() {} };
+  const mounted = mountProfile();
+  try {
+    openProfileSection("teams", { teamId: "demo-7" });
+    await nextTick();
+    assert.equal(mounted.page.section.value, "teams");
+    assert.equal(switches, 0);
+    openProfileSection("profile");
+    await nextTick();
+    assert.equal(mounted.page.section.value, "profile");
+    assert.equal(switches, 0);
+  } finally {
+    mounted.stop();
+    globalThis.uni = previousUni;
+    globalThis.getCurrentPages = previousPages;
   }
 });

@@ -223,7 +223,14 @@ onBeforeUnmount(unregister);
           ><AppIcon :name="link.icon" :size="20"
         /></view>
         <view class="profile-link-text"
-          ><text class="block text-sm font-semibold">{{ link.label }}</text
+          ><text class="block text-sm font-semibold"
+            >{{ link.label
+            }}<text
+              v-if="link.icon === 'bell'"
+              class="notification-count"
+              :aria-label="`${session.unreadNotificationCount} 条未读通知`"
+              >{{ session.unreadNotificationCount }}</text
+            ></text
           ><text class="block text-xs text-muted">{{
             link.description
           }}</text></view
@@ -353,6 +360,16 @@ onBeforeUnmount(unregister);
 </template>
 
 <style scoped>
+.notification-count {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--hhr-radius-badge);
+  color: var(--hhr-color-brand);
+  background: var(--hhr-color-brand-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .profile-page {
   min-width: 0;
   overflow-wrap: anywhere;
