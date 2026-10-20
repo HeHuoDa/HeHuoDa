@@ -290,6 +290,16 @@ H5 迁移后回归分区参数、History/刷新、dialog 的 showModal/cancel、
 
 H5 迁移后需回归模态隔离、遮罩不关闭、Escape 丢弃草稿、焦点回返、软键盘与长表单滚动。微信小程序改用平台弹层、表单 focus 状态和 scroll-view，替换 DOM 焦点与 body 滚动锁，并验证平台背景滚动隔离与安全区域。官方 [Vue3 平台差异](https://uniapp.dcloud.net.cn/tutorial/vue3-api.html)说明非 H5 的 ref 不能取得内置组件实例，不能直接沿用 HTMLDialogElement 或 HTMLElement 操作。预计适配成本中；当前浏览器验收仅证明 Web 行为，H5 迁移和微信小程序编译/真机验收仍待执行。
 
+## Issue #72：发布招募与比赛赛道选择
+
+- `pages/teams/new.vue`、`stores/team-publish-controller.ts` 复用跨端表单、请求和 `useSessionStore.publish`；不跨应用导入 Web。真实比赛只从公开搜索与详情接口读取，选择时校验返回 ID，切换立即清除旧赛道，请求代次阻止迟到结果回填。比赛类型必须关联有效详情，赛道可选且须属于当前比赛；普通项目不等待搜索成功。共享 `validateDraft` 补齐比赛必选规则，旧 Web 同步显示其字段错误。
+- `FormInput`、`FormPicker`、`FormDateTime` 分别消费 #65 的 H5 原生控件适配器／微信原生 input、textarea、picker；H5 日期时间从单一 datetime-local 改为两次选择，同样组合为无时区字符串并按 UTC+8 严格解析，不按设备时区解释。赛道官方报名时间独立展示，不自动填为招募截止。角色采用勾选外观的 `FormButton`，同源码支持 H5 Enter/Space 和微信触控，保持至少 44px 操作区。
+- 字段错误由 `uni.pageScrollTo({selector})` 滚到页面字段容器；H5 同时通过现有组件 focus 聚焦，微信 picker 没有程序化 focus，采用滚动和明确文本。官方支持范围见 [pageScrollTo](https://uniapp.dcloud.net.cn/api/ui/scroll)；真实键盘与滚动位置仍需目标端验收。失败保留草稿，重复提交使用动作锁和已发布 ID 双重保护。成功用 redirectTo 替换发布页并保留列表筛选，若导航异常仍有查看已发布队伍入口，不再建队。
+- onHide 取消请求／待执行发布，onShow 恢复未完成查询；onUnload 和组件卸载清理请求及会话重置监听。临时隐藏保留本页草稿，卸载后不持久化；统一重置清空草稿，迟到响应不恢复数据。浏览器 History／DOM focus／AbortController 不进入页面业务逻辑，原生导航和旧 Web 侧栏差异沿 ADR 0005。
+- 用户确认本票补齐 `ProfileTeamsReadOnly`：个人中心仅展示自己的队伍、带领／加入数量、成员人数和详情入口，从同一 session 派生；完整管理和申请处理仍归 #74。发布、列表、详情与个人中心不保存第二份队伍数据。无真实登录、业务写接口、存储或官方报名。
+- 样式沿旧 Web 的面板、三段表单、字号、留白与主题，固定 px 的局部依据见样式约定。320px 修正旧端最小宽度引起的溢出；日期控件分列／窄屏换行和勾选按钮属于必要平台适配。H5 浏览器模拟覆盖 320／375／390／430px 和 1440px；检查初始／空搜索／失败／字段错误、长比赛名、触控下限和跨页发布计数。比赛选择成功使用遵守现有 HTTP 契约的请求替身，API 不可用时另外验证普通项目仍可发布；没有把替身当作真实服务或生产证据。维护型测试覆盖边界、竞态、取消、草稿、导航和会话同步；截图及临时结果仅留本地。
+- 本次未执行微信开发者工具人工验收；H5／mp-weixin 构建与替身测试不证明微信真实运行。微信 picker／textarea、软键盘、安全区、返回／后台恢复、合法请求域名、系统字号及 iOS／Android 真机仍交 #85。采用已有 #63／#65 平台入口，迁移维护成本低至中，无新增框架或平台依赖。
+
 ## Issue #71：队伍详情与申请邀请交互
 
 - `apps/uni/src/pages/teams/detail.vue` 复用 `useSessionStore` 与共享领域动作，不导入旧 Web。申请、撤回、接受／拒绝邀请在详情内提供入口；完整个人中心管理仍归 #74。申请和待确认邀请不增员，确认提交时再次校验有效邀请、成员、名额、截止、招募状态及角色需求。确认记录在弹层打开时固定，重置或替换记录后不能操作新对象。

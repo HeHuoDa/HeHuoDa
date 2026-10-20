@@ -2,6 +2,10 @@
 import { computed, ref, watch } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import PlaceholderPage from "../../components/PlaceholderPage.vue";
+import ProfileTeamsReadOnly from "../../components/ProfileTeamsReadOnly.vue";
+import FormButton from "../../components/FormButton.vue";
+import { useSessionStore } from "../../stores/session";
+import { DEMO_PARTICIPANT } from "@hehuoda/client-domain/team";
 import { openPage, openProfileSection } from "../../navigation/navigate";
 import {
   copyRouteQuery,
@@ -12,6 +16,14 @@ import {
 import { useNavigationStore } from "../../stores/navigation";
 
 const navigation = useNavigationStore();
+const session = useSessionStore();
+const teamCount = computed(
+  () =>
+    session.teams.filter(
+      (t) =>
+        !t.dissolved && t.members.some((m) => m.id === DEMO_PARTICIPANT.id),
+    ).length,
+);
 const section = ref<ProfileSection>("profile");
 // 后续个人中心业务页从这里读取附加参数；不把它们当作身份或权限。
 const routeQuery = ref<RouteQuery>({});
@@ -70,7 +82,14 @@ function showProfile() {
   <view class="hhr-page hhr-page--tab">
     <view class="hhr-page__inner">
       <view v-if="notice" class="hhr-notice mb-4">{{ notice }}</view>
+      <template v-if="section === 'teams'">
+        <ProfileTeamsReadOnly />
+        <FormButton class="mt-4" variant="secondary" @click="showProfile"
+          >返回个人资料</FormButton
+        >
+      </template>
       <PlaceholderPage
+        v-else
         :title="current.title"
         :description="current.description"
       >
@@ -90,7 +109,7 @@ function showProfile() {
           class="hhr-button hhr-button--secondary hhr-button--inline"
           @click="openProfileSection('teams')"
         >
-          我的队伍
+          我的队伍（{{ teamCount }}）
         </button>
         <button
           class="hhr-button hhr-button--secondary hhr-button--inline"

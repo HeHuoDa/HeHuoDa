@@ -169,6 +169,8 @@ export function validateDraft(
     deadlineInstant(d.deadline) <= now
   )
     errors.deadline = "截止时间必须晚于当前时刻（北京时间）。";
+  if (d.type === "competition" && !d.competition?.id.trim())
+    errors.competition = "比赛项目请选择有效的比赛届次。";
   if (d.trackId && !d.competition?.tracks.some((t) => t.id === d.trackId))
     errors.trackId = "赛道必须属于所选比赛届次。";
   return errors;
