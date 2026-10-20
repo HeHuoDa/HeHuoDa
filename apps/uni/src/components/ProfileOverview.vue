@@ -367,7 +367,7 @@ onBeforeUnmount(unregister);
   border-radius: var(--hhr-radius-badge);
   color: var(--hhr-color-brand);
   background: var(--hhr-color-brand-soft);
-  font-size: 0.75rem;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .profile-page {

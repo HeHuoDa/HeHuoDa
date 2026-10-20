@@ -6,7 +6,7 @@ import {
   initialTeamState,
   createTeamActions,
 } from "@hehuoda/client-domain/team-session";
-import { draftFromTeam } from "@hehuoda/client-domain/team";
+import { DEMO_PARTICIPANT, draftFromTeam } from "@hehuoda/client-domain/team";
 import {
   captureNotificationBaseline,
   createNotificationActions,
@@ -201,4 +201,28 @@ test("发布新队伍不是确认入队，不制造成员进展通知", () => {
   const initial = s.notifications.length;
   assert.ok(s.publish(draft));
   assert.equal(s.notifications.length, initial);
+});
+
+test("外部移除自己由转换 fixture 覆盖，解散由共享动作覆盖，成员事件各一次", () => {
+  const f = fixture();
+  const team = f.teams.teams.find((t) => t.id === "demo-8");
+  const initial = f.state.notifications.length;
+  // 只有外部队长才能移除当前演示用户，测试在事件边界送入对应合法结果。
+  f.change(() => {
+    team.members = team.members.filter((m) => m.id !== DEMO_PARTICIPANT.id);
+  });
+  assert.equal(f.state.notifications.length, initial + 1);
+  assert.deepEqual(f.state.notifications.at(-1).target, {
+    section: "teams",
+    teamId: "demo-8",
+  });
+  f.change(() => {});
+  assert.equal(f.state.notifications.length, initial + 1);
+  const s = useSessionStore(createPinia());
+  const before = s.notifications.length;
+  s.manage("demo-7", "dissolve");
+  assert.equal(s.notifications.length, before + 1);
+  assert.match(s.notifications.at(-1).title, /成员关系已结束/);
+  s.manage("demo-7", "dissolve");
+  assert.equal(s.notifications.length, before + 1);
 });

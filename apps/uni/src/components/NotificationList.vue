@@ -204,7 +204,7 @@ watch(
   width: auto;
   max-width: 100%;
   padding: 0.625rem 1rem;
-  font-size: 0.8125rem;
+  font-size: 13px;
   min-height: 44px;
 }
 .notification-card {
