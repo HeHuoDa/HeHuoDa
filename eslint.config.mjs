@@ -18,7 +18,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...vue.configs["flat/recommended"],
   {
-    files: ["apps/web/**/*.{ts,vue}"],
+    files: ["apps/web/**/*.{ts,vue}", "apps/admin/**/*.{ts,vue}"],
     languageOptions: { globals: globals.browser },
   },
   {
@@ -27,7 +27,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["apps/web/**/*.vue", "apps/uni/**/*.vue"],
+    files: ["apps/web/**/*.vue", "apps/admin/**/*.vue", "apps/uni/**/*.vue"],
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
   {
