@@ -14,7 +14,10 @@ import { ConsoleError } from "../console/resource";
 async function setup(service: CompetitionService) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/competitions/:id/edit", component: CompetitionsView }],
+    routes: [
+      { path: "/competitions/:id/edit", component: CompetitionsView },
+      { path: "/competitions/new", component: CompetitionsView },
+    ],
   });
   await router.push("/competitions/example-contest-2/edit?preview=1");
   const wrapper = mount(
@@ -65,6 +68,20 @@ it("当前409保留输入并锁定确认，预览进行中阻止切换对象", a
   await flushPromises();
   expect(wrapper.text()).not.toContain("本轮基线已过期");
   expect(generate().attributes("disabled")).toBeUndefined();
+  wrapper.unmount();
+});
+it("从隐藏动作进入新增页面会重置为保存新草稿", async () => {
+  const { wrapper, router } = await setup(exampleCompetitions);
+  const select = wrapper
+    .findAll("select")
+    .find((s) => s.text().includes("保存修改"))!;
+  await select.setValue("hide");
+  await router.push("/competitions/new?preview=1");
+  await flushPromises();
+  const next = wrapper
+    .findAll("select")
+    .find((s) => s.text().includes("保存新草稿"))!;
+  expect((next.element as HTMLSelectElement).value).toBe("save");
   wrapper.unmount();
 });
 

@@ -92,6 +92,14 @@ const dirty = computed(
   () => draft.value !== null && JSON.stringify(draft.value) !== initial.value,
 );
 const fresh = computed(() => preview.value?.key === contentKey.value);
+const allowedActions = computed<CompetitionAction[]>(() => {
+  if (isNew.value) return ["save"];
+  if (!draft.value) return [];
+  return [
+    ...(editing.value ? ["save" as const] : []),
+    draft.value.publication === "published" ? "hide" : "publish",
+  ];
+});
 const labels = { save: "保存比赛", publish: "发布比赛", hide: "隐藏比赛" };
 const title = computed(() =>
   action.value === "save" && original.value?.publication === "published"
@@ -136,6 +144,7 @@ async function load() {
   draft.value = null;
   original.value = null;
   baseline.value = "";
+  action.value = "save";
   if (!detail.value) {
     await controller.load(() => service.value.list(query.value));
     return;
@@ -152,6 +161,11 @@ async function load() {
     original.value = structuredClone(toRaw(state.detail.content));
     baseline.value = state.detail.baseline;
     initial.value = JSON.stringify(draft.value);
+    action.value = editing.value
+      ? "save"
+      : draft.value.publication === "published"
+        ? "hide"
+        : "publish";
   }
 }
 function changeQuery(value: PageQuery) {
@@ -162,6 +176,10 @@ function changeQuery(value: PageQuery) {
 }
 async function validate() {
   if (!draft.value) return false;
+  if (!allowedActions.value.includes(action.value)) {
+    error.value = "当前对象不允许该动作，请重新加载并选择。";
+    return false;
+  }
   const issue = validateCompetition(draft.value, colleges.value, action.value);
   if (!issue) return true;
   error.value = issue.message;
