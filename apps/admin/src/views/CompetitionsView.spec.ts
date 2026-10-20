@@ -98,6 +98,7 @@ it("发布内容修改后预览失效，示例写入不冒充成功", async () =
     },
   });
   await flushPromises();
+  expect(wrapper.text()).toContain("北京时间显示：2026/11/09 18:00:00");
   await wrapper
     .findAll("button")
     .find((b) => b.text() === "生成变更预览")!

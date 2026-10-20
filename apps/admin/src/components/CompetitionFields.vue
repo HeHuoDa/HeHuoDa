@@ -2,6 +2,25 @@
 import type { College } from "@hehuoda/api-types";
 import type { CompetitionPatch } from "../console/review";
 import ReviewTime from "./ReviewTime.vue";
+import type { Time } from "@hehuoda/api-types";
+function beijing(value: Time) {
+  if (
+    value.precision !== "instant" ||
+    !value.value ||
+    !Number.isFinite(Date.parse(value.value))
+  )
+    return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value.value));
+}
 defineProps<{ colleges: College[]; disabled: boolean; existing: boolean }>();
 const model = defineModel<CompetitionPatch>({ required: true });
 function addStage() {
@@ -127,6 +146,24 @@ function addStage() {
             label="比赛时间"
             :disabled="disabled"
           />
+          <p
+            v-for="(time, label) in {
+              报名开始: stage.startsAt,
+              报名截止: stage.deadline,
+              材料截止: stage.materialsAt,
+              比赛时间: stage.eventAt,
+            }"
+            :key="label"
+            class="field-help"
+          >
+            {{ label }}：{{
+              time.precision === "instant"
+                ? "北京时间显示：" + beijing(time)
+                : time.precision === "date"
+                  ? "仅日期 " + time.value + "，不补时刻"
+                  : "未知"
+            }}
+          </p>
           <label>时间说明<input v-model="stage.timeNote" /></label
           ><label>报名方式<input v-model="stage.registration" /></label>
           <label

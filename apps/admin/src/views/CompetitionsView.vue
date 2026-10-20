@@ -490,3 +490,21 @@ function confirm() {
     />
   </div>
 </template>
+<style scoped>
+.console-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.console-page p {
+  overflow-wrap: anywhere;
+}
+.console-page :deep(select) {
+  border: 1px solid #cbd7cf;
+  border-radius: 6px;
+  padding: 9px;
+  min-width: 0;
+  color: #243d32;
+  background: white;
+}
+</style>
