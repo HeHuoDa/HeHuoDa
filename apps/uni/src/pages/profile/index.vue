@@ -22,7 +22,8 @@ const navigation = useNavigationStore();
 const session = useSessionStore();
 const state = reactive(initialProfileTeamState());
 const controller = createProfileTeamController(state, session);
-const section = ref<ProfileSection>("profile");
+// 分区只由控制器持有，页面不再维护第二份 section 状态。
+const section = computed(() => state.section);
 // 后续个人中心业务页从这里读取附加参数；不把它们当作身份或权限。
 const routeQuery = ref<RouteQuery>({});
 const notice = ref("");
@@ -48,7 +49,6 @@ let timer: ReturnType<typeof globalThis.setInterval> | undefined;
 let disposed = false;
 
 function applySection(next: ProfileSection, query?: RouteQuery) {
-  section.value = next;
   if (query) routeQuery.value = query;
   controller.switchSection(next);
 }

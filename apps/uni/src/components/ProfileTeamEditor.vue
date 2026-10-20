@@ -42,7 +42,7 @@ function toggleRole(role: Role) {
 <template>
   <view class="profile-team-editor">
     <text class="editor-copy"
-      >编辑只更新这支队伍的会话内招募信息；关联比赛与赛道沿用原招募，不在此处重新选择。</text
+      >编辑只更新这支队伍的会话内招募信息，保存后仅在当前会话生效。</text
     >
     <view id="profile-team-type-field">
       <FormPicker
@@ -129,7 +129,7 @@ function toggleRole(role: Role) {
         >{{ state.errors.competition || state.errors.trackId }}</text
       >
       <text class="editor-copy"
-        >改项目类型不会清除或新建比赛关联。需要关联比赛时请回到发布流程重新创建招募。</text
+        >关联比赛与赛道沿用原招募，普通项目无需关联比赛；需要新建关联请回到发布流程。</text
       >
     </view>
     <text

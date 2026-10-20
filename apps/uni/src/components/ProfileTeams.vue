@@ -13,6 +13,7 @@ import type { ProfileTeamController } from "../stores/profile-team-controller";
 import FormButton from "./FormButton.vue";
 import FormDialog from "./FormDialog.vue";
 import FormPicker from "./FormPicker.vue";
+import ProfileTeamConfirmDialog from "./ProfileTeamConfirmDialog.vue";
 import ProfileTeamEditor from "./ProfileTeamEditor.vue";
 
 const props = defineProps<{ controller: ProfileTeamController }>();
@@ -22,7 +23,7 @@ const state = controller.state;
 const teams = computed(() => controller.mine());
 const team = computed(() => controller.selectedTeam());
 const captain = computed(() => controller.isCaptain(team.value));
-const incoming = computed(() => controller.incoming(team.value));
+const teamRecords = computed(() => controller.teamRecords(team.value));
 const captainCount = computed(
   () => teams.value.filter((t) => controller.isCaptain(t)).length,
 );
@@ -49,7 +50,7 @@ function toggleAuthorization(memberId: string, event: unknown) {
   if (memberId === DEMO_PARTICIPANT.id) session.contactShared = value;
   else session.contactAuthorizations[memberId] = value;
 }
-function authorizationKey(
+function authorizationKeydown(
   memberId: string,
   event: { key?: string; repeat?: boolean; preventDefault?: () => void },
 ) {
@@ -195,7 +196,7 @@ function invitationHint(recordId: string) {
                 : '预览此成员授权状态（示例）'
             "
             @change="toggleAuthorization(member.id, $event)"
-            @keydown="authorizationKey(member.id, $event)"
+            @keydown="authorizationKeydown(member.id, $event)"
           />
         </view>
         <text class="teams-copy">{{
@@ -228,9 +229,9 @@ function invitationHint(recordId: string) {
       </view>
       <template v-if="captain">
         <text class="detail-subtitle">申请与发出的邀请</text>
-        <text v-if="!incoming.length" class="teams-copy">暂无申请。</text>
+        <text v-if="!teamRecords.length" class="teams-copy">暂无申请。</text>
         <view
-          v-for="record in incoming"
+          v-for="record in teamRecords"
           :key="record.id"
           class="record"
           :data-incoming="record.id"
@@ -294,21 +295,7 @@ function invitationHint(recordId: string) {
     >
       <ProfileTeamEditor v-if="state.draft" :controller="props.controller" />
     </FormDialog>
-    <FormDialog
-      id="profile-team-confirm"
-      class="profile-team-confirm-dialog"
-      :open="!!state.confirm"
-      :title="state.confirm?.title ?? '确认操作'"
-      save-label="确认操作"
-      :saving="state.saving"
-      @save="controller.submit()"
-      @cancel="controller.cancelConfirm()"
-    >
-      <text class="dialog-copy">{{ state.confirm?.description }}</text>
-      <text class="dialog-copy"
-        >本次操作只更新当前会话内示例，不会送达真实用户，也不会写入服务器。</text
-      >
-    </FormDialog>
+    <ProfileTeamConfirmDialog :controller="controller" />
   </view>
 </template>
 
@@ -366,7 +353,7 @@ function invitationHint(recordId: string) {
 .detail-subtitle {
   display: block;
   margin-top: 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 .action-row {
@@ -392,7 +379,7 @@ function invitationHint(recordId: string) {
 }
 .record-title {
   display: block;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -441,20 +428,9 @@ function invitationHint(recordId: string) {
   max-width: 560px;
   max-height: 640px;
 }
-.profile-team-confirm-dialog :deep(.hhr-dialog-panel) {
-  max-width: 480px;
-  max-height: 320px;
-}
 @media (max-width: 600px) {
   .profile-team-editor-dialog :deep(.hhr-dialog-panel) {
     max-height: calc(100% - 24px);
   }
-}
-.dialog-copy {
-  display: block;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 26px;
-  color: var(--hhr-color-muted);
 }
 </style>

@@ -66,6 +66,22 @@ export function initialProfileTeamState() {
 }
 export type ProfileTeamState = ReturnType<typeof initialProfileTeamState>;
 
+/** 编辑表单自上而下的字段顺序，用于选择可定位的首个错误。 */
+const editFieldOrder = [
+  "type",
+  "title",
+  "goal",
+  "progress",
+  "skills",
+  "location",
+  "mode",
+  "roles",
+  "capacity",
+  "deadline",
+  "competition",
+  "trackId",
+] as const;
+
 const manageCopy: Record<
   ProfileManageAction,
   { label: string; description: string }
@@ -174,7 +190,8 @@ export function createProfileTeamController(
   function selectedTeam() {
     return mine().find((t) => t.id === state.selectedId);
   }
-  function incoming(team: Team | undefined) {
+  /** 选中队伍的全部申请与发出的邀请；终态记录同样保留。 */
+  function teamRecords(team: Team | undefined) {
     return team ? session.records.filter((a) => a.teamId === team.id) : [];
   }
   function ownRecords() {
@@ -245,7 +262,11 @@ export function createProfileTeamController(
         state.feedback = result.message;
         return true;
       }
-      const first = Object.keys(result.errors)[0] ?? "";
+      // 首错按表单视觉顺序选择，不依赖 validateDraft 的键插入顺序。
+      const first =
+        editFieldOrder.find((key) => result.errors[key]) ??
+        Object.keys(result.errors)[0] ??
+        "";
       state.errorTarget = first ? `profile-team-${first}-field` : "";
       state.feedback = result.message;
       return false;
@@ -274,14 +295,18 @@ export function createProfileTeamController(
     confirmTeam = team;
     confirmMember = member;
     const copy = manageCopy[action];
+    // 移交与移除的目标是成员，确认标题必须写明是谁，而不是只写队伍。
+    const target = member ? member.nickname : team.title;
     state.confirm = {
       kind: "manage",
       action,
       teamId: team.id,
       memberId: action === "transfer" || action === "remove" ? memberId : "",
-      title: `确认${copy.label}「${team.title}」？`,
+      title: `确认${copy.label}「${target}」？`,
       description: copy.description,
     };
+    // 确认期间保留已选成员，取消后仍能直接重试。
+    if (action === "transfer") state.successor = memberId;
     return true;
   }
   function beginProcess(recordId: string, action: ProfileProcessAction) {
@@ -412,7 +437,7 @@ export function createProfileTeamController(
     isCaptain,
     mine,
     selectedTeam,
-    incoming,
+    teamRecords,
     ownRecords,
     switchSection,
     select,

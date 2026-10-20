@@ -8,7 +8,7 @@ import { useSessionStore } from "../stores/session";
 import { openPage, openTab } from "../navigation/navigate";
 import type { ProfileTeamController } from "../stores/profile-team-controller";
 import FormButton from "./FormButton.vue";
-import FormDialog from "./FormDialog.vue";
+import ProfileTeamConfirmDialog from "./ProfileTeamConfirmDialog.vue";
 
 const props = defineProps<{ controller: ProfileTeamController }>();
 const session = useSessionStore();
@@ -95,21 +95,7 @@ function problem(record: TeamApplication) {
     <text class="apps-footer"
       >撤回、确认与拒绝都只在当前会话内生效，不会向真实用户发送消息；待确认邀请不预占名额。</text
     >
-    <FormDialog
-      id="profile-team-confirm"
-      class="profile-team-confirm-dialog"
-      :open="!!state.confirm"
-      :title="state.confirm?.title ?? '确认操作'"
-      save-label="确认操作"
-      :saving="state.saving"
-      @save="controller.submit()"
-      @cancel="controller.cancelConfirm()"
-    >
-      <text class="dialog-copy">{{ state.confirm?.description }}</text>
-      <text class="dialog-copy"
-        >本次操作只更新当前会话内示例，不会送达真实用户，也不会写入服务器。</text
-      >
-    </FormDialog>
+    <ProfileTeamConfirmDialog :controller="controller" />
   </view>
 </template>
 
@@ -142,7 +128,7 @@ function problem(record: TeamApplication) {
 }
 .record-title {
   display: block;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -172,16 +158,5 @@ function problem(record: TeamApplication) {
   line-height: 22px;
   color: var(--hhr-color-muted);
   overflow-wrap: anywhere;
-}
-.profile-team-confirm-dialog :deep(.hhr-dialog-panel) {
-  max-width: 480px;
-  max-height: 320px;
-}
-.dialog-copy {
-  display: block;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 26px;
-  color: var(--hhr-color-muted);
 }
 </style>

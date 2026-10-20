@@ -213,9 +213,15 @@ for (const [name, change] of [
 }
 
 test("A07 移交后旧队长立即失去管理权限，成为普通成员后可退出", () => {
-  const { session, controller } = fixture("demo-7");
+  const { session, controller, state } = fixture("demo-7");
   assert.equal(controller.beginManage("transfer", "member-6"), true);
   assert.match(controller.state.confirm.title, /移交队长/);
+  // 确认标题必须写明移交给谁，且取消后仍保留已选成员。
+  assert.match(controller.state.confirm.title, /演示伙伴 7/);
+  assert.equal(state.successor, "member-6");
+  controller.cancelConfirm();
+  assert.equal(state.successor, "member-6");
+  assert.equal(controller.beginManage("transfer", "member-6"), true);
   controller.submit();
   const team = teamOf(session, "demo-7");
   assert.equal(
@@ -302,6 +308,11 @@ test("A10 编辑校验准确、首错可定位、草稿保留，成功后列表�
 
   state.draft.title = "校园植物摄影";
   state.draft.roles = [];
+  state.draft.skills = "字".repeat(501);
+  assert.equal(controller.saveEdit(), false);
+  // 首错按表单视觉顺序：技能说明在角色需求之上。
+  assert.equal(state.errorTarget, "profile-team-skills-field");
+  state.draft.skills = "";
   assert.equal(controller.saveEdit(), false);
   assert.equal(state.errorTarget, "profile-team-roles-field");
 
@@ -467,7 +478,7 @@ test("A15 无队伍、无记录时返回空集合，选择失效队伍不保留�
   assert.equal(controller.state.selectedId, "");
   session.records = [];
   assert.deepEqual(controller.ownRecords(), []);
-  assert.deepEqual(controller.incoming(undefined), []);
+  assert.deepEqual(controller.teamRecords(undefined), []);
 });
 
 test("A16 切分区清理弹层与选择，同分区重复进入不误清确认", () => {
