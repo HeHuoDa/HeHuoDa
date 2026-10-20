@@ -195,15 +195,19 @@ onBeforeUnmount(unregister);
       <text class="block mt-5 whitespace-pre-wrap text-sm text-muted">{{
         session.profile.bio || "还没有填写简介，期待和伙伴一起成长。"
       }}</text>
-      <view class="profile-stats" aria-label="个人业务统计尚未接入">
+      <view class="profile-stats" aria-label="个人业务统计，收藏为当前会话数量">
         <view
           v-for="label in ['我的队伍', '待处理邀请', '我的申请', '收藏比赛']"
           :key="label"
           class="profile-stat"
         >
-          <text class="profile-stat-number">—</text
+          <text class="profile-stat-number">{{
+            label === "收藏比赛" ? session.favoriteCount : "—"
+          }}</text
           ><text class="block text-xs text-muted">{{ label }}</text
-          ><text class="block text-xs text-muted">待接入</text>
+          ><text class="block text-xs text-muted">{{
+            label === "收藏比赛" ? "当前会话" : "待接入"
+          }}</text>
         </view>
       </view>
     </view>
