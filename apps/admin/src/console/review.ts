@@ -96,9 +96,23 @@ export interface ReviewRecord {
   date: string;
   versions: string[];
   latestVersion: string;
-  material: ReviewMaterial;
+  material: ReviewInput;
   requiresReapproval?: boolean;
 }
+export type ImportPatch = Partial<
+  Omit<CompetitionPatch, "stages" | "tracks" | "notices">
+> & {
+  id: string;
+  stages?: (Omit<Partial<StagePatch>, "scope"> & {
+    id: string;
+    scope?: Partial<StagePatch["scope"]>;
+  })[];
+  tracks?: (Partial<CompetitionDetail["tracks"][number]> & { id: string })[];
+  notices?: (Partial<CompetitionDetail["notices"][number]> & { id: string })[];
+};
+export type ReviewInput = Omit<ReviewMaterial, "batch"> & {
+  batch: { competitions: ImportPatch[] };
+};
 export interface PreviewReceipt {
   contentKey: string;
   token: string;
@@ -115,12 +129,12 @@ export interface ReviewService {
     targetId?: string,
   ): Promise<ReviewRecord>;
   preview(
-    material: ReviewMaterial,
+    material: ReviewInput,
     action: "import" | "publish",
   ): Promise<PreviewReceipt>;
   change(
     action: ReviewAction,
-    material: ReviewMaterial,
+    material: ReviewInput,
     reason: string,
     operationId: string,
     receipt?: PreviewReceipt,

@@ -188,7 +188,7 @@ export const exampleReview: ReviewService = {
         precision: "date",
         value: "2026-11-01",
       };
-      row.material.batch.competitions[0]!.stages[0]!.deadline = {
+      row.material.batch.competitions[0]!.stages![0]!.deadline = {
         precision: "date",
         value: "2026-11-01",
       };

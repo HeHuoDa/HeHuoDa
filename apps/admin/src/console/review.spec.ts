@@ -5,9 +5,10 @@ import {
   validateReviewDraft,
 } from "./review";
 import { reviewExamples } from "./review-examples";
+import { toReviewDraft } from "./review-draft";
 describe("候选审核页面规则", () => {
   it("人工日期和理由不可猜测，已导入不能拒绝，已发布更新预览绑定同一内容", () => {
-    const file = structuredClone(reviewExamples[0]!.material);
+    const file = toReviewDraft(reviewExamples[0]!.material);
     expect(validateReviewDraft(file)).toMatchObject({ field: "checkedAt" });
     file.checkedAt = "2026-02-30";
     expect(validateReviewDraft(file)?.field).toBe("checkedAt");

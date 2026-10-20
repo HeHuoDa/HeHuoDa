@@ -71,6 +71,8 @@ export function createPublicCatalog(): PublicCatalog {
             (item) =>
               object(item) &&
               object(item.competition) &&
+              object(item.stage) &&
+              typeof item.stage.id === "string" &&
               typeof item.competition.id === "string" &&
               typeof item.competition.name === "string",
           ),

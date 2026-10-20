@@ -34,6 +34,19 @@ describe("公开目录真实请求适配", () => {
   it("缺失或错误响应不伪装成空列表", async () => {
     vi.stubGlobal(
       "fetch",
+      async () =>
+        new Response(
+          JSON.stringify({
+            items: [{ competition: { id: "a", name: "合法标题" } }],
+            totalPages: 1,
+            hasMore: false,
+          }),
+          { status: 200 },
+        ),
+    );
+    await expect(createPublicCatalog().list("", 1)).rejects.toThrow();
+    vi.stubGlobal(
+      "fetch",
       async () => new Response("<html>not api</html>", { status: 200 }),
     );
     await expect(createPublicCatalog().colleges()).rejects.toThrow();

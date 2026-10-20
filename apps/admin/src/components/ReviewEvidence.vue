@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { safeSourceUrl, type ReviewMaterial } from "../console/review";
-const props = defineProps<{ file: ReviewMaterial }>();
+import { safeSourceUrl, type ReviewInput } from "../console/review";
+const props = defineProps<{ file: ReviewInput }>();
 const fields = computed(() => props.file.candidate.fields);
 const times = [
   ["startsAt", "报名开始"],

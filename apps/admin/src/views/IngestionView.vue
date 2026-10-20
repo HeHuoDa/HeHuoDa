@@ -28,11 +28,14 @@ import {
   type ReviewMaterial,
   type ReviewRecord,
   type PreviewReceipt,
+  type ReviewInput,
 } from "../console/review";
+import { toReviewDraft, serializeReviewDraft } from "../console/review-draft";
 import { exampleReview } from "../console/review-examples";
 import {
   createResourceController,
   errorMessage,
+  ConsoleError,
   type PageQuery,
 } from "../console/resource";
 import { readQuery } from "../console/query";
@@ -65,6 +68,7 @@ const draft = ref<ReviewMaterial | null>(null),
 const dirty = computed(
   () => !!draft.value && JSON.stringify(draft.value) !== initialKey.value,
 );
+const stale = ref(false);
 const readOnly = computed(
   () =>
     !state.detail ||
@@ -153,6 +157,7 @@ async function load() {
   acknowledged.value = false;
   error.value = "";
   dialog.value = false;
+  stale.value = false;
   pending.value = false;
   const id = route.params.id;
   if (id) {
@@ -167,7 +172,7 @@ async function load() {
       ),
     );
     if (state.detail && currentLoad === loadEpoch) {
-      draft.value = structuredClone(state.detail.material);
+      draft.value = toReviewDraft(state.detail.material);
       initialKey.value = JSON.stringify(draft.value);
       target.value = draft.value.targetId;
       targetMode.value = draft.value.formalBefore ? "existing" : "new";
@@ -219,6 +224,7 @@ function can(action: ReviewAction) {
   return (
     !!state.detail &&
     !pending.value &&
+    !stale.value &&
     state.detail.material.sourceVersion === state.detail.latestVersion &&
     allowedReviewAction(state.detail.status, action) &&
     !(action === "import" && state.detail.requiresReapproval) &&
@@ -230,8 +236,11 @@ function can(action: ReviewAction) {
 }
 async function makePreview(kind: "import" | "publish") {
   if (!draft.value || !(await valid()) || !can(kind)) return;
-  const material = structuredClone(toRaw(draft.value)),
-    key = JSON.stringify(material),
+  const material = serializeReviewDraft(
+      toRaw(draft.value),
+      state.detail!.material,
+    ),
+    key = JSON.stringify(draft.value),
     epoch = ++previewEpoch;
   preview.value = { kind, key, error: "" };
   acknowledged.value = false;
@@ -239,18 +248,23 @@ async function makePreview(kind: "import" | "publish") {
   try {
     const receipt = await service.value.preview(material, kind);
     if (epoch === previewEpoch && contentKey.value === key) {
-      if (receipt.contentKey !== key || !receipt.token)
+      if (receipt.contentKey !== JSON.stringify(material) || !receipt.token)
         throw new Error("预览内容不匹配");
       preview.value = { kind, key, receipt, error: "" };
     }
   } catch (cause) {
+    if (cause instanceof ConsoleError && cause.status === 409) {
+      stale.value = true;
+      confirmedMaterial = null;
+      confirmedReceipt = undefined;
+    }
     if (epoch === previewEpoch && preview.value?.key === key)
       preview.value.error = errorMessage(cause);
   } finally {
     if (epoch === previewEpoch) pending.value = false;
   }
 }
-let confirmedMaterial: ReviewMaterial | null = null;
+let confirmedMaterial: ReviewInput | null = null;
 let confirmedReceipt: PreviewReceipt | undefined;
 async function confirm(next: ReviewAction) {
   if (!draft.value || !can(next)) return;
@@ -270,13 +284,17 @@ async function confirm(next: ReviewAction) {
     error.value = "已批准材料已改动，请先保存修正并重新审核，不能沿用旧批准。";
     return;
   }
-  confirmedMaterial = structuredClone(toRaw(draft.value));
+  confirmedMaterial = serializeReviewDraft(
+    toRaw(draft.value),
+    state.detail!.material,
+  );
   confirmedReceipt = preview.value?.receipt;
   operationId.value = crypto.randomUUID();
   action.value = next;
   dialog.value = true;
 }
 async function execute(reason: string) {
+  if (stale.value) throw new ConsoleError(409, "stale");
   if (!confirmedMaterial) return;
   if (
     (action.value === "import" || action.value === "publish") &&
@@ -302,8 +320,16 @@ async function execute(reason: string) {
   } catch (cause) {
     preview.value = null;
     acknowledged.value = false;
+    if (cause instanceof ConsoleError && cause.status === 409) {
+      stale.value = true;
+      confirmedMaterial = null;
+      confirmedReceipt = undefined;
+    }
     throw cause;
   }
+}
+async function reload() {
+  if (await mayLeave()) await load();
 }
 </script>
 <template>
@@ -368,6 +394,12 @@ async function execute(reason: string) {
     </div>
     <template v-else-if="state.detail && draft">
       <section class="panel console-pad">
+        <div v-if="stale" role="alert" class="field-help">
+          审核材料版本已过期，本轮确认已失效。请重新载入/导出材料并重新审核。<ElButton
+            @click="reload"
+            >重新载入审核材料</ElButton
+          >
+        </div>
         <span class="status-tag">{{ reviewStates[state.detail.status] }}</span>
         <p v-if="state.detail.requiresReapproval" class="field-help">
           目标核对材料已重新导出，旧批准不适用，需重新填写日期并审核。
@@ -506,10 +538,10 @@ async function execute(reason: string) {
             ><input
               v-model="acknowledged"
               type="checkbox"
-              :disabled="!previewFresh || pending"
+              :disabled="!previewFresh || pending || stale"
             />我已审阅同一内容的布局预览（不等于服务端授权）</label
           ><ElButton
-            :disabled="!previewFresh || !acknowledged || pending"
+            :disabled="!previewFresh || !acknowledged || pending || stale"
             @click="confirm(preview.kind)"
             >打开{{ preview.kind === "import" ? "导入" : "发布" }}确认</ElButton
           >
@@ -521,5 +553,6 @@ async function execute(reason: string) {
     v-model="dialog"
     :title="confirmationTitle"
     :execute="execute"
+    :blocked="stale"
   />
 </template>

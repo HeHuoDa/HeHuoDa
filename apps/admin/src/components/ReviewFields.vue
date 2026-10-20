@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, toRaw } from "vue";
 import type { College } from "@hehuoda/api-types";
 import type { ReviewMaterial } from "../console/review";
 import ReviewTime from "./ReviewTime.vue";
@@ -42,6 +42,22 @@ function addTrack() {
       members: "",
       rules: "",
     });
+}
+function removeStage(index: number) {
+  const current = patch.value.stages[index]!;
+  const original = model.value.formalBefore?.stages.find(
+    (stage) => stage.id === current.id,
+  );
+  if (original) patch.value.stages[index] = structuredClone(toRaw(original));
+  else patch.value.stages.splice(index, 1);
+}
+function removeTrack(index: number) {
+  const current = patch.value.tracks[index]!;
+  const original = model.value.formalBefore?.tracks.find(
+    (track) => track.id === current.id,
+  );
+  if (original) patch.value.tracks[index] = structuredClone(toRaw(original));
+  else patch.value.tracks.splice(index, 1);
 }
 </script>
 <template>
@@ -164,7 +180,7 @@ function addTrack() {
           >时间冲突待核对<input v-model="stage.conflict" type="checkbox"
         /></label>
       </div>
-      <ElButton :disabled="disabled" @click="patch.stages.splice(index, 1)"
+      <ElButton :disabled="disabled" @click="removeStage(index)"
         >移除此赛段修正</ElButton
       >
     </section>
@@ -222,7 +238,7 @@ function addTrack() {
         ><label>人数要求<input v-model="track.members" /></label
         ><label class="wide-field"
           >赛道规则<textarea v-model="track.rules" rows="3" /></label
-        ><ElButton :disabled="disabled" @click="patch.tracks.splice(index, 1)"
+        ><ElButton :disabled="disabled" @click="removeTrack(index)"
           >移除此赛道修正</ElButton
         >
       </div>

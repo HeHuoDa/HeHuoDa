@@ -84,9 +84,11 @@ describe("候选审核公开交互", () => {
   });
   for (const status of [403, 409])
     it(`审核${status}错误不改候选状态`, async () => {
+      let calls = 0;
       const { wrapper } = await setup("example-candidate-2", {
         ...exampleReview,
         change: async () => {
+          calls++;
           throw new ConsoleError(status, "test");
         },
       });
@@ -102,8 +104,51 @@ describe("候选审核公开交互", () => {
         status === 403 ? "权限不足" : "重新加载并重新审核",
       );
       expect(wrapper.text()).toContain("已批准，未导入");
+      if (status === 409) {
+        expect(
+          wrapper
+            .find('form.editor-form button[type="submit"]')
+            .attributes("disabled"),
+        ).toBeDefined();
+        await wrapper.get("form.editor-form").trigger("submit");
+        await flushPromises();
+        expect(calls).toBe(1);
+      }
       wrapper.unmount();
     });
+  it("真实已有目标局部补丁可编辑，未修改预览保持原始审核文件形状", async () => {
+    const material = (
+      await exampleReview.detail("candidates", "example-candidate-2")
+    ).material;
+    material.batch.competitions = [
+      {
+        id: material.targetId,
+        notices: material.batch.competitions[0]!.notices,
+      },
+    ];
+    let received: unknown;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async () => ({
+        ...(await exampleReview.detail("candidates", "example-candidate-2")),
+        material,
+      }),
+      preview: async (input) => {
+        received = input;
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    expect(
+      (wrapper.get("#review-name").element as HTMLInputElement).value,
+    ).toBe(material.formalBefore!.name);
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await flushPromises();
+    expect(received).toEqual(material);
+    wrapper.unmount();
+  });
   it("已批准仍未导入，纯文本原文不执行HTML；布局预览未授权不能执行写入", async () => {
     const { wrapper } = await setup();
     expect(wrapper.text()).toContain("已批准，未导入");
