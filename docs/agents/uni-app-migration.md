@@ -1,5 +1,17 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #75：会话收藏与跨页面同步
+
+`pages/my/favorites.vue` 新增收藏列表、空态、取消、重新查询与重试；`pages/home/competition.vue` 接通收藏按钮；`ProfileOverview.vue` 的收藏数量读取同一 `useSessionStore`。旧 Web 仅有占位，不存在可像素对照的收藏成品，本票按现有主题和控件直接新增普通 uni-app 功能，不跨应用导入旧端代码，也不补建旧 Web 收藏页。
+
+- 收藏集合只含稳定比赛 ID 与单调递增的收藏顺序，按最近收藏在前去重；取消再收藏置顶。404、网络失败及尚未加载项都保留在总数中。
+- 详情沿用真实 `GET /api/v1/competitions/:id` 与现有响应校验。`stores/favorites-controller.ts` 最多同时查询三个比赛，重复同步复用同 ID 在途请求；单项失败单独重试，不回退静态比赛。
+- 页面隐藏或卸载时取消在途查询，返回时重新获取当前资料；移除、重置与重新收藏使用记录顺序及请求身份隔离，迟到响应不能覆盖新条目或复活收藏。队伍与资料会话的统一 `reset()` 同时清空收藏。
+- 收藏不要求尚未提供的真实登录；不写存储、不新增收藏数据库或业务写接口。H5 刷新、小程序冷启动及统一重置清空，普通页面跳转和返回保留；详情与列表均展示此边界。
+- H5 与 mp-weixin 使用相同 `view/text`、`FormButton`、`AppIcon`、Pinia 状态和 `uni.request`。标题、正文、辅助文案使用现有固定 px 的 `text-display`、`text-body`、`text-caption` 主题字号，避免窄屏根字号缩放导致小字；按钮允许换行并维持现有 44px 触控规则。沿用 ADR 0005 原生导航，不新增 DOM、浏览器 History 或动态 SVG 依赖。
+
+验收需区分：真实本地 API 的成功与 404，平台替身的超时、迟到响应、长文案及加载状态；H5 浏览器模拟不代表微信运行。微信开发者工具、iOS/Android 真机、微信网络域名与安全区仍交 #85；可按 PR 约定按需调用微信开发者工具人工验收流程。完整实际命令、视口与结果记录在交付说明，不把编译通过称作双端发布。
+
 ## Issue #74：个人中心队伍管理与申请邀请处理
 
 `pages/profile/index.vue` 的 `teams` 分区由 `ProfileTeams` 替换 #73 的只读队伍区，`applications` 分区由 `ProfileApplications` 替换占位页；两处仍读同一个 `useSessionStore`，找队友列表、公开详情、发布流程与个人中心共享同一份队伍、申请、邀请与授权，没有第二套业务集合。分区仍由 `openProfileSection` + `onShow` 消费一次性意图，`switchTab` 不拼 query，`/my/teams`、`/my/applications` 的旧地址继续交给现有 registry／#82，本票没有新增 recordId 深链协议。

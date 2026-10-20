@@ -101,7 +101,7 @@ export const routeRegistry = {
     path: "/pages/my/favorites",
     title: "我的收藏",
     kind: "page",
-    status: "placeholder",
+    status: "baseline",
     source: "/my/favorites",
     description: "在这里回看关注的比赛。",
   },
