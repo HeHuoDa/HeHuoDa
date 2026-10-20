@@ -92,7 +92,7 @@ export const routeRegistry = {
     path: "/pages/teams/new",
     title: "发布招募",
     kind: "page",
-    status: "placeholder",
+    status: "baseline",
     source: "/teams/new",
     description: "填写项目目标与角色需求，演示发布队伍招募。",
   },

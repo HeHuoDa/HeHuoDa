@@ -237,6 +237,13 @@ const sections = [
         <p v-if="errors.trackId" role="alert" class="mt-2 text-sm text-danger">
           {{ errors.trackId }}
         </p>
+        <p
+          v-if="errors.competition"
+          role="alert"
+          class="mt-2 text-sm text-danger"
+        >
+          {{ errors.competition }}
+        </p>
       </template>
     </section>
     <div
