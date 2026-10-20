@@ -26,7 +26,7 @@ const menu = [
   { to: "/runs", text: "采集运行", icon: Play },
   { to: "/notifications", text: "通知管理", icon: Bell },
   { to: "/users", text: "用户管理", icon: Users },
-  { to: "/teams", text: "招募管理", icon: ListChecks },
+  { to: "/recruitments", text: "招募治理", icon: ListChecks },
   { to: "/reports", text: "举报管理", icon: Flag },
   { to: "/operations", text: "操作记录", icon: History },
 ];
@@ -48,7 +48,13 @@ const menu = [
           :to="item.to"
           :aria-label="item.text"
           class="nav-link"
-          :class="{ selected: route.path === item.to }"
+          :class="{
+            selected:
+              item.to === '/'
+                ? route.path === '/'
+                : route.path === item.to ||
+                  route.path.startsWith(item.to + '/'),
+          }"
           ><component :is="item.icon" :size="19" /><span>{{
             item.text
           }}</span></RouterLink

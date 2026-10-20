@@ -2,6 +2,33 @@ import { createRouter, createWebHistory } from "vue-router";
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    ...(["users", "recruitments", "reports"] as const).flatMap((kind) => [
+      {
+        path: `/${kind}`,
+        component: () => import("./views/GovernanceView.vue"),
+        meta: {
+          title: {
+            users: "用户查询",
+            recruitments: "招募治理",
+            reports: "举报处理",
+          }[kind],
+          governance: kind,
+        },
+      },
+      {
+        path: `/${kind}/:id`,
+        component: () => import("./views/GovernanceView.vue"),
+        meta: {
+          title: {
+            users: "用户详情",
+            recruitments: "招募详情",
+            reports: "举报详情",
+          }[kind],
+          governance: kind,
+        },
+      },
+    ]),
+    { path: "/teams", redirect: "/recruitments" },
     {
       path: "/",
       component: () => import("./views/OverviewView.vue"),
@@ -35,9 +62,6 @@ export const router = createRouter({
     ...[
       ["/runs", "采集运行"],
       ["/notifications", "通知管理"],
-      ["/users", "用户管理"],
-      ["/teams", "招募管理"],
-      ["/reports", "举报管理"],
     ].map(([path, title]) => ({
       path: path!,
       component: () => import("./views/PendingView.vue"),

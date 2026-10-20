@@ -848,3 +848,105 @@ h2 {
     animation: none !important;
   }
 }
+.console-pad {
+  padding: 24px;
+}
+.console-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 22px;
+}
+.console-filters label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  flex: 1 1 145px;
+  min-width: 0;
+}
+.console-filters label:first-child {
+  flex-basis: 220px;
+}
+.console-filters .el-select {
+  width: 100%;
+}
+.console-filters input[type="date"],
+.table-footer select {
+  min-height: 36px;
+  padding: 5px 9px;
+  border: 1px solid #d5dfd8;
+  border-radius: 6px;
+  color: #243d32;
+  background: white;
+  min-width: 0;
+  width: 100%;
+}
+.console-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+.record-link {
+  color: #27644b;
+  background: none;
+  border: 0;
+  text-align: left;
+  line-height: 1.8;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.record-link:hover {
+  text-decoration: underline;
+}
+.record-id {
+  display: block;
+  color: #65736a;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.console-details {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 18px 24px;
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 26px 0;
+}
+.console-details dt {
+  color: #65736a;
+}
+.console-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.detail-heading {
+  margin: 18px 0;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.detail-description,
+.field-help {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #56655c;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.field-help {
+  margin-bottom: 20px;
+}
+.el-dialog {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.table-footer label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
