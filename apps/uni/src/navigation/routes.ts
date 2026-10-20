@@ -83,7 +83,7 @@ export const routeRegistry = {
     path: "/pages/teams/detail",
     title: "队伍详情",
     kind: "page",
-    status: "placeholder",
+    status: "baseline",
     source: "/teams/:id",
     description: "了解队伍目标、成员与合作需求。",
   },
