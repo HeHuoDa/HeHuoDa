@@ -75,7 +75,7 @@ onBeforeUnmount(close);
 <style scoped>
 .competition-sources {
   min-width: 0;
-  margin-top: 8px;
+  margin-top: 0.5rem;
 }
 .sources-message {
   display: block;

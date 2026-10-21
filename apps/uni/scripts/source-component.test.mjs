@@ -144,6 +144,17 @@ test("H5 完整和 compact 来源使用安全原生链接，危险地址没有�
       assert.equal(anchor.props.href, notice.url);
       assert.equal(anchor.props.target, "_blank");
       assert.equal(anchor.props.rel, "noopener noreferrer");
+      const currentNotice = {
+        ...notice,
+        id: "notice-current",
+        url: "https://news.example.edu.cn/current",
+      };
+      app.render({ notice: currentNotice, compact });
+      await nextTick();
+      assert.equal(
+        app.find((node) => node.type === "a").props.href,
+        currentNotice.url,
+      );
       app.render({
         notice: { ...notice, url: "javascript:alert(1)" },
         compact,

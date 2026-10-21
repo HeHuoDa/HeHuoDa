@@ -60,7 +60,7 @@ onLoad((query) => {
 }
 .source-explanation {
   display: block;
-  margin: 12px 0;
+  margin: 0.75rem 0;
   color: var(--hhr-color-muted);
   font-size: 14px;
 }

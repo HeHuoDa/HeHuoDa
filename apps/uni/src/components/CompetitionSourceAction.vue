@@ -156,6 +156,10 @@ async function activate(open = false) {
   word-break: break-all;
 }
 .source-link {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 44px;
+  align-items: center;
   padding: 8px 0;
   text-decoration: underline;
 }
@@ -164,6 +168,9 @@ async function activate(open = false) {
   min-height: 44px;
   align-items: center;
   padding: 0;
+}
+.source-link:not(.source-publisher) {
+  margin-top: 8px;
 }
 .source-url {
   padding: 8px 0;
@@ -178,6 +185,9 @@ async function activate(open = false) {
   white-space: normal;
 }
 .source-feedback {
-  margin-top: 8px;
+  margin-top: 0.5rem;
+}
+.source-button.hhr-button--secondary {
+  padding: 10px 18px;
 }
 </style>
