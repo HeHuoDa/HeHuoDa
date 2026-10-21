@@ -1,4 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   DocumentBuilder,
   SwaggerModule,
@@ -18,9 +19,11 @@ export function configureApp(app: INestApplication): OpenAPIObject {
     .build();
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup("docs", app, document, {
-    jsonDocumentUrl: "/docs-json",
-  });
+  if (app.get(ConfigService).get<boolean>("SWAGGER_ENABLED", false)) {
+    SwaggerModule.setup("docs", app, document, {
+      jsonDocumentUrl: "/docs-json",
+    });
+  }
 
   return document;
 }

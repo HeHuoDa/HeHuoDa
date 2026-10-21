@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 检查数据库及当前版本所需迁移结构是否就绪 */
+        get: operations["HealthController_getReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -73,6 +90,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ReadinessResponseDto: {
+            /** @enum {string} */
+            status: "ready" | "unavailable";
+            /** @description 当前请求关联 ID */
+            requestId: string;
+        };
         HealthResponseDto: {
             /**
              * @example ok
@@ -205,6 +228,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    HealthController_getReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponseDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponseDto"];
+                };
+            };
+        };
+    };
     HealthController_getHealth: {
         parameters: {
             query?: never;

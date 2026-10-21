@@ -16,7 +16,11 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const port = app.get(ConfigService).get<number>("PORT", 3001);
-  await app.listen(port, "127.0.0.1");
+  const host = app.get(ConfigService).get<string>("HOST", "127.0.0.1");
+  await app.listen(port, host);
 }
 
-void bootstrap();
+void bootstrap().catch(() => {
+  console.error("API 启动失败，请检查运行配置与日志");
+  process.exit(1);
+});
