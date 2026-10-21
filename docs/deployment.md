@@ -113,7 +113,7 @@ docker compose --env-file /opt/hehuoda/.env -f compose.deploy.yaml exec -T api n
 
 停机使用同一环境配置执行 `docker compose ... stop` 或 `down`；重新 `up -d --wait` 保留数据库卷。禁止对现有环境使用 `down --volumes`、`volume prune` 或删除数据库目录。进程存活与就绪分别是 `/api/v1/health`、`/api/v1/health/ready`；后者检查数据库、当前应用所需迁移和必要表字段，失败只返回安全状态/requestId 及 503。
 
-H5 HTML 使用 `no-store`，构建指纹资源长期 immutable 缓存，普通静态资源重新校验。缺失静态文件返回 404，未知 API 返回 API 的 JSON 404，均不落入首页。Nginx 将注册的旧 Web History 路径重定向到对应 uni hash 页面，并保留查询参数；完整浏览器返回、非法参数和路由兼容验收仍按 #82 执行，不以 HTTP 302 检查替代页面交互验收。
+H5 HTML 使用 `no-store`，构建指纹资源长期 immutable 缓存，普通静态资源重新校验。缺失静态文件返回 404，未知 API 返回 API 的 JSON 404，均不落入首页。Nginx 使用基础镜像自带的 njs 模块，将注册的旧 Web History 路径（含末尾斜杠）重定向到对应 uni hash 页面。详情 `id`、我的队伍/申请 `section` 以路径为准，移除查询串中重复或编码的冲突键，其余参数保留原编码与重复值；完整浏览器返回、非法参数和路由兼容验收仍按 #82 执行，不以 HTTP 302 检查替代页面交互验收。
 
 ## 备份、异机保存及恢复
 

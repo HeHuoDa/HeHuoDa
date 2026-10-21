@@ -140,6 +140,22 @@ try {
     /^\/#\/pages\/home\/competition\?id=smoke-competition&stage=smoke-stage$/,
   );
   assert.equal((await fetch(`${base}/pages/home/competition`)).status, 200);
+  for (const [path, expected] of [
+    [
+      "/home/competitions/smoke-competition/?id=other&%69d=third&stage=a&stage=b",
+      "/#/pages/home/competition?id=smoke-competition&stage=a&stage=b",
+    ],
+    [
+      "/my/teams/?section=applications&%73ection=other",
+      "/#/pages/profile/index?section=teams",
+    ],
+    ["/teams/new/?next=%2Fhome", "/#/pages/teams/new?next=%2Fhome"],
+    ["/teams/team-1/?id=other", "/#/pages/teams/detail?id=team-1"],
+  ]) {
+    const response = await fetch(`${base}${path}`, { redirect: "manual" });
+    assert.equal(response.status, 302, path);
+    assert.equal(response.headers.get("location"), expected, path);
+  }
   assert.equal((await json("/api/v1/health/ready")).status, "ready");
   assert.equal((await json("/api/v1/health")).status, "ok");
   assert.ok((await json("/api/v1/colleges")).some((c) => c.id === "law"));
