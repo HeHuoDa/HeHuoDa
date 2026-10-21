@@ -1,5 +1,5 @@
 /*
- * 用户端导航注册表：uni-app 页面、旧 Web 路由与页面标题的唯一来源。
+ * 用户端导航注册表：uni-app 页面、来源路径/兼容别名与页面标题的唯一来源。
  *
  * 新增业务页面时只需两步：在 pages.json 注册页面，再在这里补一条定义；
  * 页面跳转统一走 navigation/navigate.ts，不再另建一套路由状态。
@@ -20,6 +20,7 @@ export type PageRouteName =
   | "team-new"
   | "favorites"
   | "notifications"
+  | "about"
   | "login"
   | "register"
   | "not-found"
@@ -36,7 +37,7 @@ export interface RouteDefinition {
   kind: "tab" | "page";
   /** placeholder 表示预留页，需在页面上标注开发状态 */
   status: "placeholder" | "baseline";
-  /** 对应旧 Web 路由；工程基线页没有旧地址 */
+  /** 对应来源路径或需求预留的兼容别名；工程基线页没有旧地址 */
   source: string | null;
   description: string;
 }
@@ -114,6 +115,15 @@ export const routeRegistry = {
     source: "/notifications",
     description: "组队进展与平台提醒将在这里展示。",
   },
+  about: {
+    name: "about",
+    path: "/pages/about/index",
+    title: "关于禾伙搭",
+    kind: "page",
+    status: "baseline",
+    source: "/about",
+    description: "了解禾伙搭的定位、使用方式与当前开放能力。",
+  },
   login: {
     name: "login",
     path: "/pages/auth/login",
@@ -177,7 +187,7 @@ export function routeTitle(name: RouteName): string {
 }
 
 /**
- * 旧 Web 路由 → 新客户端的完整映射清单。
+ * 来源路径 → 新客户端的完整映射清单，含需求明确预留的兼容别名。
  * 目标为 null 表示不迁移为页面，必须写明原因。
  */
 export interface SourceRoute {
@@ -217,6 +227,11 @@ export const sourceRoutes: readonly SourceRoute[] = [
   },
   { source: "/my/favorites", target: "favorites" },
   { source: "/notifications", target: "notifications" },
+  {
+    source: "/about",
+    target: "about",
+    note: "#77/#82 预留的兼容别名，旧 Web 没有关于页成品",
+  },
   {
     source: "/profile",
     target: "profile",

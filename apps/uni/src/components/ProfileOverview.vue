@@ -27,6 +27,7 @@ const stats = computed(() => [
   { label: "收藏比赛", count: session.favoriteCount, note: "当前会话" },
 ]);
 const feedback = ref("");
+const aboutFeedback = ref("");
 const focusField = ref("");
 const {
   opened,
@@ -98,6 +99,12 @@ const links = [
     action: () => openPage("notifications"),
   },
 ];
+function openAbout() {
+  aboutFeedback.value = "";
+  openPage("about", undefined, () => {
+    aboutFeedback.value = "暂时无法打开关于页面，请重试。";
+  });
+}
 async function edit() {
   feedback.value = "";
   focusField.value = "";
@@ -140,6 +147,7 @@ function authorizationKey(event: {
 // 外部统一重置、页面切换均丢弃编辑草稿，避免旧资料再次写回。
 const unregister = session.registerReset("profile-editor", () => {
   cancel();
+  aboutFeedback.value = "";
   feedback.value = "演示会话已重置，联系方式默认不共享。";
 });
 watch(
@@ -261,14 +269,25 @@ onBeforeUnmount(unregister);
             @keydown="authorizationKey"
           />
         </view>
-        <view class="profile-setting-row">
+        <FormButton
+          variant="secondary"
+          class="profile-setting-row profile-about-link"
+          @click="openAbout"
+        >
           <AppIcon name="leaf" :size="20" class="text-brand" /><view
             class="flex-1 text-sm"
             >关于禾伙搭<text class="block mt-1 text-xs text-muted"
               >一起成长，各有所长。</text
             ></view
           >
-        </view>
+        </FormButton>
+        <view
+          v-if="aboutFeedback"
+          role="status"
+          aria-live="polite"
+          class="hhr-notice text-caption"
+          >{{ aboutFeedback }}</view
+        >
         <view class="profile-notice"
           >默认不共享。仅在所有者授权后，同队有效成员才能查看；申请者、未确认的受邀者和已退出成员不能查看。仅演示授权状态，未提供真实联系方式。</view
         >
@@ -502,6 +521,19 @@ onBeforeUnmount(unregister);
 }
 .profile-setting-row + .profile-setting-row {
   border-top: 1px solid var(--hhr-color-line);
+}
+.profile-about-link {
+  justify-content: flex-start;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--hhr-color-ink);
+  font-weight: 400;
+  text-align: left;
+}
+.profile-about-link::after {
+  border: 0;
 }
 .profile-notice {
   margin-top: 20px;
