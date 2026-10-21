@@ -49,6 +49,12 @@
       }
     },
     {
+      "path": "pages/about/index",
+      "style": {
+        "navigationBarTitleText": "关于禾伙搭"
+      }
+    },
+    {
       "path": "pages/auth/login",
       "style": {
         "navigationBarTitleText": "登录"

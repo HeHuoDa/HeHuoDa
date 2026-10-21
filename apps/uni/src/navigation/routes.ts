@@ -20,6 +20,7 @@ export type PageRouteName =
   | "team-new"
   | "favorites"
   | "notifications"
+  | "about"
   | "login"
   | "register"
   | "not-found"
@@ -113,6 +114,15 @@ export const routeRegistry = {
     status: "placeholder",
     source: "/notifications",
     description: "组队进展与平台提醒将在这里展示。",
+  },
+  about: {
+    name: "about",
+    path: "/pages/about/index",
+    title: "关于禾伙搭",
+    kind: "page",
+    status: "baseline",
+    source: "/about",
+    description: "了解禾伙搭的定位、使用方式与当前开放能力。",
   },
   login: {
     name: "login",
@@ -217,6 +227,7 @@ export const sourceRoutes: readonly SourceRoute[] = [
   },
   { source: "/my/favorites", target: "favorites" },
   { source: "/notifications", target: "notifications" },
+  { source: "/about", target: "about" },
   {
     source: "/profile",
     target: "profile",

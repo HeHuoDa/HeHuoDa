@@ -45,8 +45,9 @@ export function openTab(name: TabRouteName, onFailure?: () => void): void {
 export function openPage(
   name: PageRouteName,
   query?: Record<string, QueryValue>,
+  onFailure?: () => void,
 ): void {
-  uni.navigateTo({ url: withQuery(routePath(name), query) });
+  uni.navigateTo({ url: withQuery(routePath(name), query), fail: onFailure });
 }
 
 /** 替换当前页面，用于登录/注册互跳，避免堆叠重复页面。 */
