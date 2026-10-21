@@ -42,6 +42,7 @@ export async function component(file, platform = "MP-WEIXIN") {
       "picker",
       "switch",
       "scroll-view",
+      "web-view",
     ].includes(tag);
   const { descriptor } = parse(source, {
     filename: url.pathname,
@@ -63,6 +64,7 @@ export async function component(file, platform = "MP-WEIXIN") {
             "picker",
             "switch",
             "scroll-view",
+            "web-view",
           ].includes(tag),
       },
     },
@@ -80,7 +82,7 @@ export async function component(file, platform = "MP-WEIXIN") {
     if (name.endsWith(".vue"))
       target = await component(new URL(name, url), platform);
     else if (name === "@dcloudio/uni-app") {
-      target = `data:text/javascript,${encodeURIComponent("export const onPageHide = (fn) => globalThis.__formPageHooks?.push(fn); export const onUnload = (fn) => globalThis.__formPageHooks?.push(fn);")}`;
+      target = `data:text/javascript,${encodeURIComponent("export const onLoad = (fn) => globalThis.__pageLoadHooks?.push(fn); export const onPageHide = (fn) => globalThis.__formPageHooks?.push(fn); export const onUnload = (fn) => globalThis.__formPageHooks?.push(fn);")}`;
     } else
       target = name.startsWith(".")
         ? new URL(/\.[a-z]+$/.test(name) ? name : `${name}.ts`, url).href

@@ -7,6 +7,12 @@
       }
     },
     {
+      "path": "pages/source/index",
+      "style": {
+        "navigationBarTitleText": "官方原文"
+      }
+    },
+    {
       "path": "pages/teams/index",
       "style": {
         "navigationBarTitleText": "找队友"

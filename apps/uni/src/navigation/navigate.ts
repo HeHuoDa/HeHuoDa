@@ -46,8 +46,13 @@ export function openPage(
   name: PageRouteName,
   query?: Record<string, QueryValue>,
   onFailure?: () => void,
+  onSuccess?: () => void,
 ): void {
-  uni.navigateTo({ url: withQuery(routePath(name), query), fail: onFailure });
+  uni.navigateTo({
+    url: withQuery(routePath(name), query),
+    fail: onFailure,
+    success: onSuccess,
+  });
 }
 
 /** 替换当前页面，用于登录/注册互跳，避免堆叠重复页面。 */
