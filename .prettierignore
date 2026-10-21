@@ -34,3 +34,6 @@ docs/issue-*-build-*.json
 
 apps/uni/src/manifest.json
 apps/uni/unpackage/
+
+# Nginx include files are not HTML despite their .inc extension.
+deploy/nginx/

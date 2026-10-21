@@ -1,0 +1,78 @@
+name: ${COMPOSE_PROJECT_NAME:-hehuoda-deploy}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:17.10-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    volumes:
+      - database:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  api:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/api:${IMAGE_TAG:?set IMAGE_TAG}
+    build:
+      context: .
+      target: api
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL using db:5432}
+      SWAGGER_ENABLED: "false"
+      INGESTION_ENABLED: ${INGESTION_ENABLED:-false}
+      INGESTION_RAW_DAYS: ${INGESTION_RAW_DAYS:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+    logging: *logging
+
+  web:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/web:${IMAGE_TAG:?set IMAGE_TAG}
+    build:
+      context: .
+      target: web
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1/_health]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+volumes:
+  database:

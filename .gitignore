@@ -6,6 +6,9 @@
 .claude/settings.local.json
 .secrets/
 .aws/
+/deploy/state/
+/deploy/backups/
+/deploy/tls/
 
 # Dependencies and build output
 node_modules/
