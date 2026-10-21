@@ -16,6 +16,7 @@ import {
 export type TabRouteName = "home" | "teams" | "profile";
 export type PageRouteName =
   | "competition-detail"
+  | "source-webview"
   | "team-detail"
   | "team-new"
   | "favorites"
@@ -43,6 +44,15 @@ export interface RouteDefinition {
 }
 
 export const routeRegistry = {
+  "source-webview": {
+    name: "source-webview",
+    path: "/pages/source/index",
+    title: "官方原文",
+    kind: "page",
+    status: "baseline",
+    source: null,
+    description: "核准业务域名的原文承载页，未核准地址提供复制回退。",
+  },
   home: {
     name: "home",
     path: "/pages/index/index",

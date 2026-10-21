@@ -13,6 +13,7 @@ import {
   type Filters,
 } from "@hehuoda/client-domain/competition-discovery";
 import CollegePicker from "../../components/CollegePicker.vue";
+import CompetitionSources from "../../components/CompetitionSources.vue";
 import FormButton from "../../components/FormButton.vue";
 import FormInput from "../../components/FormInput.vue";
 import FormPicker from "../../components/FormPicker.vue";
@@ -240,6 +241,10 @@ onUnload(controller.cancel);
                   }}</text
                 >
               </view>
+              <CompetitionSources
+                :competition-id="competition.id"
+                :stage-id="stage.id"
+              />
             </view>
           </view>
           <view
