@@ -9,6 +9,10 @@ import {
   createPublicCatalog,
   publicCatalogKey,
 } from "../console/public-catalog";
+withDefaults(defineProps<{ showDetails?: boolean; allowSelect?: boolean }>(), {
+  showDetails: false,
+  allowSelect: true,
+});
 const emit = defineEmits<{
   colleges: [value: College[]];
   select: [id: string];
@@ -151,7 +155,13 @@ onUnmounted(() => {
         公开赛段 {{ selected.stages.length }} 个，来源通知
         {{ selected.notices.length }} 条。
       </p>
-      <ElButton @click="emit('select', selected.id)"
+      <template v-if="showDetails"
+        ><h4>公开详情（只读）</h4>
+        <pre class="plain-document">{{
+          JSON.stringify(selected, null, 2)
+        }}</pre>
+      </template>
+      <ElButton v-if="allowSelect" @click="emit('select', selected.id)"
         >选为关联目标并重新载入核对材料</ElButton
       >
     </div>

@@ -54,9 +54,16 @@ export const router = createRouter({
     },
     {
       path: "/competitions",
-      component: () => import("./views/PendingView.vue"),
+      component: () => import("./views/CompetitionsView.vue"),
       meta: { title: "比赛管理" },
     },
+    ...["/competitions/new", "/competitions/:id", "/competitions/:id/edit"].map(
+      (path) => ({
+        path,
+        component: () => import("./views/CompetitionsView.vue"),
+        meta: { title: "比赛届次维护" },
+      }),
+    ),
     {
       path: "/reviews",
       redirect: "/ingestion/candidates",
