@@ -64,7 +64,7 @@ node deploy/release.mjs <40位SHA>
 
 ## GitHub Actions
 
-`CI` 先运行现有全仓质量检查和部署流程测试，再构建真实镜像并运行冒烟。`ci-gate` 同时依赖两者。只有 `main` 的 push 在质量和镜像检查成功后才推送 SHA 标签镜像；PR 只构建和测试，不发布镜像。
+`CI` 先运行现有全仓质量检查和部署流程测试，再以只读 token 构建真实镜像并运行冒烟。仅 `main` push 将通过检查的镜像保存为当前运行的短期 artifact；独立 `publish-images` 任务加载这些相同镜像并推送 SHA 标签，不检出源码或执行仓库脚本。只有该任务具有包写权限。`ci-gate` 要求质量与镜像检查成功，主分支 push 还必须发布成功；PR 的发布任务跳过且没有包写权限。
 
 `Deploy` 由成功的 `main` push CI 完成事件触发，兼容自动合并产生的主分支 push；也可手动输入完整 SHA 重试。手动发布同样检查该 SHA 存在成功的 `main` push CI。更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。同一已部署 SHA 只做检查，不重复迁移。质量检查与部署 SHA 不一致时不发布。
 
