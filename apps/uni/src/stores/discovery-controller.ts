@@ -6,7 +6,7 @@ import {
   type Filters,
 } from "@hehuoda/client-domain/competition-discovery";
 import type { PendingRequest } from "../api/http.ts";
-import { RequestError } from "../api/http.ts";
+import { RequestError, requestErrorMessage } from "../api/http.ts";
 
 export interface DiscoveryState {
   filters: Filters;
@@ -89,7 +89,7 @@ export function createDiscoveryController(
       const directoryFailure = state.directoryStatus === "error";
       state.error =
         error instanceof RequestError
-          ? `${directoryFailure ? "学院目录" : "比赛"}加载失败：${error.message}`
+          ? `${directoryFailure ? "学院目录" : "比赛"}加载失败：${requestErrorMessage(error)}`
           : error instanceof Error
             ? error.message
             : "加载失败，请稍后重试。";

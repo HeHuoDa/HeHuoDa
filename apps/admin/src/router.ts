@@ -70,9 +70,16 @@ export const router = createRouter({
     },
     {
       path: "/sources",
-      component: () => import("./views/PendingView.vue"),
-      meta: { title: "采集来源" },
+      redirect: "/ingestion/sources",
     },
+    { path: "/runs", redirect: "/ingestion/runs" },
+    ...["/ingestion/sources", "/ingestion/runs", "/ingestion/runs/:id"].map(
+      (path) => ({
+        path,
+        component: () => import("./views/IngestionControlView.vue"),
+        meta: { title: path.includes("sources") ? "采集来源" : "采集运行" },
+      }),
+    ),
     {
       path: "/operations",
       component: () => import("./views/OperationsView.vue"),
@@ -83,10 +90,7 @@ export const router = createRouter({
       component: () => import("./views/LoginView.vue"),
       meta: { title: "管理员登录" },
     },
-    ...[
-      ["/runs", "采集运行"],
-      ["/notifications", "通知管理"],
-    ].map(([path, title]) => ({
+    ...[["/notifications", "通知管理"]].map(([path, title]) => ({
       path: path!,
       component: () => import("./views/PendingView.vue"),
       meta: { title },

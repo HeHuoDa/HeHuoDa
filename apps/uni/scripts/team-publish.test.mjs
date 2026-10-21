@@ -161,7 +161,7 @@ test("比赛 404 与网络错误区分，可重试；清除后迟到响应无效
   const b = controller.select("hidden");
   api.calls[1].reject(new RequestError("http", "failed", { statusCode: 503 }));
   await b;
-  assert.match(state.selectionError, /加载失败/);
+  assert.match(state.selectionError, /服务暂时不可用/);
   const c = controller.select("hidden");
   await controller.select("");
   api.calls[2].resolve(detail("hidden"));

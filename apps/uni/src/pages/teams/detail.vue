@@ -66,6 +66,10 @@ function leave() {
   timer = undefined;
   controller.cancel();
 }
+function tick() {
+  controller.syncClock();
+  session.syncNotifications(state.now);
+}
 onLoad((query) => {
   sourceQuery = teamRouteQuery(parseTeamRouteQuery(query ?? {}));
   const parsed = parseBusinessId(query?.id);
@@ -73,9 +77,8 @@ onLoad((query) => {
   controller.load(parsed.issue ? "" : parsed.value);
 });
 onShow(() => {
-  controller.syncClock();
-  if (timer === undefined)
-    timer = globalThis.setInterval(controller.syncClock, 1000);
+  tick();
+  if (timer === undefined) timer = globalThis.setInterval(tick, 1000);
 });
 onHide(leave);
 onUnload(leave);

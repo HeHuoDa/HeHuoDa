@@ -9,7 +9,11 @@ import {
   type Team,
   type TeamDraft,
 } from "@hehuoda/client-domain/team";
-import { RequestError, type PendingRequest } from "../api/http.ts";
+import {
+  RequestError,
+  requestErrorMessage,
+  type PendingRequest,
+} from "../api/http.ts";
 
 type Status = "idle" | "loading" | "ready" | "error";
 export function initialTeamPublishState() {
@@ -26,9 +30,11 @@ export function initialTeamPublishState() {
     items: [] as CompetitionList["items"],
     searchStatus: "idle" as Status,
     searchError: "",
+    searchRequestId: null as string | null,
     selectedId: "",
     selectionStatus: "idle" as Status,
     selectionError: "",
+    selectionRequestId: null as string | null,
   };
 }
 export type TeamPublishState = ReturnType<typeof initialTeamPublishState>;
@@ -53,6 +59,7 @@ export function createTeamPublishController(
     searchRequest?.cancel();
     state.searchStatus = "loading";
     state.searchError = "";
+    state.searchRequestId = null;
     if (page === 1) {
       state.items = [];
       state.hasMore = false;
@@ -68,10 +75,12 @@ export function createTeamPublishController(
       state.page = result.page;
       state.hasMore = result.hasMore;
       state.searchStatus = "ready";
-    } catch {
+    } catch (error) {
       if (version !== searchVersion) return;
       state.searchStatus = "error";
-      state.searchError = "比赛查询失败，没有使用样例替代。请重试。";
+      state.searchError = requestErrorMessage(error, "比赛查询失败，请重试。");
+      state.searchRequestId =
+        error instanceof RequestError ? error.requestId : null;
     } finally {
       if (version === searchVersion) searchRequest = null;
     }
@@ -95,6 +104,7 @@ export function createTeamPublishController(
     state.draft.competition = undefined;
     state.draft.trackId = "";
     state.selectionError = "";
+    state.selectionRequestId = null;
     state.selectionStatus = "idle";
     if (!id) return;
     state.selectionStatus = "loading";
@@ -111,7 +121,9 @@ export function createTeamPublishController(
       state.selectionError =
         error instanceof RequestError && error.statusCode === 404
           ? "比赛不存在或未公开，请重新选择或清除比赛。"
-          : "比赛详情加载失败，请重试或清除比赛。";
+          : requestErrorMessage(error, "比赛详情加载失败，请重试或清除比赛。");
+      state.selectionRequestId =
+        error instanceof RequestError ? error.requestId : null;
     } finally {
       if (version === selectionVersion) detailRequest = null;
     }

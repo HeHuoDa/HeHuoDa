@@ -10,6 +10,8 @@ Issue #23 已交付首批信息工程学院、生命科学学院的官方通知�
 
 独立应用 `apps/admin` 可执行 `pnpm dev:admin` 预览登录、工作台、操作记录及业务导航。管理服务未开放时明确显示“待接入”，布局与筛选分页示例需单独展开；不创建登录态，不代表线上管理能力。完整范围与验证命令见 [管理端前端说明](docs/admin-frontend.md)。
 
+采集来源配置、扫描请求和运行追溯入口见[管理端采集控制页面](docs/admin-ingestion-control.md)。控制 HTTP 尚未开放，页面示例不执行官网抓取或配置写入。
+
 ## 技术栈
 
 项目采用 **pnpm workspace 单仓（Monorepo）**，包含现有 Web 应用、迁移中的 uni-app 用户端、API 服务和共享接口类型包。以下版本来自各工作区的 `package.json` 与 `compose.yaml`；保留依赖声明的 `^` / `~` 范围，实际安装版本以 `pnpm-lock.yaml` 为准。
