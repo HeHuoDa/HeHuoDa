@@ -46,6 +46,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
+      - run: pnpm test:deployment
       - run: pnpm api:generate
       - run: git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
       - run: pnpm typecheck
@@ -54,13 +55,83 @@ jobs:
       - run: pnpm test:integration
       - run: pnpm test:e2e
 
+  image-smoke:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Select immutable image names
+        shell: bash
+        run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Build actual images and run isolated smoke checks
+        run: node deploy/smoke.mjs
+      - name: Save verified main images for the publishing job
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$RUNNER_TEMP/verified-images.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: verified-images-${{ github.sha }}
+          path: ${{ runner.temp }}/verified-images.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
+  publish-images:
+    needs: image-smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      packages: write
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      # No source checkout or repository scripts run with the package-write token.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verified-images-${{ github.sha }}
+          path: ${{ runner.temp }}/verified-images
+      - name: Load and publish the exact verified images
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
+          gzip -dc "$RUNNER_TEMP/verified-images/verified-images.tar.gz" | docker image load
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          docker push "$IMAGE_PREFIX/api:$IMAGE_TAG"
+          docker push "$IMAGE_PREFIX/web:$IMAGE_TAG"
+          docker logout ghcr.io
+
   ci-gate:
     name: ci-gate
-    needs: quality
+    needs: [quality, image-smoke, publish-images]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: test "$QUALITY_RESULT" = "success"
+      - run: test "$QUALITY_RESULT" = "success" && test "$IMAGE_RESULT" = "success"
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
+          IMAGE_RESULT: ${{ needs.image-smoke.result }}
+      - name: Require image publishing for main pushes
+        run: test "$PUBLISH_RESULT" = "success" || test "$PUBLISH_REQUIRED" = "false"
+        env:
+          PUBLISH_RESULT: ${{ needs.publish-images.result }}
+          PUBLISH_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

@@ -1,6 +1,38 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "HealthController_getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "检查数据库及当前版本所需迁移结构是否就绪",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -201,6 +233,26 @@
   "servers": [],
   "components": {
     "schemas": {
+      "ReadinessResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "unavailable"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "description": "当前请求关联 ID"
+          }
+        },
+        "required": [
+          "status",
+          "requestId"
+        ]
+      },
       "HealthResponseDto": {
         "type": "object",
         "properties": {

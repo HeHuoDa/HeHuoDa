@@ -55,6 +55,7 @@ export default tseslint.config(
       "packages/**/*.ts",
       "**/*.config.*",
       "apps/uni/scripts/**/*.mjs",
+      "deploy/**/*.mjs",
     ],
     languageOptions: { globals: globals.node },
   },

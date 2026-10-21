@@ -1,0 +1,47 @@
+{
+  "competitions": [
+    {
+      "id": "smoke-competition",
+      "name": "隔离镜像测试比赛",
+      "edition": "2026",
+      "category": "测试",
+      "organizer": "测试",
+      "origin": "official",
+      "publication": "published",
+      "notices": [
+        {
+          "id": "smoke-notice",
+          "title": "测试通知",
+          "publisher": "测试",
+          "url": "https://sicau.edu.cn/",
+          "publishedAt": "2026-10-01",
+          "checkedAt": "2026-10-21",
+          "kind": "registration"
+        }
+      ],
+      "tracks": [
+        {
+          "id": "smoke-track",
+          "name": "测试赛道",
+          "mode": "team",
+          "members": "3 人",
+          "rules": "测试"
+        }
+      ],
+      "stages": [
+        {
+          "id": "smoke-stage",
+          "name": "测试赛段",
+          "organizer": "测试",
+          "hosts": ["law"],
+          "scope": { "kind": "all", "colleges": [], "note": "测试" },
+          "startsAt": { "precision": "unknown", "value": null },
+          "deadline": { "precision": "unknown", "value": null },
+          "registration": "查看测试通知",
+          "sourceIds": ["smoke-notice"],
+          "order": 0
+        }
+      ]
+    }
+  ]
+}

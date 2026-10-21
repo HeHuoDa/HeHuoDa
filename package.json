@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @hehuoda/api --filter @hehuoda/web dev",
-    "lint": "pnpm -r --if-present lint",
+    "lint": "pnpm -r --if-present lint && eslint deploy",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",
     "api:generate": "pnpm --filter @hehuoda/api openapi:write && pnpm --filter @hehuoda/api-types generate",
@@ -15,7 +15,9 @@
     "test:unit": "pnpm -r --if-present test:unit",
     "test:integration": "pnpm --filter @hehuoda/api test:integration",
     "test:e2e": "pnpm --filter @hehuoda/api test:e2e",
-    "dev:admin": "pnpm --filter @hehuoda/admin dev"
+    "dev:admin": "pnpm --filter @hehuoda/admin dev",
+    "test:images": "node deploy/smoke.mjs",
+    "test:deployment": "node --test deploy/test/*.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -1,0 +1,103 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full main commit SHA with a successful push CI run and published images
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hehuoda-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CANDIDATE_SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
+    steps:
+      - name: Verify the exact release passed main push CI
+        id: verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          count=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&branch=main&event=push&status=success&per_page=100" --jq '.total_count')
+          test "$count" -gt 0
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ steps.verified.outputs.sha }}
+          persist-credentials: false
+      - name: Transfer the verified release and deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          RELEASE_SHA: ${{ steps.verified.outputs.sha }}
+          DEPLOY_TLS: ${{ vars.DEPLOY_TLS }}
+          DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          DEPLOY_PORT=${DEPLOY_PORT:-22}
+          DEPLOY_PATH=${DEPLOY_PATH:-/opt/hehuoda}
+          [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9/_-]+$ && "$DEPLOY_PATH" != / ]]
+          [[ "${DEPLOY_TLS:-false}" =~ ^(true|false)$ ]]
+          [[ -z "$DEPLOY_PUBLIC_URL" || "$DEPLOY_PUBLIC_URL" =~ ^https?://[a-zA-Z0-9.:-]+/?$ ]]
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          task_dir=$(mktemp -d)
+          trap 'rm -rf -- "$task_dir"' EXIT
+          chmod 700 "$task_dir"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$task_dir/known_hosts"
+          ssh_args=(-p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts" -o ConnectTimeout=15)
+          if [[ -n "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY" > "$task_dir/key"
+            chmod 600 "$task_dir/key"
+            ssh_args+=(-o BatchMode=yes -o IdentitiesOnly=yes -i "$task_dir/key")
+            transport=(ssh)
+          elif [[ -n "$DEPLOY_PASSWORD" && -z "$DEPLOY_SSH_KEY" ]]; then
+            if ! command -v sshpass >/dev/null; then
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq sshpass
+            fi
+            export SSHPASS="$DEPLOY_PASSWORD"
+            transport=(sshpass -e ssh)
+            ssh_args+=(-o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no)
+          else
+            echo 'Configure exactly one of DEPLOY_PASSWORD or DEPLOY_SSH_KEY.' >&2
+            exit 1
+          fi
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          "${transport[@]}" "${ssh_args[@]}" "$target" "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null"
+          # The server stores its own registry login and .env; neither is transferred from the checkout.
+          tar -czf "$task_dir/release.tar.gz" compose.deploy.yaml compose.tls.yaml deploy/nginx/https.conf deploy/runtime.mjs deploy/release.mjs deploy/backup.mjs
+          "${transport[@]}" "${ssh_args[@]}" "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE_SHA' && tar -xzf - -C '$DEPLOY_PATH/releases/$RELEASE_SHA'" < "$task_dir/release.tar.gz"
+          "${transport[@]}" "${ssh_args[@]}" "$target" "cd '$DEPLOY_PATH/releases/$RELEASE_SHA' && DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' node deploy/release.mjs '$RELEASE_SHA'"

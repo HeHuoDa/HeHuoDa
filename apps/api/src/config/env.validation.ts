@@ -4,6 +4,8 @@ import { parseDnsOverrides } from "../ingestion/http.js";
 export interface EnvironmentVariables {
   NODE_ENV: "development" | "test" | "production";
   PORT: number;
+  HOST: string;
+  SWAGGER_ENABLED: boolean;
   DATABASE_URL?: string;
   INGESTION_ENABLED: boolean;
   INGESTION_RAW_DAYS: number;
@@ -14,8 +16,18 @@ const environmentSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid("development", "test", "production")
     .default("development"),
-  DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }),
+  DATABASE_URL: Joi.string()
+    .uri({ scheme: ["postgres", "postgresql"] })
+    .when("NODE_ENV", { is: "production", then: Joi.required() }),
   PORT: Joi.number().integer().min(1).max(65535).default(3001),
+  HOST: Joi.string()
+    .ip({ version: ["ipv4", "ipv6"] })
+    .default("127.0.0.1"),
+  SWAGGER_ENABLED: Joi.boolean().when("NODE_ENV", {
+    is: "production",
+    then: Joi.boolean().default(false),
+    otherwise: Joi.boolean().default(true),
+  }),
   INGESTION_ENABLED: Joi.boolean().default(true),
   INGESTION_RAW_DAYS: Joi.number().integer().min(1).max(365).default(30),
   INGESTION_DNS_OVERRIDES: Joi.string()

@@ -1,0 +1,9 @@
+# Opt-in overlay. Compose >=2.24.4 is required for !override.
+services:
+  web:
+    ports: !override
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+      - "${HTTP_BIND:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./deploy/nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_CERT_DIR:?set an absolute TLS certificate directory}:/etc/nginx/tls:ro
