@@ -1,5 +1,13 @@
 # uni-app 迁移提醒与集中待办
 
+## Issue #77：关于页面与平台使用说明
+
+- `pages/about/index.vue` 新增公开静态说明，个人中心 `ProfileOverview` 的静态行改为现有 `FormButton`，保留设置行的布局和主题。旧 Web 没有关于页成品，本页沿现有禾苗绿、暖白、衬线标题与共享面板实现；不新增旧 Web 页面或跨应用导入。
+- 同时登记 `pages.json`、`PageRouteName`、`routeRegistry` 与 `/about` 的 `sourceRoutes` 映射。H5 原生 hash 地址可独立打开与刷新，小程序依赖静态页面注册；旧 pathname 部署兼容继续归 #82。返回按钮通过 `openProfileSection("profile")` 交接到个人资料区，不改变其他页面 `backOrHome()` 空栈回首页的约定。入口导航失败在对应设置行旁提示，个人中心切换与 reLaunch 回退均失败时清理意图并允许重试。
+- 品牌复用本地 `ProjectLogo`／`ResourceImage`，`image` 使用 `aspectFit` 与文字回退；相邻品牌文字承担名称，Logo 作为装饰，避免重复朗读。正文采用 `view/text` 与固定 px 字号，间距沿 rem／rpx 生成链，容器沿现有底部安全区。H5 操作用 FormButton 的键盘分支，微信用原生 button，不依赖 DOM、浏览器 History 或网络图片。
+- 内容区分真实公开查询、会话组队／资料／收藏／站内通知及未开放认证；官方来源通知与站内演示提醒分别说明，联系方式保留双方有效成员及所有者授权条件。能力判断以已合并实现为依据，不单凭 README 或路由 status；本票无 API／数据库前置，没有请求加载态，也没有未核实的版本号或反馈外链。
+- 维护型测试覆盖页面内容、图片失败回退、H5／微信分支的入口、返回、失败重试和意图清理；H5 浏览器模拟检查关于页及个人中心入口的 320／375／390／430px 与 1440px 布局。实际命令与结果在交付说明记录。微信真实页面栈、原生按钮、图片回退、辅助技术、系统大字号、安全区和 iOS／Android／移动 H5 真机仍交 #85；本轮编译及平台替身不代表这些验收。迁移维护成本低，复用既有导航、资源和控件，无新增平台业务状态。
+
 ## Issue #75：会话收藏与跨页面同步
 
 `pages/my/favorites.vue` 新增收藏列表、空态、取消、重新查询与重试；`pages/home/competition.vue` 接通收藏按钮；`ProfileOverview.vue` 的收藏数量读取同一 `useSessionStore`。旧 Web 仅有占位，不存在可像素对照的收藏成品，本票按现有主题和控件直接新增普通 uni-app 功能，不跨应用导入旧端代码，也不补建旧 Web 收藏页。
