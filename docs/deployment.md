@@ -66,6 +66,8 @@ node deploy/release.mjs <40位SHA>
 
 `CI` 先运行现有全仓质量检查和部署流程测试，再以只读 token 构建真实镜像并运行冒烟。仅 `main` 的 push 或 `workflow_dispatch` 将通过检查的镜像保存为当前运行的短期 artifact；独立 `publish-images` 任务加载这些相同镜像并推送 SHA 标签，不检出源码或执行仓库脚本。只有该任务具有包写权限。`ci-gate` 要求质量与镜像检查成功，主分支发布还必须发布成功；PR 和非 main 分支的手动运行不发布镜像。
 
+镜像包使用 `verified-images-<SHA>-<attempt>` 独立名称，上传产出的 artifact ID 作为 `image-smoke` job 输出，publisher 按该 ID 下载。整次重跑不会与旧 artifact 重名；只重跑失败的 publisher 时使用成功生产任务保留的输出，不用当前 attempt 猜测生产任务所在轮次。若原镜像包已过期，应新提交发布，不能以同名新包替换旧凭证。
+
 PR 按编号加 SHA 分组，main 按 SHA 分组；旧 SHA 重跑不会取消或挤掉新 SHA 检查，同一 PR/SHA 的重复运行可以取消。代价是旧提交的检查可能继续运行；自动合并仍校验 PR 当前 head，旧结果不能合并新提交。main 同一 SHA 串行且不取消正在发布的运行。
 
 发布前通过受认证的 GHCR API 检查两个目标标签。所有已存在镜像都必须与本次验证 artifact 的 image ID 一致，才允许保留或补齐缺失项；完整镜像对也不例外。网络、认证或服务错误不当作缺失。推送后拉取 Registry 返回的 digest 引用，再次核对镜像 ID，并生成包含准确 SHA 和两个 digest 引用的 `release.json`，保存为每个 attempt 独立的 artifact，申请保留 90 天（受仓库上限限制）。同 SHA 重新构建可能产生不同镜像，此时停止；在原镜像 artifact 的 1 天保留期内仅重跑原 publisher，或使用新提交重新发布，不删除/覆盖标签来绕过校验。

@@ -47,6 +47,44 @@ test("main manual CI publishes the same verified images and requires publishing 
   }
 });
 
+test("CI reruns keep separate verified image artifacts and publisher consumes the successful producer's artifact ID", () => {
+  const ci = workflow("ci");
+  const smoke = ci.jobs["image-smoke"];
+  const upload = smoke.steps.find(
+    (step) =>
+      step.uses?.startsWith("actions/upload-artifact") &&
+      step.with.name.startsWith("verified-images-"),
+  );
+  assert.ok(upload.with.name.includes("github.run_attempt"));
+  assert.ok(upload.id);
+  assert.equal(
+    smoke.outputs["images-artifact-id"],
+    `\u0024{{ steps.${upload.id}.outputs.artifact-id }}`,
+  );
+  const download = ci.jobs["publish-images"].steps.find((step) =>
+    step.uses?.startsWith("actions/download-artifact"),
+  );
+  assert.equal(
+    download.with["artifact-ids"],
+    "${{ needs.image-smoke.outputs.images-artifact-id }}",
+  );
+  assert.equal(download.with["merge-multiple"], true);
+  assert.equal(download.with.name, undefined);
+  const guard = ci.jobs["publish-images"].steps.find(
+    (step) => step.env?.VERIFIED_ARTIFACT_ID,
+  );
+  for (const [value, expected] of [
+    ["123", 0],
+    ["", 1],
+    ["all", 1],
+  ]) {
+    assert.equal(
+      runBash(guard.run, { VERIFIED_ARTIFACT_ID: value }).status,
+      expected,
+    );
+  }
+});
+
 function runBash(input, env = {}) {
   const bash =
     process.platform === "win32"
@@ -322,7 +360,7 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-image-publish-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const script = workflow("ci").jobs["publish-images"].steps.find(
-    (step) => step.run,
+    (step) => step.env?.REGISTRY_TOKEN,
   ).run;
   for (const [api, web, same, expectedStatus, pushes, digestMatches = true] of [
     ["0", "0", "true", 0, 2],

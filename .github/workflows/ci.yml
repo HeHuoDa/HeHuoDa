@@ -59,6 +59,8 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      images-artifact-id: ${{ steps.images.outputs.artifact-id }}
     permissions:
       contents: read
     env:
@@ -91,9 +93,10 @@ jobs:
           set -euo pipefail
           docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$RUNNER_TEMP/verified-images.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: images
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
-          name: verified-images-${{ github.sha }}
+          name: verified-images-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/verified-images.tar.gz
           retention-days: 1
           if-no-files-found: error
@@ -110,9 +113,15 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
     steps:
       # No source checkout or repository scripts run with the package-write token.
+      - name: Require the verified producer artifact ID
+        env:
+          VERIFIED_ARTIFACT_ID: ${{ needs.image-smoke.outputs.images-artifact-id }}
+        shell: bash
+        run: '[[ "$VERIFIED_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: verified-images-${{ github.sha }}
+          artifact-ids: ${{ needs.image-smoke.outputs.images-artifact-id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/verified-images
       - name: Load and publish the exact verified images
         env:
