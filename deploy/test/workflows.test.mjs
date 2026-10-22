@@ -111,22 +111,24 @@ test("deployment requires successful image publishing for the exact main SHA", (
   const script = workflow("deploy").jobs.deploy.steps.find(
     (step) => step.id === "verified",
   ).run;
-  for (const [event, published, expected] of [
+  for (const [event, published, expected, manifest = true] of [
     ["push", "1", 0],
     ["workflow_dispatch", "1", 0],
     ["workflow_dispatch", "0", 1],
     ["pull_request", "1", 1],
+    ["workflow_dispatch", "1", 1, false],
   ]) {
-    const output = join(directory, `${event}-${published}`).replaceAll(
-      "\\",
-      "/",
-    );
+    const output = join(
+      directory,
+      `${event}-${published}-${manifest}`,
+    ).replaceAll("\\", "/");
     const result = runBash(
       `
       gh() {
         case "$*" in
           *"head_sha=$CANDIDATE_SHA&branch=main&event=$RUN_EVENT&status=success"*) echo 17 ;;
           *"/runs/17/jobs?filter=all&per_page=100"*) printf '%s\\n' "$PUBLISH_COUNT" ;;
+          *"/runs/17/artifacts?per_page=100"*) printf '%s\\n' "$MANIFEST_ARTIFACT" ;;
           *"/workflows/ci.yml/runs?"*) return 0 ;;
           *) echo "Unexpected API call" >&2; return 1 ;;
         esac
@@ -139,6 +141,9 @@ test("deployment requires successful image publishing for the exact main SHA", (
         RUN_EVENT: event,
         RELEASE_EVENT: "workflow_dispatch",
         PUBLISH_COUNT: published,
+        MANIFEST_ARTIFACT: manifest
+          ? `release-images-${"a".repeat(40)}-1`
+          : "unrelated-artifact",
         GITHUB_OUTPUT: output,
       },
     );
@@ -148,7 +153,10 @@ test("deployment requires successful image publishing for the exact main SHA", (
       `${event}/${published}: ${result.stderr}`,
     );
     if (expected === 0)
-      assert.equal(readFileSync(output, "utf8"), `sha=${"a".repeat(40)}\n`);
+      assert.equal(
+        readFileSync(output, "utf8"),
+        `sha=${"a".repeat(40)}\nrun_id=17\nartifact=release-images-${"a".repeat(40)}-1\n`,
+      );
     else assert.equal(existsSync(output), false);
   }
 });
@@ -171,6 +179,7 @@ test("automatic deployment skips superseded main SHA while explicit rollback sti
           *"git/ref/heads/main"*) printf '%s\\n' "$CURRENT_MAIN" ;;
           *"/workflows/ci.yml/runs?"*) echo 17 ;;
           *"/runs/17/jobs?"*) echo 1 ;;
+          *"/runs/17/artifacts?"*) printf 'release-images-%s-1\\n' "$CANDIDATE_SHA" ;;
           *) return 1 ;;
         esac
       }
@@ -310,9 +319,10 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
   const script = workflow("ci").jobs["publish-images"].steps.find(
     (step) => step.run,
   ).run;
-  for (const [api, web, same, expectedStatus, pushes] of [
+  for (const [api, web, same, expectedStatus, pushes, digestMatches = true] of [
     ["0", "0", "true", 0, 2],
-    ["1", "1", "false", 0, 0],
+    ["1", "1", "true", 0, 0],
+    ["1", "1", "false", 1, 0],
     ["1", "0", "true", 0, 1],
     ["0", "1", "true", 0, 1],
     ["1", "0", "false", 1, 0],
@@ -320,7 +330,9 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
     ["401", "0", "true", 1, 0],
     ["403", "0", "true", 1, 0],
     ["500", "0", "true", 1, 0],
+    ["0", "0", "true", 1, 2, false],
   ]) {
+    const attempt = mkdtempSync(join(directory, "attempt-"));
     const result = runBash(
       `
       gzip() { echo archive; }
@@ -343,6 +355,12 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
           'image load'|'login ghcr.io') cat >/dev/null ;;
           'logout ghcr.io') return 0 ;;
           'image inspect')
+            if [[ "$*" == *@sha256:* && "$MATCHING_DIGEST" == false ]]; then echo moved; return 0; fi
+            if [[ "$*" == *RepoDigests* ]]; then
+              if [[ "$*" == */api:* ]]; then component=api; else component=web; fi
+              printf '%s/%s@sha256:%064d\\n' "$IMAGE_PREFIX" "$component" 1
+              return 0
+            fi
             if [[ "$remote_loaded" == true && "$MATCHING_IMAGE" == false ]]; then echo different; else echo candidate; fi ;;
           pull*) remote_loaded=true ;;
           push*) echo "PUSH:$*" ;;
@@ -355,9 +373,10 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
         EXISTING_API: api,
         EXISTING_WEB: web,
         MATCHING_IMAGE: same,
+        MATCHING_DIGEST: String(digestMatches),
         IMAGE_TAG: "a".repeat(40),
         GITHUB_REPOSITORY: "HeHuoDa/HeHuoDa",
-        RUNNER_TEMP: directory.replaceAll("\\", "/"),
+        RUNNER_TEMP: attempt.replaceAll("\\", "/"),
         REGISTRY_TOKEN: "test-only",
         REGISTRY_USER: "test-only",
       },
@@ -368,6 +387,24 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
       `${api}/${web}/${same}: ${result.stderr}`,
     );
     assert.equal((result.stdout.match(/^PUSH:/gm) || []).length, pushes);
+    if (expectedStatus === 0) {
+      const manifest = JSON.parse(
+        readFileSync(join(attempt, "release-manifest", "release.json"), "utf8"),
+      );
+      assert.equal(manifest.sha, "a".repeat(40));
+      assert.equal(
+        manifest.images.api,
+        `ghcr.io/hehuoda/hehuoda/api@sha256:${"0".repeat(63)}1`,
+      );
+      assert.equal(
+        manifest.images.web,
+        `ghcr.io/hehuoda/hehuoda/web@sha256:${"0".repeat(63)}1`,
+      );
+    } else
+      assert.equal(
+        existsSync(join(attempt, "release-manifest", "release.json")),
+        false,
+      );
   }
 });
 

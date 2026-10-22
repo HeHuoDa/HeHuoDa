@@ -146,22 +146,40 @@ jobs:
               *) echo 'Cannot establish registry image state; refusing to publish.' >&2; exit 1 ;;
             esac
           done
-          if [[ ${#present[@]} -eq 2 ]]; then
-            echo 'Both SHA images already exist; preserving the original release.'
-            exit 0
-          fi
           for image in "${present[@]}"; do
             candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
             docker pull "$image"
             existing_id=$(docker image inspect --format '{{.Id}}' "$image")
             if [[ "$candidate_id" != "$existing_id" ]]; then
-              echo 'Partial release differs from this artifact; rerun the original publishing job or publish a new commit.' >&2
+              echo 'Existing release differs from the verified artifact; rerun the original publishing job or publish a new commit.' >&2
               exit 1
             fi
           done
           for image in "${missing[@]}"; do
             docker push "$image"
           done
+          # Pin what was actually verified, including retries and existing releases.
+          refs=()
+          for component in api web; do
+            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
+            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
+            docker pull "$image"
+            ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+            [[ "$ref" == "$IMAGE_PREFIX/$component@sha256:"* ]]
+            [[ "${ref##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
+            docker pull "$ref"
+            [[ "$(docker image inspect --format '{{.Id}}' "$ref")" == "$candidate_id" ]]
+            refs+=("$ref")
+          done
+          mkdir -p "$RUNNER_TEMP/release-manifest"
+          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$RUNNER_TEMP/release-manifest/release.json"
+      - name: Retain immutable release manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-images-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-manifest/release.json
+          retention-days: 90
+          if-no-files-found: error
 
   ci-gate:
     name: ci-gate

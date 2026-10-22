@@ -23,6 +23,8 @@ function fixture(
     failCheck = false,
     failRollback = false,
     backupFails = false,
+    changeDatabase = false,
+    missingApi = false,
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-release-test-"));
@@ -30,16 +32,32 @@ function fixture(
   if (!first)
     writeFileSync(
       join(directory, "current.json"),
-      JSON.stringify({ sha: old }),
+      JSON.stringify({
+        sha: old,
+        releaseDirectory: join(directory, "releases", old),
+      }),
     );
   const events = [];
   const operations = {
-    compose(args, tag) {
-      events.push({ command: args[0], args, tag });
-      if (args[0] === "ps") return first ? "" : "old-container";
+    releaseContext(tag, record) {
+      if (record && !record.releaseDirectory)
+        throw new Error("Missing previous release directory");
+      return record || { releaseDirectory: join(directory, "releases", tag) };
+    },
+    compose(args, tag, options) {
+      events.push({ command: args[0], args, tag, context: options?.release });
+      if (args[0] === "ps") return first || missingApi ? "" : "old-container";
       if (args[0] === "config")
         return JSON.stringify({
-          services: { api: { image: `test/api:${old}` } },
+          name: "test-deployment",
+          services: {
+            api: { image: `test/api:${old}` },
+            db: {
+              image:
+                changeDatabase && tag === next ? "postgres:18" : "postgres:17",
+              volumes: [{ source: "database" }],
+            },
+          },
         });
       if (args[0] === "exec") return first ? "0" : "1";
       if (args[0] === "run" && failMigration)
@@ -121,11 +139,62 @@ test("migration failure leaves old applications and release state intact", async
 
 test("failed readiness restores old application without executing any database downgrade", async (t) => {
   const f = fixture(t, { failCheck: true });
+  const previousDirectory = join(f.directory, "releases", old);
+  writeFileSync(
+    join(f.directory, "current.json"),
+    JSON.stringify({ sha: old, releaseDirectory: previousDirectory }),
+  );
   await assert.rejects(release(next, f.operations, f.directory));
   assert.equal(f.state().sha, old);
   assert.ok(f.events.some((e) => e.command === "up" && e.tag === old));
   assert.equal(f.events.at(-1).tag, old);
   assert.equal(f.events.filter((e) => e.command === "run").length, 1);
+  assert.equal(
+    f.events.find((e) => e.command === "up" && e.tag === old).context
+      .releaseDirectory,
+    previousDirectory,
+  );
+  assert.equal(
+    f.events.find(
+      (e) => e.command === "up" && e.tag === next && e.args.includes("api"),
+    ).context.releaseDirectory,
+    join(f.directory, "releases", next),
+  );
+});
+
+test("legacy release state without its configuration refuses replacement before pulling or migrating", async (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.directory, "current.json"),
+    JSON.stringify({ sha: old }),
+  );
+  await assert.rejects(
+    release(next, f.operations, f.directory),
+    /release state was not advanced/,
+  );
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+});
+
+test("database image or storage changes require a separate maintenance plan before replacement", async (t) => {
+  const f = fixture(t, { changeDatabase: true });
+  await assert.rejects(release(next, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+  assert.equal(f.state().sha, old);
+});
+
+test("a missing application container does not bypass recorded database protection", async (t) => {
+  const f = fixture(t, { changeDatabase: true, missingApi: true });
+  await assert.rejects(release(next, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
 });
 
 test("rollback failure and first-deployment failure have distinct actionable errors", async (t) => {

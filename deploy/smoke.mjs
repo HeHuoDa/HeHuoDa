@@ -8,7 +8,7 @@ import {
   mkdirSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { colleges } from "../packages/client-domain/src/colleges.ts";
 
 const temporary = mkdtempSync(join(tmpdir(), "hehuoda-image-smoke-"));
@@ -29,6 +29,7 @@ Object.assign(process.env, {
   IMAGE_TAG: process.env.IMAGE_TAG || "0".repeat(40),
   DEPLOY_ENV_FILE: join(temporary, ".env"),
   DEPLOY_BACKUP_DIR: join(temporary, "backups"),
+  DEPLOY_STATE_DIR: process.env.DEPLOY_STATE_DIR || join(temporary, "state"),
 });
 writeFileSync(process.env.DEPLOY_ENV_FILE, "# isolated smoke configuration\n", {
   mode: 0o600,
@@ -203,9 +204,20 @@ try {
   mkdirSync(releaseState);
   writeFileSync(
     join(releaseState, "current.json"),
-    JSON.stringify({ sha: originalTag }),
+    JSON.stringify({
+      sha: originalTag,
+      releaseDirectory: resolve(import.meta.dirname, ".."),
+    }),
   );
   const localOperations = {
+    // The smoke seam uses locally built tags instead of a registry manifest.
+    releaseContext() {
+      return {
+        releaseDirectory: resolve(import.meta.dirname, ".."),
+        tls: false,
+        publicUrl: "",
+      };
+    },
     compose(args, tag, options) {
       if (args[0] === "pull") {
         for (const service of ["api", "web"])
@@ -301,11 +313,7 @@ try {
   );
 } catch (error) {
   console.error(error);
-  try {
-    console.error(compose(["logs", "--no-color", "--tail", "40", "web"]));
-  } catch {
-    /* The build may fail before a web container exists. */
-  }
+  // Raw container logs may contain request data; only runtime's safe reports are exported.
   process.exitCode = 1;
 } finally {
   // project is generated here, never supplied by the caller; cleanup affects only this test stack.

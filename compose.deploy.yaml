@@ -28,7 +28,7 @@ services:
     logging: *logging
 
   api:
-    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/api:${IMAGE_TAG:?set IMAGE_TAG}
+    image: ${API_IMAGE:-${IMAGE_PREFIX:?set IMAGE_PREFIX}/api:${IMAGE_TAG:?set IMAGE_TAG}}
     build:
       context: .
       target: api
@@ -61,7 +61,7 @@ services:
     logging: *logging
 
   web:
-    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX}/web:${IMAGE_TAG:?set IMAGE_TAG}
+    image: ${WEB_IMAGE:-${IMAGE_PREFIX:?set IMAGE_PREFIX}/web:${IMAGE_TAG:?set IMAGE_TAG}}
     build:
       context: .
       target: web

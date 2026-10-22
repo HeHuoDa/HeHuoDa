@@ -60,21 +60,51 @@ jobs:
             for run_id in $run_ids; do
               publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
               if grep -Eq '^[1-9][0-9]*$' <<< "$publish_counts"; then
-                published=true
-                break 2
+                artifacts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" --jq ".artifacts[] | select(.expired == false) | .name")
+                for artifact in $artifacts; do
+                  if [[ "$artifact" =~ ^release-images-$CANDIDATE_SHA-[0-9]+$ ]]; then
+                    published=true
+                    break 3
+                  fi
+                done
               fi
             done
           done
           if [[ "$published" != true ]]; then
-            echo 'No successful main CI run with published images for the exact SHA.' >&2
+            echo 'No successful main CI with published images and a retained digest manifest for the exact SHA.' >&2
             exit 1
           fi
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: steps.verified.outputs.sha != ''
         with:
           ref: ${{ steps.verified.outputs.sha }}
           persist-credentials: false
+      - name: Download the successful run's digest manifest
+        if: steps.verified.outputs.sha != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.verified.outputs.artifact }}
+          run-id: ${{ steps.verified.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/release-manifest
+      - name: Validate release digests before connecting to the server
+        if: steps.verified.outputs.sha != ''
+        env:
+          MANIFEST_DIR: ${{ runner.temp }}/release-manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { readReleaseManifest } from "./deploy/manifest.mjs";
+            const images = readReleaseManifest(process.env.MANIFEST_DIR, process.env.CANDIDATE_SHA);
+            for (const component of ["api", "web"]) {
+              if (!images[component].startsWith(`ghcr.io/${process.env.GH_REPO.toLowerCase()}/${component}@sha256:`)) throw new Error("Unexpected image repository");
+            }
+          '
+          cp "$MANIFEST_DIR/release.json" release.json
       - name: Transfer the verified release and deploy
         if: steps.verified.outputs.sha != ''
         env:
@@ -123,8 +153,10 @@ jobs:
             exit 1
           fi
           target="$DEPLOY_USER@$DEPLOY_HOST"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          release_dir="$DEPLOY_PATH/releases/$RELEASE_SHA/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           "${transport[@]}" "${ssh_args[@]}" "$target" "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null"
           # The server stores its own registry login and .env; neither is transferred from the checkout.
-          tar -czf "$task_dir/release.tar.gz" compose.deploy.yaml compose.tls.yaml deploy/nginx/https.conf deploy/runtime.mjs deploy/release.mjs deploy/backup.mjs
-          "${transport[@]}" "${ssh_args[@]}" "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE_SHA' && tar -xzf - -C '$DEPLOY_PATH/releases/$RELEASE_SHA'" < "$task_dir/release.tar.gz"
-          "${transport[@]}" "${ssh_args[@]}" "$target" "cd '$DEPLOY_PATH/releases/$RELEASE_SHA' && DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' node deploy/release.mjs '$RELEASE_SHA'"
+          tar -czf "$task_dir/release.tar.gz" release.json compose.deploy.yaml compose.tls.yaml deploy/nginx/https.conf deploy/runtime.mjs deploy/release.mjs deploy/backup.mjs deploy/manifest.mjs
+          "${transport[@]}" "${ssh_args[@]}" "$target" "test ! -e '$release_dir' && mkdir -p '$release_dir' && tar -xzf - -C '$release_dir'" < "$task_dir/release.tar.gz"
+          "${transport[@]}" "${ssh_args[@]}" "$target" "cd '$release_dir' && DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' node deploy/release.mjs '$RELEASE_SHA'"

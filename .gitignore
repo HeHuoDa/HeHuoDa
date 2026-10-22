@@ -9,6 +9,7 @@
 /deploy/state/
 /deploy/backups/
 /deploy/tls/
+/release.json
 
 # Dependencies and build output
 node_modules/

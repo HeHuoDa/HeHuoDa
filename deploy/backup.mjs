@@ -18,7 +18,7 @@ function removeVerificationContainer(container, run = docker) {
 }
 
 // A dump is retained only after pg_dump has exited successfully.
-export function backup(tag) {
+export function backup(tag, context) {
   mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
   const file = join(
     backupDirectory,
@@ -36,7 +36,7 @@ export function backup(tag) {
         'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-acl',
       ],
       tag,
-      { stdio: ["ignore", fd, "pipe"] },
+      { stdio: ["ignore", fd, "pipe"], release: context },
     );
   } catch (error) {
     closeSync(fd);
