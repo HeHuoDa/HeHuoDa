@@ -64,9 +64,22 @@ node deploy/release.mjs <40位SHA>
 
 ## GitHub Actions
 
-`CI` 先运行现有全仓质量检查和部署流程测试，再以只读 token 构建真实镜像并运行冒烟。仅 `main` push 将通过检查的镜像保存为当前运行的短期 artifact；独立 `publish-images` 任务加载这些相同镜像并推送 SHA 标签，不检出源码或执行仓库脚本。只有该任务具有包写权限。`ci-gate` 要求质量与镜像检查成功，主分支 push 还必须发布成功；PR 的发布任务跳过且没有包写权限。
+`CI` 先运行现有全仓质量检查和部署流程测试，再以只读 token 构建真实镜像并运行冒烟。仅 `main` 的 push 或 `workflow_dispatch` 将通过检查的镜像保存为当前运行的短期 artifact；独立 `publish-images` 任务加载这些相同镜像并推送 SHA 标签，不检出源码或执行仓库脚本。只有该任务具有包写权限。`ci-gate` 要求质量与镜像检查成功，主分支发布还必须发布成功；PR 和非 main 分支的手动运行不发布镜像。
 
-`Deploy` 由成功的 `main` push CI 完成事件触发，兼容自动合并产生的主分支 push；也可手动输入完整 SHA 重试。手动发布同样检查该 SHA 存在成功的 `main` push CI。更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。同一已部署 SHA 只做检查，不重复迁移。质量检查与部署 SHA 不一致时不发布。
+`Auto-merge` 使用 `GITHUB_TOKEN` 合并时，产生的 push 不会再触发普通 CI。确认 PR 实际合并后，它会显式 dispatch 默认分支 CI；这个调用需要 `actions: write`，但自动合并任务仍不检出或执行 PR 代码。尚未实际合并时不触发发布；来源分支是否可删除不影响 dispatch，触发失败会报错并保留分支。CI 固定本次 dispatch 的 main SHA，质量检查、镜像构建与发布均使用同一 SHA；main CI 不满足自动合并任务的 PR 事件条件，不会递归触发。
+
+`Deploy` 由成功的 `main` push 或手动 CI 完成事件触发；也可从 main 手动输入完整 SHA 重试。执行前必须找到该 SHA 的成功 main CI，且其 `publish-images` 任务成功；仅有 PR 测试、发布跳过或未成功推送的运行不能作为部署凭证。更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。同一已部署 SHA 只做检查，不重复迁移。质量检查与部署 SHA 不一致时不发布。
+
+自动合并后的 CI 没有启动、dispatch 失败或需要重试时，在已登录且有工作流运行权限的维护机执行（不是服务器初始化必装项）：
+
+```bash
+gh workflow run ci.yml --repo HeHuoDa/HeHuoDa --ref main
+gh run list --repo HeHuoDa/HeHuoDa --workflow ci.yml --branch main \
+  --event workflow_dispatch --limit 5 \
+  --json databaseId,headSha,status,conclusion,url
+```
+
+使用列表中对应运行的 `headSha`，并查看该运行的 jobs，确认整体成功及 `publish-images` 成功后才把它作为部署 SHA。仅知道 Git 提交 SHA 不代表镜像已经发布。若自动合并仍在等待保护规则或合并队列，等待实际合并后再重试 main CI，不以旧 main 的成功结果代表新改动已发布。手动 main CI 与正常发布遵循同一部署开关；已启用生产自动部署时，重试前确认发布窗口。
 
 默认 `DEPLOY_ENABLED` 未开启，因此添加本工作流不会自动连接服务器。在 GitHub 的 `production` Environment 配置审核规则、以下环境变量与 Secrets，并完成主机交接后，将仓库级变量 `DEPLOY_ENABLED=true`。开关须使用仓库级变量，因为任务调度判断发生在环境变量加载前。只有生产维护者应有权修改这些设置。
 
