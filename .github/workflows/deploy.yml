@@ -18,6 +18,7 @@ permissions:
 
 concurrency:
   group: hehuoda-production-deploy
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -40,15 +41,24 @@ jobs:
     steps:
       - name: Verify the exact main release passed CI and published images
         id: verified
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          if [[ "$RELEASE_EVENT" == workflow_run ]]; then
+            current_main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')
+            if [[ "$current_main" != "$CANDIDATE_SHA" ]]; then
+              echo 'Skipping superseded automatic release; explicit manual rollback remains available.'
+              exit 0
+            fi
+          fi
           published=false
           for ci_event in push workflow_dispatch; do
             run_ids=$(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&branch=main&event=$ci_event&status=success&per_page=100" --jq '.workflow_runs[].id')
             for run_id in $run_ids; do
-              publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
+              publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
               if grep -Eq '^[1-9][0-9]*$' <<< "$publish_counts"; then
                 published=true
                 break 2
@@ -61,10 +71,12 @@ jobs:
           fi
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: steps.verified.outputs.sha != ''
         with:
           ref: ${{ steps.verified.outputs.sha }}
           persist-credentials: false
       - name: Transfer the verified release and deploy
+        if: steps.verified.outputs.sha != ''
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}

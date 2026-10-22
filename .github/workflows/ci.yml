@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -115,9 +115,44 @@ jobs:
           IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
           gzip -dc "$RUNNER_TEMP/verified-images/verified-images.tar.gz" | docker image load
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          docker push "$IMAGE_PREFIX/api:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/web:$IMAGE_TAG"
-          docker logout ghcr.io
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          present=()
+          missing=()
+          for component in api web; do
+            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
+            # Include push scope so a new package can be distinguished from denied access.
+            registry_token=$(printf 'user = "%s:%s"\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
+              | curl --config - --fail --silent --show-error --connect-timeout 15 --max-time 30 --get \
+                --data-urlencode "scope=repository:${GITHUB_REPOSITORY,,}/$component:pull,push" \
+                --data-urlencode 'service=ghcr.io' https://ghcr.io/token \
+              | jq -er '.token // .access_token')
+            status=$(printf 'header = "Authorization: Bearer %s"\n' "$registry_token" \
+              | curl --config - --silent --show-error --connect-timeout 15 --max-time 30 --head --output /dev/null --write-out '%{http_code}' \
+                --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+                "https://ghcr.io/v2/${GITHUB_REPOSITORY,,}/$component/manifests/$IMAGE_TAG")
+            unset registry_token
+            case "$status" in
+              200) present+=("$image") ;;
+              404) missing+=("$image") ;;
+              *) echo 'Cannot establish registry image state; refusing to publish.' >&2; exit 1 ;;
+            esac
+          done
+          if [[ ${#present[@]} -eq 2 ]]; then
+            echo 'Both SHA images already exist; preserving the original release.'
+            exit 0
+          fi
+          for image in "${present[@]}"; do
+            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
+            docker pull "$image"
+            existing_id=$(docker image inspect --format '{{.Id}}' "$image")
+            if [[ "$candidate_id" != "$existing_id" ]]; then
+              echo 'Partial release differs from this artifact; rerun the original publishing job or publish a new commit.' >&2
+              exit 1
+            fi
+          done
+          for image in "${missing[@]}"; do
+            docker push "$image"
+          done
 
   ci-gate:
     name: ci-gate
