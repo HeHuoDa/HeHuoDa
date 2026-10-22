@@ -180,3 +180,43 @@ test("PR and non-main manual CI cannot publish images or start automatic deploym
     assert.equal(condition(deploy.jobs.deploy.if, github, {}), false);
   }
 });
+
+test("delayed merge recovery dispatches missing main CI once and leaves existing runs alone", () => {
+  const recovery = workflow("release-recovery");
+  assert.ok(recovery.on.schedule.length > 0);
+  assert.equal(recovery.permissions.actions, "write");
+  const job = recovery.jobs.recover;
+  assert.equal(condition(job.if, { ref: "refs/heads/fix/example" }), false);
+  for (const [push, manual, dispatch] of [
+    ["0", "0", true],
+    ["1", "0", false],
+    ["0", "1", false],
+  ]) {
+    const result = runBash(
+      `
+      gh() {
+        case "$*" in
+          *"git/ref/heads/main"*) printf '%s\\n' "$MAIN_SHA" ;;
+          *"head_sha=$MAIN_SHA&branch=main&event=push"*) printf '%s\\n' "$PUSH_RUNS" ;;
+          *"head_sha=$MAIN_SHA&branch=main&event=workflow_dispatch"*) printf '%s\\n' "$MANUAL_RUNS" ;;
+          'workflow run ci.yml --repo HeHuoDa/HeHuoDa --ref main') echo DISPATCH ;;
+          *) echo 'Unexpected GitHub operation' >&2; return 1 ;;
+        esac
+      }
+      ${job.steps[0].run}
+    `,
+      {
+        GH_REPO: "HeHuoDa/HeHuoDa",
+        MAIN_SHA: "b".repeat(40),
+        PUSH_RUNS: push,
+        MANUAL_RUNS: manual,
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout.includes("DISPATCH"),
+      dispatch,
+      `push=${push}, manual=${manual}`,
+    );
+  }
+});

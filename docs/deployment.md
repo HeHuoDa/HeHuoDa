@@ -70,6 +70,8 @@ node deploy/release.mjs <40位SHA>
 
 `Deploy` 由成功的 `main` push 或手动 CI 完成事件触发；也可从 main 手动输入完整 SHA 重试。执行前必须找到该 SHA 的成功 main CI，且其 `publish-images` 任务成功；仅有 PR 测试、发布跳过或未成功推送的运行不能作为部署凭证。更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。同一已部署 SHA 只做检查，不重复迁移。质量检查与部署 SHA 不一致时不发布。
 
+`Release recovery` 在默认分支按每 15 分钟的计划检查当前 main，补偿合并队列或保护规则导致的延迟合并：只有该 SHA 完全没有 push/手动 CI 记录时才 dispatch。排队中、运行中、成功、失败或取消的已有运行都会阻止自动补发，因此不会因失败持续重试；失败后需要维护者明确重试。它不检出代码，不访问服务器，仍通过 CI 的完整验证与既有部署开关。GitHub 定时任务可能延迟，长期不活跃的公开仓库也可能被停用定时任务，不能将这个周期视作发布时限；急需发布时可手动运行该恢复工作流或直接运行 main CI。
+
 自动合并后的 CI 没有启动、dispatch 失败或需要重试时，在已登录且有工作流运行权限的维护机执行（不是服务器初始化必装项）：
 
 ```bash
@@ -79,7 +81,7 @@ gh run list --repo HeHuoDa/HeHuoDa --workflow ci.yml --branch main \
   --json databaseId,headSha,status,conclusion,url
 ```
 
-使用列表中对应运行的 `headSha`，并查看该运行的 jobs，确认整体成功及 `publish-images` 成功后才把它作为部署 SHA。仅知道 Git 提交 SHA 不代表镜像已经发布。若自动合并仍在等待保护规则或合并队列，等待实际合并后再重试 main CI，不以旧 main 的成功结果代表新改动已发布。手动 main CI 与正常发布遵循同一部署开关；已启用生产自动部署时，重试前确认发布窗口。
+使用列表中对应运行的 `headSha`，并查看该运行的 jobs，确认整体成功及 `publish-images` 成功后才把它作为部署 SHA。仅知道 Git 提交 SHA 不代表镜像已经发布。若自动合并仍在等待保护规则或合并队列，等待实际合并后由恢复工作流补发或手动重试 main CI，不以旧 main 的成功结果代表新改动已发布。手动 main CI 与正常发布遵循同一部署开关；已启用生产自动部署时，重试前确认发布窗口。
 
 默认 `DEPLOY_ENABLED` 未开启，因此添加本工作流不会自动连接服务器。在 GitHub 的 `production` Environment 配置审核规则、以下环境变量与 Secrets，并完成主机交接后，将仓库级变量 `DEPLOY_ENABLED=true`。开关须使用仓库级变量，因为任务调度判断发生在环境变量加载前。只有生产维护者应有权修改这些设置。
 
