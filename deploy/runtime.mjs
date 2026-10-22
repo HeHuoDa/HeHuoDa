@@ -35,6 +35,7 @@ export function releaseContext(tag, record) {
   return {
     releaseDirectory,
     images,
+    configurationHash: record?.configurationHash,
     tls: record?.tls ?? process.env.DEPLOY_TLS === "true",
     publicUrl: record?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL ?? "",
   };

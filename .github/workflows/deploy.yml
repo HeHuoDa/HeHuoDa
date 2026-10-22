@@ -58,16 +58,17 @@ jobs:
           for ci_event in push workflow_dispatch; do
             run_ids=$(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&branch=main&event=$ci_event&status=success&per_page=100" --jq '.workflow_runs[].id')
             for run_id in $run_ids; do
-              publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
-              if grep -Eq '^[1-9][0-9]*$' <<< "$publish_counts"; then
-                artifacts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" --jq ".artifacts[] | select(.expired == false) | .name")
-                for artifact in $artifacts; do
-                  if [[ "$artifact" =~ ^release-images-$CANDIDATE_SHA-[0-9]+$ ]]; then
+              artifacts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name')
+              for artifact in $artifacts; do
+                if [[ "$artifact" =~ ^release-images-$CANDIDATE_SHA-([0-9]+)$ ]]; then
+                  attempt="${BASH_REMATCH[1]}"
+                  publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/attempts/$attempt/jobs?per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
+                  if grep -Eq '^[1-9][0-9]*$' <<< "$publish_counts"; then
                     published=true
                     break 3
                   fi
-                done
-              fi
+                fi
+              done
             done
           done
           if [[ "$published" != true ]]; then

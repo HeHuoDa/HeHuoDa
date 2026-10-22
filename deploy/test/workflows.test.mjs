@@ -117,6 +117,7 @@ test("deployment requires successful image publishing for the exact main SHA", (
     ["workflow_dispatch", "0", 1],
     ["pull_request", "1", 1],
     ["workflow_dispatch", "1", 1, false],
+    ["workflow_dispatch", "1", 1, "wrong-attempt"],
   ]) {
     const output = join(
       directory,
@@ -127,7 +128,8 @@ test("deployment requires successful image publishing for the exact main SHA", (
       gh() {
         case "$*" in
           *"head_sha=$CANDIDATE_SHA&branch=main&event=$RUN_EVENT&status=success"*) echo 17 ;;
-          *"/runs/17/jobs?filter=all&per_page=100"*) printf '%s\\n' "$PUBLISH_COUNT" ;;
+          *"/runs/17/attempts/1/jobs?per_page=100"*) printf '%s\\n' "$PUBLISH_COUNT" ;;
+          *"/runs/17/attempts/2/jobs?per_page=100"*) echo 0 ;;
           *"/runs/17/artifacts?per_page=100"*) printf '%s\\n' "$MANIFEST_ARTIFACT" ;;
           *"/workflows/ci.yml/runs?"*) return 0 ;;
           *) echo "Unexpected API call" >&2; return 1 ;;
@@ -141,9 +143,12 @@ test("deployment requires successful image publishing for the exact main SHA", (
         RUN_EVENT: event,
         RELEASE_EVENT: "workflow_dispatch",
         PUBLISH_COUNT: published,
-        MANIFEST_ARTIFACT: manifest
-          ? `release-images-${"a".repeat(40)}-1`
-          : "unrelated-artifact",
+        MANIFEST_ARTIFACT:
+          manifest === "wrong-attempt"
+            ? `release-images-${"a".repeat(40)}-2`
+            : manifest
+              ? `release-images-${"a".repeat(40)}-1`
+              : "unrelated-artifact",
         GITHUB_OUTPUT: output,
       },
     );
@@ -178,7 +183,7 @@ test("automatic deployment skips superseded main SHA while explicit rollback sti
         case "$*" in
           *"git/ref/heads/main"*) printf '%s\\n' "$CURRENT_MAIN" ;;
           *"/workflows/ci.yml/runs?"*) echo 17 ;;
-          *"/runs/17/jobs?"*) echo 1 ;;
+          *"/runs/17/attempts/1/jobs?"*) echo 1 ;;
           *"/runs/17/artifacts?"*) printf 'release-images-%s-1\\n' "$CANDIDATE_SHA" ;;
           *) return 1 ;;
         esac

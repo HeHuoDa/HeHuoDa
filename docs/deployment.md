@@ -24,7 +24,7 @@ pnpm test:images
 
 `test:images` 使用随机项目名、随机测试密码、仅绑定回环的随机端口和独立数据卷，不读取生产 `.env`；退出时只删除自己创建的测试项目及卷。它会实际构建镜像，检查无迁移时 503、重复迁移、公开查询与详情、H5/静态缓存、旧 History 地址、缺失静态资源和未知 API、数据库断开/恢复、进程崩溃后的 Docker 重启、整栈重建的数据保留，以及备份到隔离容器的恢复。最小比赛 fixture 仅进入隔离测试库。
 
-构建错误和容器命令错误的 stderr 保存在忽略的 `deploy/state/logs/`，不把环境值及命令参数输出到 CI 日志。日志可能有敏感内容，仅在受控机器查看；不要直接上传 Issue。截图、临时浏览器脚本及验收结果按仓库规则保留本地。
+构建错误和容器命令错误的原始 stderr 保存在 `DEPLOY_STATE_DIR/logs/` 下权限为 600 的日志中，不把环境值、命令参数或容器原始日志输出到 CI。未指定状态目录的本机冒烟使用被忽略的 `deploy/state/<随机项目名>/`，测试容器清理后仍保留诊断，不读取已有部署状态；CI 使用 runner 临时目录。每个错误另外生成只含固定操作类别、退出码和固定错误分类的 JSON 报告，不包含 stderr、参数、环境或业务数据；失败时仅上传这些 JSON，保留 7 天。未分类错误仍需在受控机器复现并查看原始日志，不应扩大上传范围。截图、临时浏览器脚本及验收结果按仓库规则保留本地。
 
 ## 主机准备与首次部署
 
@@ -35,8 +35,8 @@ pnpm test:images
 ```text
 /opt/hehuoda/
   .env                 # 仅主机持有的配置，权限 600
-  releases/<SHA>/      # 通过检查的部署程序和 Compose
-  state/current.json  # 当前/上一应用 SHA
+  releases/<SHA>/<run>-<attempt>/ # 部署程序、Compose 与 release.json；不覆盖已有目录
+  state/current.json  # 当前/上一 SHA、版本目录、镜像 digest、TLS 模式、检查 URL、配置指纹
   state/release.lock/ # 串行更新锁
   state/logs/          # 受控诊断
   backups/            # 经隔离恢复校验的数据库 dump
@@ -48,7 +48,7 @@ pnpm test:images
 
 无域名的测试环境可将 `HTTP_BIND` 设为 `0.0.0.0`、`HTTP_PORT` 设为 `80` 或其他明确空闲端口，并只开放相应安全组/防火墙入口。数据库 5432 和 API 3001 不需要公网放行。未明确公网访问时保留默认回环绑定。
 
-在包含部署程序的源码目录执行（SHA 替换成真实已通过检查且已分发镜像的提交）：
+在完整版本目录执行，目录必须包含该 SHA 的源码部署文件及成功 CI 保存的 `release.json`。从对应成功运行下载 `release-images-<SHA>-<attempt>` artifact，确认来源仓库、运行 SHA 和 `publish-images` 成功，再将清单放到该版本目录根部；不要从当前可变标签反推历史清单。SHA 替换成真实已通过检查且已分发镜像的提交：
 
 ```bash
 export DEPLOY_ENV_FILE=/opt/hehuoda/.env
@@ -58,7 +58,7 @@ export DEPLOY_PUBLIC_URL=http://your-server-ip
 node deploy/release.mjs <40位SHA>
 ```
 
-部署程序先验证配置和锁，拉取准确 SHA 的镜像，启动数据库；已有数据时先备份并在隔离数据库恢复校验，再执行尚未应用的迁移，最后更新 API/Nginx，检查就绪和学院/比赛查询。配置 `DEPLOY_PUBLIC_URL` 时还会从部署机请求公开入口。生产不执行导入或比赛发布，采集默认关闭；维护者评估来源及运行条件后才可显式打开 `INGESTION_ENABLED`。
+部署程序先验证锁、清单及配置，API/Web 按清单 digest 拉取，标签后续移动不改变部署内容。已有版本时先验证其保留目录、清单和有效配置指纹，再比较两个版本的 Compose 项目名、数据库服务、卷和网络定义；这些共享配置变化拒绝走普通应用发布，需要单独审核维护方案。启动数据库后，已有数据先备份并在隔离数据库恢复校验，再执行尚未应用的迁移，最后重建 API/Nginx 并检查就绪和业务查询；即使 Web digest 未变化也重建 Nginx，以刷新 API 地址。配置 `DEPLOY_PUBLIC_URL` 时还会从部署机请求公开入口。生产不执行导入或比赛发布，采集默认关闭。
 
 首次部署失败会明确报告不存在旧应用，保留数据库与诊断。已存在 API 容器但缺少 `state/current.json` 时拒绝自动接管：先核对 API/Web 镜像、环境、卷和真实 SHA，再由管理员建立准确状态，不能随意伪造版本记录。锁未释放时不要删除另一个发布进程的锁；确认原进程退出、容器与状态一致后才人工移除残留锁。
 
@@ -66,13 +66,15 @@ node deploy/release.mjs <40位SHA>
 
 `CI` 先运行现有全仓质量检查和部署流程测试，再以只读 token 构建真实镜像并运行冒烟。仅 `main` 的 push 或 `workflow_dispatch` 将通过检查的镜像保存为当前运行的短期 artifact；独立 `publish-images` 任务加载这些相同镜像并推送 SHA 标签，不检出源码或执行仓库脚本。只有该任务具有包写权限。`ci-gate` 要求质量与镜像检查成功，主分支发布还必须发布成功；PR 和非 main 分支的手动运行不发布镜像。
 
-PR 更新按 PR 编号取消旧检查；main 按 SHA 分组，同一 SHA 串行且不自动取消正在进行的发布，不同 SHA 的重跑不能取消彼此。发布前通过受认证的 GHCR Registry API 检查两个目标标签：完整镜像对已存在时保留原镜像，不再推送，判断不依赖会过期的 GitHub CI 记录；仅一个存在时，必须与本次 artifact 中对应镜像的 image ID 一致才允许补齐另一镜像，否则停止。网络、认证或服务错误不当作镜像缺失。需要刷新基础镜像时提交新的版本或摘要变更，获得新 SHA，不覆盖已发布 SHA。部分发布无法补齐时优先在 artifact 保留期内重跑原 publish-images 任务；artifact 已过期或内容不一致时使用新提交发布，不删除或覆盖现有标签来绕过校验。
+PR 按编号加 SHA 分组，main 按 SHA 分组；旧 SHA 重跑不会取消或挤掉新 SHA 检查，同一 PR/SHA 的重复运行可以取消。代价是旧提交的检查可能继续运行；自动合并仍校验 PR 当前 head，旧结果不能合并新提交。main 同一 SHA 串行且不取消正在发布的运行。
+
+发布前通过受认证的 GHCR API 检查两个目标标签。所有已存在镜像都必须与本次验证 artifact 的 image ID 一致，才允许保留或补齐缺失项；完整镜像对也不例外。网络、认证或服务错误不当作缺失。推送后拉取 Registry 返回的 digest 引用，再次核对镜像 ID，并生成包含准确 SHA 和两个 digest 引用的 `release.json`，保存为每个 attempt 独立的 artifact，申请保留 90 天（受仓库上限限制）。同 SHA 重新构建可能产生不同镜像，此时停止；在原镜像 artifact 的 1 天保留期内仅重跑原 publisher，或使用新提交重新发布，不删除/覆盖标签来绕过校验。
 
 `Auto-merge` 使用 `GITHUB_TOKEN` 合并时，产生的 push 不会再触发普通 CI。确认 PR 实际合并后，它会显式 dispatch 默认分支 CI；这个调用需要 `actions: write`，但自动合并任务仍不检出或执行 PR 代码。尚未实际合并时不触发发布；来源分支是否可删除不影响 dispatch，触发失败会报错并保留分支。CI 固定本次 dispatch 的 main SHA，质量检查、镜像构建与发布均使用同一 SHA；main CI 不满足自动合并任务的 PR 事件条件，不会递归触发。
 
-`Deploy` 由成功的 `main` push 或手动 CI 完成事件触发；也可从 main 手动输入完整 SHA 重试。自动部署在取得队列执行机会后先读取实时 main，候选已被新提交取代时跳过，既不检出候选代码也不连接服务器；只有显式手动部署允许选择旧 SHA 回滚。执行前必须找到该 SHA 的成功 main CI，且其任一 attempt 的 `publish-images` 任务成功（Jobs API 使用 `filter=all`）；仅有 PR 测试、发布跳过或未成功推送的运行不能作为部署凭证。CI 历史记录过期后，工作流会拒绝无法证明的旧 SHA；应提前保留发布与备份证据，必要时按受控主机手动回滚流程处理。
+`Deploy` 由成功的 main push/手动 CI 完成事件触发，也可从 main 手动输入完整 SHA。自动候选取得执行位后读取实时 main，已被取代时跳过；只有显式手动部署允许旧 SHA 回滚。必须找到该 SHA 的成功 main CI、未过期的 digest artifact，以及该 artifact 对应 attempt 的成功 publisher（通过 `/runs/{id}/attempts/{attempt}/jobs` 核验，不依赖 job 对象的扩展字段）。下载后校验 SHA、两个组件和仓库路径，随后才连接服务器。缺少、过期或不合法的清单均停止，不回退到标签部署。旧版仅有 CI 成功记录的 SHA 也不能绕过此要求；清单与 CI 证据须提前异机保存，超出保留期按受控主机恢复流程处理。
 
-更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。部署队列显式使用 `queue: max`，避免较晚完成的旧 SHA CI 挤掉正在等待的新版本；GitHub 最多保留 100 个等待运行，满队列或定时任务延误时需维护者核对并手动重试当前 main。同一已部署 SHA 只做检查，不重复迁移。质量检查与部署 SHA 不一致时不发布。
+更新在 GitHub concurrency 与主机目录锁两层串行执行，不取消进行中的更新。部署队列显式使用 `queue: max`，避免较晚完成的旧 SHA CI 挤掉正在等待的新版本；GitHub 最多保留 100 个等待运行，满队列或定时任务延误时需维护者核对并手动重试当前 main。同一已部署 SHA 只做检查，不重复迁移；若要求改变 TLS 模式或检查 URL 则明确拒绝，不能把一次健康检查误当配置更新成功，应另行安排配置维护或新版本发布。质量检查与部署 SHA 不一致时不发布。
 
 `Release recovery` 在默认分支按每 15 分钟的计划检查当前 main，补偿合并队列或保护规则导致的延迟合并：只有该 SHA 完全没有 push/手动 CI 记录时才 dispatch。排队中、运行中、成功、失败或取消的已有运行都会阻止自动补发，因此不会因失败持续重试；失败后需要维护者明确重试。它不检出代码，不访问服务器，仍通过 CI 的完整验证与既有部署开关。GitHub 定时任务可能延迟，长期不活跃的公开仓库也可能被停用定时任务，不能将这个周期视作发布时限；急需发布时可手动运行该恢复工作流或直接运行 main CI。
 
@@ -119,10 +121,13 @@ TLS 叠加依赖当前版本发布目录中的 `deploy/nginx/https.conf`，工�
 
 迁移与导入 CLI 已包含在 API 镜像，运行时无需 pnpm 或重新编译。以下例子以保护好的 `.env` 和准确 `IMAGE_TAG` 为前提，TLS 环境增加 `-f compose.tls.yaml`：
 
-自动发布以 `state/current.json` 为当前版本来源，不改写存放凭据的 `.env`。因此每次手动维护前，先从状态文件设置 `IMAGE_TAG`，避免重启时误用 `.env` 中首次部署的旧版本；`backup.mjs` 在没有显式标签时也会读取此状态。
+自动发布以 `state/current.json` 为当前版本来源，不改写存放凭据的 `.env`。手动维护先进入记录的版本目录，并设置该状态中的 SHA、两个 digest 及 TLS 模式，避免误用当前源码配置或旧标签；`backup.mjs` 的 Compose 调用会自动读取已记录版本的目录和镜像。
 
 ```bash
 export IMAGE_TAG=$(node -p "require('/opt/hehuoda/state/current.json').sha")
+export API_IMAGE=$(node -p "require('/opt/hehuoda/state/current.json').images.api")
+export WEB_IMAGE=$(node -p "require('/opt/hehuoda/state/current.json').images.web")
+cd "$(node -p "require('/opt/hehuoda/state/current.json').releaseDirectory")"
 docker compose --env-file /opt/hehuoda/.env -f compose.deploy.yaml ps
 docker compose --env-file /opt/hehuoda/.env -f compose.deploy.yaml logs --tail 100 api web
 docker compose --env-file /opt/hehuoda/.env -f compose.deploy.yaml exec -T api node dist-openapi/scripts/migrate.js
@@ -154,7 +159,11 @@ sha256sum /opt/hehuoda/backups/实际文件.dump
 
 ## 更新失败与应用回滚
 
-就绪、真实查询或配置的公开入口检查失败时，发布脚本恢复 `state/current.json` 中旧 SHA 的 API/Web 镜像，再验证恢复结果。未成功前不推进状态文件。回滚失败明确报告 `ROLLBACK FAILED`，保留数据库、备份和诊断，转入人工处理。更新过程可能短暂中断，不承诺零停机。
+就绪、真实查询或公开入口检查失败时，发布脚本使用旧状态保留的 Compose 目录、API/Web digest、TLS 模式恢复，再以旧检查 URL 验证。检查 URL 不会修改或恢复实际端口/DNS。回滚不混用新 Compose；同 SHA 不得替换已记录 digest。未成功前不推进状态文件，失败恢复也不删除候选目录和备份。旧版本目录、清单及其引用的 TLS 文件必须保留；不要在普通发布时清理。回滚失败明确报告 `ROLLBACK FAILED`，转入人工处理；更新可能短暂中断，不承诺零停机。
+
+成功状态保存完整有效 Compose 配置的 SHA256 指纹：递归排序对象键，原始 JSON 仅在内存处理，不将环境秘密存入状态或日志。下次用旧版本目录、旧 TLS 模式及当前主机 `.env` 重算；指纹不一致时在拉取/启动/迁移前停止。因此端口、绑定地址、挂载目录或密码等 `.env` 变更须走独立维护，普通发布不会自动回滚 `.env`。指纹只覆盖配置值，不检测同路径证书内容、DNS 或其他文件内容变化；证书轮换和数据库升级也需独立验证。
+
+旧 `current.json` 若只有 SHA，缺版本目录、有效清单或配置指纹，更新会在拉取/迁移前拒绝。维护者须核对实际容器镜像 digest、原版本 Compose、TLS/入口、项目名和卷，并从可信原 CI 恢复对应清单，建立与实际运行一致的版本记录和配置指纹；旧 Compose 不支持 digest 覆盖时还需安排受控切换。缺少历史证据时保持旧应用运行并制定人工接管方案，禁止拿当前标签或新配置伪造旧版本记录。
 
 需要手动回到旧应用时，使用仍然兼容当前数据库且已通过原 CI 的旧 SHA 重新运行发布。迁移历史只追加，旧应用允许库中存在额外的新迁移记录，但仍检查自身需要的表字段。应用回滚不删除迁移记录、不自动执行数据库降级或恢复旧 dump。新增迁移必须评估旧版本兼容性；破坏性结构变更应另行制定维护和数据恢复计划。
 

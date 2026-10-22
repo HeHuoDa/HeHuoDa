@@ -29,7 +29,8 @@ Object.assign(process.env, {
   IMAGE_TAG: process.env.IMAGE_TAG || "0".repeat(40),
   DEPLOY_ENV_FILE: join(temporary, ".env"),
   DEPLOY_BACKUP_DIR: join(temporary, "backups"),
-  DEPLOY_STATE_DIR: process.env.DEPLOY_STATE_DIR || join(temporary, "state"),
+  DEPLOY_STATE_DIR:
+    process.env.DEPLOY_STATE_DIR || join(import.meta.dirname, "state", project),
 });
 writeFileSync(process.env.DEPLOY_ENV_FILE, "# isolated smoke configuration\n", {
   mode: 0o600,
@@ -37,7 +38,7 @@ writeFileSync(process.env.DEPLOY_ENV_FILE, "# isolated smoke configuration\n", {
 const { compose, docker, waitFor } = await import("./runtime.mjs");
 const { validateDeploymentConfig, verifyApplication, verifyPublicApplication } =
   await import("./runtime.mjs");
-const { release } = await import("./release.mjs");
+const { release, configurationHash } = await import("./release.mjs");
 const { backup, verifyBackup } = await import("./backup.mjs");
 let base;
 const imageAliases = [];
@@ -207,16 +208,21 @@ try {
     JSON.stringify({
       sha: originalTag,
       releaseDirectory: resolve(import.meta.dirname, ".."),
+      configurationHash: configurationHash(
+        JSON.parse(compose(["config", "--format", "json"], originalTag)),
+      ),
     }),
   );
   const localOperations = {
     // The smoke seam uses locally built tags instead of a registry manifest.
-    releaseContext() {
-      return {
-        releaseDirectory: resolve(import.meta.dirname, ".."),
-        tls: false,
-        publicUrl: "",
-      };
+    releaseContext(_tag, record) {
+      return (
+        record || {
+          releaseDirectory: resolve(import.meta.dirname, ".."),
+          tls: false,
+          publicUrl: "",
+        }
+      );
     },
     compose(args, tag, options) {
       if (args[0] === "pull") {

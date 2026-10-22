@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import {
   compose,
   docker,
@@ -19,6 +20,22 @@ import {
   releaseContext,
 } from "./runtime.mjs";
 import { backup } from "./backup.mjs";
+
+export function configurationHash(config) {
+  const ordered = (value) =>
+    Array.isArray(value)
+      ? value.map(ordered)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, ordered(value[key])]),
+          )
+        : value;
+  return createHash("sha256")
+    .update(JSON.stringify(ordered(config)))
+    .digest("hex");
+}
 
 export async function release(
   input,
@@ -56,6 +73,9 @@ export async function release(
     locked = true;
     candidate = releaseContext(tag);
     validateDeploymentConfig(tag, candidate);
+    const candidateConfig = JSON.parse(
+      compose(["config", "--format", "json"], tag, { release: candidate }),
+    );
     if (existsSync(state)) {
       const record = JSON.parse(readFileSync(state, "utf8"));
       previous = sha(record.sha);
@@ -73,15 +93,18 @@ export async function release(
       const previousConfig = JSON.parse(
         compose(["config", "--format", "json"], previous, { release: prior }),
       );
-      const candidateConfig = JSON.parse(
-        compose(["config", "--format", "json"], tag, { release: candidate }),
-      );
+      if (prior.configurationHash !== configurationHash(previousConfig))
+        throw new Error(
+          "Previous effective configuration changed or lacks a fingerprint; use a reviewed host maintenance plan",
+        );
       if (
         previousConfig.name !== candidateConfig.name ||
         JSON.stringify(previousConfig.services.db) !==
           JSON.stringify(candidateConfig.services.db) ||
         JSON.stringify(previousConfig.volumes) !==
-          JSON.stringify(candidateConfig.volumes)
+          JSON.stringify(candidateConfig.volumes) ||
+        JSON.stringify(previousConfig.networks) !==
+          JSON.stringify(candidateConfig.networks)
       )
         throw new Error(
           "Database or project configuration changed; use a separate reviewed maintenance plan",
@@ -95,6 +118,13 @@ export async function release(
         throw new Error("Running API does not match recorded release");
     }
     if (previous === tag) {
+      if (
+        candidate.tls !== prior.tls ||
+        candidate.publicUrl !== prior.publicUrl
+      )
+        throw new Error(
+          "Same commit cannot silently change TLS or the check URL; use a reviewed configuration maintenance plan",
+        );
       if (JSON.stringify(candidate.images) !== JSON.stringify(prior.images))
         throw new Error(
           "Same commit cannot replace its recorded image digests",
@@ -157,6 +187,7 @@ export async function release(
       JSON.stringify({
         sha: tag,
         ...candidate,
+        configurationHash: configurationHash(candidateConfig),
         previous: previous || null,
         deployedAt: new Date().toISOString(),
       }) + "\n",
