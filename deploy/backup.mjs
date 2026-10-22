@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { backupDirectory, compose, docker, waitFor } from "./runtime.mjs";
 
-function removeVerificationContainer(container) {
-  const label = docker([
+function removeVerificationContainer(container, run = docker) {
+  const label = run([
     "inspect",
     "--format",
     '{{ index .Config.Labels "hehuoda.task" }}',
@@ -14,11 +14,11 @@ function removeVerificationContainer(container) {
   if (label !== "backup-verification") {
     throw new Error("Refusing to remove a container with an unexpected label");
   }
-  docker(["rm", "-f", "-v", container]);
+  run(["rm", "-f", "-v", container]);
 }
 
 // A dump is retained only after pg_dump has exited successfully.
-export function backup(tag) {
+export function backup(tag, context) {
   mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
   const file = join(
     backupDirectory,
@@ -36,7 +36,7 @@ export function backup(tag) {
         'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-acl',
       ],
       tag,
-      { stdio: ["ignore", fd, "pipe"] },
+      { stdio: ["ignore", fd, "pipe"], release: context },
     );
   } catch (error) {
     closeSync(fd);
@@ -50,12 +50,14 @@ export function backup(tag) {
 
 // Restore only into a new container with no network and its own disposable anonymous volume.
 // There is deliberately no automatic restore-into-production command.
-export function verifyBackup(file) {
+export function verifyBackup(file, operations = {}) {
+  const run = operations.docker || docker;
+  const wait = operations.waitFor || waitFor;
   const container = `hehuoda-restore-${randomUUID()}`;
   const password = randomUUID();
   let created = false;
   try {
-    docker(
+    run(
       [
         "run",
         "-d",
@@ -78,11 +80,14 @@ export function verifyBackup(file) {
       { env: { ...process.env, POSTGRES_PASSWORD: password } },
     );
     created = true;
-    waitFor(() =>
-      docker([
+    wait(() =>
+      run([
         "exec",
         container,
         "pg_isready",
+        // The image's temporary init server accepts sockets before restarting.
+        "-h",
+        "127.0.0.1",
         "-U",
         "restore",
         "-d",
@@ -91,7 +96,7 @@ export function verifyBackup(file) {
     );
     const fd = openSync(file, "r");
     try {
-      docker(
+      run(
         [
           "exec",
           "-i",
@@ -111,7 +116,7 @@ export function verifyBackup(file) {
       closeSync(fd);
     }
     return JSON.parse(
-      docker([
+      run([
         "exec",
         container,
         "psql",
@@ -126,7 +131,7 @@ export function verifyBackup(file) {
       ]),
     );
   } finally {
-    if (created) removeVerificationContainer(container);
+    if (created) removeVerificationContainer(container, run);
   }
 }
 

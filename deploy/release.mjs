@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import {
   compose,
   docker,
@@ -16,8 +17,25 @@ import {
   validateDeploymentConfig,
   verifyApplication,
   verifyPublicApplication,
+  releaseContext,
 } from "./runtime.mjs";
 import { backup } from "./backup.mjs";
+
+export function configurationHash(config) {
+  const ordered = (value) =>
+    Array.isArray(value)
+      ? value.map(ordered)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, ordered(value[key])]),
+          )
+        : value;
+  return createHash("sha256")
+    .update(JSON.stringify(ordered(config)))
+    .digest("hex");
+}
 
 export async function release(
   input,
@@ -28,6 +46,7 @@ export async function release(
     validateDeploymentConfig,
     verifyApplication,
     verifyPublicApplication,
+    releaseContext,
   },
   directory = stateDirectory,
 ) {
@@ -39,6 +58,7 @@ export async function release(
     validateDeploymentConfig,
     verifyApplication,
     verifyPublicApplication,
+    releaseContext,
   } = operations;
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const lock = join(directory, "release.lock");
@@ -46,35 +66,78 @@ export async function release(
   let locked = false;
   let changed = false;
   let previous;
+  let candidate;
+  let prior;
   try {
     mkdirSync(lock);
     locked = true;
-    validateDeploymentConfig(tag);
-    if (existsSync(state))
-      previous = sha(JSON.parse(readFileSync(state, "utf8")).sha);
-    const existing = compose(["ps", "--all", "-q", "api"], tag);
+    candidate = releaseContext(tag);
+    validateDeploymentConfig(tag, candidate);
+    const candidateConfig = JSON.parse(
+      compose(["config", "--format", "json"], tag, { release: candidate }),
+    );
+    if (existsSync(state)) {
+      const record = JSON.parse(readFileSync(state, "utf8"));
+      previous = sha(record.sha);
+      prior = releaseContext(previous, record);
+      validateDeploymentConfig(previous, prior);
+    }
+    const existing = compose(["ps", "--all", "-q", "api"], tag, {
+      release: candidate,
+    });
     if (existing && !previous)
       throw new Error(
         "Existing deployment has no release state; verify and adopt its exact SHA before updating",
       );
-    if (previous && existing) {
-      const expected = JSON.parse(
-        compose(["config", "--format", "json"], previous),
-      ).services.api.image;
+    if (previous) {
+      const previousConfig = JSON.parse(
+        compose(["config", "--format", "json"], previous, { release: prior }),
+      );
+      if (prior.configurationHash !== configurationHash(previousConfig))
+        throw new Error(
+          "Previous effective configuration changed or lacks a fingerprint; use a reviewed host maintenance plan",
+        );
       if (
+        previousConfig.name !== candidateConfig.name ||
+        JSON.stringify(previousConfig.services.db) !==
+          JSON.stringify(candidateConfig.services.db) ||
+        JSON.stringify(previousConfig.volumes) !==
+          JSON.stringify(candidateConfig.volumes) ||
+        JSON.stringify(previousConfig.networks) !==
+          JSON.stringify(candidateConfig.networks)
+      )
+        throw new Error(
+          "Database or project configuration changed; use a separate reviewed maintenance plan",
+        );
+      const expected = previousConfig.services.api.image;
+      if (
+        existing &&
         docker(["inspect", "--format", "{{.Config.Image}}", existing]) !==
-        expected
+          expected
       )
         throw new Error("Running API does not match recorded release");
     }
     if (previous === tag) {
-      verifyApplication(tag);
-      await verifyPublicApplication();
+      if (
+        candidate.tls !== prior.tls ||
+        candidate.publicUrl !== prior.publicUrl
+      )
+        throw new Error(
+          "Same commit cannot silently change TLS or the check URL; use a reviewed configuration maintenance plan",
+        );
+      if (JSON.stringify(candidate.images) !== JSON.stringify(prior.images))
+        throw new Error(
+          "Same commit cannot replace its recorded image digests",
+        );
+      verifyApplication(tag, prior);
+      await verifyPublicApplication(prior);
       console.log(`Already deployed and healthy: ${tag}`);
       return;
     }
-    compose(["pull", "api", "web", "db"], tag);
-    compose(["up", "-d", "--wait", "--wait-timeout", "120", "db"], tag);
+    compose(["pull", "api", "web", "db"], tag, { release: candidate });
+    compose(["up", "-d", "--wait", "--wait-timeout", "120", "db"], tag, {
+      release: candidate,
+    });
     const populated = compose(
       [
         "exec",
@@ -85,9 +148,10 @@ export async function release(
         'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema=\u0027public\u0027"',
       ],
       tag,
+      { release: candidate },
     );
     if (previous || Number(populated) > 0)
-      console.log(`Verified pre-migration backup: ${backup(previous || tag)}`);
+      console.log(`Verified pre-migration backup: ${backup(tag, candidate)}`);
     compose(
       [
         "run",
@@ -98,6 +162,7 @@ export async function release(
         "dist-openapi/scripts/migrate.js",
       ],
       tag,
+      { release: candidate },
     );
     changed = true;
     compose(
@@ -105,6 +170,7 @@ export async function release(
         "up",
         "-d",
         "--no-deps",
+        "--force-recreate",
         "--wait",
         "--wait-timeout",
         "180",
@@ -112,13 +178,16 @@ export async function release(
         "web",
       ],
       tag,
+      { release: candidate },
     );
-    verifyApplication(tag);
-    await verifyPublicApplication();
+    verifyApplication(tag, candidate);
+    await verifyPublicApplication(candidate);
     writeFileSync(
       `${state}.tmp`,
       JSON.stringify({
         sha: tag,
+        ...candidate,
+        configurationHash: configurationHash(candidateConfig),
         previous: previous || null,
         deployedAt: new Date().toISOString(),
       }) + "\n",
@@ -140,6 +209,7 @@ export async function release(
             "up",
             "-d",
             "--no-deps",
+            "--force-recreate",
             "--wait",
             "--wait-timeout",
             "180",
@@ -147,9 +217,10 @@ export async function release(
             "web",
           ],
           previous,
+          { release: prior },
         );
-        verifyApplication(previous);
-        await verifyPublicApplication();
+        verifyApplication(previous, prior);
+        await verifyPublicApplication(prior);
         console.error(
           `Deployment failed; previous application restored: ${previous}. Database was not downgraded.`,
         );

@@ -1,0 +1,39 @@
+name: Release recovery
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: hehuoda-release-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: a delayed GITHUB_TOKEN merge can happen after Auto-merge exits.
+      - name: Dispatch CI only when current main has no release run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')
+          [[ "$main_sha" =~ ^[a-f0-9]{40}$ ]]
+          for ci_event in push workflow_dispatch; do
+            count=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$main_sha&branch=main&event=$ci_event&per_page=1" --jq '.total_count')
+            if [[ "$count" -gt 0 ]]; then
+              echo 'Current main already has CI; failed runs require an explicit retry.'
+              exit 0
+            fi
+          done
+          gh workflow run ci.yml --repo "$GH_REPO" --ref main

@@ -10,10 +10,25 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { release } from "../release.mjs";
+import { release, configurationHash } from "../release.mjs";
 
 const old = "1".repeat(40);
 const next = "2".repeat(40);
+
+test("configuration fingerprint ignores object key order without ignoring changed values", () => {
+  assert.equal(
+    configurationHash({ b: 2, a: 1 }),
+    "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+  );
+  assert.equal(
+    configurationHash({ a: 1, b: 2 }),
+    "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+  );
+  assert.notEqual(
+    configurationHash({ a: 1, b: 3 }),
+    configurationHash({ a: 1, b: 2 }),
+  );
+});
 
 function fixture(
   t,
@@ -23,24 +38,42 @@ function fixture(
     failCheck = false,
     failRollback = false,
     backupFails = false,
+    changeDatabase = false,
+    missingApi = false,
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-release-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const configuration = (tag) => ({
+    name: "test-deployment",
+    services: {
+      api: { image: `test/api:${old}` },
+      db: {
+        image: changeDatabase && tag === next ? "postgres:18" : "postgres:17",
+        volumes: [{ source: "database" }],
+      },
+    },
+  });
   if (!first)
     writeFileSync(
       join(directory, "current.json"),
-      JSON.stringify({ sha: old }),
+      JSON.stringify({
+        sha: old,
+        releaseDirectory: join(directory, "releases", old),
+        configurationHash: configurationHash(configuration(old)),
+      }),
     );
   const events = [];
   const operations = {
-    compose(args, tag) {
-      events.push({ command: args[0], args, tag });
-      if (args[0] === "ps") return first ? "" : "old-container";
-      if (args[0] === "config")
-        return JSON.stringify({
-          services: { api: { image: `test/api:${old}` } },
-        });
+    releaseContext(tag, record) {
+      if (record && !record.releaseDirectory)
+        throw new Error("Missing previous release directory");
+      return record || { releaseDirectory: join(directory, "releases", tag) };
+    },
+    compose(args, tag, options) {
+      events.push({ command: args[0], args, tag, context: options?.release });
+      if (args[0] === "ps") return first || missingApi ? "" : "old-container";
+      if (args[0] === "config") return JSON.stringify(configuration(tag));
       if (args[0] === "exec") return first ? "0" : "1";
       if (args[0] === "run" && failMigration)
         throw new Error("Migration failed");
@@ -121,11 +154,94 @@ test("migration failure leaves old applications and release state intact", async
 
 test("failed readiness restores old application without executing any database downgrade", async (t) => {
   const f = fixture(t, { failCheck: true });
+  const previousDirectory = join(f.directory, "releases", old);
+  writeFileSync(
+    join(f.directory, "current.json"),
+    JSON.stringify({ ...f.state(), releaseDirectory: previousDirectory }),
+  );
   await assert.rejects(release(next, f.operations, f.directory));
   assert.equal(f.state().sha, old);
   assert.ok(f.events.some((e) => e.command === "up" && e.tag === old));
   assert.equal(f.events.at(-1).tag, old);
   assert.equal(f.events.filter((e) => e.command === "run").length, 1);
+  assert.equal(
+    f.events.find((e) => e.command === "up" && e.tag === old).context
+      .releaseDirectory,
+    previousDirectory,
+  );
+  assert.equal(
+    f.events.find(
+      (e) => e.command === "up" && e.tag === next && e.args.includes("api"),
+    ).context.releaseDirectory,
+    join(f.directory, "releases", next),
+  );
+});
+
+test("legacy release state without its configuration refuses replacement before pulling or migrating", async (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.directory, "current.json"),
+    JSON.stringify({ sha: old }),
+  );
+  await assert.rejects(
+    release(next, f.operations, f.directory),
+    /release state was not advanced/,
+  );
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+});
+
+test("database image or storage changes require a separate maintenance plan before replacement", async (t) => {
+  const f = fixture(t, { changeDatabase: true });
+  await assert.rejects(release(next, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+  assert.equal(f.state().sha, old);
+});
+
+test("a missing application container does not bypass recorded database protection", async (t) => {
+  const f = fixture(t, { changeDatabase: true, missingApi: true });
+  await assert.rejects(release(next, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+});
+
+test("host configuration drift refuses update before changing the running release", async (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.directory, "current.json"),
+    JSON.stringify({
+      sha: old,
+      releaseDirectory: join(f.directory, "releases", old),
+      configurationHash: "0".repeat(64),
+    }),
+  );
+  await assert.rejects(release(next, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
+});
+
+test("same SHA cannot silently ignore a requested TLS or check URL change", async (t) => {
+  const f = fixture(t);
+  const context = f.operations.releaseContext;
+  f.operations.releaseContext = (tag, record) => ({
+    ...context(tag, record),
+    tls: !record,
+    publicUrl: record ? "" : "https://test.invalid",
+  });
+  await assert.rejects(release(old, f.operations, f.directory));
+  assert.equal(
+    f.events.some((event) => ["pull", "run", "up"].includes(event.command)),
+    false,
+  );
 });
 
 test("rollback failure and first-deployment failure have distinct actionable errors", async (t) => {

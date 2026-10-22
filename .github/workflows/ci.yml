@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -59,6 +59,8 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      images-artifact-id: ${{ steps.images.outputs.artifact-id }}
     permissions:
       contents: read
     env:
@@ -74,24 +76,35 @@ jobs:
         shell: bash
         run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - name: Build actual images and run isolated smoke checks
+        env:
+          DEPLOY_STATE_DIR: ${{ runner.temp }}/smoke-state
         run: node deploy/smoke.mjs
+      - name: Retain safe failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/smoke-state/logs/*.json
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Save verified main images for the publishing job
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
           docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$RUNNER_TEMP/verified-images.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: images
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
-          name: verified-images-${{ github.sha }}
+          name: verified-images-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/verified-images.tar.gz
           retention-days: 1
           if-no-files-found: error
 
   publish-images:
     needs: image-smoke
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -101,9 +114,15 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
     steps:
       # No source checkout or repository scripts run with the package-write token.
+      - name: Require the verified producer artifact ID
+        env:
+          VERIFIED_ARTIFACT_ID: ${{ needs.image-smoke.outputs.images-artifact-id }}
+        shell: bash
+        run: '[[ "$VERIFIED_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: verified-images-${{ github.sha }}
+          artifact-ids: ${{ needs.image-smoke.outputs.images-artifact-id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/verified-images
       - name: Load and publish the exact verified images
         env:
@@ -115,9 +134,62 @@ jobs:
           IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
           gzip -dc "$RUNNER_TEMP/verified-images/verified-images.tar.gz" | docker image load
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          docker push "$IMAGE_PREFIX/api:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/web:$IMAGE_TAG"
-          docker logout ghcr.io
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          present=()
+          missing=()
+          for component in api web; do
+            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
+            # Include push scope so a new package can be distinguished from denied access.
+            registry_token=$(printf 'user = "%s:%s"\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
+              | curl --config - --fail --silent --show-error --connect-timeout 15 --max-time 30 --get \
+                --data-urlencode "scope=repository:${GITHUB_REPOSITORY,,}/$component:pull,push" \
+                --data-urlencode 'service=ghcr.io' https://ghcr.io/token \
+              | jq -er '.token // .access_token')
+            status=$(printf 'header = "Authorization: Bearer %s"\n' "$registry_token" \
+              | curl --config - --silent --show-error --connect-timeout 15 --max-time 30 --head --output /dev/null --write-out '%{http_code}' \
+                --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+                "https://ghcr.io/v2/${GITHUB_REPOSITORY,,}/$component/manifests/$IMAGE_TAG")
+            unset registry_token
+            case "$status" in
+              200) present+=("$image") ;;
+              404) missing+=("$image") ;;
+              *) echo 'Cannot establish registry image state; refusing to publish.' >&2; exit 1 ;;
+            esac
+          done
+          for image in "${present[@]}"; do
+            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
+            docker pull "$image"
+            existing_id=$(docker image inspect --format '{{.Id}}' "$image")
+            if [[ "$candidate_id" != "$existing_id" ]]; then
+              echo 'Existing release differs from the verified artifact; rerun the original publishing job or publish a new commit.' >&2
+              exit 1
+            fi
+          done
+          for image in "${missing[@]}"; do
+            docker push "$image"
+          done
+          # Pin what was actually verified, including retries and existing releases.
+          refs=()
+          for component in api web; do
+            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
+            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
+            docker pull "$image"
+            ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+            [[ "$ref" == "$IMAGE_PREFIX/$component@sha256:"* ]]
+            [[ "${ref##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
+            docker pull "$ref"
+            [[ "$(docker image inspect --format '{{.Id}}' "$ref")" == "$candidate_id" ]]
+            refs+=("$ref")
+          done
+          mkdir -p "$RUNNER_TEMP/release-manifest"
+          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$RUNNER_TEMP/release-manifest/release.json"
+      - name: Retain immutable release manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-images-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-manifest/release.json
+          retention-days: 90
+          if-no-files-found: error
 
   ci-gate:
     name: ci-gate
@@ -130,8 +202,8 @@ jobs:
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           IMAGE_RESULT: ${{ needs.image-smoke.result }}
-      - name: Require image publishing for main pushes
+      - name: Require image publishing for main releases
         run: test "$PUBLISH_RESULT" = "success" || test "$PUBLISH_REQUIRED" = "false"
         env:
           PUBLISH_RESULT: ${{ needs.publish-images.result }}
-          PUBLISH_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          PUBLISH_REQUIRED: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}

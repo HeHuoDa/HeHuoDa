@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { readReleaseManifest } from "./manifest.mjs";
 
 export const root = resolve(import.meta.dirname, "..");
 export const stateDirectory = resolve(
@@ -13,6 +14,32 @@ export const backupDirectory = resolve(
 export const envFile = resolve(
   process.env.DEPLOY_ENV_FILE || resolve(import.meta.dirname, ".env"),
 );
+
+export function releaseContext(tag, record) {
+  if (
+    record &&
+    (!record.releaseDirectory || !isAbsolute(record.releaseDirectory))
+  )
+    throw new Error(
+      "Previous release lacks an absolute configuration directory; adopt its verified release metadata before updating",
+    );
+  const releaseDirectory = record?.releaseDirectory || root;
+  const images = readReleaseManifest(releaseDirectory, tag);
+  if (
+    record?.images &&
+    (record.images.api !== images.api || record.images.web !== images.web)
+  )
+    throw new Error(
+      "Recorded release digests differ from its retained manifest",
+    );
+  return {
+    releaseDirectory,
+    images,
+    configurationHash: record?.configurationHash,
+    tls: record?.tls ?? process.env.DEPLOY_TLS === "true",
+    publicUrl: record?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL ?? "",
+  };
+}
 
 export function docker(args, options = {}) {
   const result = spawnSync(process.env.DOCKER_BIN || "docker", args, {
@@ -33,6 +60,38 @@ export function docker(args, options = {}) {
         "Docker exited without diagnostics",
       { mode: 0o600 },
     );
+    // Only fixed categories are exportable. Raw stderr can contain credentials or data.
+    const categories = Object.entries({
+      "connection-refused": /connection refused/i,
+      "server-restarting": /shutting down|starting up|terminated abnormally/i,
+      "out-of-memory": /out of memory|cannot allocate memory|oom/i,
+      "permission-denied":
+        /permission denied|authentication failed|unauthorized/i,
+      "archive-invalid":
+        /not a valid archive|unsupported version.*header|unexpected end of file/i,
+      "sql-error": /pg_restore: error:|ERROR:|SQLSTATE/i,
+      timeout: /timed out|timeout/i,
+    })
+      .filter(([, pattern]) => pattern.test(result.stderr || ""))
+      .map(([name]) => name);
+    writeFileSync(
+      `${log}.json`,
+      JSON.stringify({
+        operation: [
+          "compose",
+          "exec",
+          "run",
+          "pull",
+          "inspect",
+          "build",
+        ].includes(args[0])
+          ? args[0]
+          : "other",
+        exitCode: result.status,
+        categories: categories.length ? categories : ["unclassified"],
+      }) + "\n",
+      { mode: 0o600 },
+    );
     throw new Error(
       `Docker operation failed (${args[0]}); diagnostics: ${log}`,
     );
@@ -49,12 +108,25 @@ function activeTag() {
 }
 
 export function compose(args, tag = activeTag(), options = {}) {
-  const files = ["-f", resolve(root, "compose.deploy.yaml")];
-  if (process.env.DEPLOY_TLS === "true")
-    files.push("-f", resolve(root, "compose.tls.yaml"));
+  let { release: context, ...runOptions } = options;
+  const state = resolve(stateDirectory, "current.json");
+  if (!context && existsSync(state)) {
+    const record = JSON.parse(readFileSync(state, "utf8"));
+    if (record.sha === tag) context = releaseContext(tag, record);
+  }
+  const directory = context?.releaseDirectory || root;
+  const files = ["-f", resolve(directory, "compose.deploy.yaml")];
+  if (context ? context.tls : process.env.DEPLOY_TLS === "true")
+    files.push("-f", resolve(directory, "compose.tls.yaml"));
   return docker(["compose", "--env-file", envFile, ...files, ...args], {
-    ...options,
-    env: { ...process.env, ...(tag ? { IMAGE_TAG: tag } : {}) },
+    ...runOptions,
+    env: {
+      ...process.env,
+      ...(tag ? { IMAGE_TAG: tag } : {}),
+      ...(context?.images
+        ? { API_IMAGE: context.images.api, WEB_IMAGE: context.images.web }
+        : {}),
+    },
   });
 }
 
@@ -76,16 +148,16 @@ export function waitFor(check, attempts = 40) {
   throw new Error("Service did not become ready before the deadline");
 }
 
-export function verifyApplication(tag) {
-  compose(
-    [
-      "exec",
-      "-T",
-      "api",
-      "node",
-      "--input-type=module",
-      "-e",
-      `
+export function verifyApplication(tag, context) {
+  const run = (args) => compose(args, tag, { release: context });
+  run([
+    "exec",
+    "-T",
+    "api",
+    "node",
+    "--input-type=module",
+    "-e",
+    `
     for (const path of ['/health/ready', '/colleges', '/competitions']) {
       const r = await fetch('http://127.0.0.1:3001/api/v1' + path);
       if (!r.ok || !(r.headers.get('content-type') || '').includes('application/json')) process.exit(1);
@@ -95,34 +167,44 @@ export function verifyApplication(tag) {
       if (path === '/competitions' && !Array.isArray(value.items)) process.exit(1);
     }
   `,
-    ],
-    tag,
-  );
-  compose(["exec", "-T", "web", "nginx", "-t"], tag);
-  compose(
-    ["exec", "-T", "web", "wget", "-q", "--spider", "http://127.0.0.1/_health"],
-    tag,
-  );
-  if (process.env.DEPLOY_TLS !== "true") {
-    compose(
-      [
-        "exec",
-        "-T",
-        "web",
-        "wget",
-        "-q",
-        "-O",
-        "/dev/null",
-        "http://127.0.0.1/api/v1/health/ready",
-      ],
-      tag,
-    );
+  ]);
+  run(["exec", "-T", "web", "nginx", "-t"]);
+  run([
+    "exec",
+    "-T",
+    "web",
+    "wget",
+    "-q",
+    "--spider",
+    "http://127.0.0.1/_health",
+  ]);
+  if (!(context ? context.tls : process.env.DEPLOY_TLS === "true")) {
+    run([
+      "exec",
+      "-T",
+      "web",
+      "wget",
+      "-q",
+      "-O",
+      "/dev/null",
+      "http://127.0.0.1/api/v1/health/ready",
+    ]);
   }
 }
 
-export function validateDeploymentConfig(tag) {
-  const config = JSON.parse(compose(["config", "--format", "json"], tag));
+export function validateDeploymentConfig(tag, context) {
+  const config = JSON.parse(
+    compose(["config", "--format", "json"], tag, { release: context }),
+  );
   const db = config.services.db.environment;
+  if (
+    context?.images &&
+    (config.services.api.image !== context.images.api ||
+      config.services.web.image !== context.images.web)
+  )
+    throw new Error(
+      "Release configuration must use its verified API/Web digests",
+    );
   const connection = new URL(config.services.api.environment.DATABASE_URL);
   if (
     connection.hostname !== "db" ||
@@ -136,8 +218,10 @@ export function validateDeploymentConfig(tag) {
     );
   }
   if (
-    process.env.DEPLOY_TLS === "true" &&
-    !process.env.DEPLOY_PUBLIC_URL?.startsWith("https://")
+    (context ? context.tls : process.env.DEPLOY_TLS === "true") &&
+    !(context?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL)?.startsWith(
+      "https://",
+    )
   ) {
     throw new Error(
       "TLS deployment requires DEPLOY_PUBLIC_URL=https://your-host",
@@ -145,9 +229,10 @@ export function validateDeploymentConfig(tag) {
   }
 }
 
-export async function verifyPublicApplication() {
-  if (!process.env.DEPLOY_PUBLIC_URL) return;
-  const base = new URL(process.env.DEPLOY_PUBLIC_URL);
+export async function verifyPublicApplication(context) {
+  const publicUrl = context?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL;
+  if (!publicUrl) return;
+  const base = new URL(publicUrl);
   if (base.username || base.password || base.search || base.hash)
     throw new Error("Invalid public deployment URL");
   for (const path of [
