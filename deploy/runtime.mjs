@@ -33,6 +33,38 @@ export function docker(args, options = {}) {
         "Docker exited without diagnostics",
       { mode: 0o600 },
     );
+    // Only fixed categories are exportable. Raw stderr can contain credentials or data.
+    const categories = Object.entries({
+      "connection-refused": /connection refused/i,
+      "server-restarting": /shutting down|starting up|terminated abnormally/i,
+      "out-of-memory": /out of memory|cannot allocate memory|oom/i,
+      "permission-denied":
+        /permission denied|authentication failed|unauthorized/i,
+      "archive-invalid":
+        /not a valid archive|unsupported version.*header|unexpected end of file/i,
+      "sql-error": /pg_restore: error:|ERROR:|SQLSTATE/i,
+      timeout: /timed out|timeout/i,
+    })
+      .filter(([, pattern]) => pattern.test(result.stderr || ""))
+      .map(([name]) => name);
+    writeFileSync(
+      `${log}.json`,
+      JSON.stringify({
+        operation: [
+          "compose",
+          "exec",
+          "run",
+          "pull",
+          "inspect",
+          "build",
+        ].includes(args[0])
+          ? args[0]
+          : "other",
+        exitCode: result.status,
+        categories: categories.length ? categories : ["unclassified"],
+      }) + "\n",
+      { mode: 0o600 },
+    );
     throw new Error(
       `Docker operation failed (${args[0]}); diagnostics: ${log}`,
     );

@@ -35,7 +35,9 @@ test("main manual CI publishes the same verified images and requires publishing 
       true,
       event_name,
     );
-    for (const step of ci.jobs["image-smoke"].steps.filter((step) => step.if)) {
+    for (const step of ci.jobs["image-smoke"].steps.filter(
+      (step) => step.if && step.if !== "failure()",
+    )) {
       assert.equal(condition(step.if, github), true, step.name || step.uses);
     }
     const gate = ci.jobs["ci-gate"].steps.find(
@@ -369,7 +371,7 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
   }
 });
 
-test("rerunning an old main SHA cannot cancel a newer main CI, but PR updates cancel old PR checks", () => {
+test("rerunning an old SHA cannot displace newer main or PR checks", () => {
   const ci = workflow("ci");
   const group = (sha, number) =>
     ci.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
@@ -381,7 +383,7 @@ test("rerunning an old main SHA cannot cancel a newer main CI, but PR updates ca
       }),
     );
   assert.notEqual(group("a".repeat(40)), group("b".repeat(40)));
-  assert.equal(group("a".repeat(40), 121), group("b".repeat(40), 121));
+  assert.notEqual(group("a".repeat(40), 121), group("b".repeat(40), 121));
   assert.equal(
     condition(ci.concurrency["cancel-in-progress"], {
       event_name: "workflow_dispatch",
