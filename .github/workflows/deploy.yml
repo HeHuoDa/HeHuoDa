@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Full main commit SHA with a successful push CI run and published images
+        description: Full main commit SHA with successful push/manual CI and published images
         required: true
         type: string
 
@@ -24,9 +24,11 @@ jobs:
   deploy:
     if: >-
       vars.DEPLOY_ENABLED == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -36,14 +38,27 @@ jobs:
       GH_REPO: ${{ github.repository }}
       CANDIDATE_SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
     steps:
-      - name: Verify the exact release passed main push CI
+      - name: Verify the exact main release passed CI and published images
         id: verified
         shell: bash
         run: |
           set -euo pipefail
           [[ "$CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          count=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&branch=main&event=push&status=success&per_page=100" --jq '.total_count')
-          test "$count" -gt 0
+          published=false
+          for ci_event in push workflow_dispatch; do
+            run_ids=$(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$CANDIDATE_SHA&branch=main&event=$ci_event&status=success&per_page=100" --jq '.workflow_runs[].id')
+            for run_id in $run_ids; do
+              publish_counts=$(gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?per_page=100" --jq '[.jobs[] | select(.name == "publish-images" and .conclusion == "success")] | length')
+              if grep -Eq '^[1-9][0-9]*$' <<< "$publish_counts"; then
+                published=true
+                break 2
+              fi
+            done
+          done
+          if [[ "$published" != true ]]; then
+            echo 'No successful main CI run with published images for the exact SHA.' >&2
+            exit 1
+          fi
           echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

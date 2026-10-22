@@ -6,6 +6,7 @@ on:
     types: [completed]
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -23,7 +24,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # 不检出或执行 PR 代码；只通过 GitHub API 操作已通过 CI 的提交。
-      - name: Merge the verified PR commit and delete its branch
+      - name: Merge verified PR, dispatch main CI and delete its branch
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -61,6 +62,11 @@ jobs:
               echo "PR #$pr is pending or its branch is ineligible for deletion; keeping branch."
               continue
             fi
+
+            # GITHUB_TOKEN 合并产生的 push 不会触发 CI，必须显式 dispatch。
+            # 发布的是 dispatch 时固定的 main SHA；不能检出或执行 PR 代码。
+            # 分支是否可以删除不影响发布，dispatch 失败时保留分支并报错。
+            gh workflow run ci.yml --repo "$GH_REPO" --ref "$default_branch"
 
             # 避免删除其他打开的 PR 使用的来源分支或目标分支。
             open_prs=$(gh api --paginate "repos/$GH_REPO/pulls?state=open&per_page=100" \

@@ -76,13 +76,13 @@ jobs:
       - name: Build actual images and run isolated smoke checks
         run: node deploy/smoke.mjs
       - name: Save verified main images for the publishing job
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
           docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$RUNNER_TEMP/verified-images.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
           name: verified-images-${{ github.sha }}
           path: ${{ runner.temp }}/verified-images.tar.gz
@@ -91,7 +91,7 @@ jobs:
 
   publish-images:
     needs: image-smoke
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -130,8 +130,8 @@ jobs:
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           IMAGE_RESULT: ${{ needs.image-smoke.result }}
-      - name: Require image publishing for main pushes
+      - name: Require image publishing for main releases
         run: test "$PUBLISH_RESULT" = "success" || test "$PUBLISH_REQUIRED" = "false"
         env:
           PUBLISH_RESULT: ${{ needs.publish-images.result }}
-          PUBLISH_REQUIRED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          PUBLISH_REQUIRED: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
