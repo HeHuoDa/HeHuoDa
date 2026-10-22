@@ -24,6 +24,18 @@ function condition(expression, github, vars = {}) {
   });
 }
 
+test("CI job environment does not reference runner context before runner allocation", () => {
+  for (const [name, job] of Object.entries(workflow("ci").jobs)) {
+    for (const value of Object.values(job.env || {})) {
+      assert.doesNotMatch(
+        String(value),
+        /\$\{\{[^}]*\brunner\s*\./,
+        `${name}: runner context is available in step env, not job env`,
+      );
+    }
+  }
+});
+
 test("main manual CI publishes the same verified images and requires publishing at the gate", () => {
   const ci = workflow("ci");
   assert.deepEqual(ci.on.push.branches, ["main"]);
