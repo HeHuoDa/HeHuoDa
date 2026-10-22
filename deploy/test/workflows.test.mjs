@@ -198,6 +198,12 @@ test("automatic deployment skips superseded main SHA while explicit rollback sti
       }),
       false,
     );
+    assert.equal(
+      runInNewContext(step.if, {
+        steps: { verified: { outputs: { sha: "a".repeat(40) } } },
+      }),
+      true,
+    );
   }
 });
 
@@ -209,6 +215,21 @@ test("PR and non-main manual CI cannot publish images or start automatic deploym
     types: ["completed"],
     branches: ["main"],
   });
+  assert.deepEqual(deploy.on.workflow_run.workflows, [ci.name]);
+  assert.deepEqual(workflow("auto-merge").on.workflow_run.workflows, [ci.name]);
+  for (const [ref, allowed] of [
+    ["refs/heads/main", true],
+    ["refs/heads/fix/example", false],
+  ]) {
+    assert.equal(
+      condition(
+        deploy.jobs.deploy.if,
+        { event_name: "workflow_dispatch", ref, event: {} },
+        { DEPLOY_ENABLED: "true" },
+      ),
+      allowed,
+    );
+  }
   for (const [event_name, ref] of [
     ["pull_request", "refs/heads/main"],
     ["workflow_dispatch", "refs/heads/fix/example"],
