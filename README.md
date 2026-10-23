@@ -1,10 +1,20 @@
 # 禾伙搭
 
-单机容器化、隔离镜像冒烟、SHA 发布、HTTPS 和备份恢复入口见[部署与恢复说明](docs/deployment.md)。原开发 Compose 保持独立；新增部署工作流默认关闭，真实服务器验收另行记录。
+四川农业大学校园比赛与项目组队平台。当前包含普通 uni-app 用户端（H5／微信小程序同源）、保留作对照与回滚的旧 Web、独立管理端前端，以及 NestJS/Fastify API。项目仍在开发中，尚未形成真实账号与组队业务闭环。
 
-四川农业大学校园比赛与项目组队平台。当前完成阶段一工程初始化、学生端共享导航与路由，登录注册前端表单，以及比赛首页、院徽筛选承办学院、比赛详情（Issue #12）。Issue #22 接入 PostgreSQL、人工核对数据导入、学院与比赛公开查询及真实 API 联调；Issue #13 实现找队友筛选、队伍详情、发布表单、比赛关联及会话内申请/举报演示；Issue #14 提供个人中心、资料编辑及联系方式授权的会话内演示；Issue #15 完成个人中心内队长管理、申请邀请及成员变更的会话演示，真实认证与招募写接口尚未开发。工程包含 pnpm 工作区、Vue 健康页、NestJS/Fastify 健康接口、OpenAPI 类型生成与 CI 配置。
+截至 **2026-10-23**，已核对远端 `main`（`4dae578c38465993949538839a559100d4c11150`）、源码与 GitHub Issues／Actions：
 
-Issue #23 已交付首批信息工程学院、生命科学学院的官方通知采集、候选人工审核、草稿导入与显式发布 CLI；已补充预算分配、定时续跑和诊断记录，尚无管理 HTTP 接口；管理端应用现提供独立前端演示，未完成真实联调。
+| 范围     | 已有能力                                                                                        | 当前边界                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 用户端   | #59–#78、#80 已关闭；导航、主题、控件、比赛、队伍、资料管理、收藏、通知、关于及来源操作均有实现 | 完整 H5 回归、布局／生命周期收尾、微信真机及正式发布仍待验收                                   |
+| 真实 API | 健康／数据库就绪、学院、比赛列表与详情；PostgreSQL 持久化与人工核对导入                         | 认证、验证码、个人业务与招募写接口及消息投递未开放；相应界面使用内存会话演示                   |
+| 通知采集 | 两院官方通知扫描、候选审核、导入与显式发布 CLI                                                  | #49 的 27 学院扩展、管理 HTTP 接口及真实联调仍开放                                             |
+| 管理端   | #36、#42–#45 已关闭，独立应用与比赛／来源／审核／治理页面已存在                                 | #37–#41、#46 仍开放；固定示例不等于管理员认证、业务写入或真实联调                              |
+| 部署     | PR #120／#121 已合并；uni H5/API 镜像、Nginx、SHA/digest 发布、备份恢复与回滚工具已实现         | 有远端镜像发布与手动部署成功记录；#25 仍开放，不能据此认定正式 TLS、异机恢复及完整生产验收完成 |
+
+当前 20 个开放 Issue、无开放 PR；数量为核查时点快照，后续以 [GitHub Issues](https://github.com/HeHuoDa/HeHuoDa/issues) 为准。当前 main 的 [CI 39733924690](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39733924690) 中 `quality`、`image-smoke`、`publish-images`、`ci-gate` 均成功；[手动 Deploy 39771854939](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39771854939) 的传输与部署步骤成功。本次只读核实这些记录，未独立检查服务器在线状态、正式证书、异机恢复或微信真机，也未重跑全套业务测试。
+
+单机容器化、镜像冒烟、SHA 发布、HTTPS 和备份恢复操作见[部署与恢复说明](docs/deployment.md)。原开发 Compose 保持独立；部署工作流是否执行取决于实际开关与环境条件，不能从默认关闭推断当前配置。
 
 仓库现由 [HeHuoDa 组织](https://github.com/HeHuoDa/HeHuoDa)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoDa/HeHuoDa.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
 
@@ -34,9 +44,9 @@ Issue #23 已交付首批信息工程学院、生命科学学院的官方通知�
 | Web 测试         | Vitest `5.0.3`、`@vue/test-utils` `2.5.1`、jsdom `30.1.1`                                        | 组件、路由、状态与请求行为单元测试                                    |
 | API 测试         | Jest `30.5.2`、`ts-jest` `29.4.14`                                                               | 单元测试、真实 PostgreSQL 集成测试与 HTTP e2e 测试                    |
 | 代码质量与协作   | ESLint `10.11.0`、Prettier `3.9.9`、GitHub Actions                                               | 静态检查、格式统一与 CI 质量门禁                                      |
-| 本地数据库环境   | Docker Compose，`postgres:17` 镜像                                                               | 开发数据库持久卷与独立临时测试数据库；尚未提供 Web / API 容器化部署   |
+| 本地数据库环境   | Docker Compose，`postgres:17` 镜像                                                               | 开发／测试数据库；生产另用独立 Compose、uni H5/API 镜像与 Nginx       |
 
-当前旧 Web 继续运行，普通 uni-app（H5、微信小程序）已建立工程入口并开始逐页迁移；真实认证、招募与申请写接口仍待开发。迁移中，Vue Router 的 History 路由、Axios 浏览器请求、DOM / 浏览器 API、Lucide SVG 与 Tailwind Web CSS 均需逐项适配和实测，不能直接视为小程序兼容。迁移任务与替代方案见[迁移提醒与待办](docs/agents/uni-app-migration.md)。
+普通 uni-app（H5、微信小程序）已交付主要工程与页面，部署用户端目标为 uni H5；旧 Web 保留对照与回滚，退役归 #90。真实认证、招募与申请写接口仍待开发。迁移中，Vue Router 的 History 路由、Axios 浏览器请求、DOM / 浏览器 API、Lucide SVG 与 Tailwind Web CSS 均需逐项适配和实测，不能直接视为小程序兼容。迁移任务与替代方案见[迁移提醒与待办](docs/agents/uni-app-migration.md)。
 
 ## 环境
 
@@ -54,7 +64,7 @@ pnpm install --frozen-lockfile
 
 关于页面已由 #77 提供：从个人中心“关于禾伙搭”进入，或直接打开 H5 `/#/pages/about/index`／小程序 `pages/about/index`。页面说明平台定位、使用方式、真实公开查询、会话演示与未开放服务；无需登录，无历史时也可返回个人资料区。页面本身不请求业务 API，无版本或反馈渠道的虚构占位。旧 `/about` pathname 的部署兼容仍由 #82 完成，微信实际运行与真机仍交 #85。
 
-`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前已建立导航骨架：首页 / 找队友 / 我的三项原生 `tabBar`，比赛与队伍详情、发布招募、收藏、通知、登录注册与 404 预留页；页面标题来自 `pages.json`，跳转统一走 `src/navigation/navigate.ts`。业务内容仍由后续页面任务接入，迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
+`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前已接入首页 / 找队友 / 我的三项原生 `tabBar`，比赛与队伍详情、发布招募、收藏、通知、关于、登录注册及 404 页面；页面标题来自 `pages.json`，跳转统一走 `src/navigation/navigate.ts`。比赛公开查询使用真实 API，队伍、资料、授权、申请邀请、收藏和通知使用内存会话；迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
 
 导航注册表在 `apps/uni/src/navigation/routes.ts`：新增页面只需在 `pages.json` 注册并补一条定义，`test:unit` 会校验两处一致、标题同源与旧地址映射完整。旧个人中心地址 `/my/teams`、`/my/applications` 映射到「我的」的队伍/申请分区；平台主导航用 `switchTab`，普通页面用 `navigateTo`，不依赖浏览器 History 或 `document.title`。H5 未知 hash 入口启动时转到 404；pathname 旧地址、刷新与浏览器返回由 #82 验证。决策见 [ADR 0005](docs/adr/0005-uni-navigation-shell.md)。
 
@@ -85,7 +95,7 @@ H5 开发地址默认 [http://127.0.0.1:5174/](http://127.0.0.1:5174/)，端口�
 
 AppID 未就绪时允许本地 H5 与小程序编译，脚本明确标记“本地编译”；DCloud 自动生成的 `touristappid` 不是正式平台配置，不能用它证明微信运行或用于发布。`UNI_RELEASE=true` 时缺少 AppID、使用游客 ID 或格式非法均拒绝执行；格式检查也不代表账号有效或审核通过。保留 `urlCheck=true`，不关闭合法域名检查。
 
-健康页 `/#/pages/health/index` 已通过统一 `uni.request` 入口查询真实 `GET /api/v1/health`；支持首载、刷新、错误重试及请求 ID 展示。微信开发者工具已验证健康查询、停服失败、重启重试、重复点击和页面隐藏后的迟到响应保护。其他公开业务契约联调由 #78 接入；生产合法域名、设备键盘和安全区域及真机全流程由 #58/#85 后续验证。
+健康页 `/#/pages/health/index` 已通过统一 `uni.request` 入口查询真实 `GET /api/v1/health`；支持首载、刷新、错误重试及请求 ID 展示。微信开发者工具已验证健康查询、停服失败、重启重试、重复点击和页面隐藏后的迟到响应保护。学院与比赛公开查询已由 #78 接入；生产合法域名、设备键盘和安全区域及真机全流程由 #58/#85 后续验证。
 
 ### 统一请求与健康页
 
@@ -161,7 +171,7 @@ API 默认只监听本机。开发端口冲突时可设置 API 的 PORT 和 Web 
 | `/health`                                        | 独立服务状态页                                   |
 | 未匹配路径                                       | 页面不存在，可返回首页                           |
 
-首页与比赛详情读取 API；找队友使用明确标注的演示队伍，未知队伍 ID 显示不存在。原计划的 `/competitions` 路径已由首页替代。收藏与通知在移动端通过“个人中心”进入。History 路由部署时需配置 SPA fallback；本次未扩展生产部署。
+首页与比赛详情读取 API；找队友使用明确标注的演示队伍，未知队伍 ID 显示不存在。原计划的 `/competitions` 路径已由首页替代。收藏与通知在移动端通过“个人中心”进入。此表仅描述旧 Web；uni 收藏、通知与关于已实现，参见上文。当前部署以 uni H5 为目标，旧 pathname 映射已有 Nginx 基础，完整刷新／返回兼容仍归 #82。
 
 登录校验邮箱及非空密码；注册包含昵称、邮箱、密码、确认密码与邮箱验证码，密码至少 8 位，不裁剪密码或限制字符组合。密码支持显示/隐藏，验证码发送前校验邮箱。OpenAPI 包含健康与比赛公开查询，认证尚未接入；提交反馈“认证服务暂未开放”，发送反馈“验证码服务暂未开放”；不创建登录状态、不模拟发送成功或倒计时。密码与验证码不写入浏览器存储、日志或 URL，切换认证页面时清空输入。
 
@@ -262,13 +272,13 @@ ESLint 使用原生支持的 `eslint.config.mjs`；`eslint-config-prettier` 关�
 
 ## CI 与协作
 
-GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行完整质量检查，Action 固定为完整提交 SHA。最终 job 名为 `ci-gate`，只有 `quality` 成功时通过。配置没有路径过滤器。
+GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行完整质量检查，Action 固定为完整提交 SHA。`ci-gate` 要求 `quality` 与真实镜像 `image-smoke` 成功；main 发布还须 `publish-images` 成功，PR 允许发布 Job 按规则跳过。配置没有路径过滤器。
 
 `quality` 已配置临时 PostgreSQL 17 service，运行数据库集成测试与真实 HTTP e2e；官网采集测试使用离线片段与模拟网络。当前没有独立 integration/e2e Job，也没有浏览器业务闭环 CI。2026-10-12 核验组织仓库：`main` 必需 `ci-gate`、分支保持最新、解决讨论且管理员同样受约束；Allow auto-merge 与 merge commit 已开启。[PR #48 的 CI](https://github.com/HeHuoDa/HeHuoDa/actions/runs/38193253994)已通过，属于该 PR 的证据，不代表后续改动已验证。
 
 `auto-merge.yml` 在 PR 的 `CI` 成功后自动启用合并：仅处理本仓库面向 `main` 的非草稿 PR，核对通过 CI 的提交仍是 PR 最新提交，并使用 merge commit 保留分步提交。它遵守分支保护，不检出或执行 PR 代码。该工作流合并到默认分支后才会触发；CI 会在草稿 PR 转为可审阅时重新运行，成功后再次触发自动合并。
 
-合并命令执行后，工作流重新确认 PR 已合并，再显式删除来源远程分支。仅删除 SHA 仍等于通过 CI 的提交、未受保护、不是默认分支且没有其他打开的 PR 引用的本仓库分支；已删除或新增提交的分支会跳过。如果 `--auto` 只启用了等待合并，本次运行保留分支，后续延迟合并仍依赖仓库自动删除设置或人工清理。
+合并命令执行后，工作流重新确认 PR 已合并，先显式 dispatch main CI，再按条件清理来源远程分支；漏发由 `release-recovery.yml` 检查补发，发布幂等与失败重试规则见部署说明。仅删除 SHA 仍等于通过 CI 的提交、未受保护、不是默认分支且没有其他打开的 PR 引用的本仓库分支；已删除或新增提交的分支会跳过。如果 `--auto` 只启用了等待合并，本次运行保留分支，后续延迟合并的分支清理仍依赖仓库设置或人工操作。
 
 问题与方案记录在 GitHub Issues，PR 使用仓库模板。参见 [AGENTS.md](AGENTS.md)，现行决策见 [ADR](docs/adr/0001-phase-one-technology-foundation.md)。
 
@@ -276,13 +286,13 @@ GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行�
 
 本机 Agent 配置、依赖、构建缓存、日志、浏览器测试产物及本地运行数据由 `.gitignore` 排除。环境变量示例、根锁文件、OpenAPI 文档与生成的接口类型随代码提交。
 
-本地检查不能证明远端 CI 已执行；分支保护、required checks 与 Auto-merge 需要在 GitHub 单独配置和核验。本次完成首页所需数据库与公开比赛 API；真实登录、招募、申请和生产部署仍待开发。
+本地检查不能证明远端 CI 已执行；分支保护、required checks 与 Auto-merge 需要在 GitHub 单独配置和核验。真实登录、招募与申请写接口仍待开发；容器发布工具已实现，镜像与手动部署运行记录及未验收范围见本文开头和部署说明。
 
 ## 学生端样式与跨端规划
 
 Issue #19 完整移除 Vant；现采用 Tailwind 为主、少量普通 CSS、按复用与行为需要封装组件。图标使用 `@lucide/vue` 1.51.0，经 `AppIcon.vue` 统一入口静态按需导入，许可证与渲染适配见[图标来源](third-party-notices/lucide-LICENSE.txt)和[样式约定](docs/student-ui-style.md)。认证、健康状态与导航保持既有行为。
 
-项目采用普通 uni-app，目标 H5、微信小程序。旧 Web 继续交付，apps/uni 工程已建立并开始逐页迁移；开发时持续识别、解释并记录影响，参见[迁移提醒与待办](docs/agents/uni-app-migration.md)。验证结果与构建体积对比记录在 PR；验收文档和截图仅保留本地。
+项目采用普通 uni-app，目标 H5、微信小程序。apps/uni 主要页面已实现，当前推进迁移收尾与分端验收；旧 Web 保留对照与回滚。开发时持续识别、解释并记录影响，参见[迁移提醒与待办](docs/agents/uni-app-migration.md)。验证结果与构建体积对比记录在 PR；验收文档和截图仅保留本地。
 
 图标与加载组件位于 `apps/web/src/components/`，分别为 `AppIcon.vue`、`app-icons.ts` 和 `LoadingIndicator.vue`，复用既有认证与学院组件。
 
@@ -402,10 +412,10 @@ H5 迁移需回归表单标签与焦点、query/History、Tailwind 和安全区�
 
 主导航移除独立队伍与申请入口；`/my/teams`、`/my/applications` 兼容跳转至 `/profile?section=teams|applications`，保留无关 query 与 hash。边界预览提供满员、截止、暂停、失效邀请、无队伍及无申请状态；切换预览会明确重置当前示例。刷新恢复初始状态，重置全部组队示例同时恢复资料和默认未授权，不写业务 localStorage、不模拟认证，也没有业务写请求、真实送达或服务器事务及并发保障。
 
-### 当前个人中心未完成项
+### 个人中心边界（旧 Web 与 uni-app）
 
-- 业务统计、收藏与站内通知未接入。
+- 旧 Web 的收藏、通知仍是占位；uni-app 已实现会话收藏、站内通知及相应计数，不另行补建旧 Web 成品。
 - 真实账号、资料持久化、队伍/申请/邀请写 API、联系方式存储与服务端权限未接入。
-- 普通 uni-app H5 与微信小程序尚未迁移和验收，Web 检查不代表小程序兼容。
+- uni-app 资料、授权、队伍管理与申请邀请已迁移，完整 H5 回归和微信真机／发布仍待验收；Web 检查不代表小程序兼容。
 
 2026-10-09 按最新确认统一使用“个人中心”，保留七项资料（昵称、校区、学院、专业、年级、技能、简介），移除个人中心与招募页的学习时长字段、展示和校验。原 Issue #14 中相关旧要求以本次后续确认与进展评论说明为准。

@@ -2,6 +2,19 @@
 
 本说明对应 Issue #25。用户端部署 `apps/uni` 的 H5，API 使用 NestJS/Fastify，数据库使用 PostgreSQL。管理端仍是独立前端演示，本方案不开放管理 API、真实登录、业务写入或消息投递；旧 `apps/web` 不作为第二套常态用户端上线。微信小程序产物不放进 Nginx，也不由本工作流上传。
 
+## 已核实的交付记录（2026-10-23）
+
+源码基线为远端 main `4dae578c38465993949538839a559100d4c11150`。[PR #120](https://github.com/HeHuoDa/HeHuoDa/pull/120) 的容器化基础与 [PR #121](https://github.com/HeHuoDa/HeHuoDa/pull/121) 的发布触发／digest／恢复防护已合并；[Issue #25](https://github.com/HeHuoDa/HeHuoDa/issues/25) 仍开放。
+
+| 证据                                                                                        | 实际状态                                               | 可证明范围                                                                                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [main CI 39733924690](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39733924690)          | quality、image-smoke、publish-images、ci-gate 全部成功 | 当前 SHA 的完整工作区门禁、真实镜像隔离冒烟及 GHCR 发布成功；存在 `release-images-4dae578c38465993949538839a559100d4c11150-2` 清单产物 |
+| [自动 Deploy 39740192347](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39740192347)      | deploy Job skipped                                     | 当次未执行部署；不能据此推断后续开关或服务器状态                                                                                       |
+| [手动 Deploy 39771854939](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39771854939)      | deploy Job 及传输部署步骤 success                      | 已有远端传输与部署执行成功记录，不能继续写“从未部署”；不等于本次独立核验服务器在线与完整生产验收                                       |
+| [Release recovery 39871463294](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39871463294) | 定时运行 success                                       | 恢复检查已运行；不单独证明本轮补发了 CI、连接服务器或部署新版本                                                                        |
+
+以上来自本次只读回查的 Actions Job／步骤和产物元数据。本次没有登录服务器、读取其受控配置或执行发布，也没有独立验证实际入口、正式 TLS 及续期、异机备份与恢复、故障回滚或微信运行。环境变量和 Secrets 的当前配置未读取；下文默认开关与配置步骤是操作规则，不能作为“目前未启用”的状态结论。#25 收尾按真实环境逐项核验，H5 切流／回滚和微信发布仍分别归 #88／#89。
+
 ## 环境与交付边界
 
 - `compose.yaml` / `compose.override.yaml` 保留原有开发及测试数据库，不与本方案叠加。
