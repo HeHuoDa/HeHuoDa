@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, nextTick, onUnmounted, reactive, ref } from "vue";
 import { onLoad, onUnload } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -19,7 +20,7 @@ import {
   replacePage,
   returnToTeams,
 } from "../../navigation/navigate";
-import type { RouteQuery } from "../../navigation/params";
+import { copyRouteQuery, type RouteQuery } from "../../navigation/params";
 import {
   parseTeamRouteQuery,
   teamRouteQuery,
@@ -173,8 +174,13 @@ function hide() {
   active = false;
   controller.cancel();
 }
-onLoad((query) => {
-  sourceQuery = teamRouteQuery(parseTeamRouteQuery(query ?? {}));
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
+  sourceQuery = {
+    ...copyRouteQuery(query ?? {}),
+    ...teamRouteQuery(parseTeamRouteQuery(query ?? {})),
+  };
+  delete sourceQuery.id;
 });
 usePageLifecycle({
   show() {

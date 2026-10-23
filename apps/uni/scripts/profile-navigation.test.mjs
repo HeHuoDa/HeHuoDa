@@ -93,6 +93,23 @@ test("重置后的迟到导航失败不重新跳转或清除新会话定位", ()
   }
 });
 
+test("重置后的迟到 tab 成功回调不恢复旧地址意图", () => {
+  setActivePinia(createPinia());
+  const session = useSessionStore();
+  const original = globalThis.uni;
+  const requests = [];
+  let completed = 0;
+  globalThis.uni = { switchTab: (options) => requests.push(options) };
+  try {
+    openTab("teams", undefined, () => completed++);
+    session.reset();
+    requests[0].success();
+    assert.equal(completed, 0);
+  } finally {
+    globalThis.uni = original;
+  }
+});
+
 test("比赛返回复用首页栈，空栈交接筛选；关联招募只传比赛 ID且只消费一次", () => {
   setActivePinia(createPinia());
   const originalUni = globalThis.uni;

@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "preview:h5": "node scripts/h5-preview.mjs",
     "dev:h5": "node scripts/run-uni.mjs dev h5",
     "dev:mp-weixin": "node scripts/run-uni.mjs dev mp-weixin",
     "build": "pnpm check:toolchain && pnpm build:h5 && pnpm build:mp-weixin",

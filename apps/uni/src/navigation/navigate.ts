@@ -10,38 +10,46 @@ import { useNavigationStore } from "../stores/navigation";
 import { useSessionStore } from "../stores/session";
 import { routePath, type PageRouteName, type TabRouteName } from "./routes.ts";
 import type { ProfileSection, RouteQuery } from "./params";
+import { replaceH5TabQuery, prepareH5PageAddress } from "./h5-router";
 
-export type QueryValue = string | number | undefined;
+export type QueryValue = string | string[] | number | undefined;
 
 export function withQuery(
   path: string,
   query: Record<string, QueryValue> = {},
 ): string {
   const search = Object.entries(query)
-    // hosts="" 表示显式未选择学院，不能清洗成缺省的全校范围。
-    .filter(
-      ([key, value]) =>
-        value !== undefined && (key === "hosts" || `${value}` !== ""),
-    )
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(`${value}`)}`,
+    // 显式空 hosts 与合法附加 query 的空值均有语义，只剔除缺省值。
+    .filter(([, value]) => value !== undefined)
+    .flatMap(([key, value]) =>
+      (Array.isArray(value) ? value : [value]).map(
+        (item) => `${encodeURIComponent(key)}=${encodeURIComponent(`${item}`)}`,
+      ),
     )
     .join("&");
   return search ? `${path}?${search}` : path;
 }
 
 /** 切换主导航；switchTab 不支持参数，需要分区时用 openProfileSection。 */
-export function openTab(name: TabRouteName, onFailure?: () => void): void {
+export function openTab(
+  name: TabRouteName,
+  onFailure?: () => void,
+  onSuccess?: () => void,
+): void {
   const session = useSessionStore();
   const revision = session.sessionRevision;
+  const complete = () => {
+    if (revision === session.sessionRevision) onSuccess?.();
+  };
   uni.switchTab({
     url: routePath(name),
+    success: complete,
     fail: () => {
       if (revision !== session.sessionRevision) return;
       // tabBar 配置异常时至少保证能到目标页，不留在空白页。
       uni.reLaunch({
         url: routePath(name),
+        success: complete,
         fail: () => {
           if (revision === session.sessionRevision) onFailure?.();
         },
@@ -57,10 +65,13 @@ export function openPage(
   onFailure?: () => void,
   onSuccess?: () => void,
 ): void {
+  const url = withQuery(routePath(name), query);
+  const complete = prepareH5PageAddress(url);
   uni.navigateTo({
-    url: withQuery(routePath(name), query),
+    url,
     fail: onFailure,
     success: onSuccess,
+    complete,
   });
 }
 
@@ -69,7 +80,9 @@ export function replacePage(
   name: PageRouteName,
   query?: Record<string, QueryValue>,
 ): void {
-  uni.redirectTo({ url: withQuery(routePath(name), query) });
+  const url = withQuery(routePath(name), query);
+  const complete = prepareH5PageAddress(url);
+  uni.redirectTo({ url, complete });
 }
 
 /** 返回上一页；页面栈只有当前页时回到首页。 */
@@ -100,12 +113,18 @@ export function openProfileSection(
   if (
     typeof getCurrentPages === "function" &&
     getCurrentPages().at(-1)?.route === routePath("profile").slice(1)
-  )
+  ) {
+    replaceH5TabQuery("profile", { ...query, section });
     return;
-  openTab("profile", () => {
-    useNavigationStore().clearProfileNavigation();
-    onFailure?.();
-  });
+  }
+  openTab(
+    "profile",
+    () => {
+      useNavigationStore().clearProfileNavigation();
+      onFailure?.();
+    },
+    () => replaceH5TabQuery("profile", { ...query, section }),
+  );
 }
 
 /** switchTab 不能携带 query；首页返回条件与关联招募用同一个一次性交接入口。 */
@@ -114,7 +133,7 @@ export function openTabWithQuery(
   query: RouteQuery,
 ): void {
   useNavigationStore().requestTabQuery(name, query);
-  openTab(name);
+  openTab(name, undefined, () => replaceH5TabQuery(name, query));
 }
 
 export function returnToCompetitions(query: RouteQuery): void {

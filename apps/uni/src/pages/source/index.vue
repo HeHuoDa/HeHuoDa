@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import CompetitionSourceAction from "../../components/CompetitionSourceAction.vue";
@@ -14,7 +15,8 @@ const notice = computed(() => ({
   publisher: "官方通知",
   url: rawUrl.value,
 }));
-onLoad((query) => {
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
   // 不做额外 decode，不接收重复参数数组，更不相信调用方的允许标识。
   const url: unknown = query?.url;
   rawUrl.value = typeof url === "string" ? url : "";

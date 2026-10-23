@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, onScopeDispose, reactive, ref, watch } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -22,6 +23,8 @@ import {
 import { openPage } from "../../navigation/navigate";
 import { copyRouteQuery } from "../../navigation/params";
 import { teamRouteQuery } from "../../navigation/team-query";
+import { useH5Query } from "../../navigation/use-h5-query";
+import { currentH5Query } from "../../navigation/h5-address";
 import { useNavigationStore } from "../../stores/navigation";
 import { useSessionStore } from "../../stores/session";
 
@@ -92,13 +95,21 @@ function trackName(team: Team) {
   );
 }
 function openDetail(team: Team) {
-  openPage("team-detail", { ...teamRouteQuery(state.filters), id: team.id });
+  openPage("team-detail", {
+    ...currentH5Query(),
+    ...teamRouteQuery(state.filters),
+    id: team.id,
+  });
 }
 function openPublish() {
-  openPage("team-new", teamRouteQuery(state.filters));
+  openPage("team-new", {
+    ...currentH5Query(),
+    ...teamRouteQuery(state.filters),
+  });
 }
 
-onLoad((query) => {
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
   controller.restore(copyRouteQuery(query ?? {}));
   keyword.value = state.filters.q;
 });
@@ -127,6 +138,14 @@ const unregisterReset = session.registerReset(Symbol("team-list"), () => {
   keyword.value = "";
 });
 onScopeDispose(unregisterReset);
+useH5Query(
+  "teams",
+  () => teamRouteQuery(state.filters),
+  (query) => {
+    controller.restore(query);
+    keyword.value = state.filters.q;
+  },
+);
 </script>
 
 <template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, onScopeDispose, reactive, ref, watch } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -18,6 +19,7 @@ import ParamFeedback from "../../components/ParamFeedback.vue";
 import { openPage, returnToTeams } from "../../navigation/navigate";
 import {
   paramMessage,
+  copyRouteQuery,
   parseBusinessId,
   type RouteQuery,
 } from "../../navigation/params";
@@ -71,8 +73,13 @@ function tick() {
   controller.syncClock();
   session.syncNotifications(state.now);
 }
-onLoad((query) => {
-  sourceQuery = teamRouteQuery(parseTeamRouteQuery(query ?? {}));
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
+  sourceQuery = {
+    ...copyRouteQuery(query ?? {}),
+    ...teamRouteQuery(parseTeamRouteQuery(query ?? {})),
+  };
+  delete sourceQuery.id;
   const parsed = parseBusinessId(query?.id);
   parameterError.value = parsed.issue ? paramMessage(parsed.issue, "队伍") : "";
   controller.load(parsed.issue ? "" : parsed.value);
