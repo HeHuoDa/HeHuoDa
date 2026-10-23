@@ -19,7 +19,6 @@ interface ProfileNavigation {
  * 状态只活在当前应用会话内，不持久化，也不代表登录态或权限。
  */
 export const useNavigationStore = defineStore("navigation", () => {
-  const sessionRevision = ref(0);
   const pendingProfileNavigation = ref<ProfileNavigation | null>(null);
   const pendingTabQueries = ref<Partial<Record<"home" | "teams", RouteQuery>>>(
     {},
@@ -53,13 +52,11 @@ export const useNavigationStore = defineStore("navigation", () => {
     pendingProfileNavigation.value = null;
   }
   function clearSessionNavigation() {
-    sessionRevision.value++;
     clearProfileNavigation();
     pendingTabQueries.value = {};
   }
 
   return {
-    sessionRevision,
     requestTabQuery,
     consumeTabQuery,
     pendingProfileNavigation,

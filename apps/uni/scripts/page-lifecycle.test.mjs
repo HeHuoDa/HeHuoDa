@@ -2,6 +2,31 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createPageLifecycle } from "../src/lifecycle/page-controller.ts";
 
+test("onLoad 已发出的请求在页面首次显示前卸载时也会被清理", () => {
+  let pending = true;
+  const page = createPageLifecycle({
+    show() {},
+    hide() {
+      pending = false;
+    },
+  });
+  page.dispose();
+  assert.equal(pending, false);
+});
+
+test("首次显示前进入后台也清理 onLoad 请求，重复隐藏不重复清理", () => {
+  let cancellations = 0;
+  const page = createPageLifecycle({
+    show() {},
+    hide() {
+      cancellations++;
+    },
+  });
+  page.setForeground(false);
+  page.hide();
+  assert.equal(cancellations, 1);
+});
+
 test("应用与页面都显示时才运行，重复切换十次及卸载均不累积资源", () => {
   let active = 0,
     starts = 0,
