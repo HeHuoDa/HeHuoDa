@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { computed, onScopeDispose, reactive, ref } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
+import { useSessionStore } from "../../stores/session";
 import {
   collegeNames,
   formatTime,
@@ -62,19 +64,29 @@ onLoad((query) => {
   state.filters = parseFilters(query ?? {});
   search.value = state.filters.q;
 });
-onShow(() => {
-  const query = navigation.consumeTabQuery("home");
-  if (query) {
-    controller.cancel();
-    state.filters = parseFilters(query);
-    search.value = state.filters.q;
-    void controller.load();
-    return;
-  }
-  void controller.resume();
+usePageLifecycle({
+  show() {
+    const query = navigation.consumeTabQuery("home");
+    if (query) {
+      controller.cancel();
+      state.filters = parseFilters(query);
+      search.value = state.filters.q;
+      void controller.load();
+      return;
+    }
+    void controller.resume();
+  },
+  hide: controller.cancel,
 });
-onHide(controller.cancel);
-onUnload(controller.cancel);
+const unregisterReset = useSessionStore().registerReset(
+  Symbol("discovery"),
+  () => {
+    controller.cancel();
+    state.response = null;
+    state.status = "idle";
+  },
+);
+onScopeDispose(unregisterReset);
 </script>
 
 <template>

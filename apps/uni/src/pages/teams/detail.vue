@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { computed, onScopeDispose, reactive, ref, watch } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import {
   projectTypes,
   cooperationModes,
@@ -76,12 +77,19 @@ onLoad((query) => {
   parameterError.value = parsed.issue ? paramMessage(parsed.issue, "队伍") : "";
   controller.load(parsed.issue ? "" : parsed.value);
 });
-onShow(() => {
-  tick();
-  if (timer === undefined) timer = globalThis.setInterval(tick, 1000);
+usePageLifecycle({
+  show() {
+    tick();
+    if (timer === undefined) timer = globalThis.setInterval(tick, 1000);
+  },
+  hide: leave,
 });
-onHide(leave);
-onUnload(leave);
+const unregisterReset = session.registerReset(Symbol("team-detail"), () => {
+  controller.cancel();
+  state.feedback = "";
+  controller.syncClock();
+});
+onScopeDispose(unregisterReset);
 watch(team, (value) => {
   if (!value) controller.cancel();
 });

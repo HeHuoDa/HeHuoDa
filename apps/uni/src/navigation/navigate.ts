@@ -32,11 +32,19 @@ export function withQuery(
 
 /** 切换主导航；switchTab 不支持参数，需要分区时用 openProfileSection。 */
 export function openTab(name: TabRouteName, onFailure?: () => void): void {
+  const navigation = useNavigationStore();
+  const revision = navigation.sessionRevision;
   uni.switchTab({
     url: routePath(name),
     fail: () => {
+      if (revision !== navigation.sessionRevision) return;
       // tabBar 配置异常时至少保证能到目标页，不留在空白页。
-      uni.reLaunch({ url: routePath(name), fail: onFailure });
+      uni.reLaunch({
+        url: routePath(name),
+        fail: () => {
+          if (revision === navigation.sessionRevision) onFailure?.();
+        },
+      });
     },
   });
 }

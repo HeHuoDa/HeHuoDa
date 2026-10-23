@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { computed, onScopeDispose, reactive, ref, watch } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import {
   cooperationModes,
   projectTypes,
@@ -101,26 +102,31 @@ onLoad((query) => {
   controller.restore(copyRouteQuery(query ?? {}));
   keyword.value = state.filters.q;
 });
-onShow(() => {
-  const query = navigation.consumeTabQuery("teams");
-  if (query) {
-    controller.restore(query);
-    keyword.value = state.filters.q;
-  }
-  controller.startClock();
+usePageLifecycle({
+  show() {
+    const query = navigation.consumeTabQuery("teams");
+    if (query) {
+      controller.restore(query);
+      keyword.value = state.filters.q;
+    }
+    controller.startClock();
+    controller.syncClock();
+    // 只补发被中断的请求；已落定的资料在返回时直接复用。
+    if (state.filters.competition && state.competitionStatus === "idle")
+      void controller.loadCompetition();
+  },
+  hide() {
+    controller.stopClock();
+    controller.cancel();
+  },
+});
+const unregisterReset = session.registerReset(Symbol("team-list"), () => {
+  controller.cancel();
+  controller.reset();
   controller.syncClock();
-  // 只补发被中断的请求；已落定的资料在返回时直接复用。
-  if (state.filters.competition && state.competitionStatus === "idle")
-    void controller.loadCompetition();
+  keyword.value = "";
 });
-onHide(() => {
-  controller.stopClock();
-  controller.cancel();
-});
-onUnload(() => {
-  controller.stopClock();
-  controller.cancel();
-});
+onScopeDispose(unregisterReset);
 </script>
 
 <template>

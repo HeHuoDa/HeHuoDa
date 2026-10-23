@@ -8,6 +8,7 @@ import { compileScript, parse } from "vue/compiler-sfc";
 import { createPinia, setActivePinia } from "pinia";
 import { useSessionStore } from "../src/stores/session.ts";
 import { useNavigationStore } from "../src/stores/navigation.ts";
+import { useAppLifecycleStore } from "../src/stores/app-lifecycle.ts";
 
 // Compile the real page; only platform lifecycle and non-rendered child imports
 // are substitutes. Browser rendering and real controls are verified separately.
@@ -85,6 +86,22 @@ test("真实详情页按 ID 读取共享状态，隐藏清草稿和时钟，返�
     hooks.show.forEach((fn) => fn());
     assert.equal(timers.size, 1);
     assert.equal(page.team.value, session.teams[1]);
+    const app = useAppLifecycleStore();
+    for (let i = 0; i < 10; i++) {
+      app.hide();
+      assert.equal(timers.size, 0);
+      app.show();
+      hooks.show.forEach((fn) => fn());
+      assert.equal(timers.size, 1);
+    }
+    page.controller.begin("accept");
+    session.reset();
+    assert.equal(page.state.action, null);
+    page.controller.submit();
+    assert.equal(
+      session.records.find((r) => r.id === "history-0").state,
+      "INVITED",
+    );
     page.controller.begin("accept");
     page.controller.submit();
     assert.equal(page.team.value.members.length, 3);

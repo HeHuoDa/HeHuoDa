@@ -111,20 +111,21 @@ export const useSessionStore = defineStore("business-session", () => {
     },
   };
   // 页面控制器及后续通知可加入统一重置，无需反向导入。
-  const resetHandlers = new Map<string, () => void>();
-  function registerReset(key: string, handler: () => void) {
+  const resetHandlers = new Map<string | symbol, () => void>();
+  function registerReset(key: string | symbol, handler: () => void) {
     resetHandlers.set(key, handler);
     return () => {
       if (resetHandlers.get(key) === handler) resetHandlers.delete(key);
     };
   }
   function reset() {
+    // 先隔离旧会话及页面操作，再恢复同 ID 的新示例。
+    sessionRevision.value++;
+    navigation.clearSessionNavigation();
+    for (const handler of [...resetHandlers.values()]) handler();
     favorites.value = [];
     teamActions.reset();
-    sessionRevision.value++;
-    navigation.clearProfileNavigation();
     notificationActions.reset();
-    for (const handler of resetHandlers.values()) handler();
   }
   function memberNickname(id: string, fallback: string) {
     return id === DEMO_PARTICIPANT.id

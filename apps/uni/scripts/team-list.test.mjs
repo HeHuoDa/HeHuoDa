@@ -432,6 +432,7 @@ test("列表页按参数恢复、纠正页码、进详情携带有效页，隐�
     assert.equal(page.state.competitionStatus, "ready");
 
     // 比赛已隐藏：只提供清除条件，不提供重试。
+    hooks.show.forEach((fn) => fn());
     page.update({ competition: "competition-missing" });
     assert.equal(page.state.competitionStatus, "loading");
     globalThis.__teamApiCalls

@@ -7,6 +7,26 @@ import { useSessionStore } from "../src/stores/session.ts";
 import { colleges } from "../src/data/colleges.ts";
 import { colleges as pureColleges } from "@hehuoda/client-domain/colleges";
 import { DEMO_PARTICIPANT } from "@hehuoda/client-domain/team";
+import { useNavigationStore } from "../src/stores/navigation.ts";
+
+test("统一重置先失效旧操作再恢复示例，并清除所有一次性导航", () => {
+  const pinia = createPinia();
+  const store = useSessionStore(pinia);
+  const navigation = useNavigationStore(pinia);
+  const oldTeam = store.teams[0];
+  store.addFavorite("old");
+  navigation.requestTabQuery("teams", { competition: "old" });
+  navigation.requestProfileSection("applications", { recordId: "history-0" });
+  store.registerReset("pending-operation", () => {
+    assert.equal(store.sessionRevision, 1);
+    assert.equal(store.teams[0], oldTeam, "旧控制器清理时尚未恢复同 ID 示例");
+  });
+  store.reset();
+  assert.notEqual(store.teams[0], oldTeam);
+  assert.equal(store.favoriteCount, 0);
+  assert.equal(navigation.consumeTabQuery("teams"), null);
+  assert.equal(navigation.consumeProfileNavigation(), null);
+});
 
 test("个人资料昵称跨页展示，既有与新建队伍均按当前资料读取，不改变其他成员", () => {
   const store = useSessionStore(createPinia());

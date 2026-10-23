@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import LoadingIndicator from "../../components/LoadingIndicator.vue";
 import ProjectLogo from "../../components/ProjectLogo.vue";
 import { useHealthStore } from "../../stores/health";
@@ -19,11 +20,12 @@ const statusText = computed(
 onLoad(() => {
   void health.refresh();
 });
-onShow(() => {
-  if (health.state === "idle") void health.refresh();
+usePageLifecycle({
+  show() {
+    if (health.state === "idle") void health.refresh();
+  },
+  hide: () => health.cancel(),
 });
-onHide(() => health.cancel());
-onUnload(() => health.cancel());
 </script>
 
 <template>

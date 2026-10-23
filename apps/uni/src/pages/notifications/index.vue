@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onScopeDispose, ref } from "vue";
-import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import NotificationList from "../../components/NotificationList.vue";
 import FormButton from "../../components/FormButton.vue";
 import { backOrHome, openProfileSection } from "../../navigation/navigate";
@@ -41,15 +41,19 @@ function open(item: SessionNotification) {
     },
   );
 }
-onShow(() => {
-  feedback.value = "";
-  session.syncNotifications();
-  if (timer === undefined)
-    timer = globalThis.setInterval(() => session.syncNotifications(), 1000);
+usePageLifecycle({
+  show() {
+    feedback.value = "";
+    session.syncNotifications();
+    if (timer === undefined)
+      timer = globalThis.setInterval(() => session.syncNotifications(), 1000);
+  },
+  hide: stop,
 });
-onHide(stop);
-onUnload(stop);
-onScopeDispose(stop);
+const unregisterReset = session.registerReset(Symbol("notifications"), () => {
+  feedback.value = "";
+});
+onScopeDispose(unregisterReset);
 </script>
 
 <template>

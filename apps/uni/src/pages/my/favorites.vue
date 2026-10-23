@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
-import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
+import { onScopeDispose, reactive, ref, watch } from "vue";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import { competitionApi } from "../../api/competitions";
 import AppIcon from "../../components/AppIcon.vue";
 import FormButton from "../../components/FormButton.vue";
@@ -28,12 +28,19 @@ function remove(id: string, name?: string) {
   session.removeFavorite(id);
   feedback.value = `已取消收藏${name ? `「${name}」` : "该比赛"}。`;
 }
-onShow(() => {
-  feedback.value = "";
-  controller.start();
+usePageLifecycle({
+  show() {
+    feedback.value = "";
+    controller.start();
+  },
+  hide: controller.stop,
 });
-onHide(controller.stop);
-onUnload(controller.stop);
+const unregisterReset = session.registerReset(Symbol("favorites"), () => {
+  // 保持可见性，先取消旧请求；集合清空后同步 watcher 会清除行。
+  controller.reset();
+  feedback.value = "";
+});
+onScopeDispose(unregisterReset);
 </script>
 
 <template>
