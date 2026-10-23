@@ -298,6 +298,58 @@ test("微信弹层在旋转及键盘收起后使用当前窗口，隐藏后移�
   }
 });
 
+test("微信弹层关闭重开不重复绑定，旧回调不能改写新窗口且非 tab 页不操作 tabBar", async () => {
+  const keyboards = new Set();
+  const windows = new Set();
+  let windowHeight = 700;
+  let tabCalls = 0;
+  globalThis.uni = {
+    getWindowInfo: () => ({ windowHeight }),
+    onKeyboardHeightChange: (callback) => keyboards.add(callback),
+    offKeyboardHeightChange: (callback) => keyboards.delete(callback),
+    onWindowResize: (callback) => windows.add(callback),
+    offWindowResize: (callback) => windows.delete(callback),
+    hideTabBar: () => tabCalls++,
+    showTabBar: () => tabCalls++,
+  };
+  globalThis.getCurrentPages = () => [{ route: "pages/teams/detail" }];
+  const props = { id: "reopen", open: true, title: "申请加入" };
+  const app = await mount("../src/components/FormDialog.vue", props);
+  try {
+    const oldKeyboard = [...keyboards][0];
+    const oldResize = [...windows][0];
+    app.render({ ...props, open: false });
+    await nextTick();
+    assert.equal(keyboards.size, 0);
+    assert.equal(windows.size, 0);
+    assert.equal(
+      app.find((node) => node.props.role === "dialog"),
+      undefined,
+    );
+    windowHeight = 480;
+    app.render(props);
+    await nextTick();
+    await nextTick();
+    assert.equal(keyboards.size, 1);
+    assert.equal(windows.size, 1);
+    oldKeyboard({ height: 300 });
+    oldResize({ size: { windowHeight: 900 } });
+    await nextTick();
+    assert.equal(
+      app.find((node) => node.props.role === "dialog").props.style.height,
+      "480px",
+    );
+    app.unmount();
+    assert.equal(keyboards.size, 0);
+    assert.equal(windows.size, 0);
+    assert.equal(tabCalls, 0);
+  } finally {
+    app.unmount();
+    delete globalThis.uni;
+    delete globalThis.getCurrentPages;
+  }
+});
+
 test("完整微信表单 fixture：取消复原、错误不写回、保存防重及页面隐藏丢弃", async () => {
   globalThis.__formPageHooks = [];
   globalThis.uni = {
