@@ -424,3 +424,10 @@ H5 迁移后需回归模态隔离、遮罩不关闭、Escape 丢弃草稿、焦�
 - `App.vue` 用应用级 `onShow/onHide` 更新前后台状态，回前台先同步邀请有效性观察。页面经 `lifecycle/use-page-lifecycle.ts` 同时检查应用前台与页面显示；隐藏、后台、卸页和 Vue scope 销毁时释放所属请求、计时器与定位操作，再显示仅恢复一次。首次显示前卸页也取消 `onLoad` 已发出的请求。不使用后台保活或浏览器专用生命周期替代小程序实现。依据 [应用生命周期](https://uniapp.dcloud.net.cn/collocation/App) 与 [页面生命周期](https://uniapp.dcloud.net.cn/tutorial/page)。
 - 统一 `session.reset` 先递增唯一的 `sessionRevision`，清除个人中心及首页／队伍的一次性导航，再调用页面清理器使旧请求、确认、草稿与异步定位失效，最后恢复原有会话拥有者的示例并清空收藏／会话事件。导航失败回调和发布后跳转同样检查该代次；`resetProfile` 仍只影响资料与授权。普通导航、页面保留与短后台保留内存，整页刷新／进程冷启动重建 Pinia，不引入持久化或真实认证。
 - 两端共用同一生命周期入口与现有请求取消适配器，工程适配成本低。H5 `visibilitychange` 事件注入、平台生命周期替身及双端编译分别记录；浏览器合成前后台事件不等于真实系统后台。微信页面栈保留、实际应用前后台顺序、键盘监听释放、安全区及 iOS／Android 真机仍交 #85，按需执行微信开发者工具人工验收。
+
+## Issue #82：H5 旧地址与浏览器历史
+
+- `navigation/h5-address.ts` 复用 `sourceRoutes` 和共享筛选规则；启动前 `h5-entry.ts` 用 replaceState 把旧 pathname、query、详情稳定 ID 和赛段 fragment 转成 uni hash 页面。关于页 `/about` 是需求预留别名。Nginx 只回退静态 HTML，API 和缺失资源独立处理；移除临时 njs 业务路由表，客户端不依赖旧 Web 服务。
+- `h5-router.ts` 仅装饰 uni 的既有 router；`use-h5-query.ts` 同步列表与个人中心当前参数，筛选／页码／分区替换当前历史项，详情导航仍新增历史项并沿 uni 恢复滚动。DCloud 当前 H5 会在显式导航中再次编码、在 onLoad 再次解码；适配器只修正本次显式导航，页面从原地址解析一次，避免百分号和编码 ID 被重复处理。合法附加参数和通知稳定 ID 保留，定位仍由原有控制器校验。
+- 依据 [manifest H5 路由配置](https://uniapp.dcloud.net.cn/collocation/manifest.html)、[页面导航 API](https://uniapp.dcloud.net.cn/api/router.html) 和 [Vue Router 导航守卫](https://router.vuejs.org/guide/advanced/navigation-guards.html)；启动时序与再编码行为还结合锁定 DCloud 运行时代码和本地浏览器验证。浏览器 API 均在 H5 编译分支内；微信继续使用 switchTab、页面栈、原生标题和一次性 Pinia 交接，H5 成功不推断微信运行兼容。维护成本中等，后续升级 DCloud 时须重跑地址、显式导航、前进后退与通知定位回归。
+- 本地静态预览提供 `preview:h5`，只托管 uni 产物、不代理 API；真实公开 API／PostgreSQL、微信页面栈、应用前后台、设备滚动与安全区验证须分别记录。微信开发者工具可按 PR 指引人工验收，模拟器及真机剩余范围交 #85，生产部署与回滚交 #88。
