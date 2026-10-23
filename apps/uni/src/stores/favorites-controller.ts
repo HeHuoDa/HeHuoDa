@@ -119,5 +119,9 @@ export function createFavoritesController(
     row.detail = null;
     pump();
   }
-  return { start, stop, sync, retry };
+  function reset() {
+    for (const id of pending.keys()) cancel(id);
+    state.rows = [];
+  }
+  return { start, stop, sync, retry, reset };
 }

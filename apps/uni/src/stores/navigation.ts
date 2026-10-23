@@ -51,6 +51,10 @@ export const useNavigationStore = defineStore("navigation", () => {
   function clearProfileNavigation() {
     pendingProfileNavigation.value = null;
   }
+  function clearSessionNavigation() {
+    clearProfileNavigation();
+    pendingTabQueries.value = {};
+  }
 
   return {
     requestTabQuery,
@@ -59,5 +63,6 @@ export const useNavigationStore = defineStore("navigation", () => {
     requestProfileSection,
     consumeProfileNavigation,
     clearProfileNavigation,
+    clearSessionNavigation,
   };
 });

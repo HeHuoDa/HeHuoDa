@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
-import { onHide, onLoad, onReady, onShow, onUnload } from "@dcloudio/uni-app";
+import { computed, nextTick, onScopeDispose, reactive, ref } from "vue";
+import { onLoad, onReady } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import {
   collegeNames,
   formatTime,
@@ -112,16 +113,28 @@ onLoad((query) => {
   stage = query?.stage;
   sourceQuery = copyRouteQuery(writeFilters({}, parseFilters(query ?? {})));
 });
-onShow(() => {
-  visible = true;
-  if (state.status === "idle") void load();
+usePageLifecycle({
+  show() {
+    visible = true;
+    if (state.status === "idle") void load();
+  },
+  hide: leave,
 });
 onReady(() => {
   ready = true;
   void locate();
 });
-onHide(leave);
-onUnload(leave);
+const unregisterReset = session.registerReset(
+  Symbol("competition-detail"),
+  () => {
+    ++positioning;
+    controller.cancel();
+    state.detail = null;
+    state.status = "idle";
+    favoriteFeedback.value = stageFeedback.value = "";
+  },
+);
+onScopeDispose(unregisterReset);
 </script>
 
 <template>

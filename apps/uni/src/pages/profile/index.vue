@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onScopeDispose, reactive, ref, watch } from "vue";
-import { onHide, onLoad, onShow, onUnload } from "@dcloudio/uni-app";
+import { onLoad, onUnload } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import ProfileApplications from "../../components/ProfileApplications.vue";
 import ProfileTeams from "../../components/ProfileTeams.vue";
 import ProfileOverview from "../../components/ProfileOverview.vue";
@@ -175,10 +176,13 @@ onLoad((query) => {
 });
 
 // 首次加载先解析深链，再消费交接；已挂载页面在显示或收到新意图时消费。
-onShow(() => {
-  visible = true;
-  startClock();
-  consumePendingSection();
+usePageLifecycle({
+  show() {
+    visible = true;
+    startClock();
+    consumePendingSection();
+  },
+  hide: leave,
 });
 watch(
   () => navigation.pendingProfileNavigation,
@@ -186,7 +190,6 @@ watch(
     if (visible) consumePendingSection();
   },
 );
-onHide(leave);
 onUnload(dispose);
 onScopeDispose(dispose);
 </script>

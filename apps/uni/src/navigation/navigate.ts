@@ -7,6 +7,7 @@
  */
 
 import { useNavigationStore } from "../stores/navigation";
+import { useSessionStore } from "../stores/session";
 import { routePath, type PageRouteName, type TabRouteName } from "./routes.ts";
 import type { ProfileSection, RouteQuery } from "./params";
 
@@ -32,11 +33,19 @@ export function withQuery(
 
 /** 切换主导航；switchTab 不支持参数，需要分区时用 openProfileSection。 */
 export function openTab(name: TabRouteName, onFailure?: () => void): void {
+  const session = useSessionStore();
+  const revision = session.sessionRevision;
   uni.switchTab({
     url: routePath(name),
     fail: () => {
+      if (revision !== session.sessionRevision) return;
       // tabBar 配置异常时至少保证能到目标页，不留在空白页。
-      uni.reLaunch({ url: routePath(name), fail: onFailure });
+      uni.reLaunch({
+        url: routePath(name),
+        fail: () => {
+          if (revision === session.sessionRevision) onFailure?.();
+        },
+      });
     },
   });
 }

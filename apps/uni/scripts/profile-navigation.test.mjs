@@ -64,6 +64,35 @@ const { openProfileSection, backOrHome, openTab } =
 const { openTabWithQuery, returnToCompetitions, withQuery } =
   await import("../src/navigation/navigate.ts");
 
+test("重置后的迟到导航失败不重新跳转或清除新会话定位", () => {
+  setActivePinia(createPinia());
+  const session = useSessionStore();
+  const navigation = useNavigationStore();
+  const original = globalThis.uni;
+  const requests = [];
+  let relaunches = 0,
+    failures = 0;
+  globalThis.uni = {
+    switchTab: (options) => requests.push(options),
+    reLaunch: () => relaunches++,
+  };
+  try {
+    openProfileSection(
+      "applications",
+      { recordId: "history-0" },
+      () => failures++,
+    );
+    session.reset();
+    navigation.requestProfileSection("teams", { teamId: "demo-1" });
+    requests[0].fail();
+    assert.equal(relaunches, 0);
+    assert.equal(failures, 0);
+    assert.equal(navigation.pendingProfileNavigation.query.teamId, "demo-1");
+  } finally {
+    globalThis.uni = original;
+  }
+});
+
 test("比赛返回复用首页栈，空栈交接筛选；关联招募只传比赛 ID且只消费一次", () => {
   setActivePinia(createPinia());
   const originalUni = globalThis.uni;

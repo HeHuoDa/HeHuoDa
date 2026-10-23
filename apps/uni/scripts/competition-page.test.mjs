@@ -99,6 +99,7 @@ test("实际页面等待 onReady 和详情渲染后定位；定位失败仍保�
     scrolls[0].fail();
     assert.match(page.stageFeedback.value, /无法自动定位/);
     assert.equal(page.competition.value.id, "competition-a");
+    hooks.hide.forEach((fn) => fn());
     hooks.load.forEach((fn) => fn({ id: "competition-b", stage: "removed" }));
     hooks.show.forEach((fn) => fn());
     assert.equal(page.competition.value, null);
@@ -106,6 +107,7 @@ test("实际页面等待 onReady 和详情渲染后定位；定位失败仍保�
     await flush();
     assert.match(page.stageFeedback.value, /指定赛段不存在/);
     assert.equal(scrolls.length, 1);
+    hooks.hide.forEach((fn) => fn());
     hooks.load.forEach((fn) => fn({ id: "competition-c" }));
     hooks.show.forEach((fn) => fn());
     hooks.hide.forEach((fn) => fn());

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, reactive, ref } from "vue";
-import { onLoad, onShow, onHide, onUnload } from "@dcloudio/uni-app";
+import { onLoad, onUnload } from "@dcloudio/uni-app";
+import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import {
   projectTypes,
   cooperationModes,
@@ -40,7 +41,7 @@ const controller = createTeamPublishController(state, session, competitionApi);
 const focusField = ref("");
 let sourceQuery: RouteQuery = {};
 let active = true;
-const unregisterReset = session.registerReset("team-publish", () => {
+const unregisterReset = session.registerReset(Symbol("team-publish"), () => {
   controller.reset();
   focusField.value = "";
 });
@@ -144,8 +145,9 @@ function toggleRole(role: Role) {
     : [...state.draft.roles, role];
 }
 async function submit() {
+  const revision = session.sessionRevision;
   const team = await controller.submit();
-  if (!active) return;
+  if (!active || revision !== session.sessionRevision) return;
   if (team) {
     // 替换发布页；导航失败时保留显式详情入口，不允许再次建队。
     replacePage("team-detail", { ...sourceQuery, id: team.id });
@@ -153,7 +155,7 @@ async function submit() {
   }
   focusField.value = "";
   await nextTick();
-  if (!active) return;
+  if (!active || revision !== session.sessionRevision) return;
   focusField.value = Object.keys(state.errors)[0] ?? "";
   if (focusField.value)
     uni.pageScrollTo({
@@ -174,13 +176,15 @@ function hide() {
 onLoad((query) => {
   sourceQuery = teamRouteQuery(parseTeamRouteQuery(query ?? {}));
 });
-onShow(() => {
-  active = true;
-  if (state.searchStatus === "idle") void controller.retrySearch();
-  if (state.selectedId && state.selectionStatus === "idle")
-    void controller.select(state.selectedId);
+usePageLifecycle({
+  show() {
+    active = true;
+    if (state.searchStatus === "idle") void controller.retrySearch();
+    if (state.selectedId && state.selectionStatus === "idle")
+      void controller.select(state.selectedId);
+  },
+  hide,
 });
-onHide(hide);
 function dispose() {
   hide();
   unregisterReset();
