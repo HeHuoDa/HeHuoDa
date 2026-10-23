@@ -183,6 +183,59 @@ jobs:
           done
           mkdir -p "$RUNNER_TEMP/release-manifest"
           printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$RUNNER_TEMP/release-manifest/release.json"
+      - name: Mirror verified images to Tencent TCR when configured
+        env:
+          TCR_IMAGE_PREFIX: ${{ vars.TCR_IMAGE_PREFIX }}
+          TCR_USERNAME: ${{ secrets.TCR_USERNAME }}
+          TCR_PASSWORD: ${{ secrets.TCR_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$TCR_IMAGE_PREFIX" ]]; then
+            [[ -z "$TCR_USERNAME" && -z "$TCR_PASSWORD" ]] || { echo 'TCR credentials require TCR_IMAGE_PREFIX.' >&2; exit 1; }
+            echo 'TCR is not configured; retaining the verified GHCR release.'
+            exit 0
+          fi
+          [[ "$TCR_IMAGE_PREFIX" =~ ^(ccr\.ccs\.tencentyun\.com|[a-z0-9][a-z0-9-]*\.tencentcloudcr\.com)/[a-z0-9][a-z0-9_-]*$ ]]
+          [[ -n "$TCR_USERNAME" && -n "$TCR_PASSWORD" ]]
+          registry="${TCR_IMAGE_PREFIX%%/*}"
+          printf '%s' "$TCR_PASSWORD" | docker login "$registry" --username "$TCR_USERNAME" --password-stdin
+          trap 'docker logout "$registry" >/dev/null 2>&1 || true' EXIT
+          manifest="$RUNNER_TEMP/release-manifest/release.json"
+          missing=()
+          candidates=()
+          for component in api web; do
+            source=$(jq -er --arg component "$component" '.images[$component]' "$manifest")
+            candidate_id=$(docker image inspect --format '{{.Id}}' "$source")
+            candidates+=("$candidate_id")
+            target="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
+            if docker manifest inspect "$target" > /dev/null 2> "$RUNNER_TEMP/tcr-inspect-error"; then
+              docker pull "$target"
+              [[ "$(docker image inspect --format '{{.Id}}' "$target")" == "$candidate_id" ]] || {
+                echo 'Existing TCR release differs from the verified image; refusing to overwrite.' >&2; exit 1;
+              }
+            elif grep -Eqi 'manifest unknown|no such manifest' "$RUNNER_TEMP/tcr-inspect-error"; then
+              docker tag "$source" "$target"
+              missing+=("$target")
+            else
+              echo 'Cannot establish TCR image state; check credentials, repository and network.' >&2
+              exit 1
+            fi
+          done
+          for image in "${missing[@]}"; do docker push "$image"; done
+          refs=()
+          index=0
+          for component in api web; do
+            image="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
+            docker pull "$image"
+            ref=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" | grep -F "$TCR_IMAGE_PREFIX/$component@sha256:")
+            [[ "$ref" == "$TCR_IMAGE_PREFIX/$component@sha256:"* && "${ref##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
+            docker pull "$ref"
+            [[ "$(docker image inspect --format '{{.Id}}' "$ref")" == "${candidates[$index]}" ]]
+            refs+=("$ref")
+            index=$((index + 1))
+          done
+          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$manifest"
       - name: Retain immutable release manifest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

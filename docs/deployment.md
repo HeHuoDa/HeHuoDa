@@ -119,6 +119,38 @@ gh run list --repo HeHuoDa/HeHuoDa --workflow ci.yml --branch main \
 
 SSH 始终验证主机密钥。`ssh-keyscan` 的采样本身不能证明服务器身份；必须与腾讯云浏览器终端等可信渠道的主机指纹核对后才保存 known_hosts。密码模式通过 runner 的 `sshpass -e` 传递，不要求修改服务器为密钥登录。Secrets 不应出现在聊天、Issue、PR 或截图里。数据库及镜像仓库凭据只在主机受控配置，不随源码上传。
 
+## 腾讯云 TCR 镜像分发
+
+当服务器直接拉取 GHCR 镜像缓慢时，可保留 GHCR 发布，同时将通过冒烟的同一组镜像同步到 TCR。服务器最终使用 TCR 的不可变 digest 引用，不在服务器重新构建。未配置 TCR 时保留既有 GHCR 行为；一旦配置，认证、同步或镜像身份验证失败都会阻止 CI 发布完成，不静默回退。
+
+### 开通与配置
+
+1. 在 [TCR 控制台](https://console.cloud.tencent.com/tcr) 开通个人版，初始化仓库登录密码。参考 [个人版快速入门](https://cloud.tencent.com/document/product/1141/63910)。个人版限额免费、不承诺 SLA；企业版是另外收费的实例，不能把二者混为一谈。当前方案同样支持标准的 `<实例名>.tencentcloudcr.com` 企业版地址，但不会自动购买或创建实例。
+2. 创建项目专用命名空间，例如 `hehuoda`（实际名称须可用），并在其中创建 `api`、`web` 两个私有仓库。先创建仓库，避免将不存在仓库导致的拒绝访问误认为不存在版本。
+3. 为 GitHub 仓库配置以下仓库级设置，不能只放在 `production` Environment，因为 CI publisher 不使用该环境：
+
+| 类型     | 名称               | 内容                                                              |
+| -------- | ------------------ | ----------------------------------------------------------------- |
+| Variable | `TCR_IMAGE_PREFIX` | `ccr.ccs.tencentyun.com/<命名空间>`，不含组件名、版本号或尾部斜杠 |
+| Secret   | `TCR_USERNAME`     | 控制台“登录实例”显示的用户名                                      |
+| Secret   | `TCR_PASSWORD`     | TCR 镜像仓库登录密码，和服务器 SSH 密码无关                       |
+
+4. 在服务器上为现有部署用户执行 `docker login ccr.ccs.tencentyun.com --username <用户名>`，交互输入密码，或通过受控程序将密码送入 `--password-stdin`。保留已有 GHCR 登录与 `/opt/hehuoda/.env`，不修改数据库、卷、端口或 Docker 全局镜像加速配置。
+
+个人版使用 `ccr.ccs.tencentyun.com/<命名空间>/api` 和 `/web`；不要在命名空间下添加项目子路径。企业版接入同样使用一个专用命名空间。实际仓库访问速度应从目标服务器验证，不能仅因服务器在腾讯云就认定一定走内网或达到某个速度。
+
+### 发布与手动部署
+
+`publish-images` 先按原流程验证和发布 GHCR 镜像，再将这两个确切镜像同步到 TCR。同步前先核对两个目标 SHA 标签；已有标签必须与已验证的镜像 image ID 一致，才允许补齐缺失组件。网络、认证和不明确的错误会停止发布；不会覆盖内容不同的已发布 SHA。推送后按 TCR 返回的 digest 再拉取、核对 image ID，两个组件都成功后才将 `release.json` 更新为 TCR 引用并上传。
+
+首次切换须发布包含 TCR 支持的新提交，再使用该提交对应的成功 main CI 和清单。旧提交的已有 GHCR 清单不会因修改仓库变量自动变成 TCR 清单，不要手工篡改旧 artifact、删除旧标签或修改 `state/current.json` 来跳过验证。
+
+需要上线时打开 [Deploy](https://github.com/HeHuoDa/HeHuoDa/actions/workflows/deploy.yml)，从 `main` 运行并填写完整 40 位 SHA；必须先确认该 SHA 的 main CI、`publish-images` 和 TCR 同步成功。Deploy 仅接受本 GitHub 仓库的 GHCR 路径或 `TCR_IMAGE_PREFIX` 指定的准确 TCR 路径，拒绝其他命名空间；同时校验两个组件来自同一仓库前缀。SSH 每 30 秒发送保活，连续 6 次无响应才断开；保活不能修复镜像下载链路本身的问题。
+
+切换保留旧的 GHCR 镜像、凭据和发布记录，以便按旧 SHA 显式回滚。回退前仍须确认对应镜像可获取、digest 清单未过期，不能仅凭 GHCR 标签还在就认定可回退。若回退到旧版校验脚本，它不支持 TCR 清单，后续发布应继续使用含 TCR 支持的工作流与部署脚本。
+
+本配置只改变 API 与用户端 uni H5 的镜像分发，不更新微信小程序，也不改变 H5 页面或小程序运行代码。
+
 ## HTTPS
 
 HTTP 测试与正式 HTTPS 分开验收。准备受信任证书，将实际 `fullchain.pem`、`privkey.pem` 放在主机受控绝对目录，设置 `.env` 的 `TLS_CERT_DIR`、`HTTP_PORT=80`、`HTTPS_PORT=443` 与所需绑定地址；通过 `DEPLOY_TLS=true`、`DEPLOY_PUBLIC_URL=https://实际域名` 运行发布。Nginx 挂载证书只读，443 终止 TLS，80 返回 308 跳转；只允许 TLS 1.2/1.3。Compose 叠加文件不改变数据库卷。

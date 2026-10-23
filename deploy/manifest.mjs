@@ -9,11 +9,11 @@ export function readReleaseManifest(directory, sha) {
     throw new Error("Release manifest does not match the requested commit");
   const images = manifest.images;
   const api =
-    /^ghcr\.io\/([a-z0-9][a-z0-9._/-]*)\/api@sha256:[a-f0-9]{64}$/.exec(
+    /^((?:ghcr\.io|ccr\.ccs\.tencentyun\.com|[a-z0-9][a-z0-9-]*\.tencentcloudcr\.com)\/[a-z0-9][a-z0-9._/-]*)\/api@sha256:[a-f0-9]{64}$/.exec(
       images?.api || "",
     );
   const web =
-    /^ghcr\.io\/([a-z0-9][a-z0-9._/-]*)\/web@sha256:[a-f0-9]{64}$/.exec(
+    /^((?:ghcr\.io|ccr\.ccs\.tencentyun\.com|[a-z0-9][a-z0-9-]*\.tencentcloudcr\.com)\/[a-z0-9][a-z0-9._/-]*)\/web@sha256:[a-f0-9]{64}$/.exec(
       images?.web || "",
     );
   if (!api || !web || api[1] !== web[1])
