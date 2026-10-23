@@ -62,11 +62,15 @@ pnpm install --frozen-lockfile
 
 ## uni-app 用户端（迁移中）
 
-关于页面已由 #77 提供：从个人中心“关于禾伙搭”进入，或直接打开 H5 `/#/pages/about/index`／小程序 `pages/about/index`。页面说明平台定位、使用方式、真实公开查询、会话演示与未开放服务；无需登录，无历史时也可返回个人资料区。页面本身不请求业务 API，无版本或反馈渠道的虚构占位。旧 `/about` pathname 的部署兼容仍由 #82 完成，微信实际运行与真机仍交 #85。
+关于页面已由 #77 提供：从个人中心“关于禾伙搭”进入，或直接打开 H5 `/#/pages/about/index`／小程序 `pages/about/index`。页面说明平台定位、使用方式、真实公开查询、会话演示与未开放服务；无需登录，无历史时也可返回个人资料区。页面本身不请求业务 API，无版本或反馈渠道的虚构占位。`/about` 是需求预留的兼容别名，旧 Web 没有关于页成品；微信实际运行与真机仍交 #85。
 
 `apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前已接入首页 / 找队友 / 我的三项原生 `tabBar`，比赛与队伍详情、发布招募、收藏、通知、关于、登录注册及 404 页面；页面标题来自 `pages.json`，跳转统一走 `src/navigation/navigate.ts`。比赛公开查询使用真实 API，队伍、资料、授权、申请邀请、收藏和通知使用内存会话；迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
 
-导航注册表在 `apps/uni/src/navigation/routes.ts`：新增页面只需在 `pages.json` 注册并补一条定义，`test:unit` 会校验两处一致、标题同源与旧地址映射完整。旧个人中心地址 `/my/teams`、`/my/applications` 映射到「我的」的队伍/申请分区；平台主导航用 `switchTab`，普通页面用 `navigateTo`，不依赖浏览器 History 或 `document.title`。H5 未知 hash 入口启动时转到 404；pathname 旧地址、刷新与浏览器返回由 #82 验证。决策见 [ADR 0005](docs/adr/0005-uni-navigation-shell.md)。
+导航注册表在 `apps/uni/src/navigation/routes.ts`：新增页面只需在 `pages.json` 注册并补一条定义，`test:unit` 会校验两处一致、标题同源与旧地址映射完整。旧个人中心地址 `/my/teams`、`/my/applications` 映射到「我的」的队伍/申请分区；平台主导航用 `switchTab`，普通页面用 `navigateTo`。H5 兼容层在 uni 创建路由前，将旧 pathname、query 与赛段锚点转换成原生 hash 地址，以 `replaceState` 保留当前历史项；随后复用 uni 自带 router，不创建另一套路由或业务页面栈。未知页面进入 404，非法或不存在的业务 ID 由详情页分别反馈。决策见 [ADR 0005](docs/adr/0005-uni-navigation-shell.md)。
+
+H5 列表筛选、页码修正与个人中心分区替换当前地址，避免每次输入或服务端页码修正新增历史记录；打开详情仍新增历史项，浏览器后退／前进恢复列表参数与 uni 保存的滚动位置。合法附加 query 与重复值沿链路保留；已移除的 category/eligible 和非法筛选按共享规则清洗。`/home/competitions/:id#赛段ID` 会转换为详情的 `stage` 参数，业务 ID 与参数只解码一次；通知稳定 ID 只用于定位，不授予权限或执行业务操作。H5 标题追加「· 禾伙搭」，微信仍用原生标题与一次性交接，不调用 DOM／History。
+
+独立验证可先 `pnpm --filter @hehuoda/uni build:h5`，再 `pnpm --filter @hehuoda/uni preview:h5`，默认监听 `127.0.0.1:5176`（可用 `PORT` 调整）。此预览仅托管 `dist/build/h5`，不启动旧 Web、不代理或模拟 API；API 路径直接 404。页面网络成功态需另备隔离 API，或明确标注受控 HTTP 替身。生产部署沿 [部署说明](docs/deployment.md)：API／资源优先，其他 pathname 回退 uni 的 index.html，浏览器启动后统一映射；无需 Nginx 重复维护业务路由表。
 
 样式入口为 `apps/uni/src/app.css`，主题变量在 `src/styles/theme.css`，页面根节点与 `.hhr-*` 组件类在 `src/styles/base.css`；页面只消费语义工具类（`bg-brand`、`text-ink`、`rounded-panel`）。字号、触控下限与断点用 px，间距与宽高用 rem（构建时换算 rpx），理由与组件类清单见[学生端全局样式](docs/student-ui-style.md#uni-app-用户端样式迁移中)。H5 的 `/#/pages/style/index` 与小程序「样式基线」页逐项渲染主题色、字号层级、按钮四态与状态块，用于样式回归。
 

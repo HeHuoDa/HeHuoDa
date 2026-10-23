@@ -40,10 +40,7 @@ ENV VITE_API_BASE_URL=/api/v1 UNI_RELEASE=false
 RUN pnpm --filter @hehuoda/uni check:toolchain && pnpm --filter @hehuoda/uni build:h5
 
 FROM nginx:1.30.0-alpine AS web
-RUN sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY deploy/nginx/legacy.mjs /etc/nginx/legacy.mjs
-COPY deploy/nginx/legacy-routes.inc /etc/nginx/legacy-routes.inc
 COPY deploy/nginx/app-locations.inc /etc/nginx/app-locations.inc
 COPY --from=h5-build /workspace/apps/uni/dist/build/h5 /usr/share/nginx/html
 EXPOSE 80

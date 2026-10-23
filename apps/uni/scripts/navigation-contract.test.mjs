@@ -262,7 +262,9 @@ test("页面跳转只走统一入口，不依赖浏览器 History 与 document.t
         `${file} 应通过 navigation/navigate.ts 跳转`,
       );
     }
-    if (file !== "src/forms/dialog-h5.ts") {
+    if (
+      !["src/forms/dialog-h5.ts", "src/navigation/h5-router.ts"].includes(file)
+    ) {
       assert.ok(
         !/\b(?:document|window)\s*\./.test(source),
         `${file} 不应依赖浏览器 document / window`,

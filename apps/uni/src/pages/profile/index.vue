@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, nextTick, onScopeDispose, reactive, ref, watch } from "vue";
 import { onLoad, onUnload } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -14,6 +15,7 @@ import {
   type RouteQuery,
 } from "../../navigation/params";
 import { useNavigationStore } from "../../stores/navigation";
+import { useH5Query } from "../../navigation/use-h5-query";
 import {
   notificationAnchor,
   profileNotificationTarget,
@@ -162,7 +164,7 @@ function dispose() {
   unregisterReset();
 }
 
-onLoad((query) => {
+function restoreRouteSection(query: RouteQuery) {
   const parsed = parseProfileSection(query?.section);
   const next = copyRouteQuery(query ?? {});
   delete next.section;
@@ -172,6 +174,9 @@ onLoad((query) => {
       ? "分区参数重复且取值不一致，已显示个人资料。"
       : "分区参数无效，已显示个人资料。";
   applySection(parsed.section, next);
+}
+onLoad((platformQuery) => {
+  restoreRouteSection(pageRouteQuery(platformQuery ?? {}));
   consumePendingSection();
 });
 
@@ -192,6 +197,11 @@ watch(
 );
 onUnload(dispose);
 onScopeDispose(dispose);
+useH5Query(
+  "profile",
+  () => ({ ...routeQuery.value, section: section.value }),
+  restoreRouteSection,
+);
 </script>
 
 <template>

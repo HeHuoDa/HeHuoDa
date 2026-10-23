@@ -32,4 +32,3 @@ location ~* \.(?:js|mjs|css|map|json|png|jpe?g|gif|svg|ico|woff2?|ttf|webp|avif|
     add_header Cache-Control "no-cache";
 }
 location / { try_files $uri $uri/ /index.html; }
-include /etc/nginx/legacy-routes.inc;

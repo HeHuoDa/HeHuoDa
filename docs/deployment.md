@@ -152,7 +152,7 @@ docker compose --env-file /opt/hehuoda/.env -f compose.deploy.yaml exec -T api n
 
 停机使用同一环境配置执行 `docker compose ... stop` 或 `down`；重新 `up -d --wait` 保留数据库卷。禁止对现有环境使用 `down --volumes`、`volume prune` 或删除数据库目录。进程存活与就绪分别是 `/api/v1/health`、`/api/v1/health/ready`；后者检查数据库、当前应用所需迁移和必要表字段，失败只返回安全状态/requestId 及 503。
 
-H5 HTML 使用 `no-store`，构建指纹资源长期 immutable 缓存，普通静态资源重新校验。缺失静态文件返回 404，未知 API 返回 API 的 JSON 404，均不落入首页。Nginx 使用基础镜像自带的 njs 模块，将注册的旧 Web History 路径（含末尾斜杠）重定向到对应 uni hash 页面。详情 `id`、我的队伍/申请 `section` 以路径为准，移除查询串中重复或编码的冲突键，其余参数保留原编码与重复值；完整浏览器返回、非法参数和路由兼容验收仍按 #82 执行，不以 HTTP 302 检查替代页面交互验收。
+H5 HTML 使用 `no-store`，构建指纹资源长期 immutable 缓存，普通静态资源重新校验。缺失静态文件返回 404，未知 API 返回 API 的 JSON 404，均不落入首页。`deploy/nginx/app-locations.inc` 优先代理 `/api/`，隔离 `/assets/`、`/static/` 及文件扩展名请求，最后用 `try_files $uri $uri/ /index.html` 承接历史 pathname 与未知页面。仅部署 uni H5 产物即可，不启动旧 Web、不用 302 重写旧业务地址、不再维护 Nginx 业务路由表。HTTP 请求不携带赛段 fragment，必须让浏览器入口按 `sourceRoutes` 一次性转换 pathname、query、锚点；这样 `/home/competitions/:id#赛段ID` 才不会丢定位信息。未知页面由 H5 404 呈现，HTTP 状态为 SPA 回退的 200；缺失资源及 API 不得返回该 HTML。#25/#88 部署与回滚时须一起使用此版本的 H5 和 Nginx 配置，不能把旧 njs 重定向 include 搭配新客户端；旧版本镜像仍可整体回滚。完整浏览器返回、参数和定位由 #82 验证，HTTP 检查不代替页面验收。
 
 ## 备份、异机保存及恢复
 

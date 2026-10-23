@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, onScopeDispose, reactive, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -25,6 +26,9 @@ import {
   initialDiscoveryState,
 } from "../../stores/discovery-controller";
 import { openPage } from "../../navigation/navigate";
+import { copyRouteQuery } from "../../navigation/params";
+import { useH5Query } from "../../navigation/use-h5-query";
+import { currentH5Query } from "../../navigation/h5-address";
 import { useNavigationStore } from "../../stores/navigation";
 
 const state = reactive(initialDiscoveryState());
@@ -60,7 +64,8 @@ function submit() {
 function status(value: string) {
   void controller.update({ status: value as Filters["status"] });
 }
-onLoad((query) => {
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
   state.filters = parseFilters(query ?? {});
   search.value = state.filters.q;
 });
@@ -87,6 +92,16 @@ const unregisterReset = useSessionStore().registerReset(
   },
 );
 onScopeDispose(unregisterReset);
+useH5Query(
+  "home",
+  () => copyRouteQuery(writeFilters({}, state.filters)),
+  (query) => {
+    controller.cancel();
+    state.filters = parseFilters(query);
+    search.value = state.filters.q;
+    void controller.load();
+  },
+);
 </script>
 
 <template>
@@ -220,7 +235,7 @@ onScopeDispose(unregisterReset);
                 class="discovery-card-title"
                 @click="
                   openPage('competition-detail', {
-                    ...writeFilters({}, state.filters),
+                    ...writeFilters(currentH5Query(), state.filters),
                     id: competition.id,
                     stage: stage.id,
                   })

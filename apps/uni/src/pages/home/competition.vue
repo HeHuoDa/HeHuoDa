@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, nextTick, onScopeDispose, reactive, ref } from "vue";
 import { onLoad, onReady } from "@dcloudio/uni-app";
 import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
@@ -102,7 +103,8 @@ function leave() {
 function returnToList() {
   returnToCompetitions(sourceQuery);
 }
-onLoad((query) => {
+onLoad((platformQuery) => {
+  const query = pageRouteQuery(platformQuery ?? {});
   ++positioning;
   controller.cancel();
   state.detail = null;
@@ -111,7 +113,11 @@ onLoad((query) => {
   parameterError.value = parsed.issue ? paramMessage(parsed.issue, "比赛") : "";
   id.value = parsed.issue ? "" : parsed.value;
   stage = query?.stage;
-  sourceQuery = copyRouteQuery(writeFilters({}, parseFilters(query ?? {})));
+  sourceQuery = copyRouteQuery(
+    writeFilters(query ?? {}, parseFilters(query ?? {})),
+  );
+  delete sourceQuery.id;
+  delete sourceQuery.stage;
 });
 usePageLifecycle({
   show() {
