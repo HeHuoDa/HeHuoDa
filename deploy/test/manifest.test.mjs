@@ -18,6 +18,19 @@ test("release manifest binds both digest references to the exact commit and repo
   assert.throws(() => readReleaseManifest(directory, sha));
   write({ sha, images });
   assert.deepEqual(readReleaseManifest(directory, sha), images);
+  for (const prefix of [
+    "ccr.ccs.tencentyun.com/hehuoda",
+    "hehuoda.tencentcloudcr.com/hehuoda",
+  ]) {
+    const tcrImages = {
+      api: `${prefix}/api@sha256:${"1".repeat(64)}`,
+      web: `${prefix}/web@sha256:${"2".repeat(64)}`,
+    };
+    write({ sha, images: tcrImages });
+    assert.deepEqual(readReleaseManifest(directory, sha), tcrImages);
+    write({ sha, images: { ...tcrImages, api: images.api } });
+    assert.throws(() => readReleaseManifest(directory, sha));
+  }
   for (const manifest of [
     { sha: "b".repeat(40), images },
     { sha, images: { ...images, api: `ghcr.io/hehuoda/hehuoda/api:${sha}` } },
@@ -29,6 +42,15 @@ test("release manifest binds both digest references to the exact commit and repo
       },
     },
     { sha, images: { api: images.api } },
+    {
+      sha,
+      images: Object.fromEntries(
+        Object.entries(images).map(([key, value]) => [
+          key,
+          value.replace("ghcr.io", "untrusted.example"),
+        ]),
+      ),
+    },
   ]) {
     write(manifest);
     assert.throws(() => readReleaseManifest(directory, sha));

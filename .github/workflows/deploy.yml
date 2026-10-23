@@ -95,14 +95,16 @@ jobs:
         if: steps.verified.outputs.sha != ''
         env:
           MANIFEST_DIR: ${{ runner.temp }}/release-manifest
+          TCR_IMAGE_PREFIX: ${{ vars.TCR_IMAGE_PREFIX }}
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module -e '
             import { readReleaseManifest } from "./deploy/manifest.mjs";
             const images = readReleaseManifest(process.env.MANIFEST_DIR, process.env.CANDIDATE_SHA);
+            const prefixes = [`ghcr.io/${process.env.GH_REPO.toLowerCase()}`, process.env.TCR_IMAGE_PREFIX].filter(Boolean);
             for (const component of ["api", "web"]) {
-              if (!images[component].startsWith(`ghcr.io/${process.env.GH_REPO.toLowerCase()}/${component}@sha256:`)) throw new Error("Unexpected image repository");
+              if (!prefixes.some(prefix => images[component].startsWith(`${prefix}/${component}@sha256:`))) throw new Error("Unexpected image repository");
             }
           '
           cp "$MANIFEST_DIR/release.json" release.json
@@ -135,7 +137,7 @@ jobs:
           trap 'rm -rf -- "$task_dir"' EXIT
           chmod 700 "$task_dir"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$task_dir/known_hosts"
-          ssh_args=(-p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts" -o ConnectTimeout=15)
+          ssh_args=(-p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
           if [[ -n "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
             printf '%s\n' "$DEPLOY_SSH_KEY" > "$task_dir/key"
             chmod 600 "$task_dir/key"

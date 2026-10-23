@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, existsSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdtempSync,
+  existsSync,
+  rmSync,
+  mkdirSync,
+} from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parse } from "yaml";
@@ -460,6 +467,157 @@ test("published SHA images are preserved, and partial retries cannot overwrite a
         existsSync(join(attempt, "release-manifest", "release.json")),
         false,
       );
+  }
+});
+
+test("TCR publishing preserves verified image identity and refuses uncertain or conflicting releases", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "hehuoda-tcr-publish-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const step = workflow("ci").jobs["publish-images"].steps.find(
+    (step) => step.env?.TCR_IMAGE_PREFIX,
+  );
+  const sha = "a".repeat(40);
+  const source = {
+    sha,
+    images: {
+      api: `ghcr.io/hehuoda/hehuoda/api@sha256:${"1".repeat(64)}`,
+      web: `ghcr.io/hehuoda/hehuoda/web@sha256:${"2".repeat(64)}`,
+    },
+  };
+  for (const [api, web, same, expected, pushes, digestMatches = true] of [
+    ["missing", "missing", "true", 0, 2],
+    ["present", "present", "true", 0, 0],
+    ["present", "missing", "true", 0, 1],
+    ["missing", "present", "false", 1, 0],
+    ["denied", "missing", "true", 1, 0],
+    ["timeout", "missing", "true", 1, 0],
+    ["missing", "missing", "true", 1, 2, false],
+  ]) {
+    const attempt = mkdtempSync(join(directory, "attempt-"));
+    mkdirSync(join(attempt, "release-manifest"));
+    const file = join(attempt, "release-manifest", "release.json");
+    writeFileSync(file, JSON.stringify(source));
+    const result = runBash(
+      `
+      jq() { printf 'ghcr.io/hehuoda/hehuoda/%s@sha256:%064d\\n' "$3" 1; }
+      docker() {
+        case "$1 $2" in
+          'login ccr.ccs.tencentyun.com') cat >/dev/null ;;
+          'logout ccr.ccs.tencentyun.com') return 0 ;;
+          'manifest inspect')
+            local state="$WEB_STATE"
+            [[ "$3" == */api:* ]] && state="$API_STATE"
+            case "$state" in
+              present) return 0 ;;
+              missing) echo 'manifest unknown' >&2; return 1 ;;
+              denied) echo 'unauthorized' >&2; return 1 ;;
+              *) echo 'connection timed out' >&2; return 1 ;;
+            esac ;;
+          'image inspect')
+            if [[ "$*" == *RepoDigests* ]]; then
+              local component=web
+              [[ "$*" == */api:* ]] && component=api
+              printf '%s/%s@sha256:%064d\\n' "$TCR_IMAGE_PREFIX" "$component" 1
+            elif [[ "$*" == *ccr.ccs.tencentyun.com* && "$MATCHING_IMAGE" == false ]] ||
+                 [[ "$*" == *ccr.ccs.tencentyun.com*'@sha256:'* && "$MATCHING_DIGEST" == false ]]; then echo different
+            else echo candidate; fi ;;
+          pull*|tag*) return 0 ;;
+          push*) echo "PUSH:$*" ;;
+          *) echo "Unexpected operation: $*" >&2; return 1 ;;
+        esac
+      }
+      ${step.run}
+      `,
+      {
+        IMAGE_TAG: sha,
+        TCR_IMAGE_PREFIX: "ccr.ccs.tencentyun.com/hehuoda",
+        TCR_USERNAME: "test-user",
+        TCR_PASSWORD: "test-only",
+        RUNNER_TEMP: attempt.replaceAll("\\", "/"),
+        API_STATE: api,
+        WEB_STATE: web,
+        MATCHING_IMAGE: same,
+        MATCHING_DIGEST: String(digestMatches),
+      },
+    );
+    assert.equal(
+      result.status,
+      expected,
+      `${api}/${web}/${same}: ${result.stderr}`,
+    );
+    assert.equal((result.stdout.match(/^PUSH:/gm) || []).length, pushes);
+    const manifest = JSON.parse(readFileSync(file, "utf8"));
+    if (expected === 0) {
+      assert.equal(manifest.sha, sha);
+      for (const component of ["api", "web"])
+        assert.equal(
+          manifest.images[component],
+          `ccr.ccs.tencentyun.com/hehuoda/${component}@sha256:${"0".repeat(63)}1`,
+        );
+    } else assert.deepEqual(manifest, source);
+  }
+  for (const [prefix, user, password, expected] of [
+    ["", "", "", 0],
+    ["", "user", "secret", 1],
+    ["evil.example/ns", "user", "secret", 1],
+    ["ccr.ccs.tencentyun.com/hehuoda", "", "", 1],
+  ]) {
+    const result = runBash(step.run, {
+      TCR_IMAGE_PREFIX: prefix,
+      TCR_USERNAME: user,
+      TCR_PASSWORD: password,
+    });
+    assert.equal(result.status, expected, result.stderr);
+  }
+});
+
+test("deployment accepts only configured TCR namespaces and retains the original GHCR rollback path", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "hehuoda-tcr-deploy-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const step = workflow("deploy").jobs.deploy.steps.find(
+    (step) => step.env?.MANIFEST_DIR,
+  );
+  const script = step.run.match(/node --input-type=module -e '([\s\S]*?)'/)[1];
+  const sha = "a".repeat(40);
+  for (const [prefix, configured, expected] of [
+    ["ghcr.io/hehuoda/hehuoda", "", 0],
+    ["ghcr.io/hehuoda/hehuoda", "ccr.ccs.tencentyun.com/hehuoda", 0],
+    ["ccr.ccs.tencentyun.com/hehuoda", "ccr.ccs.tencentyun.com/hehuoda", 0],
+    [
+      "hehuoda.tencentcloudcr.com/production",
+      "hehuoda.tencentcloudcr.com/production",
+      0,
+    ],
+    ["ccr.ccs.tencentyun.com/hehuoda", "", 1],
+    ["ccr.ccs.tencentyun.com/other", "ccr.ccs.tencentyun.com/hehuoda", 1],
+    ["ghcr.io/other/repo", "ccr.ccs.tencentyun.com/hehuoda", 1],
+  ]) {
+    writeFileSync(
+      join(directory, "release.json"),
+      JSON.stringify({
+        sha,
+        images: {
+          api: `${prefix}/api@sha256:${"1".repeat(64)}`,
+          web: `${prefix}/web@sha256:${"2".repeat(64)}`,
+        },
+      }),
+    );
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        encoding: "utf8",
+        cwd: resolve(import.meta.dirname, "../.."),
+        env: {
+          ...process.env,
+          MANIFEST_DIR: directory,
+          CANDIDATE_SHA: sha,
+          GH_REPO: "HeHuoDa/HeHuoDa",
+          TCR_IMAGE_PREFIX: configured,
+        },
+      },
+    );
+    assert.equal(result.status, expected, `${prefix}: ${result.stderr}`);
   }
 });
 
