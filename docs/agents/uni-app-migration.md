@@ -19,6 +19,13 @@
 
 当前 main 的镜像发布与一次手动部署已有成功记录，具体链接和未验证范围见[部署状态](../deployment.md#已核实的交付记录2026-10-23)。本次文档核实没有新增浏览器、微信开发者工具或真机验收。
 
+## Issue #81：窗口、键盘与弹层安全区
+
+- 沿用已迁移页面与原生导航。`FormDialog` 的微信分支通过 `uni.onWindowResize` 更新当前窗口高度，结合当前键盘高度重算弹层，避免横竖屏或窗口变化后继续使用打开时的快照。键盘覆盖与窗口尺寸分别处理；真实微信键盘事件与窗口事件的先后顺序、原生控件自动上推仍需 #85 验证。
+- 微信弹层操作区从 `uni.getWindowInfo().safeAreaInsets.bottom` 获取底部安全距离；窗口或键盘变化时更新，键盘打开时不重复保留屏幕底部留白。H5 继续使用 visualViewport 和 CSS env 回退，不把浏览器单位、DOM 或 env 支持当作微信能力。依据：[窗口变化与监听取消](https://uniapp.dcloud.net.cn/api/ui/window.html)、[窗口与安全区信息](https://uniapp.dcloud.net.cn/api/system/getWindowInfo.html)、[键盘高度监听](https://uniapp.dcloud.net.cn/api/key.html)。
+- 弹层关闭、页面隐藏、卸载统一移除窗口及键盘监听并恢复原生 tabBar；代次校验阻止旧弹层的迟到事件影响新弹层。保留原有配色、字号、间距和内部滚动结构，不扩展认证或业务写入能力。
+- 本地浏览器窗口模拟、组件平台替身和 H5/mp-weixin 编译分别记录。真实 iOS/Android 的键盘、地址栏、横竖屏、安全区、系统大字号、滚动及 tabBar 时序交 #85；微信开发者工具可按 PR 指引人工验收，编译不等于模拟器或真机通过。
+
 ## Issue #80：官网原文与复制回退
 
 - `source/policy.ts`、`source/actions.ts` 是两端共用的来源操作边界，仅使用真实 Notice 的 URL／标题，不构造报名地址。统一接受明确的 HTTP(S) ASCII DNS 地址，拒绝空白／控制字符、userinfo、编码主机、反斜杠、非法端口与破损转义；当前保守子集不支持 IP／原始国际化主机，需要时独立评估后扩展，不依赖微信环境未保证提供的浏览器 `URL` 对象。

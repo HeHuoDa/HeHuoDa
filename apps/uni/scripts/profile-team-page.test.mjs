@@ -129,6 +129,8 @@ function installUni() {
   globalThis.uni = {
     getWindowInfo: () => ({ windowHeight: 800 }),
     onKeyboardHeightChange() {},
+    onWindowResize() {},
+    offWindowResize() {},
     offKeyboardHeightChange() {},
     hideTabBar() {},
     showTabBar() {},
