@@ -19,8 +19,9 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ cancel: []; save: [] }>();
 const root = ref();
-const height = ref(0);
+const height = ref<number>();
 const top = ref(0);
+const safeBottom = ref<number>();
 const scrollTarget = ref("");
 let dispose = () => {};
 let generation = 0;
@@ -55,18 +56,35 @@ watch(
     });
     // #endif
     // #ifdef MP-WEIXIN
-    const windowHeight = uni.getWindowInfo().windowHeight;
-    height.value = windowHeight;
+    let windowHeight = uni.getWindowInfo().windowHeight;
+    let keyboardHeight = 0;
+    const update = () => {
+      if (generation !== current) return;
+      const info = uni.getWindowInfo();
+      height.value = Math.max(0, windowHeight - keyboardHeight);
+      safeBottom.value =
+        keyboardHeight > 0 ? 0 : (info.safeAreaInsets?.bottom ?? 0);
+    };
     const keyboard = (event: { height: number }) => {
-      height.value = Math.max(0, windowHeight - event.height);
+      if (generation !== current) return;
+      keyboardHeight = Math.max(0, event.height);
+      update();
+    };
+    const resize = (event: { size: { windowHeight: number } }) => {
+      if (generation !== current) return;
+      windowHeight = event.size.windowHeight;
+      update();
     };
     uni.onKeyboardHeightChange(keyboard);
+    uni.onWindowResize(resize);
+    update();
     // 原生 tabBar 在页面视图之外，弹层打开期间隐藏，关闭后恢复。
     const route = getCurrentPages().at(-1)?.route;
     const tab = tabRoutes.some(({ name }) => routePath(name) === `/${route}`);
     if (tab) uni.hideTabBar({ animation: false });
     dispose = () => {
       uni.offKeyboardHeightChange(keyboard);
+      uni.offWindowResize(resize);
       if (tab) uni.showTabBar({ animation: false });
     };
     // #endif
@@ -88,7 +106,12 @@ onBeforeUnmount(stop);
     v-if="open"
     ref="root"
     class="hhr-dialog-overlay"
-    :style="height ? { height: `${height}px`, top: `${top}px` } : undefined"
+    :style="{
+      height: height === undefined ? undefined : `${height}px`,
+      top: `${top}px`,
+      '--hhr-dialog-safe-bottom':
+        safeBottom === undefined ? undefined : `${safeBottom}px`,
+    }"
     role="dialog"
     aria-modal="true"
     :aria-labelledby="`${id}-title`"

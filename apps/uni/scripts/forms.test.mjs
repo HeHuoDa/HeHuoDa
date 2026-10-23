@@ -181,6 +181,8 @@ test("微信弹层使用键盘高度、固定滚动区及显式取消，卸载�
     offKeyboardHeightChange: (callback) => {
       removed = callback;
     },
+    onWindowResize() {},
+    offWindowResize() {},
     hideTabBar: () => hides++,
     showTabBar: () => shows++,
   };
@@ -216,12 +218,94 @@ test("微信弹层使用键盘高度、固定滚动区及显式取消，卸载�
   }
 });
 
+test("微信弹层在旋转及键盘收起后使用当前窗口，隐藏后移除监听且忽略迟到事件", async () => {
+  let keyboard;
+  let resize;
+  let windowHeight = 700;
+  let bottom = 34;
+  let removedKeyboard;
+  let removedResize;
+  let shows = 0;
+  globalThis.__formPageHooks = [];
+  globalThis.uni = {
+    getWindowInfo: () => ({ windowHeight, safeAreaInsets: { bottom } }),
+    onKeyboardHeightChange: (callback) => (keyboard = callback),
+    offKeyboardHeightChange: (callback) => (removedKeyboard = callback),
+    onWindowResize: (callback) => (resize = callback),
+    offWindowResize: (callback) => (removedResize = callback),
+    hideTabBar() {},
+    showTabBar: () => shows++,
+  };
+  globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
+  const app = await mount("../src/components/FormDialog.vue", {
+    id: "resize",
+    open: true,
+    title: "编辑资料",
+  });
+  const height = () =>
+    app.find((node) => node.props.role === "dialog").props.style.height;
+  try {
+    assert.equal(
+      app.find((node) => node.props.role === "dialog").props.style[
+        "--hhr-dialog-safe-bottom"
+      ],
+      "34px",
+    );
+    keyboard({ height: 200 });
+    await nextTick();
+    assert.equal(height(), "500px");
+    assert.equal(
+      app.find((node) => node.props.role === "dialog").props.style[
+        "--hhr-dialog-safe-bottom"
+      ],
+      "0px",
+    );
+    windowHeight = 450;
+    bottom = 21;
+    assert.equal(typeof resize, "function");
+    resize({ size: { windowWidth: 700, windowHeight } });
+    await nextTick();
+    assert.equal(height(), "250px");
+    keyboard({ height: 0 });
+    await nextTick();
+    assert.equal(height(), "450px");
+    assert.equal(
+      app.find((node) => node.props.role === "dialog").props.style[
+        "--hhr-dialog-safe-bottom"
+      ],
+      "21px",
+    );
+    keyboard({ height: 600 });
+    await nextTick();
+    assert.equal(height(), "0px");
+    keyboard({ height: 0 });
+    await nextTick();
+    globalThis.__formPageHooks[0]();
+    assert.equal(removedKeyboard, keyboard);
+    assert.equal(removedResize, resize);
+    assert.equal(shows, 1);
+    keyboard({ height: 300 });
+    resize({ size: { windowHeight: 900 } });
+    await nextTick();
+    assert.equal(height(), "450px");
+    app.unmount();
+    assert.equal(shows, 1);
+  } finally {
+    app.unmount();
+    delete globalThis.uni;
+    delete globalThis.getCurrentPages;
+    delete globalThis.__formPageHooks;
+  }
+});
+
 test("完整微信表单 fixture：取消复原、错误不写回、保存防重及页面隐藏丢弃", async () => {
   globalThis.__formPageHooks = [];
   globalThis.uni = {
     getWindowInfo: () => ({ windowHeight: 671 }),
     onKeyboardHeightChange() {},
     offKeyboardHeightChange() {},
+    onWindowResize() {},
+    offWindowResize() {},
   };
   globalThis.getCurrentPages = () => [{ route: "pages/style/index" }];
   const app = await mount("./fixtures/FormFixture.vue");

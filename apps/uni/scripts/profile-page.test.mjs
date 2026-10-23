@@ -27,6 +27,8 @@ test("资料编辑取消不写回，校验首错保留草稿，保存规范化�
   globalThis.uni = {
     getWindowInfo: () => ({ windowHeight: 800 }),
     onKeyboardHeightChange() {},
+    onWindowResize() {},
+    offWindowResize() {},
     offKeyboardHeightChange() {},
     hideTabBar() {},
     showTabBar() {},
