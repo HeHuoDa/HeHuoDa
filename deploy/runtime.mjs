@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { resolve, isAbsolute } from "node:path";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { readReleaseManifest } from "./manifest.mjs";
+import { readManifest } from "./manifest.mjs";
 
 export const root = resolve(import.meta.dirname, "..");
 export const stateDirectory = resolve(
@@ -23,8 +23,10 @@ export function releaseContext(tag, record) {
     throw new Error(
       "Previous release lacks an absolute configuration directory; adopt its verified release metadata before updating",
     );
-  const releaseDirectory = record?.releaseDirectory || root;
-  const images = readReleaseManifest(releaseDirectory, tag);
+  const releaseDirectory =
+    record?.releaseDirectory || process.env.DEPLOY_RELEASE_DIR || root;
+  const manifest = readManifest(releaseDirectory, tag);
+  const images = manifest.images;
   if (
     record?.images &&
     (record.images.api !== images.api || record.images.web !== images.web)
@@ -32,9 +34,26 @@ export function releaseContext(tag, record) {
     throw new Error(
       "Recorded release digests differ from its retained manifest",
     );
+  if (record?.delivery && record.delivery !== (manifest.delivery || "registry"))
+    throw new Error("Recorded delivery type differs from retained manifest");
+  if (
+    manifest.delivery === "archive" &&
+    record?.imageIds &&
+    ["api", "web"].some(
+      (component) =>
+        record.imageIds[component] !== manifest.imageIds[component],
+    )
+  )
+    throw new Error("Recorded image identities differ from retained manifest");
   return {
     releaseDirectory,
     images,
+    delivery: manifest.delivery || "registry",
+    ...(manifest.delivery === "archive"
+      ? { imageIds: manifest.imageIds, platform: manifest.platform }
+      : record?.imageIds
+        ? { imageIds: record.imageIds }
+        : {}),
     configurationHash: record?.configurationHash,
     tls: record?.tls ?? process.env.DEPLOY_TLS === "true",
     publicUrl: record?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL ?? "",
