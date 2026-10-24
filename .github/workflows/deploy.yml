@@ -203,8 +203,14 @@ jobs:
           transfer() {
             local label="$1" source="$2" directory="$3" digest bytes attempt started transferred
             transfer_heartbeat=''
+            transfer_process=''
             transfer_directory="$directory"
             cleanup_transfer() {
+              if [[ -n "$transfer_process" ]]; then
+                kill "$transfer_process" 2>/dev/null || true
+                wait "$transfer_process" 2>/dev/null || true
+                transfer_process=''
+              fi
               if [[ -n "$transfer_heartbeat" ]]; then
                 kill "$transfer_heartbeat" 2>/dev/null || true
                 wait "$transfer_heartbeat" 2>/dev/null || true
@@ -245,11 +251,14 @@ jobs:
                 done
               ) &
               transfer_heartbeat=$!
-              if timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "umask 077 && rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && cat > '$directory.incoming/payload.tar.gz'" < "$source" 2> "$task_dir/transfer.stderr"; then
+              timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "umask 077 && rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && cat > '$directory.incoming/payload.tar.gz'" < "$source" 2> "$task_dir/transfer.stderr" &
+              transfer_process=$!
+              if wait "$transfer_process"; then
                 transferred=0
               else
                 transferred=1
               fi
+              transfer_process=''
               kill "$transfer_heartbeat" 2>/dev/null || true
               wait "$transfer_heartbeat" 2>/dev/null || true
               transfer_heartbeat=''

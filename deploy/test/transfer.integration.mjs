@@ -168,8 +168,13 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
             existsSync(join(caseRoot, "release.incoming", "payload.tar.gz")),
             true,
           );
+          const cancelledAt = Date.now();
           process.kill(-child.pid, "SIGTERM");
           await closed;
+          assert.ok(
+            Date.now() - cancelledAt < 10_000,
+            "cancellation must stop the stalled SSH child instead of waiting for its timeout",
+          );
           assert.equal(
             existsSync(join(caseRoot, "release.incoming")),
             false,
