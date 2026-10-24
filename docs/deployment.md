@@ -143,6 +143,29 @@ SSH 始终验证主机密钥。`ssh-keyscan` 的采样本身不能证明服务�
 
 `publish-images` 先按原流程验证和发布 GHCR 镜像，再将这两个确切镜像同步到 TCR。同步前先核对两个目标 SHA 标签；已有标签必须与已验证的镜像 image ID 一致，才允许补齐缺失组件。网络、认证和不明确的错误会停止发布；不会覆盖内容不同的已发布 SHA。推送后按 TCR 返回的 digest 再拉取、核对 image ID，两个组件都成功后才将 `release.json` 更新为 TCR 引用并上传。
 
+### TCR 超时、重试与诊断
+
+TCR 网络操作使用独立超时，最多执行三次（首次加两次重试），重试前分别等待 10 秒、30 秒。登录及远端 manifest 查询每次最多 30 秒，单组件推送最多 180 秒，按标签或 digest 拉取最多 60 秒。命令到期先发送 TERM，10 秒后仍未退出则强制结束客户端。TCR 操作总预算为 25 分钟，每次操作及重试等待均受剩余预算限制；剩余不足时停止，不保证每个操作都能用完三次机会。步骤另设 26 分钟兜底，为进程清理留出时间；整个 `publish-images` 上限为 40 分钟，覆盖产物下载、GHCR 发布、TCR 同步和清单上传。
+
+只有超时、连接超时/重置/拒绝、临时 DNS 故障，以及明确的 HTTP 429/5xx 会重试。认证、权限、非法配置、镜像身份冲突及未知错误直接失败；明确的拒绝优先于网络错误判断。仅 `manifest unknown` 或 `no such manifest` 视为目标标签缺失，查询失败不能当作不存在镜像。发布后暂时缺失可以重试查询，但不视为发布成功。
+
+推送超时或连接中断后，先重新查询目标标签：远端已存在时拉取并与预先保存的候选 image ID 比较，一致才继续；明确缺失时才允许重试推送；状态不明或身份冲突则停止。每次重试始终使用同一份通过冒烟的镜像包。只有两个组件都完成 digest 拉取和身份验证，才原子更新清单；TCR 失败不上传可部署的成功清单，也不回退到 GHCR 绕过 `ci-gate`。
+
+日志记录组件、操作、尝试次数、耗时、退出码和固定错误类别，长操作每 30 秒输出等待信息。推送另外按短层 ID 汇总所有尚未观察到完成状态的层，例如：
+
+```text
+component=api operation=push attempt=1/3 elapsed=90s waiting
+pending_count=1 pending_layers=e0caf4620173:Waiting last_progress_at=1792819200 no_progress_seconds=60
+```
+
+`Pushed`、`Layer already exists`、`Mounted from ...` 识别为完成；不会把最后一条日志直接当作阻塞层。诊断按采样观察状态变化或可识别的上传进度增长，重复 `Waiting` 不刷新进展时间；`last_progress_at` 是 Unix 秒，进展时间精度受 30 秒采样间隔影响。每次尝试独立记录；无法解析时输出 `layers=unavailable`，不影响命令退出码和发布校验。相同层重复等待不能直接证明 TCR bug，不同层等待也不能直接证明网络故障。
+
+公开输出只包含白名单进度字段和固定类别，不打印原始 Docker 错误、凭据及私有仓库地址。原始输出仅存在 runner 临时目录，不上传 artifact；退出时清理进度进程、临时文件并有界退出登录。步骤摘要分别记录 `success`、`retries-exhausted`、`budget-exhausted`、`operation-rejected`、`validation-rejected` 或 `cancelled`；认证等配置预检失败可能在摘要初始化前直接退出。
+
+已有运行需要恢复时，优先重跑原发布任务及其后续门禁，复用其尚未过期的 `verified-images` artifact，避免重新构建同一 SHA。该 artifact 默认保留一天；过期后不能继续使用。**重跑旧运行使用旧工作流，不会加载本次修改**；验证新超时和重试逻辑必须使用包含修改的新提交，由 PR CI 验证控制逻辑和冒烟，再由该提交的 main CI 验证真实 TCR。主分支发布成功后仍遵循原 `DEPLOY_ENABLED` 开关，自动部署已开启时会继续进入部署。
+
+一次正常发布成功不代表真实重试路径已触发，重试和层诊断的异常分支以源码测试为依据；TCR 发布成功与生产健康检查分别记录。若持续耗尽重试或预算，根据操作和层诊断继续定位，再评估 SSH 镜像直传，不持续扩大等待时间。本改进不调整 Docker 守护进程上传并发，也不修改生产配置。
+
 首次切换须发布包含 TCR 支持的新提交，再使用该提交对应的成功 main CI 和清单。旧提交的已有 GHCR 清单不会因修改仓库变量自动变成 TCR 清单，不要手工篡改旧 artifact、删除旧标签或修改 `state/current.json` 来跳过验证。
 
 需要上线时打开 [Deploy](https://github.com/HeHuoDa/HeHuoDa/actions/workflows/deploy.yml)，从 `main` 运行并填写完整 40 位 SHA；必须先确认该 SHA 的 main CI、`publish-images` 和 TCR 同步成功。Deploy 仅接受本 GitHub 仓库的 GHCR 路径或 `TCR_IMAGE_PREFIX` 指定的准确 TCR 路径，拒绝其他命名空间；同时校验两个组件来自同一仓库前缀。SSH 每 30 秒发送保活，连续 6 次无响应才断开；保活不能修复镜像下载链路本身的问题。
