@@ -47,7 +47,6 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test:deployment
-      # openapi:write builds the Node workspace dependency even before the root build.
       - run: pnpm api:generate
       - run: git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
       - run: pnpm typecheck
@@ -60,12 +59,9 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    outputs:
-      images-artifact-id: ${{ steps.images.outputs.artifact-id }}
-    permissions:
-      contents: read
     env:
       IMAGE_TAG: ${{ github.sha }}
+      IMAGE_PREFIX: hehuoda-local
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -73,9 +69,6 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
-      - name: Select immutable image names
-        shell: bash
-        run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - name: Build actual images and run isolated smoke checks
         env:
           DEPLOY_STATE_DIR: ${{ runner.temp }}/smoke-state
@@ -88,336 +81,35 @@ jobs:
           path: ${{ runner.temp }}/smoke-state/logs/*.json
           retention-days: 7
           if-no-files-found: ignore
-      - name: Save verified main images for the publishing job
+      # The archive reuses the images that just passed smoke checks; nothing is rebuilt.
+      - name: Save the verified images with their archive manifest
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
-          docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$RUNNER_TEMP/verified-images.tar.gz"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        id: images
+          directory="$RUNNER_TEMP/release-archive"
+          mkdir -p "$directory"
+          docker image save "$IMAGE_PREFIX/api:$IMAGE_TAG" "$IMAGE_PREFIX/web:$IMAGE_TAG" | gzip > "$directory/images.tar.gz"
+          node deploy/archive.mjs create "$directory" "$IMAGE_TAG"
+      - name: Retain the deployable archive for seven days
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        with:
-          name: verified-images-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/verified-images.tar.gz
-          retention-days: 1
-          if-no-files-found: error
-
-  publish-images:
-    needs: image-smoke
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      actions: read
-      packages: write
-    env:
-      IMAGE_TAG: ${{ github.sha }}
-    steps:
-      # No source checkout or repository scripts run with the package-write token.
-      - name: Require the verified producer artifact ID
-        env:
-          VERIFIED_ARTIFACT_ID: ${{ needs.image-smoke.outputs.images-artifact-id }}
-        shell: bash
-        run: '[[ "$VERIFIED_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ needs.image-smoke.outputs.images-artifact-id }}
-          merge-multiple: true
-          path: ${{ runner.temp }}/verified-images
-      - name: Load and publish the exact verified images
-        env:
-          REGISTRY_TOKEN: ${{ github.token }}
-          REGISTRY_USER: ${{ github.actor }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          IMAGE_PREFIX="ghcr.io/${GITHUB_REPOSITORY,,}"
-          gzip -dc "$RUNNER_TEMP/verified-images/verified-images.tar.gz" | docker image load
-          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-          present=()
-          missing=()
-          for component in api web; do
-            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
-            # Include push scope so a new package can be distinguished from denied access.
-            registry_token=$(printf 'user = "%s:%s"\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
-              | curl --config - --fail --silent --show-error --connect-timeout 15 --max-time 30 --get \
-                --data-urlencode "scope=repository:${GITHUB_REPOSITORY,,}/$component:pull,push" \
-                --data-urlencode 'service=ghcr.io' https://ghcr.io/token \
-              | jq -er '.token // .access_token')
-            status=$(printf 'header = "Authorization: Bearer %s"\n' "$registry_token" \
-              | curl --config - --silent --show-error --connect-timeout 15 --max-time 30 --head --output /dev/null --write-out '%{http_code}' \
-                --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
-                "https://ghcr.io/v2/${GITHUB_REPOSITORY,,}/$component/manifests/$IMAGE_TAG")
-            unset registry_token
-            case "$status" in
-              200) present+=("$image") ;;
-              404) missing+=("$image") ;;
-              *) echo 'Cannot establish registry image state; refusing to publish.' >&2; exit 1 ;;
-            esac
-          done
-          for image in "${present[@]}"; do
-            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
-            docker pull "$image"
-            existing_id=$(docker image inspect --format '{{.Id}}' "$image")
-            if [[ "$candidate_id" != "$existing_id" ]]; then
-              echo 'Existing release differs from the verified artifact; rerun the original publishing job or publish a new commit.' >&2
-              exit 1
-            fi
-          done
-          for image in "${missing[@]}"; do
-            docker push "$image"
-          done
-          # Pin what was actually verified, including retries and existing releases.
-          refs=()
-          for component in api web; do
-            image="$IMAGE_PREFIX/$component:$IMAGE_TAG"
-            candidate_id=$(docker image inspect --format '{{.Id}}' "$image")
-            docker pull "$image"
-            ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
-            [[ "$ref" == "$IMAGE_PREFIX/$component@sha256:"* ]]
-            [[ "${ref##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
-            docker pull "$ref"
-            [[ "$(docker image inspect --format '{{.Id}}' "$ref")" == "$candidate_id" ]]
-            refs+=("$ref")
-          done
-          mkdir -p "$RUNNER_TEMP/release-manifest"
-          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$RUNNER_TEMP/release-manifest/release.json"
-      - name: Mirror verified images to Tencent TCR when configured
-        timeout-minutes: 26 # 25-minute operation budget plus bounded cleanup.
-        env:
-          TCR_IMAGE_PREFIX: ${{ vars.TCR_IMAGE_PREFIX }}
-          TCR_USERNAME: ${{ secrets.TCR_USERNAME }}
-          TCR_PASSWORD: ${{ secrets.TCR_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "$TCR_IMAGE_PREFIX" ]]; then
-            [[ -z "$TCR_USERNAME" && -z "$TCR_PASSWORD" ]] || { echo 'TCR credentials require TCR_IMAGE_PREFIX.' >&2; exit 1; }
-            echo 'TCR is not configured; retaining the verified GHCR release.'
-            exit 0
-          fi
-          [[ "$TCR_IMAGE_PREFIX" =~ ^(ccr\.ccs\.tencentyun\.com|[a-z0-9][a-z0-9-]*\.tencentcloudcr\.com)/[a-z0-9][a-z0-9_-]*$ ]]
-          [[ -n "$TCR_USERNAME" && -n "$TCR_PASSWORD" ]]
-          registry="${TCR_IMAGE_PREFIX%%/*}"
-          task_dir=$(mktemp -d "$RUNNER_TEMP/tcr-publish.XXXXXX")
-          raw="$task_dir/output"
-          deadline=$(( $(date +%s) + 1500 ))
-          outcome=failed
-          command_pid= pulse_pid= active_operation=
-          stop_pulse() {
-            if [[ -n "$pulse_pid" ]]; then
-              kill "$pulse_pid" 2>/dev/null || true
-              wait "$pulse_pid" 2>/dev/null || true
-              pulse_pid=
-            fi
-          }
-          cleanup() {
-            local rc=$?
-            trap - EXIT
-            set +e
-            stop_pulse
-            if [[ -n "$command_pid" ]]; then
-              # GNU timeout owns its process group; cancellation must also stop Docker.
-              kill -TERM -- "-$command_pid" 2>/dev/null || kill "$command_pid" 2>/dev/null
-              kill -KILL -- "-$command_pid" 2>/dev/null
-              wait "$command_pid" 2>/dev/null
-              if [[ "$active_operation" == push ]]; then diagnostics; fi
-            fi
-            timeout --signal=TERM --kill-after=1s 5s docker logout "$registry" >/dev/null 2>&1
-            printf 'TCR synchronization result=%s\n' "$outcome"
-            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-              printf '### TCR synchronization\n\nResult: `%s`\n' "$outcome" >> "$GITHUB_STEP_SUMMARY"
-            fi
-            rm -rf -- "$task_dir"
-            exit "$rc"
-          }
-          trap cleanup EXIT
-          trap 'outcome=cancelled; exit 130' INT
-          trap 'outcome=cancelled; exit 143' TERM
-          fail() { outcome="$1"; exit 1; }
-          printf '%s' "$TCR_PASSWORD" > "$task_dir/password"
-          diagnostics() {
-            # Parse only allowlisted progress fields; never forward raw Docker output.
-            node --input-type=module - "$raw" "$task_dir/progress" "$(date +%s)" "$started" 2>/dev/null <<'NODE' || echo 'layers=unavailable'
-          import { readFileSync, writeFileSync } from 'node:fs';
-          try {
-            const [file, snapshot, nowText, startText] = process.argv.slice(2);
-            const now = Number(nowText);
-            const layers = new Map();
-            for (const line of readFileSync(file, 'utf8').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').split(/[\r\n]/)) {
-              const match = /^([a-f0-9]{12}): (Waiting|Preparing|Pushed|Layer already exists|Mounted from .+|Pushing .+|Retrying in [0-9]+ seconds)$/.exec(line);
-              if (!match) continue;
-              let state = match[2];
-              if (state.startsWith('Mounted from ')) state = 'Mounted';
-              if (state.startsWith('Retrying ')) state = 'Retrying';
-              if (state.startsWith('Pushing ')) {
-                const amount = /\b[0-9]+(?:\.[0-9]+)?(?:[kKMGT]?B)\b/.exec(state)?.[0];
-                state = amount ? `Pushing:${amount}` : 'Pushing';
-              }
-              layers.set(match[1], state);
-            }
-            const entries = [...layers].sort(([a], [b]) => a.localeCompare(b));
-            const signature = JSON.stringify(entries);
-            let previous = { signature: '[]', at: Number(startText) };
-            try { previous = JSON.parse(readFileSync(snapshot, 'utf8')); } catch {}
-            const at = signature === previous.signature ? previous.at : now;
-            writeFileSync(snapshot, JSON.stringify({ signature, at }));
-            const pending = entries.filter(([, state]) => !['Pushed', 'Layer already exists', 'Mounted'].includes(state));
-            console.log(entries.length
-              ? `pending_count=${pending.length} pending_layers=${pending.map(([id, state]) => `${id}:${state.replaceAll(' ', '_')}`).join(',') || 'none'} last_progress_at=${at} no_progress_seconds=${Math.max(0, now - at)}`
-              : 'layers=unavailable');
-          } catch { console.log('layers=unavailable'); }
-          NODE
-          }
-          run_once() {
-            local component="$1" operation="$2" limit="$3" attempt="$4"
-            shift 4
-            local remaining=$(( deadline - $(date +%s) - 10 )) input=/dev/null rc
-            (( remaining > 0 )) || fail budget-exhausted
-            (( limit <= remaining )) || limit=$remaining
-            [[ "$operation" != login ]] || input="$task_dir/password"
-            started=$(date +%s)
-            active_operation="$operation"
-            : > "$raw"
-            rm -f -- "$task_dir/progress"
-            printf 'component=%s operation=%s attempt=%s/3 started limit=%ss\n' "$component" "$operation" "$attempt" "$limit"
-            timeout --signal=TERM --kill-after=10s "${limit}s" docker "$@" < "$input" > "$raw" 2>&1 &
-            command_pid=$!
-            (
-              pulse_sleep=
-              trap 'exit 0' INT TERM
-              trap 'if [[ -n "$pulse_sleep" ]]; then kill "$pulse_sleep" 2>/dev/null || true; wait "$pulse_sleep" 2>/dev/null || true; fi' EXIT
-              while true; do
-                sleep 30 & pulse_sleep=$!
-                wait "$pulse_sleep" || exit 0
-                printf 'component=%s operation=%s attempt=%s/3 elapsed=%ss waiting\n' "$component" "$operation" "$attempt" "$(( $(date +%s) - started ))"
-                [[ "$operation" != push ]] || diagnostics
-              done
-            ) & pulse_pid=$!
-            if wait "$command_pid"; then rc=0; else rc=$?; fi
-            command_pid=
-            stop_pulse
-            [[ "$operation" != push ]] || diagnostics
-            return "$rc"
-          }
-          classify() {
-            category=unclassified
-            if grep -Eqi 'unauthorized|authentication (failed|required)|access denied|denied:|permission denied|forbidden|(^|[[:space:]:])(401|403)([[:space:]:]|$)|invalid (reference|argument|config)' "$raw"; then
-              category=rejected
-            elif grep -Eqi 'manifest unknown|no such manifest' "$raw"; then
-              category=missing
-            elif [[ "$1" == 124 || "$1" == 137 ]] || grep -Eqi 'timed out|timeout|connection reset|connection refused|temporary failure in name resolution|no such host|server misbehaving|too many requests|toomanyrequests|HTTP(/[0-9.]+)?[^0-9]*(429|5[0-9]{2})([^0-9]|$)|status( code)?[^0-9]*(429|5[0-9]{2})([^0-9]|$)' "$raw"; then
-              category=transient
-            fi
-          }
-          pause_retry() {
-            local delay=10
-            [[ "$1" == 1 ]] || delay=30
-            (( deadline - $(date +%s) > delay + 10 )) || fail budget-exhausted
-            printf 'retry_wait_seconds=%s\n' "$delay"
-            sleep "$delay"
-          }
-          invoke() {
-            local component="$1" operation="$2" limit="$3" attempt rc
-            shift 3
-            for attempt in 1 2 3; do
-              if run_once "$component" "$operation" "$limit" "$attempt" "$@"; then rc=0; category=success
-              else rc=$?; classify "$rc"; fi
-              printf 'component=%s operation=%s attempt=%s/3 elapsed=%ss rc=%s category=%s\n' "$component" "$operation" "$attempt" "$(( $(date +%s) - started ))" "$rc" "$category"
-              (( deadline - $(date +%s) > 10 )) || fail budget-exhausted
-              [[ "$category" != success ]] || return 0
-              if [[ "$category" == missing && "$operation" == inspect ]]; then return 44; fi
-              if [[ "$category" != transient && !( "$category" == missing && "$operation" == verify-inspect ) ]]; then
-                fail operation-rejected
-              fi
-              if [[ "$operation" == push ]]; then
-                # A lost response may hide a successful push. Check before retrying.
-                if invoke "$component" inspect 30 manifest inspect "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"; then
-                  verify_identity "$component" "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-                  return 0
-                else
-                  rc=$?
-                  [[ "$rc" == 44 ]] || fail operation-rejected
-                fi
-              fi
-              [[ "$attempt" != 3 ]] || fail retries-exhausted
-              pause_retry "$attempt"
-            done
-          }
-          verify_identity() {
-            local component="$1" reference="$2" actual
-            invoke "$component" pull 60 pull "$reference"
-            actual=$(docker image inspect --format '{{.Id}}' "$reference" 2> "$raw") || fail operation-rejected
-            [[ "$actual" == "${candidates[$component]}" ]] || fail validation-rejected
-          }
-          manifest="$RUNNER_TEMP/release-manifest/release.json"
-          declare -A candidates sources
-          missing=()
-          refs=()
-          invoke registry login 30 login "$registry" --username "$TCR_USERNAME" --password-stdin
-          for component in api web; do
-            sources[$component]=$(jq -er --arg component "$component" '.images[$component]' "$manifest" 2> "$raw") || fail validation-rejected
-            candidates[$component]=$(docker image inspect --format '{{.Id}}' "${sources[$component]}" 2> "$raw") || fail validation-rejected
-            [[ -n "${candidates[$component]}" ]] || fail validation-rejected
-          done
-          # Validate both existing tags before pushing either missing component.
-          for component in api web; do
-            target="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-            if invoke "$component" inspect 30 manifest inspect "$target"; then
-              verify_identity "$component" "$target"
-            else
-              rc=$?
-              [[ "$rc" == 44 ]] || fail operation-rejected
-              docker tag "${sources[$component]}" "$target" 2> "$raw" || fail operation-rejected
-              missing+=("$component")
-            fi
-          done
-          for component in "${missing[@]}"; do
-            invoke "$component" push 180 push "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-          done
-          for component in api web; do
-            image="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-            invoke "$component" verify-inspect 30 manifest inspect "$image"
-            verify_identity "$component" "$image"
-            digests=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2> "$raw") || fail validation-rejected
-            ref=
-            while IFS= read -r digest; do
-              if [[ "$digest" == "$TCR_IMAGE_PREFIX/$component@sha256:"* && "${digest##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]; then
-                [[ -z "$ref" || "$ref" == "$digest" ]] || fail validation-rejected
-                ref="$digest"
-              fi
-            done <<< "$digests"
-            [[ -n "$ref" ]] || fail validation-rejected
-            verify_identity "$component" "$ref"
-            refs+=("$ref")
-          done
-          (( deadline - $(date +%s) > 0 )) || fail budget-exhausted
-          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$task_dir/release.json"
-          mv -- "$task_dir/release.json" "$manifest"
-          outcome=success
-      - name: Retain immutable release manifest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-images-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-manifest/release.json
-          retention-days: 90
+          name: release-archive-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-archive
+          retention-days: 7
           if-no-files-found: error
 
   ci-gate:
     name: ci-gate
-    needs: [quality, image-smoke, publish-images]
+    needs: [quality, image-smoke]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # No publishing job and no package-write scope: the archive uploaded by
+      # image-smoke is the only deployable artifact for a main commit.
       - run: test "$QUALITY_RESULT" = "success" && test "$IMAGE_RESULT" = "success"
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           IMAGE_RESULT: ${{ needs.image-smoke.result }}
-      - name: Require image publishing for main releases
-        run: test "$PUBLISH_RESULT" = "success" || test "$PUBLISH_REQUIRED" = "false"
-        env:
-          PUBLISH_RESULT: ${{ needs.publish-images.result }}
-          PUBLISH_REQUIRED: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
