@@ -4,8 +4,10 @@ import { AuthClock } from "./auth-clock.js";
 import {
   CURRENT_CONSENT_VERSION,
   DEFAULT_NICKNAME,
+  RATE_LIMIT_DEFAULTS,
   RATE_LIMIT_WINDOW_SECONDS,
   WECHAT_PROVIDER,
+  type UserStatus,
 } from "./auth.constants.js";
 import {
   accessExpiry,
@@ -24,7 +26,7 @@ export interface RequestContext {
 
 export interface CredentialResult {
   kind: "active";
-  user: { id: string; nickname: string; status: string };
+  user: { id: string; nickname: string; status: UserStatus };
   accessToken: string;
   refreshToken: string;
   accessExpiresAt: string;
@@ -32,7 +34,7 @@ export interface CredentialResult {
 }
 
 export interface ProfileResult {
-  user: { id: string; nickname: string; status: string };
+  user: { id: string; nickname: string; status: UserStatus };
   campus: {
     status: "unverified";
     termId: string | null;
@@ -71,14 +73,14 @@ export class AuthService {
       "login-global",
       "all",
       "AUTH_RATE_LOGIN_GLOBAL",
-      300,
+      RATE_LIMIT_DEFAULTS.loginGlobal,
       now,
     );
     await this.enforceRate(
       "login-source",
       ctx.ip,
       "AUTH_RATE_LOGIN_PER_SOURCE",
-      10,
+      RATE_LIMIT_DEFAULTS.loginPerSource,
       now,
     );
 
@@ -107,7 +109,7 @@ export class AuthService {
       "login-openid",
       appId + ":" + exchange.identity.openId,
       "AUTH_RATE_LOGIN_PER_IDENTITY",
-      20,
+      RATE_LIMIT_DEFAULTS.loginPerIdentity,
       now,
     );
 
@@ -162,21 +164,21 @@ export class AuthService {
       "refresh-global",
       "all",
       "AUTH_RATE_REFRESH_GLOBAL",
-      600,
+      RATE_LIMIT_DEFAULTS.refreshGlobal,
       now,
     );
     await this.enforceRate(
       "refresh-source",
       ctx.ip,
       "AUTH_RATE_REFRESH_PER_SUBJECT",
-      20,
+      RATE_LIMIT_DEFAULTS.refreshPerSubject,
       now,
     );
     await this.enforceRate(
       "refresh-token",
       hashToken(input.refreshToken),
       "AUTH_RATE_REFRESH_PER_SUBJECT",
-      20,
+      RATE_LIMIT_DEFAULTS.refreshPerSubject,
       now,
     );
     const tokens = generateTokenPair();

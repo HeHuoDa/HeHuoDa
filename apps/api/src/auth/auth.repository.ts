@@ -12,13 +12,16 @@ import {
 import {
   ACCESS_TOKEN_MINUTES,
   REFRESH_SESSION_DAYS,
+  asUserStatus,
+  type SessionRevokeReason,
+  type UserStatus,
 } from "./auth.constants.js";
 import { hashToken, newId, type TokenPair } from "./auth-token.js";
 
 export interface UserRecord {
   id: string;
   nickname: string;
-  status: string;
+  status: UserStatus;
 }
 
 export interface AccessContext {
@@ -91,7 +94,10 @@ export class AuthRepository {
           })
           .from(users)
           .where(eq(users.id, identity.userId));
-        return { user: user!, created: false };
+        return {
+          user: { ...user!, status: asUserStatus(user!.status) },
+          created: false,
+        };
       }
       const userId = newId();
       await tx.insert(users).values({
@@ -151,18 +157,18 @@ export class AuthRepository {
     now: Date;
   }): Promise<RotateOutcome> {
     const refreshHash = hashToken(input.refreshToken);
-    return this.database.db.transaction(async (tx) => {
+    return this.database.db.transaction(async (tx): Promise<RotateOutcome> => {
       const [token] = await tx
         .select()
         .from(authTokens)
         .where(eq(authTokens.refreshHash, refreshHash))
         .for("update");
-      if (!token) return { kind: "unknown" } as const;
+      if (!token) return { kind: "unknown" };
       const [session] = await tx
         .select()
         .from(authSessions)
         .where(eq(authSessions.id, token.sessionId));
-      if (!session) return { kind: "unknown" } as const;
+      if (!session) return { kind: "unknown" };
       const [user] = await tx
         .select({
           id: users.id,
@@ -181,16 +187,19 @@ export class AuthRepository {
               isNull(authSessions.revokedAt),
             ),
           );
-        return { kind: "replay", sessionId: session.id } as const;
+        return { kind: "replay", sessionId: session.id };
       }
       if (
         session.revokedAt ||
         input.now >= session.absoluteExpiresAt ||
         input.now >= token.refreshExpiresAt
       )
-        return { kind: "rejected" } as const;
+        return { kind: "rejected" };
       if (!user || user.status !== "active")
-        return { kind: "account", user: user ?? null } as const;
+        return {
+          kind: "account",
+          user: user ? { ...user, status: asUserStatus(user.status) } : null,
+        };
       await tx
         .update(authTokens)
         .set({ consumedAt: input.now })
@@ -211,8 +220,8 @@ export class AuthRepository {
           id: session.id,
           absoluteExpiresAt: session.absoluteExpiresAt,
         },
-        user,
-      } as const;
+        user: { ...user, status: asUserStatus(user.status) },
+      };
     });
   }
 
@@ -246,13 +255,17 @@ export class AuthRepository {
     return {
       sessionId: row.sessionId,
       generation: row.generation,
-      user: { id: row.userId, nickname: row.nickname, status: row.status },
+      user: {
+        id: row.userId,
+        nickname: row.nickname,
+        status: asUserStatus(row.status),
+      },
     };
   }
 
   async revokeSession(
     sessionId: string,
-    reason: string,
+    reason: SessionRevokeReason,
     now: Date,
   ): Promise<void> {
     await this.database.db
@@ -277,7 +290,7 @@ export class AuthRepository {
         nickname: users.nickname,
         status: users.status,
       });
-    return user!;
+    return { ...user!, status: asUserStatus(user!.status) };
   }
 
   // 审计只存内部引用与安全元数据，不保存原始凭据、code 或上游原报文。

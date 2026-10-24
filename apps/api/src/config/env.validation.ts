@@ -1,5 +1,9 @@
 import Joi from "joi";
 import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
+import {
+  AUDIT_RETENTION_DAYS_DEFAULT,
+  RATE_LIMIT_DEFAULTS,
+} from "../auth/auth.constants.js";
 
 export interface EnvironmentVariables {
   NODE_ENV: "development" | "test" | "production";
@@ -73,16 +77,31 @@ const environmentSchema = Joi.object({
     then: Joi.string().valid("real").default("real"),
     otherwise: Joi.string().valid("real", "stub").default("real"),
   }),
-  AUTH_RATE_LOGIN_PER_SOURCE: Joi.number().integer().min(1).default(10),
-  AUTH_RATE_LOGIN_PER_IDENTITY: Joi.number().integer().min(1).default(20),
-  AUTH_RATE_LOGIN_GLOBAL: Joi.number().integer().min(1).default(300),
-  AUTH_RATE_REFRESH_PER_SUBJECT: Joi.number().integer().min(1).default(20),
-  AUTH_RATE_REFRESH_GLOBAL: Joi.number().integer().min(1).default(600),
+  AUTH_RATE_LOGIN_PER_SOURCE: Joi.number()
+    .integer()
+    .min(1)
+    .default(RATE_LIMIT_DEFAULTS.loginPerSource),
+  AUTH_RATE_LOGIN_PER_IDENTITY: Joi.number()
+    .integer()
+    .min(1)
+    .default(RATE_LIMIT_DEFAULTS.loginPerIdentity),
+  AUTH_RATE_LOGIN_GLOBAL: Joi.number()
+    .integer()
+    .min(1)
+    .default(RATE_LIMIT_DEFAULTS.loginGlobal),
+  AUTH_RATE_REFRESH_PER_SUBJECT: Joi.number()
+    .integer()
+    .min(1)
+    .default(RATE_LIMIT_DEFAULTS.refreshPerSubject),
+  AUTH_RATE_REFRESH_GLOBAL: Joi.number()
+    .integer()
+    .min(1)
+    .default(RATE_LIMIT_DEFAULTS.refreshGlobal),
   AUTH_AUDIT_RETENTION_DAYS: Joi.number()
     .integer()
     .min(1)
     .max(3650)
-    .default(180),
+    .default(AUDIT_RETENTION_DAYS_DEFAULT),
 }).unknown(true);
 
 export function validateEnvironment(

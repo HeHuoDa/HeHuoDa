@@ -8,7 +8,10 @@ import { AuthService } from "./auth.service.js";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthClock } from "./auth-clock.js";
 import { AuthRateLimiter } from "./auth-rate-limiter.js";
-import { WECHAT_PROVIDER } from "./auth.constants.js";
+import {
+  WECHAT_PROVIDER,
+  AUDIT_RETENTION_DAYS_DEFAULT,
+} from "./auth.constants.js";
 import { cleanupAuthArtifacts } from "./auth-cleanup.js";
 import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { RealWechatProvider } from "./wechat/real-wechat-provider.js";
@@ -35,7 +38,10 @@ export class AuthCleanupScheduler {
     try {
       await cleanupAuthArtifacts(
         this.database.pool,
-        this.config.get<number>("AUTH_AUDIT_RETENTION_DAYS", 180),
+        this.config.get<number>(
+          "AUTH_AUDIT_RETENTION_DAYS",
+          AUDIT_RETENTION_DAYS_DEFAULT,
+        ),
       );
     } catch {
       this.logger.error("认证数据清理失败；凭据摘要与审计记录保持原状");

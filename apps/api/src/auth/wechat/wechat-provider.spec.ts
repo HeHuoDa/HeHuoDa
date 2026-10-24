@@ -59,7 +59,7 @@ describe("RealWechatProvider", () => {
       ok: true,
       identity: { openId: "o-1", unionId: null },
     });
-    const [input] = fetchMock.mock.calls[0] as [RequestInfo | URL];
+    const [input] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL];
     const url = new URL(String(input));
     expect(url.origin + url.pathname).toBe(
       "https://api.weixin.qq.com/sns/jscode2session",
