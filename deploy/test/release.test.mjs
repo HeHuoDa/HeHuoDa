@@ -273,3 +273,56 @@ test("same SHA is checked without duplicate migrations; concurrent release locks
   );
   assert.equal(existsSync(join(f.directory, "release.lock")), true);
 });
+
+test("archive deployments never pull or build API/Web and preserve three successful versions", async (t) => {
+  const f = fixture(t);
+  const context = f.operations.releaseContext;
+  f.operations.releaseContext = (tag, record) => ({
+    ...context(tag, record),
+    delivery: record?.delivery || "archive",
+  });
+  f.operations.ensureReleaseImages = () => ({
+    api: `sha256:${"a".repeat(64)}`,
+    web: `sha256:${"b".repeat(64)}`,
+  });
+  for (const tag of [next, "3".repeat(40), "4".repeat(40)])
+    await release(tag, f.operations, f.directory);
+  assert.deepEqual(
+    f.state().history.map((r) => r.sha),
+    ["4".repeat(40), "3".repeat(40), next],
+  );
+  assert.equal(
+    f.events.some((e) => e.command === "pull"),
+    false,
+  );
+  for (const event of f.events.filter((e) =>
+    ["run", "up"].includes(e.command),
+  )) {
+    assert.ok(event.args.includes("--pull") && event.args.includes("never"));
+    if (event.command === "up") assert.ok(event.args.includes("--no-build"));
+  }
+});
+
+test("explicit application rollback skips migrations and promotes a retained success", async (t) => {
+  const f = fixture(t);
+  await release(next, f.operations, f.directory);
+  f.events.length = 0;
+  const target = f.state().history.find((r) => r.sha === old);
+  await release(old, f.operations, f.directory, {
+    candidate: target,
+    rollback: true,
+  });
+  assert.equal(f.state().sha, old);
+  assert.deepEqual(
+    f.state().history.map((r) => r.sha),
+    [old, next],
+  );
+  assert.equal(
+    f.events.some((e) => e.command === "run"),
+    false,
+  );
+  assert.equal(
+    f.events.some((e) => e.command === "backup"),
+    true,
+  );
+});

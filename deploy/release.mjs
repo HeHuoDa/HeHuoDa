@@ -20,6 +20,8 @@ import {
   releaseContext,
 } from "./runtime.mjs";
 import { backup } from "./backup.mjs";
+import { successfulHistory, cleanRetired } from "./history.mjs";
+import { ensureReleaseImages } from "./images.mjs";
 
 export function configurationHash(config) {
   const ordered = (value) =>
@@ -47,8 +49,10 @@ export async function release(
     verifyApplication,
     verifyPublicApplication,
     releaseContext,
+    ensureReleaseImages,
   },
   directory = stateDirectory,
+  options = {},
 ) {
   const tag = sha(input);
   const {
@@ -68,16 +72,18 @@ export async function release(
   let previous;
   let candidate;
   let prior;
+  let priorRecord;
   try {
     mkdirSync(lock);
     locked = true;
-    candidate = releaseContext(tag);
+    candidate = options.candidate || releaseContext(tag);
     validateDeploymentConfig(tag, candidate);
     const candidateConfig = JSON.parse(
       compose(["config", "--format", "json"], tag, { release: candidate }),
     );
     if (existsSync(state)) {
       const record = JSON.parse(readFileSync(state, "utf8"));
+      priorRecord = record;
       previous = sha(record.sha);
       prior = releaseContext(previous, record);
       validateDeploymentConfig(previous, prior);
@@ -134,10 +140,24 @@ export async function release(
       console.log(`Already deployed and healthy: ${tag}`);
       return;
     }
-    compose(["pull", "api", "web", "db"], tag, { release: candidate });
-    compose(["up", "-d", "--wait", "--wait-timeout", "120", "db"], tag, {
-      release: candidate,
-    });
+    if (operations.ensureReleaseImages) {
+      if (prior) prior.imageIds = operations.ensureReleaseImages(prior, docker);
+      candidate.imageIds = operations.ensureReleaseImages(candidate, docker);
+    }
+    if (candidate.delivery === "archive") {
+      const dbImage = candidateConfig.services.db.image;
+      if (!docker(["image", "ls", "--quiet", "--no-trunc", dbImage]))
+        docker(["pull", dbImage]);
+    } else compose(["pull", "api", "web", "db"], tag, { release: candidate });
+    const local =
+      candidate.delivery === "archive" ? ["--pull", "never", "--no-build"] : [];
+    compose(
+      ["up", ...local, "-d", "--wait", "--wait-timeout", "120", "db"],
+      tag,
+      {
+        release: candidate,
+      },
+    );
     const populated = compose(
       [
         "exec",
@@ -152,22 +172,25 @@ export async function release(
     );
     if (previous || Number(populated) > 0)
       console.log(`Verified pre-migration backup: ${backup(tag, candidate)}`);
-    compose(
-      [
-        "run",
-        "--rm",
-        "--no-deps",
-        "api",
-        "node",
-        "dist-openapi/scripts/migrate.js",
-      ],
-      tag,
-      { release: candidate },
-    );
+    if (!options.rollback)
+      compose(
+        [
+          "run",
+          ...(candidate.delivery === "archive" ? ["--pull", "never"] : []),
+          "--rm",
+          "--no-deps",
+          "api",
+          "node",
+          "dist-openapi/scripts/migrate.js",
+        ],
+        tag,
+        { release: candidate },
+      );
     changed = true;
     compose(
       [
         "up",
+        ...local,
         "-d",
         "--no-deps",
         "--force-recreate",
@@ -182,18 +205,24 @@ export async function release(
     );
     verifyApplication(tag, candidate);
     await verifyPublicApplication(candidate);
+    const current = {
+      sha: tag,
+      ...candidate,
+      configurationHash: configurationHash(candidateConfig),
+      previous: previous || null,
+      deployedAt: new Date().toISOString(),
+    };
+    const history = successfulHistory(
+      current,
+      priorRecord ? { ...priorRecord, ...prior } : undefined,
+    );
     writeFileSync(
       `${state}.tmp`,
-      JSON.stringify({
-        sha: tag,
-        ...candidate,
-        configurationHash: configurationHash(candidateConfig),
-        previous: previous || null,
-        deployedAt: new Date().toISOString(),
-      }) + "\n",
+      JSON.stringify({ ...current, history }) + "\n",
       { mode: 0o600 },
     );
     renameSync(`${state}.tmp`, state);
+    cleanRetired(priorRecord, history, docker);
     console.log(`Deployed and verified: ${tag}`);
   } catch (error) {
     if (!locked)
@@ -207,6 +236,9 @@ export async function release(
         compose(
           [
             "up",
+            ...(prior.delivery === "archive"
+              ? ["--pull", "never", "--no-build"]
+              : []),
             "-d",
             "--no-deps",
             "--force-recreate",
