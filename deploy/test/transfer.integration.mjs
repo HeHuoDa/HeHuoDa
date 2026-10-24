@@ -101,7 +101,12 @@ test(
           script.indexOf("transfer() {"),
           script.indexOf("# Measure the same SSH"),
         )
-        .replace("then sleep 10;", "then sleep 0.1;");
+        .replace("then sleep 10;", "then sleep 0.1;")
+        .replace("30s 600 ", '30s "$TRANSFER_LIMIT" ')
+        .replace(
+          "transfer_process=$!",
+          'transfer_process=$!\nprintf "%s" "$transfer_process" > "$CASE_ROOT/transfer.pid"',
+        );
       const remote = script
         .split("\n")
         .find((line) => line.trim().startsWith("remote()"));
@@ -127,7 +132,6 @@ mkdir -p "$task_dir"
 transport=(bash "$ROOT/transport.sh")
 ssh_args=(-F /dev/null -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ROOT/known_hosts" -o IdentitiesOnly=yes -i "$ROOT/client")
 target="$SSH_USER@127.0.0.1"
-timeout() { local signal="$1" grace="$2" seconds="$3"; shift 3; [[ "$seconds" != 600 || "$SCENARIO" != timeout ]] || seconds=1; command timeout "$signal" "$grace" "$seconds" "$@"; }
 ${remote}
 ${transfer}
 transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
@@ -149,6 +153,7 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
           PORT: String(port),
           SSH_USER: userInfo().username,
           SCENARIO: scenario,
+          TRANSFER_LIMIT: scenario === "timeout" ? "1" : "600",
         };
         if (scenario === "cancel") {
           const child = spawn("bash", ["-c", setup], {
@@ -169,8 +174,17 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
             true,
           );
           const cancelledAt = Date.now();
-          process.kill(-child.pid, "SIGTERM");
+          const transferPid = Number(
+            readFileSync(join(caseRoot, "transfer.pid"), "utf8"),
+          );
+          assert.ok(Number.isInteger(transferPid) && transferPid > 0);
+          process.kill(child.pid, "SIGTERM");
           await closed;
+          assert.throws(
+            () => process.kill(transferPid, 0),
+            { code: "ESRCH" },
+            "the parent must reap its actual timeout process",
+          );
           assert.ok(
             Date.now() - cancelledAt < 10_000,
             "cancellation must stop the stalled SSH child instead of waiting for its timeout",
