@@ -71,6 +71,7 @@ test(
           });
           socket.on("error", () => resolve(false));
         });
+        assert.ifError(result.error);
         if (!ready) await new Promise((resolve) => setTimeout(resolve, 100));
       }
       assert.equal(ready, true, "isolated SSH daemon must start");
@@ -95,10 +96,12 @@ test(
       const script = workflow.jobs.deploy.steps.find(
         (step) => step.env?.DEPLOY_HOST,
       ).run;
-      const transfer = script.slice(
-        script.indexOf("transfer() {"),
-        script.indexOf("# Measure the same SSH"),
-      );
+      const transfer = script
+        .slice(
+          script.indexOf("transfer() {"),
+          script.indexOf("# Measure the same SSH"),
+        )
+        .replace("then sleep 10;", "then sleep 0.1;");
       const remote = script
         .split("\n")
         .find((line) => line.trim().startsWith("remote()"));
@@ -124,7 +127,6 @@ transport=(bash "$ROOT/transport.sh")
 ssh_args=(-F /dev/null -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ROOT/known_hosts" -o IdentitiesOnly=yes -i "$ROOT/client")
 target="$SSH_USER@127.0.0.1"
 timeout() { local signal="$1" grace="$2" seconds="$3"; shift 3; [[ "$seconds" != 600 || "$SCENARIO" != timeout ]] || seconds=1; command timeout "$signal" "$grace" "$seconds" "$@"; }
-sleep() { if [[ "$1" == 10 ]]; then command sleep 0.1; else command sleep "$@"; fi; }
 ${remote}
 ${transfer}
 transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
@@ -178,6 +180,7 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
             encoding: "utf8",
             timeout: 30_000,
           });
+          assert.ifError(result.error);
           assert.equal(
             result.status,
             scenario === "timeout" ? 1 : 0,
@@ -194,6 +197,7 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
               encoding: "utf8",
               timeout: 30_000,
             });
+            assert.ifError(reused.error);
             assert.equal(reused.status, 0, reused.stderr);
             assert.match(reused.stdout, /status=reused/);
           }
