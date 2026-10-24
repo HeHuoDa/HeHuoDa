@@ -28,4 +28,5 @@ GitHub artifact 保留 7 天，服务器保留最近三个成功版本。手动�
 - CI：`image-smoke` 以 `hehuoda-local` 前缀构建并冒烟，用 `deploy/archive.mjs` 生成 `images.tar.gz` 与 `release.json`，上传 `release-archive-<sha>-<attempt>`（7 天）。`publish-images` 作业、`packages: write` 与 TCR 镜像步骤已删除，`ci-gate` 只要求 `quality` 与 `image-smoke` 成功。
 - Deploy：控制器固定从 `main` 检出，目标 SHA 只提供 Compose、Nginx 与清单；下载归档后先用 `deploy/archive.mjs verify` 复核仓库、run、attempt、摘要与平台，再打包传输。单次传输 10 分钟上限、最多 2 次、间隔 10 秒，远端已存在相同摘要时直接复用。
 - 动作：`workflow_dispatch` 新增 `action`（`prepare`/`deploy`/`rollback`，默认 `prepare`）。自动 `workflow_run` 在 `DEPLOY_ARCHIVE_ACTIVATE` 关闭时整体跳过；`rollback` 只传输控制器，不依赖未过期的 artifact。
-- 未完成：服务器 `prepare` 演练、`DEPLOY_ARCHIVE_ACTIVATE` 激活、首次正式部署与回滚证据。GitHub artifact 过期后的服务器本地回滚只有单元测试覆盖。
+- 验证边界：服务器 `prepare` 演练、`DEPLOY_ARCHIVE_ACTIVATE` 激活、首次正式部署与生产回滚仍待验收。新增 CI 以真实 loopback SSH 验证故障传输，并以真实 Docker 和独立数据库验证归档准备、更新失败恢复、归档文件不可用后的本地回滚及三版保留；隔离结果不代替生产证据。
+- 首次真实演练：[prepare #40096153574](https://github.com/HeHuoDa/HeHuoDa/actions/runs/40096153574) 的约 129 MB payload 首次 SSH 传输约 609 秒后超时，第二次尝试期间人工取消，未进入导入或应用更新，激活保持关闭。具体网络或接收端根因尚未定位；后续补充小包测速、接收字节进度、完整 payload 校验和取消清理，不据此延长既定传输预算。
