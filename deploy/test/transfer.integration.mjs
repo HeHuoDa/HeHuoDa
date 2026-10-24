@@ -26,6 +26,7 @@ test(
         timeout: 30_000,
         ...options,
       });
+      assert.ifError(result.error);
       assert.equal(result.status, 0, result.stderr || String(result.error));
       return result.stdout;
     };
@@ -71,7 +72,6 @@ test(
           });
           socket.on("error", () => resolve(false));
         });
-        assert.ifError(result.error);
         if (!ready) await new Promise((resolve) => setTimeout(resolve, 100));
       }
       assert.equal(ready, true, "isolated SSH daemon must start");
