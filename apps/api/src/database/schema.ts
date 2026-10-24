@@ -215,3 +215,96 @@ export const ingestionOperations = pgTable("ingestion_operations", {
   inputHash: text("input_hash").notNull(),
   result: jsonb().notNull(),
 });
+export const users = pgTable("users", {
+  id: text().primaryKey(),
+  nickname: text().notNull(),
+  status: text().notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const wechatIdentities = pgTable(
+  "wechat_identities",
+  {
+    id: text().primaryKey(),
+    appId: text("app_id").notNull(),
+    openId: text("open_id").notNull(),
+    unionId: text("union_id"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique("wechat_identities_app_open").on(t.appId, t.openId)],
+);
+export const authSessions = pgTable("auth_sessions", {
+  id: text().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  absoluteExpiresAt: timestamp("absolute_expires_at", {
+    withTimezone: true,
+  }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedReason: text("revoked_reason"),
+});
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: text().primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => authSessions.id),
+    generation: integer().notNull(),
+    accessHash: text("access_hash").notNull().unique(),
+    accessExpiresAt: timestamp("access_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    refreshHash: text("refresh_hash").notNull().unique(),
+    refreshExpiresAt: timestamp("refresh_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("auth_tokens_session_generation").on(t.sessionId, t.generation),
+  ],
+);
+export const authAuditLogs = pgTable("auth_audit_logs", {
+  id: text().primaryKey(),
+  kind: text().notNull(),
+  userId: text("user_id").references(() => users.id),
+  sessionId: text("session_id"),
+  requestId: text("request_id").notNull(),
+  metadata: jsonb().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const authRateLimits = pgTable(
+  "auth_rate_limits",
+  {
+    kind: text().notNull(),
+    subject: text().notNull(),
+    windowStartedAt: timestamp("window_started_at", {
+      withTimezone: true,
+    }).notNull(),
+    count: integer().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.kind, t.subject, t.windowStartedAt],
+    }),
+  ],
+);
