@@ -24,6 +24,7 @@ CI 重用冒烟后的同一份 API 与 uni H5 镜像，不重新构建；artifac
 /opt/hehuoda/
   .env
   releases/<SHA>/<run>-<attempt>/  # artifact、目标 Compose 与受信控制器
+  controller/<run>-<attempt>/      # 仅回滚时传输的受信控制器
   state/current.json              # 当前发布和最多三个成功版本
   state/release.lock/
   state/logs/                      # 主机本地受控诊断
@@ -55,7 +56,14 @@ gh run list --repo HeHuoDa/HeHuoDa --workflow ci.yml --branch main \
   --json databaseId,headSha,status,conclusion,url
 ```
 
-部署前确认 run 的 SHA 和成功结论，并从同一 run 下载该 SHA 的 `release-images` artifact。CI 成功仅代表部署包可用，并不能证明已连接服务器或已上线。
+部署前确认 run 的 SHA 和成功结论，并从同一 run 下载该 SHA 的 `release-archive` artifact（内含 `images.tar.gz` 与 `release.json`）。手动部署入口按动作显式调用：
+
+```bash
+gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
+  -f sha=<完整 40 位 SHA> -f action=prepare
+```
+
+`action` 取 `prepare`（默认）、`deploy` 或 `rollback`。`rollback` 只传输受信控制器，不要求 GitHub artifact 仍然存在。CI 成功仅代表部署包可用，并不能证明已连接服务器或已上线。
 
 | 类型     | 名称                                        | 用途                                   |
 | -------- | ------------------------------------------- | -------------------------------------- |
