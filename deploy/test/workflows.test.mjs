@@ -328,7 +328,8 @@ test("archive transfer is bounded, reuses complete copies and cleans partial one
     runBash(
       `
       set -euo pipefail
-      task_dir="$RUNNER_TEMP"
+      task_dir="$RUNNER_TEMP/private"
+      mkdir -p "$task_dir"
       transport=(ssh)
       ssh_args=()
       target="fixture@example"

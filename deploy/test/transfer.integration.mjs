@@ -122,7 +122,8 @@ if [[ "$SCENARIO" == lost && "$command" == *"mv "* && ! -f "$CASE_ROOT/lost" ]];
         { mode: 0o700 },
       );
       const setup = `set -euo pipefail
-task_dir="$CASE_ROOT"
+task_dir="$CASE_ROOT/private"
+mkdir -p "$task_dir"
 transport=(bash "$ROOT/transport.sh")
 ssh_args=(-F /dev/null -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ROOT/known_hosts" -o IdentitiesOnly=yes -i "$ROOT/client")
 target="$SSH_USER@127.0.0.1"

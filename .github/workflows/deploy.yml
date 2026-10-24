@@ -201,17 +201,21 @@ jobs:
           # One transfer attempt is bounded to ten minutes; two attempts reuse a
           # complete remote copy instead of retransmitting it.
           transfer() {
-            (
-            local label="$1" source="$2" directory="$3" digest bytes attempt started heartbeat transferred
-            heartbeat=''
+            local label="$1" source="$2" directory="$3" digest bytes attempt started transferred
+            transfer_heartbeat=''
+            transfer_directory="$directory"
             cleanup_transfer() {
-              if [[ -n "$heartbeat" ]]; then
-                kill "$heartbeat" 2>/dev/null || true
-                wait "$heartbeat" 2>/dev/null || true
+              if [[ -n "$transfer_heartbeat" ]]; then
+                kill "$transfer_heartbeat" 2>/dev/null || true
+                wait "$transfer_heartbeat" 2>/dev/null || true
+                transfer_heartbeat=''
               fi
-              remote "rm -rf '$directory.incoming'" >/dev/null 2>&1 || true
+              if [[ -n "$transfer_directory" ]]; then
+                remote "rm -rf '$transfer_directory.incoming'" >/dev/null 2>&1 || true
+                transfer_directory=''
+              fi
             }
-            trap cleanup_transfer EXIT
+            trap 'cleanup_transfer; rm -rf -- "$task_dir"' EXIT
             trap 'exit 130' INT
             trap 'exit 143' TERM
             digest=$(sha256sum "$source" | cut -d' ' -f1)
@@ -219,6 +223,7 @@ jobs:
             for attempt in 1 2; do
               if [[ "$(remote "test -f '$directory/.payload' && cat '$directory/.payload'" 2>/dev/null || true)" == "$digest $bytes" ]]; then
                 echo "phase=$label status=reused attempt=$attempt bytes=$bytes"
+                cleanup_transfer
                 return 0
               fi
               echo "phase=$label status=transferring attempt=$attempt bytes=$bytes"
@@ -239,25 +244,26 @@ jobs:
                   echo "phase=$label status=running attempt=$attempt elapsed=${elapsed}s received=$received total=$bytes bytes_per_second=$(( received / (elapsed + 1) ))"
                 done
               ) &
-              heartbeat=$!
+              transfer_heartbeat=$!
               if timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "umask 077 && rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && cat > '$directory.incoming/payload.tar.gz'" < "$source" 2> "$task_dir/transfer.stderr"; then
                 transferred=0
               else
                 transferred=1
               fi
-              kill "$heartbeat" 2>/dev/null || true
-              wait "$heartbeat" 2>/dev/null || true
-              heartbeat=''
+              kill "$transfer_heartbeat" 2>/dev/null || true
+              wait "$transfer_heartbeat" 2>/dev/null || true
+              transfer_heartbeat=''
               if [[ "$transferred" == 0 ]] && remote "test \"\$(sha256sum '$directory.incoming/payload.tar.gz' | cut -d' ' -f1)\" = '$digest' && test \"\$(wc -c < '$directory.incoming/payload.tar.gz')\" = '$bytes' && tar -xzf '$directory.incoming/payload.tar.gz' -C '$directory.incoming' && rm '$directory.incoming/payload.tar.gz' && printf '%s %s' '$digest' '$bytes' > '$directory.incoming/.payload' && rm -rf '$directory' && mv '$directory.incoming' '$directory'"; then
                 echo "phase=$label status=transferred attempt=$attempt elapsed=$(( $(date +%s) - started ))s"
+                cleanup_transfer
                 return 0
               fi
               echo "phase=$label status=retrying attempt=$attempt elapsed=$(( $(date +%s) - started ))s" >&2
               if [[ "$attempt" == 1 ]]; then sleep 10; fi
             done
             echo "phase=$label status=transfer-failed attempts=2" >&2
+            cleanup_transfer
             return 1
-            )
           }
           # Measure the same SSH upload path before committing to a full archive.
           # Include SSH setup in the estimate, so a marginal link fails conservatively.
