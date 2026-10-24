@@ -53,16 +53,14 @@ describe("RealWechatProvider", () => {
   });
 
   it("调用固定官方端点且 grant_type 固定", async () => {
-    const fetchMock = jest.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        jsonResponse({ openid: "o-1" }),
-    );
+    const fetchMock = jest.fn(async () => jsonResponse({ openid: "o-1" }));
     const result = await providerWith(fetchMock).exchange("CODE-1");
     expect(result).toEqual({
       ok: true,
       identity: { openId: "o-1", unionId: null },
     });
-    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    const [input] = fetchMock.mock.calls[0] as [RequestInfo | URL];
+    const url = new URL(String(input));
     expect(url.origin + url.pathname).toBe(
       "https://api.weixin.qq.com/sns/jscode2session",
     );
