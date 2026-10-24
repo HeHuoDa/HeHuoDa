@@ -5,8 +5,8 @@ import type {
   Evidence,
   ParsedCandidate,
 } from "./types.js";
-import type { TimeValue } from "../competitions/competition.model.js";
-import { unknownTime } from "../competitions/time.js";
+import type { TimeValue } from "./types.js";
+const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
 
 export function extractDates(text: string, year: string | null): TimeValue[] {
   const result: TimeValue[] = [];

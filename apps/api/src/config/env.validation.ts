@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { parseDnsOverrides } from "../ingestion/http.js";
+import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
 
 export interface EnvironmentVariables {
   NODE_ENV: "development" | "test" | "production";

@@ -8,7 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { Cron, ScheduleModule } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
 import { IngestionRunner } from "./runner.js";
-import { sources } from "./sources.js";
+import { sources } from "@hehuoda/sicau-connectors/notices";
 import { cleanupResponses } from "./store.js";
 
 @Injectable()

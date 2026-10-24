@@ -1,15 +1,18 @@
 import { testDatabase } from "./competition-fixture.js";
 import { IngestionRunner } from "../src/ingestion/runner.js";
-import { BoundedFetcher } from "../src/ingestion/http.js";
-import { sources } from "../src/ingestion/sources.js";
+import {
+  BoundedFetcher,
+  sources,
+  extractArticle,
+  parseCandidate,
+} from "@hehuoda/sicau-connectors/notices";
+
 import {
   initializeSources,
   configureSource,
   persistArticle,
 } from "../src/ingestion/store.js";
-import { informationArticle } from "../src/ingestion/fixtures.js";
-import { extractArticle } from "../src/ingestion/html.js";
-import { parseCandidate } from "../src/ingestion/parse.js";
+import { informationArticle } from "./notice-fixtures.js";
 
 const source = sources[0];
 const url = (id: number) => `https://${source.host}/info/1043/${id}.htm`;

@@ -10,8 +10,9 @@ import {
   parseDnsOverrides,
   type HttpResponse,
   type Transport,
-} from "./http.js";
-import { sources } from "./sources.js";
+  sources,
+} from "../dist/notices/index.js";
+
 const source = sources[0],
   url = source.listUrl;
 const response = (

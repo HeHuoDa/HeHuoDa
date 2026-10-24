@@ -7,9 +7,10 @@ import {
   type ImportBatch,
   type ImportCompetition,
 } from "../competitions/import.js";
-import { publishedDate } from "./html.js";
+import { publishedDate, type Article } from "@hehuoda/sicau-connectors/notices";
 import { hash, transaction, type CandidateRow } from "./store.js";
-import type { Article, ParsedCandidate } from "./types.js";
+
+import type { ParsedCandidate } from "./types.js";
 
 export interface ReviewFile {
   format: 1;

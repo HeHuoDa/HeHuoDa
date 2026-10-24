@@ -1,8 +1,13 @@
-import { parseCandidate, extractDates } from "./parse.js";
-import { extractArticle } from "./html.js";
+import {
+  parseCandidate,
+  extractDates,
+  extractArticle,
+  sources,
+  type Article,
+} from "../dist/notices/index.js";
+
 import { informationArticle } from "./fixtures.js";
-import { sources } from "./sources.js";
-import type { Article } from "./types.js";
+
 const url = "https://xxgc.sicau.edu.cn/info/1043/100.htm";
 const directory = [
   { id: "science", name: "理学院", order: 0 },

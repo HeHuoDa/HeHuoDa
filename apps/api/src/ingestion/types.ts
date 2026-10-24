@@ -1,66 +1,22 @@
 import type {
-  CollegeRecord,
-  TimeValue,
-} from "../competitions/competition.model.js";
+  CandidateFields as NoticeFields,
+  ParsedCandidate as NoticeCandidate,
+} from "@hehuoda/sicau-connectors/notices";
+import type { TimeValue } from "../competitions/competition.model.js";
 
-export interface ListItem {
-  url: string;
-  title: string;
-  publishedAt: string | null;
-}
-export interface Page {
-  items: ListItem[];
-  next: string | null;
-  skipped?: { title: string; reason: string }[];
-}
-export interface Article {
-  title: string;
-  publishedAt: string | null;
-  text: string;
-  paragraphs: string[];
-  attachments: { title: string; url: string }[];
-}
-export interface Evidence {
-  field: string;
-  excerpt: string;
-  paragraph: number;
-  url: string;
-  sourceVersion?: string;
-}
-export interface CandidateFields {
-  name: string;
-  edition: string | null;
-  kind: "registration" | "supplement" | "award" | "news";
-  organizer: string | null;
-  hosts: string[];
-  scope: {
-    kind: "all" | "colleges" | "complex" | "unknown";
-    colleges: string[];
-    note: string;
-  };
-  mode: "individual" | "team" | "mixed" | null;
-  tracks: {
-    name: string;
-    mode: "individual" | "team" | "mixed" | null;
-    members: string | null;
-    rules: string | null;
-  }[];
-  members: string | null;
-  rules: string[];
-  stageNames: string[];
+// 持久化候选使用 API 自有时间模型，保持既有审核文件结构。
+export type CandidateFields = Omit<
+  NoticeFields,
+  "startsAt" | "deadline" | "materialsAt" | "eventAt"
+> & {
   startsAt: TimeValue;
   deadline: TimeValue;
   materialsAt: TimeValue;
   eventAt: TimeValue;
-}
-export interface ParsedCandidate {
+};
+export type ParsedCandidate = Omit<NoticeCandidate, "fields"> & {
   fields: CandidateFields;
-  evidence: Evidence[];
-  missing: string[];
-  conflicts: string[];
-  warnings: string[];
-}
-export type Directory = CollegeRecord[];
+};
 
 export function digestInput(value: unknown): string {
   return JSON.stringify(canonical(value));

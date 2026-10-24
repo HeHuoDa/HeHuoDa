@@ -7,17 +7,18 @@ import {
   defaultLimits,
   normalizeUrl,
   type HttpLimits,
-} from "./http.js";
-import {
   extractArticle,
   extractList,
   isCompetitionNotice,
   containsApplicantList,
-} from "./html.js";
-import { parseCandidate } from "./parse.js";
-import { sourceById } from "./sources.js";
+  parseCandidate,
+  sourceById,
+  type ListItem,
+} from "@hehuoda/sicau-connectors/notices";
+
+import { noticeDirectory, platformCandidate } from "./connector-adapter.js";
+
 import { initializeSources, persistArticle } from "./store.js";
-import type { ListItem } from "./types.js";
 
 export interface ScanOptions {
   sourceId: string;
@@ -389,10 +390,12 @@ export class IngestionRunner {
             )
               counts.ignored++;
             else {
-              const parsed = parseCandidate(
-                article,
-                item.url,
-                catalog.colleges,
+              const parsed = platformCandidate(
+                parseCandidate(
+                  article,
+                  item.url,
+                  noticeDirectory(catalog.colleges),
+                ),
               );
               if (input.preview)
                 previews.push({ url: item.url, article, candidate: parsed });

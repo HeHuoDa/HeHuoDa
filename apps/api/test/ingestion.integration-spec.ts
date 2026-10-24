@@ -8,14 +8,13 @@ import {
   defaultLimits,
   type HttpResponse,
   type Transport,
-} from "../src/ingestion/http.js";
-import { sources } from "../src/ingestion/sources.js";
-import { extractArticle } from "../src/ingestion/html.js";
-import {
-  informationArticle,
-  informationList,
-} from "../src/ingestion/fixtures.js";
-import { parseCandidate } from "../src/ingestion/parse.js";
+  sources,
+  extractArticle,
+  parseCandidate,
+} from "@hehuoda/sicau-connectors/notices";
+
+import { informationArticle, informationList } from "./notice-fixtures.js";
+
 import {
   persistArticle,
   initializeSources,

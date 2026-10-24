@@ -4,19 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nest build",
-    "start": "nest start",
+    "build": "pnpm build:connectors && nest build",
+    "start": "pnpm build:connectors && nest start",
     "start:prod": "node dist/main.js",
-    "dev": "nest start --watch",
+    "dev": "pnpm build:connectors && nest start --watch",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-unit.json --runInBand",
-    "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-integration.json --runInBand",
-    "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand",
-    "openapi:write": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/write-openapi.js",
-    "db:migrate": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/migrate.js",
-    "data:import": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/import.js",
-    "ingestion": "tsc -p tsconfig.openapi.json && node dist-openapi/scripts/ingestion.js"
+    "typecheck": "pnpm build:connectors && tsc --noEmit",
+    "test:unit": "pnpm build:connectors && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-unit.json --runInBand",
+    "test:integration": "pnpm build:connectors && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-integration.json --runInBand",
+    "test:e2e": "pnpm build:connectors && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand",
+    "openapi:write": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/write-openapi.js",
+    "db:migrate": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/migrate.js",
+    "data:import": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/import.js",
+    "ingestion": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/ingestion.js",
+    "build:connectors": "pnpm --filter @hehuoda/sicau-connectors build"
   },
   "dependencies": {
     "@fastify/static": "10.1.5",
@@ -26,7 +27,6 @@
     "@nestjs/platform-fastify": "12.1.2",
     "@nestjs/schedule": "12.0.2",
     "@nestjs/swagger": "12.0.2",
-    "cheerio": "1.2.0",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "dotenv": "18.0.5",
@@ -35,7 +35,8 @@
     "joi": "18.2.9",
     "pg": "8.23.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@hehuoda/sicau-connectors": "workspace:*"
   },
   "devDependencies": {
     "@jest/globals": "30.5.2",

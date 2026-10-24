@@ -1,10 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { Article, ParsedCandidate } from "./types.js";
+import {
+  type Article,
+  type FetchResult,
+  sources,
+  type Source,
+  BoundedFetcher,
+  defaultLimits,
+} from "@hehuoda/sicau-connectors/notices";
+import type { ParsedCandidate } from "./types.js";
 import { digestInput } from "./types.js";
-import type { FetchResult } from "./http.js";
-import { sources, type Source } from "./sources.js";
-import { BoundedFetcher, defaultLimits } from "./http.js";
 
 export const hash = (value: unknown) =>
   createHash("sha256").update(digestInput(value)).digest("hex");
