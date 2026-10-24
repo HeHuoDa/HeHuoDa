@@ -207,8 +207,8 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
         );
       if (server) {
         server.kill();
-      if (server.exitCode === null && server.signalCode === null)
-        await once(server, "close").catch(() => {});
+        if (server.exitCode === null && server.signalCode === null)
+          await once(server, "close").catch(() => {});
       }
       rmSync(root, { recursive: true, force: true });
     }
