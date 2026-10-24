@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Pool } from "pg";
 import { IngestionRunner } from "../src/ingestion/runner.js";
-import { sources, sourceById } from "../src/ingestion/sources.js";
+import { sources, sourceById } from "@hehuoda/sicau-connectors/notices";
 import {
   approveReview,
   applyReview,

@@ -7,14 +7,17 @@ import { SchedulerRegistry } from "@nestjs/schedule";
 import { configureApp } from "../src/configure-app.js";
 import { IngestionScheduler } from "../src/ingestion/ingestion.module.js";
 import { IngestionRunner } from "../src/ingestion/runner.js";
-import { BoundedFetcher, type Transport } from "../src/ingestion/http.js";
+import {
+  BoundedFetcher,
+  type Transport,
+} from "@hehuoda/sicau-connectors/notices";
 import {
   approveReview,
   applyReview,
   exportReview,
   publishImported,
 } from "../src/ingestion/review.js";
-import { informationArticle } from "../src/ingestion/fixtures.js";
+import { informationArticle } from "./notice-fixtures.js";
 import { importBatch } from "../src/competitions/import.js";
 import { correctedReview } from "./ingestion-fixture.js";
 import { testDatabase, directory } from "./competition-fixture.js";

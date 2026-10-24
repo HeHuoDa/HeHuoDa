@@ -328,6 +328,8 @@ pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json
 
 ## 官方通知采集与人工审核（Issue #23）
 
+两院来源、公开 HTTP 与解析内核由私有包 `@hehuoda/sicau-connectors/notices` 提供；调度、持久化、审核与发布仍在 API。API 命令会先构建依赖，详见[共享包说明](docs/sicau-connectors.md)。
+
 先执行 `pnpm --filter @hehuoda/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
 
 增量恢复修复新增 `0003_ingestion_recovery_indexes.sql`，通过同一迁移命令应用；只增加续跑关系与定时运行查询索引，不修改正式比赛数据。已有数据库也须执行迁移。

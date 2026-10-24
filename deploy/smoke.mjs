@@ -67,6 +67,27 @@ try {
       "dist-openapi/scripts/migrate.js",
     ]);
   compose(["up", "-d", "--wait", "--wait-timeout", "180", "api", "web"]);
+  // Exercise the deployed package rather than workspace source or host dist.
+  compose([
+    "exec",
+    "-T",
+    "api",
+    "node",
+    "--input-type=module",
+    "-e",
+    `
+    import assert from 'node:assert/strict';
+    import { parseCandidate, sourceById } from '@hehuoda/sicau-connectors/notices';
+    assert.ok(import.meta.resolve('@hehuoda/sicau-connectors/notices').endsWith('/dist/notices/index.js'));
+    const paragraph = '报名截止：2026年10月20日。';
+    const candidate = parseCandidate({
+      title: '2026年测试竞赛报名通知', publishedAt: null,
+      text: paragraph, paragraphs: [paragraph], attachments: [],
+    }, sourceById('information-engineering').listUrl, []);
+    assert.deepEqual(candidate.fields.deadline, {precision: 'date', value: '2026-10-20'});
+    assert.equal(sourceById('life-sciences').version, '1');
+  `,
+  ]);
   const fixture = JSON.parse(
     readFileSync(new URL("./test/fixture.json", import.meta.url), "utf8"),
   );

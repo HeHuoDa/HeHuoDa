@@ -1,11 +1,12 @@
-import { decodeHtml } from "./http.js";
 import {
+  decodeHtml,
   extractArticle,
   extractList,
   isCompetitionNotice,
   containsApplicantList,
-} from "./html.js";
-import { sources } from "./sources.js";
+  sources,
+} from "../dist/notices/index.js";
+
 import {
   informationList,
   lifeList,

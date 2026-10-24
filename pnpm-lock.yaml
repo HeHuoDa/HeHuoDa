@@ -89,6 +89,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@hehuoda/sicau-connectors':
+        specifier: workspace:*
+        version: link:../../packages/sicau-connectors
       '@fastify/static':
         specifier: 10.1.5
         version: 10.1.5
@@ -110,9 +113,6 @@ importers:
       '@nestjs/swagger':
         specifier: 12.0.2
         version: 12.0.2(@fastify/static@10.1.5)(@nestjs/common@12.1.2(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.2)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(typescript@6.0.3)
-      cheerio:
-        specifier: 1.2.0
-        version: 1.2.0
       class-transformer:
         specifier: 0.5.1
         version: 0.5.1
@@ -290,6 +290,31 @@ importers:
       vue-tsc:
         specifier: ^3.3.11
         version: 3.3.11(typescript@6.0.3)
+
+  packages/sicau-connectors:
+    dependencies:
+      cheerio:
+        specifier: 1.2.0
+        version: 1.2.0
+    devDependencies:
+      "@jest/globals":
+        specifier: 30.5.2
+        version: 30.5.2
+      "@types/jest":
+        specifier: 30.0.0
+        version: 30.0.0
+      "@types/node":
+        specifier: ^24.0.0
+        version: 24.19.0
+      jest:
+        specifier: 30.5.2
+        version: 30.5.2(@types/node@24.19.0)
+      ts-jest:
+        specifier: 29.4.14
+        version: 29.4.14(@babel/core@7.29.7)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.7))(jest-util@30.5.1)(jest@30.5.2(@types/node@24.19.0))(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/api-types:
     devDependencies:
