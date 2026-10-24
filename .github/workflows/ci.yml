@@ -107,7 +107,7 @@ jobs:
     needs: image-smoke
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     permissions:
       actions: read
       packages: write
@@ -185,6 +185,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/release-manifest"
           printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$RUNNER_TEMP/release-manifest/release.json"
       - name: Mirror verified images to Tencent TCR when configured
+        timeout-minutes: 26 # 25-minute operation budget plus bounded cleanup.
         env:
           TCR_IMAGE_PREFIX: ${{ vars.TCR_IMAGE_PREFIX }}
           TCR_USERNAME: ${{ secrets.TCR_USERNAME }}
@@ -200,43 +201,202 @@ jobs:
           [[ "$TCR_IMAGE_PREFIX" =~ ^(ccr\.ccs\.tencentyun\.com|[a-z0-9][a-z0-9-]*\.tencentcloudcr\.com)/[a-z0-9][a-z0-9_-]*$ ]]
           [[ -n "$TCR_USERNAME" && -n "$TCR_PASSWORD" ]]
           registry="${TCR_IMAGE_PREFIX%%/*}"
-          printf '%s' "$TCR_PASSWORD" | docker login "$registry" --username "$TCR_USERNAME" --password-stdin
-          trap 'docker logout "$registry" >/dev/null 2>&1 || true' EXIT
-          manifest="$RUNNER_TEMP/release-manifest/release.json"
-          missing=()
-          candidates=()
-          for component in api web; do
-            source=$(jq -er --arg component "$component" '.images[$component]' "$manifest")
-            candidate_id=$(docker image inspect --format '{{.Id}}' "$source")
-            candidates+=("$candidate_id")
-            target="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-            if docker manifest inspect "$target" > /dev/null 2> "$RUNNER_TEMP/tcr-inspect-error"; then
-              docker pull "$target"
-              [[ "$(docker image inspect --format '{{.Id}}' "$target")" == "$candidate_id" ]] || {
-                echo 'Existing TCR release differs from the verified image; refusing to overwrite.' >&2; exit 1;
+          task_dir=$(mktemp -d "$RUNNER_TEMP/tcr-publish.XXXXXX")
+          raw="$task_dir/output"
+          deadline=$(( $(date +%s) + 1500 ))
+          outcome=failed
+          command_pid= pulse_pid= active_operation=
+          stop_pulse() {
+            if [[ -n "$pulse_pid" ]]; then
+              kill "$pulse_pid" 2>/dev/null || true
+              wait "$pulse_pid" 2>/dev/null || true
+              pulse_pid=
+            fi
+          }
+          cleanup() {
+            local rc=$?
+            trap - EXIT
+            set +e
+            stop_pulse
+            if [[ -n "$command_pid" ]]; then
+              # GNU timeout owns its process group; cancellation must also stop Docker.
+              kill -TERM -- "-$command_pid" 2>/dev/null || kill "$command_pid" 2>/dev/null
+              kill -KILL -- "-$command_pid" 2>/dev/null
+              wait "$command_pid" 2>/dev/null
+              if [[ "$active_operation" == push ]]; then diagnostics; fi
+            fi
+            timeout --signal=TERM --kill-after=1s 5s docker logout "$registry" >/dev/null 2>&1
+            printf 'TCR synchronization result=%s\n' "$outcome"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '### TCR synchronization\n\nResult: `%s`\n' "$outcome" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            rm -rf -- "$task_dir"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          trap 'outcome=cancelled; exit 130' INT
+          trap 'outcome=cancelled; exit 143' TERM
+          fail() { outcome="$1"; exit 1; }
+          printf '%s' "$TCR_PASSWORD" > "$task_dir/password"
+          diagnostics() {
+            # Parse only allowlisted progress fields; never forward raw Docker output.
+            node --input-type=module - "$raw" "$task_dir/progress" "$(date +%s)" "$started" 2>/dev/null <<'NODE' || echo 'layers=unavailable'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          try {
+            const [file, snapshot, nowText, startText] = process.argv.slice(2);
+            const now = Number(nowText);
+            const layers = new Map();
+            for (const line of readFileSync(file, 'utf8').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').split(/[\r\n]/)) {
+              const match = /^([a-f0-9]{12}): (Waiting|Preparing|Pushed|Layer already exists|Mounted from .+|Pushing .+|Retrying in [0-9]+ seconds)$/.exec(line);
+              if (!match) continue;
+              let state = match[2];
+              if (state.startsWith('Mounted from ')) state = 'Mounted';
+              if (state.startsWith('Retrying ')) state = 'Retrying';
+              if (state.startsWith('Pushing ')) {
+                const amount = /\b[0-9]+(?:\.[0-9]+)?(?:[kKMGT]?B)\b/.exec(state)?.[0];
+                state = amount ? `Pushing:${amount}` : 'Pushing';
               }
-            elif grep -Eqi 'manifest unknown|no such manifest' "$RUNNER_TEMP/tcr-inspect-error"; then
-              docker tag "$source" "$target"
-              missing+=("$target")
+              layers.set(match[1], state);
+            }
+            const entries = [...layers].sort(([a], [b]) => a.localeCompare(b));
+            const signature = JSON.stringify(entries);
+            let previous = { signature: '[]', at: Number(startText) };
+            try { previous = JSON.parse(readFileSync(snapshot, 'utf8')); } catch {}
+            const at = signature === previous.signature ? previous.at : now;
+            writeFileSync(snapshot, JSON.stringify({ signature, at }));
+            const pending = entries.filter(([, state]) => !['Pushed', 'Layer already exists', 'Mounted'].includes(state));
+            console.log(entries.length
+              ? `pending_count=${pending.length} pending_layers=${pending.map(([id, state]) => `${id}:${state.replaceAll(' ', '_')}`).join(',') || 'none'} last_progress_at=${at} no_progress_seconds=${Math.max(0, now - at)}`
+              : 'layers=unavailable');
+          } catch { console.log('layers=unavailable'); }
+          NODE
+          }
+          run_once() {
+            local component="$1" operation="$2" limit="$3" attempt="$4"
+            shift 4
+            local remaining=$(( deadline - $(date +%s) - 10 )) input=/dev/null rc
+            (( remaining > 0 )) || fail budget-exhausted
+            (( limit <= remaining )) || limit=$remaining
+            [[ "$operation" != login ]] || input="$task_dir/password"
+            started=$(date +%s)
+            active_operation="$operation"
+            : > "$raw"
+            rm -f -- "$task_dir/progress"
+            printf 'component=%s operation=%s attempt=%s/3 started limit=%ss\n' "$component" "$operation" "$attempt" "$limit"
+            timeout --signal=TERM --kill-after=10s "${limit}s" docker "$@" < "$input" > "$raw" 2>&1 &
+            command_pid=$!
+            (
+              pulse_sleep=
+              trap 'exit 0' INT TERM
+              trap 'if [[ -n "$pulse_sleep" ]]; then kill "$pulse_sleep" 2>/dev/null || true; wait "$pulse_sleep" 2>/dev/null || true; fi' EXIT
+              while true; do
+                sleep 30 & pulse_sleep=$!
+                wait "$pulse_sleep" || exit 0
+                printf 'component=%s operation=%s attempt=%s/3 elapsed=%ss waiting\n' "$component" "$operation" "$attempt" "$(( $(date +%s) - started ))"
+                [[ "$operation" != push ]] || diagnostics
+              done
+            ) & pulse_pid=$!
+            if wait "$command_pid"; then rc=0; else rc=$?; fi
+            command_pid=
+            stop_pulse
+            [[ "$operation" != push ]] || diagnostics
+            return "$rc"
+          }
+          classify() {
+            category=unclassified
+            if grep -Eqi 'unauthorized|authentication (failed|required)|access denied|denied:|permission denied|forbidden|(^|[[:space:]:])(401|403)([[:space:]:]|$)|invalid (reference|argument|config)' "$raw"; then
+              category=rejected
+            elif grep -Eqi 'manifest unknown|no such manifest' "$raw"; then
+              category=missing
+            elif [[ "$1" == 124 || "$1" == 137 ]] || grep -Eqi 'timed out|timeout|connection reset|connection refused|temporary failure in name resolution|no such host|server misbehaving|too many requests|toomanyrequests|HTTP(/[0-9.]+)?[^0-9]*(429|5[0-9]{2})([^0-9]|$)|status( code)?[^0-9]*(429|5[0-9]{2})([^0-9]|$)' "$raw"; then
+              category=transient
+            fi
+          }
+          pause_retry() {
+            local delay=10
+            [[ "$1" == 1 ]] || delay=30
+            (( deadline - $(date +%s) > delay + 10 )) || fail budget-exhausted
+            printf 'retry_wait_seconds=%s\n' "$delay"
+            sleep "$delay"
+          }
+          invoke() {
+            local component="$1" operation="$2" limit="$3" attempt rc
+            shift 3
+            for attempt in 1 2 3; do
+              if run_once "$component" "$operation" "$limit" "$attempt" "$@"; then rc=0; category=success
+              else rc=$?; classify "$rc"; fi
+              printf 'component=%s operation=%s attempt=%s/3 elapsed=%ss rc=%s category=%s\n' "$component" "$operation" "$attempt" "$(( $(date +%s) - started ))" "$rc" "$category"
+              (( deadline - $(date +%s) > 10 )) || fail budget-exhausted
+              [[ "$category" != success ]] || return 0
+              if [[ "$category" == missing && "$operation" == inspect ]]; then return 44; fi
+              if [[ "$category" != transient && !( "$category" == missing && "$operation" == verify-inspect ) ]]; then
+                fail operation-rejected
+              fi
+              if [[ "$operation" == push ]]; then
+                # A lost response may hide a successful push. Check before retrying.
+                if invoke "$component" inspect 30 manifest inspect "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"; then
+                  verify_identity "$component" "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
+                  return 0
+                else
+                  rc=$?
+                  [[ "$rc" == 44 ]] || fail operation-rejected
+                fi
+              fi
+              [[ "$attempt" != 3 ]] || fail retries-exhausted
+              pause_retry "$attempt"
+            done
+          }
+          verify_identity() {
+            local component="$1" reference="$2" actual
+            invoke "$component" pull 60 pull "$reference"
+            actual=$(docker image inspect --format '{{.Id}}' "$reference" 2> "$raw") || fail operation-rejected
+            [[ "$actual" == "${candidates[$component]}" ]] || fail validation-rejected
+          }
+          manifest="$RUNNER_TEMP/release-manifest/release.json"
+          declare -A candidates sources
+          missing=()
+          refs=()
+          invoke registry login 30 login "$registry" --username "$TCR_USERNAME" --password-stdin
+          for component in api web; do
+            sources[$component]=$(jq -er --arg component "$component" '.images[$component]' "$manifest" 2> "$raw") || fail validation-rejected
+            candidates[$component]=$(docker image inspect --format '{{.Id}}' "${sources[$component]}" 2> "$raw") || fail validation-rejected
+            [[ -n "${candidates[$component]}" ]] || fail validation-rejected
+          done
+          # Validate both existing tags before pushing either missing component.
+          for component in api web; do
+            target="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
+            if invoke "$component" inspect 30 manifest inspect "$target"; then
+              verify_identity "$component" "$target"
             else
-              echo 'Cannot establish TCR image state; check credentials, repository and network.' >&2
-              exit 1
+              rc=$?
+              [[ "$rc" == 44 ]] || fail operation-rejected
+              docker tag "${sources[$component]}" "$target" 2> "$raw" || fail operation-rejected
+              missing+=("$component")
             fi
           done
-          for image in "${missing[@]}"; do docker push "$image"; done
-          refs=()
-          index=0
+          for component in "${missing[@]}"; do
+            invoke "$component" push 180 push "$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
+          done
           for component in api web; do
             image="$TCR_IMAGE_PREFIX/$component:$IMAGE_TAG"
-            docker pull "$image"
-            ref=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" | grep -F "$TCR_IMAGE_PREFIX/$component@sha256:")
-            [[ "$ref" == "$TCR_IMAGE_PREFIX/$component@sha256:"* && "${ref##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
-            docker pull "$ref"
-            [[ "$(docker image inspect --format '{{.Id}}' "$ref")" == "${candidates[$index]}" ]]
+            invoke "$component" verify-inspect 30 manifest inspect "$image"
+            verify_identity "$component" "$image"
+            digests=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2> "$raw") || fail validation-rejected
+            ref=
+            while IFS= read -r digest; do
+              if [[ "$digest" == "$TCR_IMAGE_PREFIX/$component@sha256:"* && "${digest##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]; then
+                [[ -z "$ref" || "$ref" == "$digest" ]] || fail validation-rejected
+                ref="$digest"
+              fi
+            done <<< "$digests"
+            [[ -n "$ref" ]] || fail validation-rejected
+            verify_identity "$component" "$ref"
             refs+=("$ref")
-            index=$((index + 1))
           done
-          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$manifest"
+          (( deadline - $(date +%s) > 0 )) || fail budget-exhausted
+          printf '{"sha":"%s","images":{"api":"%s","web":"%s"}}\n' "$IMAGE_TAG" "${refs[0]}" "${refs[1]}" > "$task_dir/release.json"
+          mv -- "$task_dir/release.json" "$manifest"
+          outcome=success
       - name: Retain immutable release manifest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
