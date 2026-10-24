@@ -59,7 +59,7 @@ test(
       server = spawn(
         "sudo",
         ["-n", "/usr/sbin/sshd", "-D", "-e", "-f", join(root, "sshd_config")],
-        { stdio: "ignore" },
+        { stdio: "ignore", detached: true },
       );
       let ready = false;
       for (let attempt = 0; attempt < 50 && !ready; attempt++) {
@@ -136,6 +136,7 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
         "timeout",
         "cancel",
       ]) {
+        console.log(`SSH scenario started: ${scenario}`);
         const caseRoot = join(root, scenario);
         mkdirSync(caseRoot);
         const env = {
@@ -197,18 +198,25 @@ transfer payload "$ROOT/payload.tar.gz" "$CASE_ROOT/release"
             assert.match(reused.stdout, /status=reused/);
           }
         }
+        console.log(`SSH scenario passed: ${scenario}`);
       }
     } finally {
-      if (existsSync(join(root, "sshd.pid")))
-        spawnSync(
-          "sudo",
-          ["-n", "kill", readFileSync(join(root, "sshd.pid"), "utf8").trim()],
-          { stdio: "ignore" },
-        );
+      if (server)
+        spawnSync("sudo", ["-n", "kill", "-TERM", "--", `-${server.pid}`], {
+          stdio: "ignore",
+        });
       if (server) {
-        server.kill();
         if (server.exitCode === null && server.signalCode === null)
-          await once(server, "close").catch(() => {});
+          await Promise.race([
+            once(server, "close"),
+            new Promise((_, reject) => {
+              const timer = setTimeout(
+                () => reject(new Error("Isolated SSH daemon did not stop")),
+                5_000,
+              );
+              timer.unref();
+            }),
+          ]);
       }
       rmSync(root, { recursive: true, force: true });
     }
