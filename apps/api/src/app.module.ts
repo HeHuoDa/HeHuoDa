@@ -1,5 +1,6 @@
 import { DatabaseModule } from "./database/database.module.js";
 import { IngestionModule } from "./ingestion/ingestion.module.js";
+import { AuthModule } from "./auth/auth.module.js";
 import { CompetitionRepository } from "./competitions/competition.repository.js";
 import { CompetitionController } from "./competitions/competition.controller.js";
 import {
@@ -20,6 +21,7 @@ import { HealthService } from "./health/health.service.js";
       validate: validateEnvironment,
     }),
     IngestionModule,
+    AuthModule,
   ],
   controllers: [HealthController, CompetitionController],
   providers: [

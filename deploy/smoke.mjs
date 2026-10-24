@@ -178,7 +178,7 @@ try {
 
   const dump = backup();
   assert.deepEqual(verifyBackup(dump), {
-    migrations: 3,
+    migrations: 4,
     colleges: colleges.length,
     competitions: 1,
     ingestionRuns: 0,
