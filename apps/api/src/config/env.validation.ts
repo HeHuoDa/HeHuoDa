@@ -10,6 +10,16 @@ export interface EnvironmentVariables {
   INGESTION_ENABLED: boolean;
   INGESTION_RAW_DAYS: number;
   INGESTION_DNS_OVERRIDES: string;
+  WECHAT_LOGIN_ENABLED: boolean;
+  WECHAT_APP_ID: string;
+  WECHAT_APP_SECRET: string;
+  WECHAT_LOGIN_ADAPTER: "real" | "stub";
+  AUTH_RATE_LOGIN_PER_SOURCE: number;
+  AUTH_RATE_LOGIN_PER_IDENTITY: number;
+  AUTH_RATE_LOGIN_GLOBAL: number;
+  AUTH_RATE_REFRESH_PER_SUBJECT: number;
+  AUTH_RATE_REFRESH_GLOBAL: number;
+  AUTH_AUDIT_RETENTION_DAYS: number;
 }
 
 const environmentSchema = Joi.object({
@@ -41,6 +51,38 @@ const environmentSchema = Joi.object({
         return helpers.error("any.invalid");
       }
     }),
+  // 微信登录默认关闭；开启后才要求服务器配置有效 AppID/AppSecret。
+  WECHAT_LOGIN_ENABLED: Joi.boolean().default(false),
+  WECHAT_APP_ID: Joi.string()
+    .allow("")
+    .default("")
+    .when("WECHAT_LOGIN_ENABLED", {
+      is: true,
+      then: Joi.string().min(6).required(),
+    }),
+  WECHAT_APP_SECRET: Joi.string()
+    .allow("")
+    .default("")
+    .when("WECHAT_LOGIN_ENABLED", {
+      is: true,
+      then: Joi.string().min(16).required(),
+    }),
+  // stub 是离线测试替身，生产环境禁止启用。
+  WECHAT_LOGIN_ADAPTER: Joi.alternatives().conditional("NODE_ENV", {
+    is: "production",
+    then: Joi.string().valid("real").default("real"),
+    otherwise: Joi.string().valid("real", "stub").default("real"),
+  }),
+  AUTH_RATE_LOGIN_PER_SOURCE: Joi.number().integer().min(1).default(10),
+  AUTH_RATE_LOGIN_PER_IDENTITY: Joi.number().integer().min(1).default(20),
+  AUTH_RATE_LOGIN_GLOBAL: Joi.number().integer().min(1).default(300),
+  AUTH_RATE_REFRESH_PER_SUBJECT: Joi.number().integer().min(1).default(20),
+  AUTH_RATE_REFRESH_GLOBAL: Joi.number().integer().min(1).default(600),
+  AUTH_AUDIT_RETENTION_DAYS: Joi.number()
+    .integer()
+    .min(1)
+    .max(3650)
+    .default(180),
 }).unknown(true);
 
 export function validateEnvironment(
