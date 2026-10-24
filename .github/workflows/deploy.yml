@@ -128,7 +128,8 @@ jobs:
           cp controller/deploy/*.mjs "$payload/deploy/"
           if [[ "$DEPLOY_ACTION" != rollback ]]; then
             cp target/compose.deploy.yaml target/compose.tls.yaml "$payload/"
-            cp target/deploy/nginx/https.conf "$payload/deploy/"
+            mkdir -p "$payload/deploy/nginx"
+            cp target/deploy/nginx/https.conf "$payload/deploy/nginx/"
             cp "$RUNNER_TEMP/release-archive/images.tar.gz" "$RUNNER_TEMP/release-archive/release.json" "$payload/"
             node controller/deploy/archive.mjs verify "$payload" "$CANDIDATE_SHA"
           fi
@@ -185,8 +186,13 @@ jobs:
           fi
           target="$DEPLOY_USER@$DEPLOY_HOST"
           # The server stores its own .env and never receives credentials from the checkout.
-          "${transport[@]}" "${ssh_args[@]}" "$target" "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null"
-          remote() { "${transport[@]}" "${ssh_args[@]}" "$target" "$1"; }
+          remote() { timeout --signal=TERM --kill-after=5s "${2:-60}" "${transport[@]}" "${ssh_args[@]}" "$target" "$1" 2> "$task_dir/ssh.stderr"; }
+          echo 'phase=connect status=started'
+          if ! remote "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null && test -w '$DEPLOY_PATH'"; then
+            echo 'phase=connect status=failed-or-timed-out' >&2
+            exit 1
+          fi
+          echo 'phase=connect status=verified'
           if [[ "$DEPLOY_ACTION" == rollback ]]; then
             destination="$DEPLOY_PATH/controller/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           else
@@ -195,7 +201,19 @@ jobs:
           # One transfer attempt is bounded to ten minutes; two attempts reuse a
           # complete remote copy instead of retransmitting it.
           transfer() {
+            (
             local label="$1" source="$2" directory="$3" digest bytes attempt started heartbeat transferred
+            heartbeat=''
+            cleanup_transfer() {
+              if [[ -n "$heartbeat" ]]; then
+                kill "$heartbeat" 2>/dev/null || true
+                wait "$heartbeat" 2>/dev/null || true
+              fi
+              remote "rm -rf '$directory.incoming'" >/dev/null 2>&1 || true
+            }
+            trap cleanup_transfer EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
             digest=$(sha256sum "$source" | cut -d' ' -f1)
             bytes=$(wc -c < "$source")
             for attempt in 1 2; do
@@ -206,19 +224,31 @@ jobs:
               echo "phase=$label status=transferring attempt=$attempt bytes=$bytes"
               started=$(date +%s)
               (
+                tick=''
+                probe=''
+                trap '[[ -z "$tick" ]] || kill "$tick" 2>/dev/null || true; [[ -z "$probe" ]] || kill "$probe" 2>/dev/null || true' EXIT
+                trap 'exit 0' TERM INT
                 while kill -0 "$$" 2>/dev/null; do
-                  sleep 30 || break
-                  kill -0 "$$" 2>/dev/null && echo "phase=$label status=running attempt=$attempt elapsed=$(( $(date +%s) - started ))s"
+                  sleep 30 & tick=$!
+                  wait "$tick" || break
+                  remote "if test -f '$directory.incoming/payload.tar.gz'; then wc -c < '$directory.incoming/payload.tar.gz'; else echo 0; fi" 5 > "$task_dir/progress" & probe=$!
+                  wait "$probe" || true
+                  received=$(cat "$task_dir/progress" 2>/dev/null || true)
+                  [[ "$received" =~ ^[0-9]+$ ]] || received=0
+                  elapsed=$(( $(date +%s) - started ))
+                  echo "phase=$label status=running attempt=$attempt elapsed=${elapsed}s received=$received total=$bytes bytes_per_second=$(( received / (elapsed + 1) ))"
                 done
               ) &
               heartbeat=$!
-              if timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && tar -xzf - -C '$directory.incoming'" < "$source"; then
+              if timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "umask 077 && rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && cat > '$directory.incoming/payload.tar.gz'" < "$source" 2> "$task_dir/transfer.stderr"; then
                 transferred=0
               else
                 transferred=1
               fi
               kill "$heartbeat" 2>/dev/null || true
-              if [[ "$transferred" == 0 ]] && remote "printf '%s %s' '$digest' '$bytes' > '$directory.incoming/.payload' && rm -rf '$directory' && mv '$directory.incoming' '$directory'"; then
+              wait "$heartbeat" 2>/dev/null || true
+              heartbeat=''
+              if [[ "$transferred" == 0 ]] && remote "test \"\$(sha256sum '$directory.incoming/payload.tar.gz' | cut -d' ' -f1)\" = '$digest' && test \"\$(wc -c < '$directory.incoming/payload.tar.gz')\" = '$bytes' && tar -xzf '$directory.incoming/payload.tar.gz' -C '$directory.incoming' && rm '$directory.incoming/payload.tar.gz' && printf '%s %s' '$digest' '$bytes' > '$directory.incoming/.payload' && rm -rf '$directory' && mv '$directory.incoming' '$directory'"; then
                 echo "phase=$label status=transferred attempt=$attempt elapsed=$(( $(date +%s) - started ))s"
                 return 0
               fi
@@ -227,6 +257,27 @@ jobs:
             done
             echo "phase=$label status=transfer-failed attempts=2" >&2
             return 1
+            )
           }
+          # Measure the same SSH upload path before committing to a full archive.
+          # Include SSH setup in the estimate, so a marginal link fails conservatively.
+          payload_bytes=$(wc -c < "$RUNNER_TEMP/payload.tar.gz")
+          probe_bytes=$(( payload_bytes < 1048576 ? payload_bytes : 1048576 ))
+          echo "phase=link-probe status=started bytes=$probe_bytes"
+          head -c "$probe_bytes" /dev/urandom > "$task_dir/probe"
+          probe_started=$(date +%s)
+          if ! timeout --signal=TERM --kill-after=5s 60 "${transport[@]}" "${ssh_args[@]}" "$target" 'cat > /dev/null' < "$task_dir/probe" 2> "$task_dir/probe.stderr"; then
+            echo 'phase=link-probe status=failed-or-timed-out limit=60s' >&2
+            exit 1
+          fi
+          probe_elapsed=$(( $(date +%s) - probe_started ))
+          probe_elapsed=$(( probe_elapsed > 0 ? probe_elapsed : 1 ))
+          estimated=$(( payload_bytes * probe_elapsed / probe_bytes ))
+          echo "phase=link-probe status=measured elapsed=${probe_elapsed}s bytes_per_second=$(( probe_bytes / probe_elapsed )) estimated_payload_seconds=$estimated"
+          if [[ "$estimated" -gt 600 ]]; then
+            echo 'phase=link-probe status=insufficient-throughput transfer_limit=600s' >&2
+            exit 1
+          fi
           transfer payload "$RUNNER_TEMP/payload.tar.gz" "$destination"
-          remote "cd '$destination' && DEPLOY_ROOT='$DEPLOY_PATH' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ARCHIVE_ACTIVATE='${DEPLOY_ARCHIVE_ACTIVATE:-false}' node deploy/delivery.mjs '$DEPLOY_ACTION' '$RELEASE_SHA' '$destination'"
+          echo "phase=delivery status=started action=$DEPLOY_ACTION"
+          remote "cd '$destination' && DEPLOY_ROOT='$DEPLOY_PATH' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ARCHIVE_ACTIVATE='${DEPLOY_ARCHIVE_ACTIVATE:-false}' node deploy/delivery.mjs '$DEPLOY_ACTION' '$RELEASE_SHA' '$destination'" 1200

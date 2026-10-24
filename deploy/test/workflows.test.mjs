@@ -5,6 +5,9 @@ import {
   mkdtempSync,
   existsSync,
   rmSync,
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
 } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -12,6 +15,7 @@ import { parse } from "yaml";
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, resolve, join } from "node:path";
 import { tmpdir } from "node:os";
+import { createArchiveManifest } from "../archive.mjs";
 
 function workflow(name) {
   return parse(
@@ -242,6 +246,72 @@ test("the deploy controller comes from trusted main and the target only supplies
   assert.match(assemble.run, /node controller\/deploy\/archive\.mjs verify/);
 });
 
+test("assembled payload retains the TLS bind source at its Compose path", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "hehuoda-payload-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const child of [
+    "controller/deploy",
+    "target/deploy/nginx",
+    "runner/release-archive",
+  ])
+    mkdirSync(join(directory, child), { recursive: true });
+  for (const name of readdirSync(new URL("../", import.meta.url)).filter(
+    (name) => name.endsWith(".mjs"),
+  ))
+    copyFileSync(
+      new URL(`../${name}`, import.meta.url),
+      join(directory, "controller/deploy", name),
+    );
+  for (const name of [
+    "compose.deploy.yaml",
+    "compose.tls.yaml",
+    "deploy/nginx/https.conf",
+  ])
+    copyFileSync(
+      new URL(`../../${name}`, import.meta.url),
+      join(directory, "target", name),
+    );
+  const sha = "a".repeat(40);
+  const archive = join(directory, "runner/release-archive");
+  writeFileSync(join(archive, "images.tar.gz"), "verified fixture archive");
+  await createArchiveManifest({
+    directory: archive,
+    sha,
+    repository: "HeHuoDa/HeHuoDa",
+    runId: "17",
+    runAttempt: "1",
+    imagePrefix: "hehuoda-local",
+    inspectImage: () => ({
+      id: `sha256:${"b".repeat(64)}`,
+      platform: "linux/amd64",
+    }),
+  });
+  const assemble = workflow("deploy").jobs.deploy.steps.find((step) =>
+    step.name?.startsWith("Assemble"),
+  );
+  const result = runBash(
+    `cd "$ASSEMBLY_ROOT"\nRUNNER_TEMP=$(cd "$RUNNER_TEMP" && pwd)\n${assemble.run}\ntar -tzf "$RUNNER_TEMP/payload.tar.gz"`,
+    {
+      ASSEMBLY_ROOT: directory.replaceAll("\\", "/"),
+      RUNNER_TEMP: join(directory, "runner").replaceAll("\\", "/"),
+      DEPLOY_ACTION: "prepare",
+      CANDIDATE_SHA: sha,
+      GITHUB_REPOSITORY: "HeHuoDa/HeHuoDa",
+      ARCHIVE_RUN_ID: "17",
+      ARCHIVE_RUN_ATTEMPT: "1",
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /\.\/deploy\/nginx\/https\.conf/);
+  assert.equal(
+    readFileSync(
+      join(directory, "runner/payload/deploy/nginx/https.conf"),
+      "utf8",
+    ),
+    readFileSync(new URL("../nginx/https.conf", import.meta.url), "utf8"),
+  );
+});
+
 test("archive transfer is bounded, reuses complete copies and cleans partial ones", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-transfer-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -250,7 +320,7 @@ test("archive transfer is bounded, reuses complete copies and cleans partial one
   ).run;
   const transfer = script.slice(
     script.indexOf("transfer() {"),
-    script.indexOf("transfer payload"),
+    script.indexOf("# Measure the same SSH"),
   );
   const payload = join(directory, "payload.tar.gz");
   writeFileSync(payload, "fixture payload");
@@ -273,7 +343,7 @@ test("archive transfer is bounded, reuses complete copies and cleans partial one
           if [[ -f "$RUNNER_TEMP/remote.payload" ]]; then cat "$RUNNER_TEMP/remote.payload"; return 0; fi
           return 1
         fi
-        if [[ "$command" == *"tar -xzf -"* ]]; then
+        if [[ "$command" == *"cat >"* ]]; then
           cat >/dev/null
           count=0
           [[ -f "$RUNNER_TEMP/transfers" ]] && count=$(cat "$RUNNER_TEMP/transfers")
@@ -331,6 +401,53 @@ test("archive transfer is bounded, reuses complete copies and cleans partial one
   assert.equal(transfers(), 2);
   assert.match(result.stderr, /status=transfer-failed attempts=2/);
   assert.doesNotMatch(result.stdout + result.stderr, /fixture@example/);
+});
+
+test("a slow SSH probe rejects the archive before starting a full transfer", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "hehuoda-link-probe-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeFileSync(join(directory, "payload.tar.gz"), Buffer.alloc(2 * 1048576));
+  const script = workflow("deploy").jobs.deploy.steps.find(
+    (step) => step.env?.DEPLOY_HOST,
+  ).run;
+  const probe = script.slice(
+    script.indexOf("# Measure the same SSH"),
+    script.indexOf("transfer payload"),
+  );
+  for (const [scenario, expected] of [
+    ["fast", 0],
+    ["slow", 1],
+    ["failed", 1],
+  ]) {
+    const result = runBash(
+      `
+      set -euo pipefail
+      task_dir="$RUNNER_TEMP"
+      transport=(ssh)
+      ssh_args=()
+      target="fixture@example"
+      date() { if [[ -f "$RUNNER_TEMP/clock" ]]; then echo "$PROBE_END"; else touch "$RUNNER_TEMP/clock"; echo 0; fi; }
+      timeout() { shift 3; "$@"; }
+      ssh() { cat >/dev/null; [[ "$SCENARIO" != failed ]]; }
+      ${probe}
+      echo 'full-transfer-would-start'
+    `,
+      {
+        RUNNER_TEMP: directory.replaceAll("\\", "/"),
+        SCENARIO: scenario,
+        PROBE_END: scenario === "slow" ? "400" : "1",
+      },
+    );
+    rmSync(join(directory, "clock"), { force: true });
+    assert.equal(result.status, expected, result.stderr);
+    assert.equal(
+      result.stdout.includes("full-transfer-would-start"),
+      expected === 0,
+    );
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture@example/);
+    if (scenario === "slow")
+      assert.match(result.stderr, /insufficient-throughput/);
+  }
 });
 
 test("automatic deployment skips superseded main SHA while explicit rollback still works", (t) => {
