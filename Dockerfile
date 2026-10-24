@@ -11,12 +11,14 @@ COPY apps/uni/package.json ./apps/uni/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/api-types/package.json ./packages/api-types/package.json
 COPY packages/client-domain/package.json ./packages/client-domain/package.json
+COPY packages/sicau-connectors/package.json ./packages/sicau-connectors/package.json
 RUN --mount=type=cache,id=hehuoda-pnpm,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --offline --frozen-lockfile
 
 FROM dependencies AS api-build
 COPY apps/api ./apps/api
+COPY packages/sicau-connectors ./packages/sicau-connectors
 # pnpm 10 needs this command-local setting to derive a portable dedicated lockfile.
-# API has no workspace package dependencies; the source workspace layout is unchanged.
+# API scripts build the connectors before compiling; deploy includes their ESM and declarations.
 RUN --mount=type=cache,id=hehuoda-pnpm,target=/root/.local/share/pnpm/store,sharing=locked pnpm --filter @hehuoda/api build \
     && pnpm --filter @hehuoda/api exec tsc -p tsconfig.openapi.json \
     && pnpm --config.inject-workspace-packages=true --filter @hehuoda/api deploy --prod --offline --frozen-lockfile /runtime

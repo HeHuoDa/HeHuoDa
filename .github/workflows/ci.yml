@@ -47,6 +47,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test:deployment
+      # openapi:write builds the Node workspace dependency even before the root build.
       - run: pnpm api:generate
       - run: git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
       - run: pnpm typecheck
