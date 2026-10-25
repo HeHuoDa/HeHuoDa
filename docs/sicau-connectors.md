@@ -45,7 +45,7 @@ packages/sicau-connectors/
 flowchart LR
     UI[H5／微信小程序／管理界面] -->|平台 API| API[apps/api]
     API --> Notices[共享包 notices 入口]
-    API -. 待 #135 接入 .-> Auth[auth 入口]
+    API --> Auth[auth 入口]
     Notices --> Sites[学院公开网站]
     Auth --> School[川农 e 认证]
     API --> DB[(平台数据库)]
@@ -131,6 +131,8 @@ API 继续负责数据库锁、任务调度、游标和恢复链、运行记录�
 Issue #129 不实现 `/auth`、学校登录、管理 HTTP 路由或数据库迁移，也不执行生产部署。认证任务按各自范围实施。
 
 ## 构建与调用
+
+平台校园核验由 #135 接入，平台事务、资格、学校资料加密保存与配置边界见[校园核验服务](campus-verification.md)。包仍只短时返回可信结果；API 按独立告知保存最新一份加密编号和姓名，仅本人只读，不保存学校 subject 原值。学校认证与平台持久化职责继续分离。
 
 - 独立构建／检查：`pnpm --filter @hehuoda/sicau-connectors build`、`typecheck`、`lint`、`test:unit`。
 - API 显式依赖 `workspace:*`。API 的开发／启动、编译、类型检查、测试、OpenAPI 与各 CLI 脚本均先构建此依赖，所以清洁安装后不要求手工准备 dist。根递归脚本按 workspace 依赖排序运行；CI 的 `api:generate` 在根 `build` 前也可运行。
