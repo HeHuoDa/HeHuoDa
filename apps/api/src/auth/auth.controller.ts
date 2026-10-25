@@ -128,4 +128,26 @@ export class AuthController {
     reply.header("Cache-Control", NO_STORE);
     return this.service.updateNickname(request.auth!, body, request.id);
   }
+
+  // wx.request 的 method 不支持 PATCH（合法值仅 OPTIONS/GET/HEAD/POST/PUT/DELETE/TRACE/CONNECT），
+  // POST 别名供微信小程序端使用；与 PATCH 共用同一服务与校验。
+  @Post("me")
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "修改本人昵称（微信小程序端别名，wx.request 不支持 PATCH）",
+  })
+  @ApiOkResponse({ type: ProfileResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorDto })
+  @ApiUnauthorizedResponse({ type: ApiErrorDto })
+  @ApiForbiddenResponse({ type: ApiErrorDto })
+  async updateProfileForWechat(
+    @Body() body: UpdateProfileRequestDto,
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    reply.header("Cache-Control", NO_STORE);
+    return this.service.updateNickname(request.auth!, body, request.id);
+  }
 }
