@@ -19,3 +19,9 @@ export type Availability = components["schemas"]["AvailabilityDto"];
 export type ProfileResponse = components["schemas"]["ProfileResponseDto"];
 export type UpdateProfileRequest =
   components["schemas"]["UpdateProfileRequestDto"];
+export type CampusPolicy = components["schemas"]["CampusPolicyDto"];
+export type CampusQualification =
+  components["schemas"]["CampusStatusResponseDto"];
+export type CampusProfile = components["schemas"]["CampusProfileResponseDto"];
+export type CampusTransaction = components["schemas"]["CampusTransactionDto"];
+export type CampusSubmit = components["schemas"]["CampusSubmitDto"];

@@ -7,6 +7,10 @@
       }
     },
     {
+      "path": "pages/campus/index",
+      "style": { "navigationBarTitleText": "校园账号核验" }
+    },
+    {
       "path": "pages/source/index",
       "style": {
         "navigationBarTitleText": "官方原文"

@@ -374,6 +374,10 @@ export function createAuthSession(
 
   return {
     accessToken: currentAccessToken,
+    reloadProfile: () =>
+      state.phase === "authenticated"
+        ? loadProfile(state.generation)
+        : Promise.resolve("failed" as const),
     refresh,
     login,
     restore,
