@@ -44,6 +44,27 @@ function makeApi() {
   return { calls, api: createAuthApi(bare, authed) };
 }
 
+test("资料读取和昵称更新接受后端真实校园资格状态", async () => {
+  for (const status of ["valid", "expired", "revoked"]) {
+    const { calls, api } = makeApi();
+    const value = {
+      ...profile,
+      campus: {
+        status,
+        termId: "synthetic-term",
+        verifiedAt: "2026-10-25T00:00:00Z",
+        validUntil: "2027-01-31T16:00:00Z",
+      },
+    };
+    const requests = [api.profile(), api.updateNickname("新昵称")];
+    calls.forEach((call) =>
+      call.options.success({ statusCode: 200, data: value }),
+    );
+    for (const request of requests)
+      assert.deepEqual(await request.promise, value);
+  }
+});
+
 test("登录与刷新走公开客户端；会话请求走认证客户端且路径与请求体正确", async () => {
   const { calls, api } = makeApi();
   const pending = [api.wechatLogin("code-1", 1), api.refresh("rt-1")];
