@@ -1,4 +1,12 @@
 import { CampusService } from "../src/campus/campus.service.js";
+import { BusinessPolicy } from "../src/business-access/business-policy.service.js";
+import { CapabilityRegistry } from "../src/business-access/capabilities.js";
+import { authDataModule } from "../src/business-access/auth-data-module.js";
+import {
+  sensitiveActions,
+  recoveryActions,
+  captainActions,
+} from "../src/business-access/ports.js";
 import {
   SchoolAuthClient,
   type AuthHttpResponse,
@@ -39,6 +47,113 @@ describe("校园核验 PG 原子性、密码学、时钟与生命周期", () => 
   async function access(token: string) {
     return (await f.repository.findActiveAccess(token, f.clock.now()))!;
   }
+  it("真实校园提供者与业务权限组合：四类操作到期即拒绝，退出和队长操作不扩大限制", async () => {
+    const a = await f.login();
+    await verify(a.accessToken);
+    const registry = new CapabilityRegistry(true);
+    registry.register(authDataModule());
+    registry.register(f.campus.dataModule());
+    registry.register({
+      id: "test-resources",
+      kind: "test",
+      capabilities: [
+        "resources",
+        "contact-revocation",
+        "business-cleanup",
+        "governance",
+      ],
+      lifecycle: {
+        check: async () => {},
+        revoke: async () => {},
+        cleanup: async () => {},
+      },
+      resources: {
+        hasActiveCaptainTeam: async () => false,
+        read: async () => ({
+          allowed: true,
+          isCaptain: true,
+          contact: {
+            ownerId: a.user.id,
+            sameTeam: true,
+            viewerIsMember: true,
+            ownerIsMember: true,
+            granted: true,
+          },
+        }),
+      },
+    });
+    registry.seal(true);
+    f.config.set("SENSITIVE_BUSINESS_ENABLED", true);
+    const policy = new BusinessPolicy(
+      registry,
+      f.repository,
+      f.config,
+      f.clock,
+    );
+    for (const action of sensitiveActions)
+      await expect(
+        f.database.db.transaction((tx) =>
+          policy.authorize(tx, a.accessToken, action, a.user.id),
+        ),
+      ).resolves.toMatchObject({ user: { id: a.user.id } });
+    f.time("2027-01-31T16:00:00Z");
+    const fresh = await f.login("fixture-user-1");
+    for (const action of sensitiveActions)
+      await expect(
+        f.database.db.transaction((tx) =>
+          policy.authorize(tx, fresh.accessToken, action, a.user.id),
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+    for (const action of [...recoveryActions, ...captainActions])
+      await expect(
+        f.database.db.transaction((tx) =>
+          policy.authorize(tx, fresh.accessToken, action, a.user.id),
+        ),
+      ).resolves.toMatchObject({ user: { id: a.user.id } });
+  });
+  it("私人记录清理失败共同回滚，可重试且不提前释放绑定", async () => {
+    const a = await f.login();
+    await verify(a.accessToken);
+    await f.isolated.pool.query(
+      "CREATE FUNCTION reject_profile_delete() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'synthetic cleanup failure'; END $$ LANGUAGE plpgsql; CREATE TRIGGER reject_profile_delete BEFORE DELETE ON campus_profiles FOR EACH ROW EXECUTE FUNCTION reject_profile_delete()",
+    );
+    await expect(
+      f.database.db.transaction((tx) =>
+        f.lifecycle.cleanup(tx, a.user.id, f.clock.now()),
+      ),
+    ).rejects.toThrow();
+    expect(
+      (await f.request("GET", "campus-verification/profile", a.accessToken))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await f.isolated.pool.query(
+          "select count(*)::int c from campus_qualifications",
+        )
+      ).rows[0].c,
+    ).toBe(1);
+    await f.isolated.pool.query(
+      "DROP TRIGGER reject_profile_delete ON campus_profiles; DROP FUNCTION reject_profile_delete()",
+    );
+    await f.database.db.transaction((tx) =>
+      f.lifecycle.cleanup(tx, a.user.id, f.clock.now()),
+    );
+    expect(
+      (
+        await f.isolated.pool.query(
+          "select count(*)::int c from campus_profiles",
+        )
+      ).rows[0].c,
+    ).toBe(0);
+    expect(
+      (
+        await f.isolated.pool.query(
+          "select count(*)::int c from campus_bindings",
+        )
+      ).rows[0].c,
+    ).toBe(1);
+  });
   it("两个用户并发核验同一主体只有一个成功，失败不泄漏绑定人", async () => {
     const a = await f.login(),
       b = await f.login(),

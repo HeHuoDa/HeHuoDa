@@ -73,6 +73,7 @@ export async function campusFixture() {
     DATABASE_URL: isolated.url,
     NODE_ENV: "test",
     SWAGGER_ENABLED: false,
+    SENSITIVE_BUSINESS_ENABLED: false,
     WECHAT_LOGIN_ENABLED: true,
     WECHAT_APP_ID: "wxtestappid1234567",
     AUTH_RATE_LOGIN_PER_SOURCE: 100000,
