@@ -161,6 +161,7 @@ export const useAuthStore = defineStore("platform-auth", () => {
     acknowledgeConsent,
     login,
     restore,
+    reloadProfile: session.reloadProfile,
     logout,
     updateNickname,
     expireIfNeeded,

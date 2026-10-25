@@ -22,6 +22,7 @@ export function initialCampusState() {
     message: "",
     profileError: "",
     uncertain: false,
+    imageFailed: false,
   };
 }
 export type CampusState = ReturnType<typeof initialCampusState>;
@@ -39,6 +40,11 @@ export function createCampusController(
   function clearSecrets() {
     state.password = "";
     state.captcha = "";
+  }
+  function imageError() {
+    clearSecrets();
+    state.imageFailed = true;
+    state.message = "验证码图片加载失败，请换一张；不要填写不可见图片的答案。";
   }
   function stop() {
     epoch++;
@@ -67,8 +73,12 @@ export function createCampusController(
   function apply(transaction: CampusTransaction) {
     state.transaction = transaction;
     state.uncertain = false;
+    if (transaction.challenge) state.imageFailed = false;
     if (transaction.status !== "waiting") clearSecrets();
-    if (transaction.status === "failed")
+    if (
+      transaction.status === "failed" &&
+      !(transaction.reason === "internal_failure" && state.message)
+    )
       state.message = campusFailure(
         new RequestError("http", "", {
           code: `CAMPUS_${transaction.reason?.toUpperCase() ?? "FAILED"}`,
@@ -208,6 +218,10 @@ export function createCampusController(
       state.message = "验证码或事务已过期，请取消后重新开始。";
       return;
     }
+    if (kind === "submitting" && state.imageFailed) {
+      clearSecrets();
+      return;
+    }
     if (
       kind === "submitting" &&
       (!state.account || !state.password || !state.captcha)
@@ -297,5 +311,6 @@ export function createCampusController(
     query,
     cancel,
     clearSecrets,
+    imageError,
   };
 }

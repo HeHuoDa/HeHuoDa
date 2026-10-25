@@ -6,6 +6,15 @@ import FormDialog from "./FormDialog.vue";
 import { useAuthStore } from "../stores/auth";
 import { useSessionStore } from "../stores/session";
 import { openPage } from "../navigation/navigate";
+// #ifdef MP-WEIXIN
+import { beijingTime, renewalDue } from "../campus/presentation";
+function openCampus() {
+  close();
+  openPage("campus-verification", undefined, () =>
+    emit("notice", "暂时无法打开核验页，请重试。"),
+  );
+}
+// #endif
 
 /**
  * 个人中心标题行的账号入口。
@@ -165,9 +174,40 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
           <view class="profile-menu__account-text">
             <text class="profile-menu__nickname">{{ auth.nickname }}</text>
             <text class="profile-menu__status">{{ statusText }}</text>
+            <!-- #ifdef MP-WEIXIN -->
+            <text v-if="auth.campus?.validUntil" class="profile-menu__status"
+              >有效至 {{ beijingTime(auth.campus.validUntil) }}</text
+            >
+            <text
+              v-if="
+                auth.campus?.status === 'valid' &&
+                renewalDue(auth.campus.validUntil)
+              "
+              class="profile-menu__status"
+              >七天内到期，下一学期需重新核验。</text
+            >
+            <!-- #endif -->
           </view>
         </view>
       </template>
+      <!-- #ifdef MP-WEIXIN -->
+      <view
+        v-if="auth.authenticated"
+        class="profile-menu__row"
+        role="menuitem"
+        tabindex="0"
+        @click="openCampus"
+        @keydown.enter.prevent="openCampus"
+        @keydown.space.prevent="openCampus"
+      >
+        <view class="profile-menu__text"
+          ><text class="profile-menu__label">校园账号核验与学校资料</text
+          ><text class="profile-menu__hint"
+            >独立告知 · 本人只读 · 学期资格</text
+          ></view
+        >
+      </view>
+      <!-- #endif -->
       <view
         v-else
         class="profile-menu__row"
