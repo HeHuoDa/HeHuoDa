@@ -251,73 +251,88 @@ export function validateDeploymentConfig(tag, context) {
 const sleepFor = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+// One probe of a public path. Reasons are fixed strings so the log stays free
+// of hosts, URLs and credentials.
+async function probePublicPath(path, base, fetchImpl) {
+  try {
+    const response = await fetchImpl(new URL(path, base), {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok)
+      return {
+        ok: false,
+        reason: "status",
+        code: String(response.status),
+        message: "Public application check failed",
+      };
+    if (path === "/") {
+      if (
+        !(response.headers.get("content-type") || "").includes("text/html") ||
+        !(await response.text()).includes("<html")
+      )
+        return {
+          ok: false,
+          reason: "not-html",
+          message: "Public H5 entry is not HTML",
+        };
+      return { ok: true };
+    }
+    if (
+      !(response.headers.get("content-type") || "").includes("application/json")
+    )
+      return {
+        ok: false,
+        reason: "non-json",
+        message: "Public API returned non-JSON",
+      };
+    const value = await response.json();
+    if (path.endsWith("/ready") && value.status !== "ready")
+      return {
+        ok: false,
+        reason: "not-ready",
+        message: "Public API is not ready",
+      };
+    if (path.endsWith("/colleges") && !Array.isArray(value))
+      return {
+        ok: false,
+        deterministic: true,
+        reason: "shape",
+        message: "Public college query returned an invalid shape",
+      };
+    if (path.endsWith("/competitions") && !Array.isArray(value.items))
+      return {
+        ok: false,
+        deterministic: true,
+        reason: "shape",
+        message: "Public competition query returned an invalid shape",
+      };
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.name === "TimeoutError" ? "timeout" : "unreachable",
+      message: "Public application check failed",
+    };
+  }
+}
+
 // A recreated web container can be briefly unreachable on its published port,
 // so a transient failure is retried and a deterministic shape mismatch is not.
-// Reasons are fixed strings: hosts, URLs and credentials never reach the log.
 async function checkPublicPath(path, base, fetchImpl, attempts, delayMs) {
-  let reason = "unreachable";
-  let code = "";
-  let message = "Public application check failed";
+  const failure = {
+    reason: "unreachable",
+    code: "",
+    message: "Public application check failed",
+  };
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    reason = "unreachable";
-    code = "";
-    message = "Public application check failed";
-    try {
-      const response = await fetchImpl(new URL(path, base), {
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!response.ok) {
-        reason = "status";
-        code = String(response.status);
-      } else if (path === "/") {
-        if (
-          !(response.headers.get("content-type") || "").includes("text/html") ||
-          !(await response.text()).includes("<html")
-        ) {
-          reason = "not-html";
-          message = "Public H5 entry is not HTML";
-        } else {
-          return { ok: true };
-        }
-      } else if (
-        !(response.headers.get("content-type") || "").includes(
-          "application/json",
-        )
-      ) {
-        reason = "non-json";
-        message = "Public API returned non-JSON";
-      } else {
-        const value = await response.json();
-        if (path.endsWith("/ready") && value.status !== "ready") {
-          reason = "not-ready";
-          message = "Public API is not ready";
-        } else if (path.endsWith("/colleges") && !Array.isArray(value)) {
-          return {
-            ok: false,
-            reason: "shape",
-            code: "",
-            message: "Public college query returned an invalid shape",
-          };
-        } else if (
-          path.endsWith("/competitions") &&
-          !Array.isArray(value.items)
-        ) {
-          return {
-            ok: false,
-            reason: "shape",
-            code: "",
-            message: "Public competition query returned an invalid shape",
-          };
-        } else {
-          return { ok: true };
-        }
-      }
-    } catch (error) {
-      reason = error?.name === "TimeoutError" ? "timeout" : "unreachable";
-    }
+    const result = await probePublicPath(path, base, fetchImpl);
+    if (result.ok || result.deterministic) return result;
+    failure.reason = result.reason;
+    failure.code = result.code || "";
+    failure.message = result.message;
     if (attempt < attempts - 1) await sleepFor(delayMs);
   }
-  return { ok: false, reason, code, message };
+  return { ok: false, ...failure };
 }
 
 export async function verifyPublicApplication(
