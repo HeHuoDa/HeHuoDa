@@ -75,7 +75,7 @@ gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
 | Secret   | `DEPLOY_KNOWN_HOSTS`                        | 经独立可信渠道核验的主机指纹           |
 | Secret   | `DEPLOY_PASSWORD` 或 `DEPLOY_SSH_KEY`       | 两种 SSH 认证方式之一                  |
 
-`DEPLOY_KNOWN_HOSTS` 必须包含目标主机与端口对应的已核验主机公钥，支持哈希主机条目及行尾注释。工作流从匹配条目生成 SHA-256 指纹，显式传给 SCP Action；多种公钥类型按该固定客户端的协商偏好选择，同类型存在冲突公钥或匹配撤销条目时拒绝运行。若服务器实际协商的公钥未在信任条目中，Action 将拒绝上传，须经可信渠道核实后补齐条目，不能关闭指纹校验。`ssh-keyscan` 结果本身不能证明主机身份，不能用于自动增加信任。Secrets 不得出现在聊天、Issue、PR 或截图。工作流继续使用生产 Environment 和原有 SSH 凭据，不隐式修改 `DEPLOY_ENABLED`。
+`DEPLOY_KNOWN_HOSTS` 必须包含目标主机与端口对应的已核验主机公钥，支持哈希主机条目及行尾注释。工作流先以这些条目严格验证 OpenSSH 连接，再通过 `UpdateHostKeys=yes` 验证服务器其他主机密钥的持有证明；新增密钥只保存在本次 runner 的私有临时信任文件，不修改 Secret。随后限时扫描服务器当前提供的公钥，按固定 SCP 客户端偏好选择，并要求公钥完整匹配已认证的信任文件，才生成 SHA-256 指纹传给 Action。扫描本身不增加信任；未认证、冲突或撤销的密钥一律拒绝。服务器不支持主机密钥更新扩展时，须经独立可信渠道补齐 SCP 所选密钥的记录；不能关闭指纹校验。Secrets 不得出现在聊天、Issue、PR 或截图。工作流继续使用生产 Environment 和原有 SSH 凭据，不隐式修改 `DEPLOY_ENABLED`。
 
 ## 成功历史、更新失败与回滚
 
