@@ -3,10 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
 import { AuthController } from "./auth.controller.js";
-import { AuthRepository } from "./auth.repository.js";
 import { AuthService } from "./auth.service.js";
-import { AuthGuard } from "./auth.guard.js";
-import { AuthClock } from "./auth-clock.js";
 import { AuthRateLimiter } from "./auth-rate-limiter.js";
 import {
   WECHAT_PROVIDER,
@@ -17,6 +14,9 @@ import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { RealWechatProvider } from "./wechat/real-wechat-provider.js";
 import { StubWechatProvider } from "./wechat/stub-wechat-provider.js";
 import { LifecycleModule } from "../business-access/lifecycle.module.js";
+import { AuthPersistenceModule } from "./auth-persistence.module.js";
+import { CampusCoreModule } from "../campus/campus-core.module.js";
+import { CampusController } from "../campus/campus.controller.js";
 
 @Injectable()
 export class AuthCleanupScheduler {
@@ -51,12 +51,9 @@ export class AuthCleanupScheduler {
 }
 
 @Module({
-  imports: [LifecycleModule],
-  controllers: [AuthController],
+  imports: [AuthPersistenceModule, LifecycleModule, CampusCoreModule],
+  controllers: [AuthController, CampusController],
   providers: [
-    AuthClock,
-    AuthGuard,
-    AuthRepository,
     AuthRateLimiter,
     AuthService,
     AuthCleanupScheduler,
@@ -69,6 +66,6 @@ export class AuthCleanupScheduler {
       inject: [ConfigService],
     },
   ],
-  exports: [AuthRepository, AuthClock],
+  exports: [AuthPersistenceModule],
 })
 export class AuthModule {}

@@ -1,6 +1,97 @@
 import { validateEnvironment } from "./env.validation.js";
 
 describe("validateEnvironment", () => {
+  it("可信代理默认禁用，拒绝任意来源和非法网段配置", () => {
+    expect(validateEnvironment({}).API_TRUSTED_PROXY_CIDRS).toBe("");
+    expect(
+      validateEnvironment({ API_TRUSTED_PROXY_CIDRS: "172.20.0.0/16" })
+        .API_TRUSTED_PROXY_CIDRS,
+    ).toBe("172.20.0.0/16");
+    for (const cidrs of [
+      "true",
+      "0.0.0.0/0",
+      "172.20.0.0/33",
+      "http://proxy",
+      "172.20.0.0",
+    ])
+      expect(() =>
+        validateEnvironment({ API_TRUSTED_PROXY_CIDRS: cidrs }),
+      ).toThrow();
+  });
+  it("校园核验默认关闭，开启时必须配置独立密钥和明确学期", () => {
+    expect(validateEnvironment({}).CAMPUS_VERIFICATION_ENABLED).toBe(false);
+    expect(() =>
+      validateEnvironment({ CAMPUS_VERIFICATION_ENABLED: true }),
+    ).toThrow();
+    const base = {
+      CAMPUS_VERIFICATION_ENABLED: true,
+      CAMPUS_SUBJECT_HMAC_KEY: Buffer.alloc(32, 1).toString("base64"),
+      CAMPUS_PROFILE_KEYS: JSON.stringify({
+        v1: Buffer.alloc(32, 2).toString("base64"),
+      }),
+      CAMPUS_PROFILE_KEY_ID: "v1",
+      CAMPUS_TERMS: JSON.stringify([
+        {
+          id: "synthetic",
+          startAt: "2026-09-01T00:00:00+08:00",
+          endAt: "2027-02-01T00:00:00+08:00",
+        },
+      ]),
+    };
+    expect(validateEnvironment(base).CAMPUS_VERIFICATION_ENABLED).toBe(true);
+    for (const terms of [
+      [
+        {
+          id: "duplicate",
+          startAt: "2026-09-01T00:00:00Z",
+          endAt: "2026-10-01T00:00:00Z",
+        },
+        {
+          id: "duplicate",
+          startAt: "2026-10-01T00:00:00Z",
+          endAt: "2026-11-01T00:00:00Z",
+        },
+      ],
+      [
+        {
+          id: "one",
+          startAt: "2026-09-01T00:00:00Z",
+          endAt: "2026-10-01T00:00:00Z",
+        },
+        {
+          id: "two",
+          startAt: "2026-09-30T23:59:59Z",
+          endAt: "2026-11-01T00:00:00Z",
+        },
+      ],
+      [
+        {
+          id: "reversed",
+          startAt: "2026-10-01T00:00:00Z",
+          endAt: "2026-09-01T00:00:00Z",
+        },
+      ],
+    ])
+      expect(() =>
+        validateEnvironment({ ...base, CAMPUS_TERMS: JSON.stringify(terms) }),
+      ).toThrow();
+    expect(() =>
+      validateEnvironment({
+        ...base,
+        CAMPUS_TERMS: JSON.stringify([
+          { id: "bad", startAt: "2026-09-01", endAt: "2027-02-01" },
+        ]),
+      }),
+    ).toThrow();
+    expect(() =>
+      validateEnvironment({
+        ...base,
+        CAMPUS_PROFILE_KEYS: JSON.stringify({
+          v1: base.CAMPUS_SUBJECT_HMAC_KEY,
+        }),
+      }),
+    ).toThrow();
+  });
   it("requires a database in production and defaults documentation to private", () => {
     expect(() => validateEnvironment({ NODE_ENV: "production" })).toThrow();
     const config = validateEnvironment({

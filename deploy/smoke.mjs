@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
   mkdirSync,
@@ -14,8 +15,10 @@ import { colleges } from "../packages/client-domain/src/colleges.ts";
 const temporary = mkdtempSync(join(tmpdir(), "hehuoda-image-smoke-"));
 const project = `hehuoda-smoke-${randomBytes(6).toString("hex")}`;
 const password = randomBytes(24).toString("hex");
+const proxyOctets = randomBytes(2);
 Object.assign(process.env, {
   COMPOSE_PROJECT_NAME: project,
+  PROXY_ADDRESS_PREFIX: `10.${proxyOctets[0]}.${proxyOctets[1]}`,
   POSTGRES_USER: "smoke",
   POSTGRES_DB: "hehuoda_smoke_test",
   POSTGRES_PASSWORD: password,
@@ -84,6 +87,14 @@ try {
     const auth = new SchoolAuthClient();
     auth.dispose();
     await assert.rejects(auth.createChallenge(), error => error instanceof SchoolAuthError && error.code === 'disposed');
+    const { createHttpAdapter } = await import('./dist/config/http-adapter.js');
+    const server = createHttpAdapter(process.env.API_TRUSTED_PROXY_CIDRS).getInstance();
+    server.get('/source-test', async request => ({ ip: request.ip }));
+    try {
+      const peer = process.env.API_TRUSTED_PROXY_CIDRS.split('/')[0];
+      const response = await server.inject({ method: 'GET', url: '/source-test', remoteAddress: peer, headers: { 'x-forwarded-for': '203.0.113.99, 198.51.100.1' } });
+      assert.equal(response.json().ip, '198.51.100.1');
+    } finally { await server.close(); }
     const paragraph = '报名截止：2026年10月20日。';
     const candidate = parseCandidate({
       title: '2026年测试竞赛报名通知', publishedAt: null,
@@ -183,7 +194,9 @@ try {
 
   const dump = backup();
   assert.deepEqual(verifyBackup(dump), {
-    migrations: 4,
+    migrations: readdirSync(
+      new URL("../apps/api/migrations/", import.meta.url),
+    ).filter((name) => name.endsWith(".sql")).length,
     colleges: colleges.length,
     competitions: 1,
     ingestionRuns: 0,

@@ -1,16 +1,14 @@
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
-import {
-  FastifyAdapter,
-  type NestFastifyApplication,
-} from "@nestjs/platform-fastify";
+import { type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { AppModule } from "./app.module.js";
 import { configureApp } from "./configure-app.js";
+import { createHttpAdapter } from "./config/http-adapter.js";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    createHttpAdapter(process.env.API_TRUSTED_PROXY_CIDRS ?? ""),
   );
   configureApp(app);
   app.enableShutdownHooks();

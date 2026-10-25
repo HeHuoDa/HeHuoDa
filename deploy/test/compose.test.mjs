@@ -77,6 +77,19 @@ test(
       assert.equal(result.status, 0, result.stderr);
       const config = JSON.parse(result.stdout);
       assert.equal(config.services.api.image, images.api);
+      assert.equal(
+        config.services.api.environment.API_TRUSTED_PROXY_CIDRS,
+        "172.30.135.3/32",
+      );
+      assert.equal(config.services.api.ports, undefined);
+      assert.deepEqual(Object.keys(config.services.db.networks), ["database"]);
+      assert.deepEqual(Object.keys(config.services.web.networks), ["proxy"]);
+      assert.equal(
+        config.services.web.networks.proxy.ipv4_address,
+        "172.30.135.3",
+      );
+      assert.equal(config.services.api.networks.proxy.ipv4_address, undefined);
+      assert.equal(config.networks.database.internal, true);
       assert.equal(config.services.web.image, images.web);
       assert.equal(config.services.api.stop_grace_period, `${seconds}s`);
     }

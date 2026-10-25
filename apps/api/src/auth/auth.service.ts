@@ -19,6 +19,7 @@ import { AuthRateLimiter, windowStart } from "./auth-rate-limiter.js";
 import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { createApiError } from "../common/api-error.js";
 import { AccountLifecycle } from "../business-access/lifecycle.service.js";
+import { CampusService } from "../campus/campus.service.js";
 
 export interface RequestContext {
   requestId: string;
@@ -37,7 +38,7 @@ export interface CredentialResult {
 export interface ProfileResult {
   user: { id: string; nickname: string; status: UserStatus };
   campus: {
-    status: "unverified";
+    status: "unverified" | "valid" | "expired" | "revoked";
     termId: string | null;
     verifiedAt: string | null;
     validUntil: string | null;
@@ -54,6 +55,7 @@ export class AuthService {
     @Inject(WECHAT_PROVIDER) private readonly provider: WechatProvider,
     private readonly clock: AuthClock,
     private readonly lifecycle: AccountLifecycle,
+    private readonly campus: CampusService,
   ) {}
 
   async wechatLogin(
@@ -278,9 +280,9 @@ export class AuthService {
     });
   }
 
-  me(access: AccessContext): ProfileResult {
+  async me(access: AccessContext): Promise<ProfileResult> {
     this.ensureActive(access);
-    return profileOf(access);
+    return this.profileOf(access);
   }
 
   async updateNickname(
@@ -305,7 +307,7 @@ export class AuthService {
       requestId,
       now,
     });
-    return profileOf({ ...access, user });
+    return this.profileOf({ ...access, user });
   }
 
   private assertLoginEnabled(): void {
@@ -347,21 +349,24 @@ export class AuthService {
     if (access.user.status !== "active")
       throw createApiError(403, "ACCOUNT_RESTRICTED", "账号当前受限");
   }
-}
-
-function profileOf(access: AccessContext): ProfileResult {
-  return {
-    user: {
-      id: access.user.id,
-      nickname: access.user.nickname,
-      status: access.user.status,
-    },
-    campus: {
-      status: "unverified",
-      termId: null,
-      verifiedAt: null,
-      validUntil: null,
-    },
-    availability: { teaming: false },
-  };
+  private async profileOf(access: AccessContext): Promise<ProfileResult> {
+    return this.repository.withAccessTransaction(async (tx) => {
+      await this.repository.assertCurrentContext(tx, access, this.clock.now());
+      const summary = await this.campus.summary(tx, access.user.id);
+      return {
+        user: {
+          id: access.user.id,
+          nickname: access.user.nickname,
+          status: access.user.status,
+        },
+        campus: {
+          status: summary.status,
+          termId: summary.termId,
+          verifiedAt: summary.verifiedAt,
+          validUntil: summary.validUntil,
+        },
+        availability: { teaming: false },
+      };
+    });
+  }
 }

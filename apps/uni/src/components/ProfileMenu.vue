@@ -31,8 +31,14 @@ const initial = computed(() => {
 const statusText = computed(() => {
   if (!auth.accountStatus) return "账号状态未知";
   const account = auth.accountStatus === "active" ? "账号正常" : "账号受限";
-  if (auth.campusStatus === "unverified") return `${account} · 校园身份未核验`;
-  if (auth.campusStatus === "verified") return `${account} · 校园身份已核验`;
+  const campusLabels = {
+    unverified: "校园账号未验证",
+    valid: "校园账号已验证",
+    expired: "校园账号核验已过期",
+    revoked: "校园账号核验已撤销",
+  };
+  if (auth.campusStatus)
+    return `${account} · ${campusLabels[auth.campusStatus]}`;
   return account;
 });
 

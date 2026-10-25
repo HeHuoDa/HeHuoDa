@@ -37,7 +37,8 @@ export function isProfileResponse(v: unknown): v is ProfileResponse {
     object(v) &&
     isUser(v.user) &&
     object(v.campus) &&
-    v.campus.status === "unverified" &&
+    typeof v.campus.status === "string" &&
+    ["unverified", "valid", "expired", "revoked"].includes(v.campus.status) &&
     [v.campus.termId, v.campus.verifiedAt, v.campus.validUntil].every(
       (x) => x === null || typeof x === "string",
     ) &&

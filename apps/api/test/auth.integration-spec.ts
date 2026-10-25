@@ -1,3 +1,5 @@
+import { CampusService } from "../src/campus/campus.service.js";
+import { SchoolAuthClient } from "@hehuoda/sicau-connectors/auth";
 import { jest } from "@jest/globals";
 import { ConfigService } from "@nestjs/config";
 import type { HttpException } from "@nestjs/common";
@@ -56,6 +58,12 @@ describe("认证数据与真实 PG 事务", () => {
       new StubWechatProvider(),
       clock,
       new AccountLifecycle(new CapabilityRegistry()),
+      new CampusService(
+        database,
+        new ConfigService(),
+        { now: () => current },
+        new SchoolAuthClient(),
+      ),
     );
   });
 
@@ -269,7 +277,7 @@ describe("认证数据与真实 PG 事务", () => {
     expect(access).toBeDefined();
     let meError: HttpException | null = null;
     try {
-      service.me(access!);
+      await service.me(access!);
     } catch (error) {
       meError = error as HttpException;
     }
@@ -326,6 +334,12 @@ describe("认证数据与真实 PG 事务", () => {
       new StubWechatProvider(),
       { now: () => current },
       new AccountLifecycle(new CapabilityRegistry()),
+      new CampusService(
+        database,
+        new ConfigService(),
+        { now: () => current },
+        new SchoolAuthClient(),
+      ),
     );
     await strict.wechatLogin(
       { code: "stub-identity:o-a", consentVersion: 1 },
@@ -357,6 +371,12 @@ describe("认证数据与真实 PG 事务", () => {
       new StubWechatProvider(),
       { now: () => current },
       new AccountLifecycle(new CapabilityRegistry()),
+      new CampusService(
+        database,
+        new ConfigService(),
+        { now: () => current },
+        new SchoolAuthClient(),
+      ),
     );
     const error = await failure(
       disabled.wechatLogin(

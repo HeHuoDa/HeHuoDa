@@ -138,12 +138,14 @@ async function mountOverview() {
   return { app, text, trigger, openMenu, menuItem, clickItem, clickButton };
 }
 
-async function loginAs(auth, platform) {
+async function loginAs(auth, platform, campusStatus = "unverified") {
   const logging = auth.login();
   await tick();
   platform.requests[0].success({ statusCode: 200, data: credential });
   await tick();
-  platform.requests[1].success({ statusCode: 200, data: profile() });
+  const data = profile();
+  data.campus.status = campusStatus;
+  platform.requests[1].success({ statusCode: 200, data });
   await logging;
 }
 
@@ -198,6 +200,27 @@ test("点遮罩或再点图标都能关闭下拉", async () => {
   }
 });
 
+test("真实资格状态仅显示校园账号结论，不宣称学生或在读", async () => {
+  for (const [status, label] of [
+    ["valid", "校园账号已验证"],
+    ["expired", "校园账号核验已过期"],
+    ["revoked", "校园账号核验已撤销"],
+  ]) {
+    const platform = installPlatform();
+    setActivePinia(createPinia());
+    const { useAuthStore } = await import("../src/stores/auth.ts");
+    await loginAs(useAuthStore(), platform, status);
+    const view = await mountOverview();
+    try {
+      await view.openMenu();
+      assert.ok(view.text().includes(label));
+      assert.doesNotMatch(view.text(), /学生身份已|当前在读|校园身份已核验/);
+    } finally {
+      view.app.unmount();
+    }
+  }
+});
+
 test("已登录：图标显示首字，下拉显示昵称与账号状态，退出后回到未登录", async () => {
   const platform = installPlatform();
   setActivePinia(createPinia());
@@ -209,7 +232,7 @@ test("已登录：图标显示首字，下拉显示昵称与账号状态，退�
     assert.match(view.text(), /微/, "图标显示昵称首字");
     assert.match(view.text(), /微信用户/);
     await view.openMenu();
-    assert.match(view.text(), /账号正常 · 校园身份未核验/);
+    assert.match(view.text(), /账号正常 · 校园账号未验证/);
     assert.ok(view.menuItem("退出登录"));
 
     view.menuItem("退出登录").props.onClick();
@@ -361,7 +384,7 @@ test("已登录：账号受限时下拉显示受限状态", async () => {
     assert.equal(auth.authenticated, true);
     assert.equal(auth.accountStatus, "restricted");
     await view.openMenu();
-    assert.match(view.text(), /账号受限 · 校园身份未核验/);
+    assert.match(view.text(), /账号受限 · 校园账号未验证/);
     assert.doesNotMatch(view.text(), /账号正常/);
   } finally {
     view.app.unmount();
