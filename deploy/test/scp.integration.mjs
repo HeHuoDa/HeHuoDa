@@ -69,6 +69,17 @@ test(
             join(root, name),
           ]),
         );
+      ok(
+        run("ssh-keygen", [
+          "-q",
+          "-t",
+          "ecdsa",
+          "-N",
+          "",
+          "-f",
+          join(root, "host-ecdsa"),
+        ]),
+      );
       // Only this isolated fixture key is shared with the Action's default UID 1000.
       chmodSync(join(root, "client"), 0o644);
       const hostKey = readFileSync(join(root, "host.pub"), "utf8")
@@ -77,7 +88,12 @@ test(
         .slice(0, 2)
         .join(" ");
       const fingerprint = ok(
-        run("ssh-keygen", ["-lf", join(root, "host.pub"), "-E", "sha256"]),
+        run("ssh-keygen", [
+          "-lf",
+          join(root, "host-ecdsa.pub"),
+          "-E",
+          "sha256",
+        ]),
       )
         .trim()
         .split(/\s+/)[1];
@@ -88,7 +104,7 @@ test(
         .split(/\s+/)[1];
       writeFileSync(
         join(root, "sshd_config"),
-        `Port ${port}\nListenAddress ${network === "host" ? "127.0.0.1" : "0.0.0.0"}\nHostKey ${root}/host\nPidFile ${root}/sshd.pid\nAuthorizedKeysFile ${root}/client.pub\nStrictModes no\nPasswordAuthentication ${password ? "yes" : "no"}\nPermitRootLogin ${password ? "yes" : "prohibit-password"}\nKbdInteractiveAuthentication no\nUsePAM yes\nAllowUsers ${userInfo().username}\nLogLevel ERROR\n`,
+        `Port ${port}\nListenAddress ${network === "host" ? "127.0.0.1" : "0.0.0.0"}\nHostKey ${root}/host\nHostKey ${root}/host-ecdsa\nPidFile ${root}/sshd.pid\nAuthorizedKeysFile ${root}/client.pub\nStrictModes no\nPasswordAuthentication ${password ? "yes" : "no"}\nPermitRootLogin ${password ? "yes" : "prohibit-password"}\nKbdInteractiveAuthentication no\nUsePAM yes\nAllowUsers ${userInfo().username}\nLogLevel ERROR\n`,
       );
       server = spawn(
         "sudo",
@@ -154,6 +170,9 @@ test(
       };
       const control = (operation) => run("bash", [helper, operation], { env });
       ok(control("setup"));
+      const selectedFingerprint = readFileSync(env.GITHUB_ENV, "utf8").match(
+        /^SCP_FINGERPRINT=(.+)$/m,
+      )[1];
       const staging = join(
         deployRoot,
         "releases",
@@ -162,7 +181,7 @@ test(
       );
       const upload = (
         name,
-        pin = fingerprint,
+        pin = selectedFingerprint,
         endpoint = port,
         timeout = "30s",
       ) => {
@@ -205,6 +224,7 @@ test(
       assert.match(rejected.stdout + rejected.stderr, /fingerprint mismatch/);
       assert.equal(existsSync(join(staging, "probe/probe")), false);
       ok(upload("probe"));
+      assert.equal(selectedFingerprint, fingerprint);
       ok(control("probe"));
 
       // This old client can stall after TCP connect; an outer step deadline must stop it.
