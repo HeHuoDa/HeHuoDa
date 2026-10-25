@@ -7,8 +7,6 @@ import {
   readFileSync,
   existsSync,
   rmSync,
-  copyFileSync,
-  chmodSync,
   statSync,
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
@@ -18,31 +16,20 @@ import { createServer, createConnection } from "node:net";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { upload } from "../rsync.mjs";
 
+const large = process.env.RSYNC_TEST_LARGE_PAYLOAD === "true";
 test(
-  "the Action's drone-scp image enforces fingerprints and delivers sealed archives over real SSH",
+  "rsync resumes interrupted real SSH transfers and enforces host trust, dependencies and sealed payloads",
   {
     skip: process.platform !== "linux",
-    timeout: 180_000,
+    timeout: large ? 1_200_000 : 180_000,
   },
   async () => {
-    const root = mkdtempSync(join(tmpdir(), "hehuoda-scp-integration-"));
-    chmodSync(root, 0o755);
-    // A shared volume/network also lets Docker Desktop run this Linux harness in a container.
-    const network = process.env.SCP_TEST_NETWORK || "host";
-    const host = process.env.SCP_TEST_HOST || "127.0.0.1";
-    const password = process.env.SCP_TEST_PASSWORD || "";
-    const mount = process.env.SCP_TEST_VOLUME
-      ? `${process.env.SCP_TEST_VOLUME}:/scp-test`
-      : `${root}:${root}`;
+    const root = mkdtempSync(join(tmpdir(), "hehuoda-rsync-integration-"));
     const helper = fileURLToPath(new URL("../scp.sh", import.meta.url));
-    const image = "ghcr.io/appleboy/drone-scp:1.6.14";
     const run = (bin, args, options = {}) =>
-      spawnSync(bin, args, {
-        encoding: "utf8",
-        timeout: 60_000,
-        ...options,
-      });
+      spawnSync(bin, args, { encoding: "utf8", timeout: 60_000, ...options });
     const ok = (result) => {
       assert.ifError(result.error);
       assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -54,9 +41,7 @@ test(
     const port = listener.address().port;
     await new Promise((resolve) => listener.close(resolve));
     let server;
-    let env;
     try {
-      ok(run("docker", ["pull", image]));
       for (const name of ["host", "client"])
         ok(
           run("ssh-keygen", [
@@ -80,31 +65,36 @@ test(
           join(root, "host-ecdsa"),
         ]),
       );
-      // Only this isolated fixture key is shared with the Action's default UID 1000.
-      chmodSync(join(root, "client"), 0o644);
-      const hostKey = readFileSync(join(root, "host.pub"), "utf8")
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .join(" ");
-      const fingerprint = ok(
-        run("ssh-keygen", [
-          "-lf",
-          join(root, "host-ecdsa.pub"),
-          "-E",
-          "sha256",
-        ]),
-      )
-        .trim()
-        .split(/\s+/)[1];
-      const wrongFingerprint = ok(
-        run("ssh-keygen", ["-lf", join(root, "client.pub"), "-E", "sha256"]),
-      )
-        .trim()
-        .split(/\s+/)[1];
+      // Fixture markers affect capability checks or rsync only, leaving all SSH trust/authentication real.
+      writeFileSync(
+        join(root, "remote-command"),
+        `#!/bin/bash
+if [[ "$SSH_ORIGINAL_COMMAND" == *'command -v rsync'* ]]; then
+  if [[ -e '${root}/missing-rsync' ]]; then exit 44; fi
+  if [[ -e '${root}/old-rsync' ]]; then echo 'rsync version 3.0.9 protocol version 30'; exit 0; fi
+fi
+if [[ "$SSH_ORIGINAL_COMMAND" == *'rsync --server'* && -e '${root}/stall' ]]; then sleep 5; exit 0; fi
+exec bash -c "$SSH_ORIGINAL_COMMAND"
+`,
+        { mode: 0o700 },
+      );
       writeFileSync(
         join(root, "sshd_config"),
-        `Port ${port}\nListenAddress ${network === "host" ? "127.0.0.1" : "0.0.0.0"}\nHostKey ${root}/host\nHostKey ${root}/host-ecdsa\nPidFile ${root}/sshd.pid\nAuthorizedKeysFile ${root}/client.pub\nStrictModes no\nPasswordAuthentication ${password ? "yes" : "no"}\nPermitRootLogin ${password ? "yes" : "prohibit-password"}\nKbdInteractiveAuthentication no\nUsePAM yes\nAllowUsers ${userInfo().username}\nLogLevel ERROR\n`,
+        `Port ${port}
+ListenAddress 127.0.0.1
+HostKey ${root}/host
+HostKey ${root}/host-ecdsa
+PidFile ${root}/sshd.pid
+AuthorizedKeysFile ${root}/client.pub
+StrictModes no
+PasswordAuthentication yes
+PermitRootLogin yes
+KbdInteractiveAuthentication no
+UsePAM yes
+AllowUsers ${userInfo().username}
+ForceCommand ${root}/remote-command
+LogLevel ERROR
+`,
       );
       server = spawn(
         "sudo",
@@ -112,7 +102,7 @@ test(
         { stdio: "ignore", detached: true },
       );
       let ready = false;
-      for (let attempt = 0; attempt < 50 && !ready; attempt++) {
+      for (let i = 0; i < 50 && !ready; i++) {
         ready = await new Promise((resolve) => {
           const socket = createConnection({ host: "127.0.0.1", port });
           socket.on("connect", () => {
@@ -123,18 +113,16 @@ test(
         });
         if (!ready) await new Promise((resolve) => setTimeout(resolve, 100));
       }
-      assert.equal(ready, true, "isolated SSH daemon must start");
-      const deployRoot = join(root, "deployment");
-      const runner = join(root, "runner");
-      mkdirSync(deployRoot);
-      mkdirSync(runner);
-      mkdirSync(join(root, "source"));
+      assert.equal(ready, true);
+      const deployRoot = join(root, "deployment"),
+        runner = join(root, "runner with ' quote"),
+        bin = join(root, "bin");
+      for (const directory of [deployRoot, runner, bin, join(root, "source")])
+        mkdirSync(directory);
       writeFileSync(join(deployRoot, ".env"), "");
       writeFileSync(
         join(root, "source/file"),
-        randomBytes(
-          process.env.SCP_TEST_LARGE_PAYLOAD === "true" ? 129390874 : 1048576,
-        ),
+        randomBytes(large ? 129390874 : 8 * 1024 * 1024),
       );
       ok(
         run("tar", [
@@ -145,189 +133,181 @@ test(
           ".",
         ]),
       );
-      console.log(
-        `SCP fixture authentication=${password ? "password" : "key"} payload_bytes=${statSync(join(runner, "payload.tar.gz")).size}`,
+      // Limit the actual client for a repeatable interruption; production has no bandwidth test switches.
+      writeFileSync(
+        join(bin, "rsync"),
+        `#!/bin/bash
+if [[ "$1" == --version ]]; then exec /usr/bin/rsync "$@"; fi
+exec /usr/bin/rsync --bwlimit=${large ? 128 : 256} "$@"
+`,
+        { mode: 0o700 },
       );
-      env = {
+      const env = {
         ...process.env,
+        PATH: bin + ":" + process.env.PATH,
         GITHUB_WORKSPACE: root,
         RUNNER_TEMP: runner,
         GITHUB_RUN_ID: "17",
         GITHUB_RUN_ATTEMPT: "2",
         RELEASE_SHA: "a".repeat(40),
         DEPLOY_ACTION: "prepare",
-        DEPLOY_HOST: host,
+        DEPLOY_HOST: "127.0.0.1",
         DEPLOY_PORT: String(port),
         DEPLOY_USER: userInfo().username,
         DEPLOY_PATH: deployRoot,
-        DEPLOY_PASSWORD: password,
-        DEPLOY_SSH_KEY: password
-          ? ""
-          : readFileSync(join(root, "client"), "utf8"),
-        DEPLOY_KNOWN_HOSTS: `[${host}]:${port} ${hostKey}`,
+        DEPLOY_PASSWORD: large ? process.env.RSYNC_TEST_PASSWORD || "" : "",
+        DEPLOY_SSH_KEY:
+          large && process.env.RSYNC_TEST_PASSWORD
+            ? ""
+            : readFileSync(join(root, "client"), "utf8"),
+        DEPLOY_KNOWN_HOSTS: `[127.0.0.1]:${port} ${readFileSync(join(root, "host.pub"), "utf8")}`,
         GITHUB_ENV: join(root, "github-env"),
         GITHUB_OUTPUT: join(root, "github-output"),
       };
-      const control = (operation) => run("bash", [helper, operation], { env });
-      ok(control("setup"));
-      const selectedFingerprint = readFileSync(env.GITHUB_ENV, "utf8").match(
-        /^SCP_FINGERPRINT=(.+)$/m,
-      )[1];
+      const control = (args, extra = {}) =>
+        run("bash", [helper, ...args], {
+          env: { ...env, ...extra },
+          timeout: large ? 1_150_000 : 90_000,
+        });
+      const badTrust = `[127.0.0.1]:${port} ${readFileSync(join(root, "client.pub"), "utf8")}`;
+      const wrong = control(["setup"], { DEPLOY_KNOWN_HOSTS: badTrust });
+      assert.notEqual(wrong.status, 0);
+      assert.match(wrong.stderr, /category=host-key/);
+      writeFileSync(join(root, "missing-rsync"), "");
+      assert.equal(control(["setup"]).status, 44);
+      rmSync(join(root, "missing-rsync"));
+      writeFileSync(join(root, "old-rsync"), "");
+      assert.equal(control(["setup"]).status, 45);
+      rmSync(join(root, "old-rsync"));
+      ok(control(["setup"]));
+      ok(control(["upload", "probe"]));
+      ok(control(["probe"]));
+      // Password authentication is checked over the same trusted SSH connection, without a client key.
+      const password = process.env.RSYNC_TEST_PASSWORD;
+      if (password) {
+        ok(
+          control(["upload", "probe"], {
+            DEPLOY_PASSWORD: password,
+            DEPLOY_SSH_KEY: "",
+          }),
+        );
+        const rejected = control(["upload", "probe"], {
+          DEPLOY_PASSWORD: "wrong-fixture-password",
+          DEPLOY_SSH_KEY: "",
+        });
+        assert.notEqual(rejected.status, 0);
+        assert.match(rejected.stdout, /category=authentication/);
+      }
       const staging = join(
         deployRoot,
         "releases",
         env.RELEASE_SHA,
         "17-2.incoming",
       );
-      const upload = (
-        name,
-        pin = selectedFingerprint,
-        endpoint = port,
-        timeout = "30s",
-      ) => {
-        const variables = {
-          PLUGIN_HOST: host,
-          PLUGIN_PORT: String(endpoint),
-          PLUGIN_USERNAME: userInfo().username,
-          PLUGIN_KEY_PATH: password ? "" : `${root}/client`,
-          PLUGIN_PASSWORD: password,
-          PLUGIN_FINGERPRINT: pin,
-          PLUGIN_SOURCE: `.scp-upload-17-2/${name}`,
-          PLUGIN_TARGET: `${staging}/${name === "probe" ? "probe" : "upload"}`,
-          PLUGIN_TAR_TMP_PATH: `${staging}/`,
-          PLUGIN_STRIP_COMPONENTS: "1",
-          PLUGIN_OVERWRITE: "true",
-          PLUGIN_TIMEOUT: timeout,
-          PLUGIN_COMMAND_TIMEOUT: "10s",
-        };
-        return run("docker", [
-          "run",
-          "--rm",
-          "--network",
-          network,
-          "-v",
-          mount,
-          "-w",
-          root,
-          "--entrypoint",
-          "/bin/drone-scp",
-          ...Object.entries(variables).flatMap(([key, value]) => [
-            "-e",
-            `${key}=${value}`,
-          ]),
-          image,
-        ]);
-      };
-      const rejected = upload("probe", wrongFingerprint);
-      assert.ifError(rejected.error);
-      assert.notEqual(rejected.status, 0);
-      assert.match(rejected.stdout + rejected.stderr, /fingerprint mismatch/);
-      assert.equal(existsSync(join(staging, "probe/probe")), false);
-      ok(upload("probe"));
-      assert.equal(selectedFingerprint, fingerprint);
-      ok(control("probe"));
-
-      // This old client can stall after TCP connect; an outer step deadline must stop it.
-      const sockets = new Set();
-      let connections = 0;
-      const stalled = createServer((socket) => {
-        connections++;
-        sockets.add(socket);
-        socket.on("close", () => sockets.delete(socket));
-      });
-      stalled.listen(0, network === "host" ? "127.0.0.1" : "0.0.0.0");
-      await once(stalled, "listening");
-      try {
-        // Keep Node's event loop alive while the Docker client waits on the isolated stalled peer.
-        const args = [
-          "run",
-          "--rm",
-          "--name",
-          `hehuoda-scp-timeout-${process.pid}`,
-          "--network",
-          network,
-          "--entrypoint",
-          "/bin/drone-scp",
-          "-e",
-          `PLUGIN_HOST=${host}`,
-          "-e",
-          `PLUGIN_PORT=${stalled.address().port}`,
-          "-e",
-          "PLUGIN_TIMEOUT=1s",
-          "-e",
-          "PLUGIN_COMMAND_TIMEOUT=1s",
-          "-e",
-          `PLUGIN_FINGERPRINT=${fingerprint}`,
-          "-e",
-          "PLUGIN_SOURCE=client.pub",
-          "-e",
-          "PLUGIN_TARGET=/tmp/unused",
-          "-e",
-          "PLUGIN_PASSWORD=isolated-fixture",
-          "-v",
-          mount,
-          "-w",
-          root,
-          image,
-        ];
+      const partial = join(staging, "upload/.rsync-partial/payload.tar.gz");
+      const receivedFile = join(staging, "upload/payload.tar.gz");
+      const size = statSync(join(runner, "payload.tar.gz")).size;
+      console.log(
+        `rsync fixture payload_bytes=${size} bandwidth_kib=${large ? 128 : 256}`,
+      );
+      if (large) {
         const started = Date.now();
-        const child = spawn("docker", args, { stdio: "ignore" });
-        let forced = false;
-        const timer = setTimeout(() => {
-          forced = true;
-          spawnSync(
-            "docker",
-            ["rm", "-f", `hehuoda-scp-timeout-${process.pid}`],
-            { stdio: "ignore" },
-          );
-        }, 5_000);
-        const [code] = await once(child, "close");
-        clearTimeout(timer);
-        assert.ok(
-          connections > 0,
-          "the client must reach the stalled SSH peer",
+        const complete = control(["upload", "payload", "1"]);
+        ok(complete);
+        console.log(
+          `rsync large payload_bytes=${size} elapsed_seconds=${Math.ceil((Date.now() - started) / 1000)}`,
         );
-        assert.equal(
-          forced,
-          true,
-          "the outer deadline terminates the stalled Action container",
+      } else {
+        // Interrupt a transfer process, not its entire workflow; retry must reuse the same private staging.
+        const child = spawn("bash", [helper, "upload", "payload", "1"], {
+          env,
+          detached: true,
+        });
+        let output = "",
+          errors = "",
+          interrupted = false;
+        const deadline = setTimeout(() => {
+          if (!interrupted) {
+            interrupted = true;
+            process.kill(-child.pid, "SIGTERM");
+          }
+        }, 10_000);
+        child.stdout.on("data", (chunk) => {
+          output += chunk;
+          if (
+            !interrupted &&
+            [...output.matchAll(/status=progress bytes=(\d+)/g)].some(
+              (match) => Number(match[1]) >= 524288,
+            )
+          ) {
+            interrupted = true;
+            process.kill(-child.pid, "SIGTERM");
+          }
+        });
+        child.stderr.on("data", (chunk) => {
+          errors += chunk;
+        });
+        await once(child, "close");
+        clearTimeout(deadline);
+        assert.ok(interrupted);
+        assert.ok(existsSync(partial), output + errors);
+        assert.ok(statSync(partial).size > 0 && statSync(partial).size < size);
+        ok(control(["received"]));
+        assert.match(readFileSync(env.GITHUB_OUTPUT, "utf8"), /valid=false/);
+        assert.equal(control(["verify"]).status, 42);
+        ok(control(["retry"]));
+        assert.ok(existsSync(partial));
+        const resumed = control(["upload", "payload", "2"]);
+        ok(resumed);
+        const matched = Number(resumed.stdout.match(/matched_bytes=(\d+)/)[1]);
+        const literal = Number(resumed.stdout.match(/literal_bytes=(\d+)/)[1]);
+        assert.ok(matched > 0);
+        assert.ok(literal < size);
+        console.log(
+          `rsync fixture resumed matched_bytes=${matched} literal_bytes=${literal}`,
         );
-        assert.ok(Date.now() - started < 15_000);
-        assert.notEqual(code, 0);
-      } finally {
-        for (const socket of sockets) socket.destroy();
-        await new Promise((resolve) => stalled.close(resolve));
       }
-
-      // A partial/corrupt upload cannot be extracted; the second attempt can replace it.
-      writeFileSync(join(staging, "upload/payload.tar.gz"), "truncated");
-      ok(control("received"));
-      assert.match(readFileSync(env.GITHUB_OUTPUT, "utf8"), /valid=false/);
-      assert.equal(control("verify").status, 42);
+      // Independently detect same-length damage instead of trusting a client's successful exit alone.
+      const original = readFileSync(receivedFile);
+      const damaged = Buffer.from(original);
+      damaged[0] ^= 1;
+      writeFileSync(receivedFile, damaged);
+      assert.equal(control(["verify"]).status, 42);
       assert.equal(existsSync(join(staging, "verified")), false);
-      ok(control("retry"));
-      ok(upload("payload.tar.gz"));
-      // Lost Action responses are safe: the receiver verifies a completed copy before deciding to retry.
-      ok(control("received"));
+      writeFileSync(receivedFile, original);
+      ok(control(["received"]));
       assert.match(readFileSync(env.GITHUB_OUTPUT, "utf8"), /valid=true/);
-      ok(control("verify"));
+      ok(control(["verify"]));
       const release = join(deployRoot, "releases", env.RELEASE_SHA, "17-2");
       assert.deepEqual(
         readFileSync(join(release, "file")),
         readFileSync(join(root, "source/file")),
       );
-      ok(control("cleanup"));
+      // An authenticated peer that stops speaking rsync is bounded by the I/O deadline.
+      writeFileSync(join(root, "stall"), "");
+      const io = await upload({
+        source: join(root, ".scp-upload-17-2/probe"),
+        target: `${env.DEPLOY_USER}@127.0.0.1:${staging}/probe/probe`,
+        ssh: join(runner, "hehuoda-scp-17-2/rsync-ssh"),
+        logDirectory: runner,
+        kind: "probe",
+        attempt: 1,
+        wallSeconds: 10,
+        ioSeconds: 1,
+        command: ["/usr/bin/rsync"],
+        onEvent: () => {},
+      });
+      assert.equal(io.category, "timeout");
+      rmSync(join(root, "stall"));
+      mkdirSync(join(deployRoot, "releases", env.RELEASE_SHA, "18-1.incoming"));
+      ok(control(["cleanup"]));
       assert.equal(existsSync(staging), false);
-      assert.equal(existsSync(join(release, ".payload")), true);
-      // Cancellation cleanup must preserve other attempts and already verified releases.
-      mkdirSync(join(staging, "upload"), { recursive: true });
-      copyFileSync(
-        join(runner, "payload.tar.gz"),
-        join(staging, "upload/payload.tar.gz"),
+      assert.ok(existsSync(join(release, ".payload")));
+      assert.ok(
+        existsSync(
+          join(deployRoot, "releases", env.RELEASE_SHA, "18-1.incoming"),
+        ),
       );
-      ok(control("cleanup"));
-      assert.equal(existsSync(staging), false);
-      assert.equal(existsSync(join(release, "file")), true);
     } finally {
       if (server) {
         spawnSync("sudo", ["-n", "kill", "-TERM", "--", `-${server.pid}`], {
