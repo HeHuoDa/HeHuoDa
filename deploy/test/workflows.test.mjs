@@ -387,6 +387,49 @@ test("SCP failure and cancellation gates prevent delivery and still request stag
   assert.equal(allowed(received, false, true, "failure", ""), false);
 });
 
+test("second SCP responses never bypass final verification or discard a complete reception", () => {
+  const steps = workflow("deploy").jobs.deploy.steps;
+  const retry = steps.find((step) => step.name?.includes("attempt 2"));
+  const verify = steps.find((step) => step.run?.endsWith("scp.sh verify"));
+  const deliver = steps.find((step) => step.run?.endsWith("scp.sh deliver"));
+  const cleanup = steps.find((step) => step.run?.endsWith("scp.sh cleanup"));
+  for (const upload of ["success", "failure"]) {
+    for (const receipt of ["success", "failure"]) {
+      let success = true;
+      const executed = [];
+      for (const [step, outcome] of [
+        [retry, upload],
+        [verify, receipt],
+        [deliver, "success"],
+        [cleanup, "success"],
+      ]) {
+        // GitHub adds success() when a condition has no status-check function.
+        if (!/always\(|cancelled\(/.test(step.if) && !success) continue;
+        const allowed = runInNewContext(
+          step.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
+          {
+            steps: {
+              verified: { outputs: { sha: "a".repeat(40) } },
+              transport: { outcome: "success" },
+              received: { outputs: { valid: "false" } },
+            },
+            always: () => true,
+          },
+        );
+        if (!allowed) continue;
+        executed.push(step);
+        if (outcome === "failure" && !step["continue-on-error"])
+          success = false;
+      }
+      const scenario = `upload=${upload} receipt=${receipt}`;
+      assert.ok(executed.includes(verify), scenario);
+      assert.equal(executed.includes(deliver), receipt === "success", scenario);
+      assert.ok(executed.includes(cleanup), scenario);
+      assert.equal(success, receipt === "success", scenario);
+    }
+  }
+});
+
 test("automatic deployment skips superseded main SHA while explicit rollback still works", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-ci-latest-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
