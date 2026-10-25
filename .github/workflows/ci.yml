@@ -47,12 +47,12 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test:deployment
-      - name: Verify real SSH transfer faults on an isolated loopback server
+      - name: Verify the SCP Action client on an isolated loopback SSH server
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq openssh-server > /dev/null
           sudo mkdir -p /run/sshd
-          node --test deploy/test/transfer.integration.mjs
+          node --test deploy/test/scp.integration.mjs
       - run: pnpm api:generate
       - run: git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
       - run: pnpm typecheck

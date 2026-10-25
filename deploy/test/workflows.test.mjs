@@ -312,143 +312,79 @@ test("assembled payload retains the TLS bind source at its Compose path", async 
   );
 });
 
-test("archive transfer is bounded, reuses complete copies and cleans partial ones", (t) => {
-  const directory = mkdtempSync(join(tmpdir(), "hehuoda-transfer-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const script = workflow("deploy").jobs.deploy.steps.find(
-    (step) => step.env?.DEPLOY_HOST,
-  ).run;
-  const transfer = script.slice(
-    script.indexOf("transfer() {"),
-    script.indexOf("# Measure the same SSH"),
+test("SCP uploads share pinned credentials and verification, with only one bounded retry", () => {
+  const deploy = workflow("deploy").jobs.deploy;
+  const steps = deploy.steps;
+  const uploads = steps.filter((step) =>
+    step.uses?.startsWith("appleboy/scp-action@"),
   );
-  const payload = join(directory, "payload.tar.gz");
-  writeFileSync(payload, "fixture payload");
-  const run = (scenario) =>
-    runBash(
-      `
-      set -euo pipefail
-      task_dir="$RUNNER_TEMP/private"
-      mkdir -p "$task_dir"
-      transport=(ssh)
-      ssh_args=()
-      target="fixture@example"
-      payload="$PAYLOAD"
-      digest=$(sha256sum "$payload" | cut -d' ' -f1)
-      bytes=$(wc -c < "$payload")
-      expected="$digest $bytes"
-      remote() { "\${transport[@]}" "\${ssh_args[@]}" "$target" "$1"; }
-      ssh() {
-        local command="\${*: -1}" count
-        if [[ "$command" == *".payload"* && "$command" == *cat* ]]; then
-          if [[ -f "$RUNNER_TEMP/remote.payload" ]]; then cat "$RUNNER_TEMP/remote.payload"; return 0; fi
-          return 1
-        fi
-        if [[ "$command" == *"cat >"* ]]; then
-          cat >/dev/null
-          count=0
-          [[ -f "$RUNNER_TEMP/transfers" ]] && count=$(cat "$RUNNER_TEMP/transfers")
-          count=$((count + 1))
-          echo "$count" > "$RUNNER_TEMP/transfers"
-          if [[ "$SCENARIO" == always-fail ]]; then return 1; fi
-          if [[ "$SCENARIO" == fail-once && "$count" == 1 ]]; then return 1; fi
-          return 0
-        fi
-        if [[ "$command" == *".payload"* && "$command" == *mv* ]]; then
-          printf '%s' "$expected" > "$RUNNER_TEMP/remote.payload"
-          return 0
-        fi
-        return 1
-      }
-      timeout() { shift 3; "$@"; }
-      sleep() { [[ "$1" == 30 ]] && command sleep 0.05; return 0; }
-      ${transfer}
-      transfer payload "$payload" "/remote/releases/\${SHA}/1-1"
-      `,
-      {
-        RUNNER_TEMP: directory.replaceAll("\\", "/"),
-        PAYLOAD: payload.replaceAll("\\", "/"),
-        SCENARIO: scenario,
-        SHA: "a".repeat(40),
-      },
+  assert.equal(uploads.length, 3);
+  for (const upload of uploads) {
+    assert.equal(
+      upload.uses,
+      "appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634",
     );
-  const transfers = () =>
-    existsSync(join(directory, "transfers"))
-      ? Number(readFileSync(join(directory, "transfers"), "utf8"))
-      : 0;
-  const reset = () => {
-    rmSync(join(directory, "transfers"), { force: true });
-    rmSync(join(directory, "remote.payload"), { force: true });
-  };
-
-  let result = run("fresh");
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(transfers(), 1, "a first transfer must send the payload once");
-
-  rmSync(join(directory, "transfers"), { force: true });
-  result = run("reuse");
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(transfers(), 0, "a complete remote copy must be reused");
-  assert.match(result.stdout, /status=reused/);
-
-  reset();
-  result = run("fail-once");
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(transfers(), 2, "a failed attempt must be retried exactly once");
-
-  reset();
-  result = run("always-fail");
-  assert.equal(result.status, 1, "transfer must give up after two attempts");
-  assert.equal(transfers(), 2);
-  assert.match(result.stderr, /status=transfer-failed attempts=2/);
-  assert.doesNotMatch(result.stdout + result.stderr, /fixture@example/);
+    assert.equal(upload.with.fingerprint, "${{ env.SCP_FINGERPRINT }}");
+    assert.equal(upload.with.password, "${{ secrets.DEPLOY_PASSWORD }}");
+    assert.equal(upload.with.key, "${{ secrets.DEPLOY_SSH_KEY }}");
+    assert.equal(upload.with.timeout, "30s");
+    assert.equal(upload.with.strip_components, 1);
+    assert.equal(upload.with.rm, undefined);
+    assert.equal(upload.with.debug, undefined);
+    assert.ok(upload.with.tar_tmp_path.includes("SCP_STAGING"));
+  }
+  assert.equal(uploads[0]["timeout-minutes"], 2);
+  assert.equal(uploads[1]["timeout-minutes"], 10);
+  assert.equal(uploads[2]["timeout-minutes"], 10);
+  assert.equal(uploads[1]["continue-on-error"], true);
+  assert.match(uploads[2].if, /steps.received.outputs.valid == 'false'/);
+  const index = (suffix) =>
+    steps.findIndex((step) => step.run?.endsWith("scp.sh " + suffix));
+  assert.ok(index("setup") < steps.indexOf(uploads[0]));
+  assert.ok(index("probe") > steps.indexOf(uploads[0]));
+  assert.ok(index("probe") < steps.indexOf(uploads[1]));
+  assert.ok(index("received") > steps.indexOf(uploads[1]));
+  assert.ok(index("received") < steps.indexOf(uploads[2]));
+  assert.ok(index("verify") > steps.indexOf(uploads[2]));
+  assert.ok(index("deliver") > index("verify"));
+  assert.match(steps[index("cleanup")].if, /always\(\)/);
+  assert.equal(steps[index("cleanup")]["timeout-minutes"], 2);
+  assert.doesNotMatch(
+    JSON.stringify(deploy),
+    /estimated_payload_seconds|insufficient-throughput|cat > \/dev\/null/,
+  );
 });
 
-test("a slow SSH probe rejects the archive before starting a full transfer", (t) => {
-  const directory = mkdtempSync(join(tmpdir(), "hehuoda-link-probe-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  writeFileSync(join(directory, "payload.tar.gz"), Buffer.alloc(2 * 1048576));
-  const script = workflow("deploy").jobs.deploy.steps.find(
-    (step) => step.env?.DEPLOY_HOST,
-  ).run;
-  const probe = script.slice(
-    script.indexOf("# Measure the same SSH"),
-    script.indexOf("transfer payload"),
-  );
-  for (const [scenario, expected] of [
-    ["fast", 0],
-    ["slow", 1],
-    ["failed", 1],
-  ]) {
-    const result = runBash(
-      `
-      set -euo pipefail
-      task_dir="$RUNNER_TEMP"
-      transport=(ssh)
-      ssh_args=()
-      target="fixture@example"
-      date() { if [[ -f "$RUNNER_TEMP/clock" ]]; then echo "$PROBE_END"; else touch "$RUNNER_TEMP/clock"; echo 0; fi; }
-      timeout() { shift 3; "$@"; }
-      ssh() { cat >/dev/null; [[ "$SCENARIO" != failed ]]; }
-      ${probe}
-      echo 'full-transfer-would-start'
-    `,
-      {
-        RUNNER_TEMP: directory.replaceAll("\\", "/"),
-        SCENARIO: scenario,
-        PROBE_END: scenario === "slow" ? "400" : "1",
+test("SCP failure and cancellation gates prevent delivery and still request staging cleanup", () => {
+  const steps = workflow("deploy").jobs.deploy.steps;
+  const retry = steps.find((step) => step.name?.includes("attempt 2"));
+  const received = steps.find((step) => step.id === "received");
+  const verify = steps.find((step) => step.run?.endsWith("scp.sh verify"));
+  const deliver = steps.find((step) => step.run?.endsWith("scp.sh deliver"));
+  const cleanup = steps.find((step) => step.run?.endsWith("scp.sh cleanup"));
+  const allowed = (step, success, cancelled, outcome, valid) => {
+    if (!/always\(|cancelled\(/.test(step.if) && !success) return false;
+    return runInNewContext(step.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
+      always: () => true,
+      cancelled: () => cancelled,
+      steps: {
+        verified: { outputs: { sha: "a".repeat(40) } },
+        transport: { outcome: "success" },
+        upload: { outcome },
+        received: { outputs: { valid } },
       },
-    );
-    rmSync(join(directory, "clock"), { force: true });
-    assert.equal(result.status, expected, result.stderr);
-    assert.equal(
-      result.stdout.includes("full-transfer-would-start"),
-      expected === 0,
-    );
-    assert.doesNotMatch(result.stdout + result.stderr, /fixture@example/);
-    if (scenario === "slow")
-      assert.match(result.stderr, /insufficient-throughput/);
+    });
+  };
+  assert.equal(allowed(received, false, false, "skipped", ""), false);
+  assert.equal(allowed(received, true, false, "failure", ""), true);
+  assert.equal(allowed(retry, true, false, "failure", "false"), true);
+  assert.equal(allowed(retry, true, false, "failure", "true"), false);
+  assert.equal(allowed(verify, true, false, "failure", "true"), true);
+  for (const cancelled of [false, true]) {
+    assert.equal(allowed(deliver, false, cancelled, "failure", "false"), false);
+    assert.equal(allowed(cleanup, false, cancelled, "failure", "false"), true);
   }
+  assert.equal(allowed(received, false, true, "failure", ""), false);
 });
 
 test("automatic deployment skips superseded main SHA while explicit rollback still works", (t) => {
@@ -488,7 +424,14 @@ test("automatic deployment skips superseded main SHA while explicit rollback sti
     assert.equal(existsSync(output), allowed, `${event}/${current}`);
   }
   const outputs = (sha, artifact) => ({
-    steps: { verified: { outputs: { sha, artifact } } },
+    steps: {
+      verified: { outputs: { sha, artifact } },
+      upload: { outcome: "success" },
+      received: { outputs: { valid: "false" } },
+      transport: { outcome: "success" },
+    },
+    always: () => true,
+    cancelled: () => false,
   });
   for (const step of deploy.steps.slice(
     deploy.steps.findIndex((step) => step.id === "verified") + 1,
@@ -498,10 +441,17 @@ test("automatic deployment skips superseded main SHA while explicit rollback sti
       "Checkout and SSH must be skipped without a verified SHA",
     );
     assert.equal(step.if.includes("outputs.sha"), true, step.name);
-    assert.equal(runInNewContext(step.if, outputs("", "")), false, step.name);
     assert.equal(
       runInNewContext(
-        step.if,
+        step.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
+        outputs("", ""),
+      ),
+      false,
+      step.name,
+    );
+    assert.equal(
+      runInNewContext(
+        step.if.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
         outputs("a".repeat(40), `release-archive-${"a".repeat(40)}-1`),
       ),
       true,
