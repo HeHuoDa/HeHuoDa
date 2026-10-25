@@ -309,3 +309,61 @@ test("登录后演示队伍里的本人显示真实昵称", async () => {
   await loggingOut;
   assert.equal(session.memberNickname(DEMO_PARTICIPANT.id, "旧"), "禾小苗");
 });
+
+test("已登录：退出时远端未确认，下拉内如实提示且本地已清除", async () => {
+  const platform = installPlatform();
+  setActivePinia(createPinia());
+  const { useAuthStore } = await import("../src/stores/auth.ts");
+  const auth = useAuthStore();
+  await loginAs(auth, platform);
+  const view = await mountOverview();
+  try {
+    await view.openMenu();
+    view.menuItem("退出登录").props.onClick();
+    await tick();
+    const logout = platform.requests.at(-1);
+    assert.equal(logout.url, "/api/v1/auth/logout");
+    logout.fail({ errMsg: "request:fail timeout" });
+    await tick();
+    await nextTick();
+
+    assert.equal(auth.authenticated, false, "本地状态已退出");
+    assert.equal(platform.storage.size, 0, "本地凭据已清除");
+    assert.match(view.text(), /远端会话未能确认撤销/, "如实说明远端状态");
+    assert.doesNotMatch(view.text(), /已退出登录/, "不伪称远端成功");
+    assert.ok(view.menuItem("微信登录"), "下拉回到未登录形态");
+  } finally {
+    view.app.unmount();
+  }
+});
+
+test("已登录：账号受限时下拉显示受限状态", async () => {
+  const platform = installPlatform();
+  setActivePinia(createPinia());
+  const { useAuthStore } = await import("../src/stores/auth.ts");
+  const auth = useAuthStore();
+  const restricted = { id: "u1", nickname: "微信用户", status: "restricted" };
+  const logging = auth.login();
+  await tick();
+  platform.requests[0].success({
+    statusCode: 200,
+    data: { ...credential, user: restricted },
+  });
+  await tick();
+  platform.requests[1].success({
+    statusCode: 200,
+    data: { ...profile(), user: restricted },
+  });
+  await logging;
+
+  const view = await mountOverview();
+  try {
+    assert.equal(auth.authenticated, true);
+    assert.equal(auth.accountStatus, "restricted");
+    await view.openMenu();
+    assert.match(view.text(), /账号受限 · 校园身份未核验/);
+    assert.doesNotMatch(view.text(), /账号正常/);
+  } finally {
+    view.app.unmount();
+  }
+});
