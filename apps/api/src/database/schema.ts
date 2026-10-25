@@ -226,6 +226,84 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
 });
+export const campusBindings = pgTable(
+  "campus_bindings",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    source: text().notNull(),
+    subjectHmac: text("subject_hmac").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.source] }),
+    unique("campus_bindings_source_subject_hmac_key").on(
+      t.source,
+      t.subjectHmac,
+    ),
+  ],
+);
+export const campusQualifications = pgTable("campus_qualifications", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  source: text().notNull(),
+  termId: text("term_id").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+export const campusProfiles = pgTable("campus_profiles", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  source: text().notNull(),
+  ciphertext: text().notNull(),
+  nonce: text().notNull(),
+  tag: text().notNull(),
+  keyId: text("key_id").notNull(),
+  version: integer().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+export const campusTransactions = pgTable("campus_transactions", {
+  id: text().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  sessionId: text("session_id").notNull(),
+  instanceId: text("instance_id").notNull(),
+  termId: text("term_id").notNull(),
+  status: text().notNull(),
+  operation: text(),
+  challengeVersion: text("challenge_version"),
+  reason: text(),
+  qualification: jsonb().$type<{
+    status: "valid";
+    termId: string;
+    verifiedAt: string;
+    validUntil: string;
+    source: string;
+  }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+export const campusAuditLogs = pgTable("campus_audit_logs", {
+  id: text().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  requestId: text("request_id").notNull(),
+  kind: text().notNull(),
+  reason: text(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+});
+export const campusRateBudgets = pgTable("campus_rate_budgets", {
+  id: text().primaryKey(),
+  events: jsonb().$type<number[]>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
 export const wechatIdentities = pgTable(
   "wechat_identities",
   {

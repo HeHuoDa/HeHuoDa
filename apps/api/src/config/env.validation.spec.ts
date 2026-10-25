@@ -1,6 +1,44 @@
 import { validateEnvironment } from "./env.validation.js";
 
 describe("validateEnvironment", () => {
+  it("校园核验默认关闭，开启时必须配置独立密钥和明确学期", () => {
+    expect(validateEnvironment({}).CAMPUS_VERIFICATION_ENABLED).toBe(false);
+    expect(() =>
+      validateEnvironment({ CAMPUS_VERIFICATION_ENABLED: true }),
+    ).toThrow();
+    const base = {
+      CAMPUS_VERIFICATION_ENABLED: true,
+      CAMPUS_SUBJECT_HMAC_KEY: Buffer.alloc(32, 1).toString("base64"),
+      CAMPUS_PROFILE_KEYS: JSON.stringify({
+        v1: Buffer.alloc(32, 2).toString("base64"),
+      }),
+      CAMPUS_PROFILE_KEY_ID: "v1",
+      CAMPUS_TERMS: JSON.stringify([
+        {
+          id: "synthetic",
+          startAt: "2026-09-01T00:00:00+08:00",
+          endAt: "2027-02-01T00:00:00+08:00",
+        },
+      ]),
+    };
+    expect(validateEnvironment(base).CAMPUS_VERIFICATION_ENABLED).toBe(true);
+    expect(() =>
+      validateEnvironment({
+        ...base,
+        CAMPUS_TERMS: JSON.stringify([
+          { id: "bad", startAt: "2026-09-01", endAt: "2027-02-01" },
+        ]),
+      }),
+    ).toThrow();
+    expect(() =>
+      validateEnvironment({
+        ...base,
+        CAMPUS_PROFILE_KEYS: JSON.stringify({
+          v1: base.CAMPUS_SUBJECT_HMAC_KEY,
+        }),
+      }),
+    ).toThrow();
+  });
   it("requires a database in production and defaults documentation to private", () => {
     expect(() => validateEnvironment({ NODE_ENV: "production" })).toThrow();
     const config = validateEnvironment({

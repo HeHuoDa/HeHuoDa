@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { campusSettings } from "../campus/campus.config.js";
 import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
 import {
   AUDIT_RETENTION_DAYS_DEFAULT,
@@ -6,6 +7,7 @@ import {
 } from "../auth/auth.constants.js";
 
 export interface EnvironmentVariables {
+  CAMPUS_VERIFICATION_ENABLED: boolean;
   NODE_ENV: "development" | "test" | "production";
   PORT: number;
   HOST: string;
@@ -28,6 +30,14 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object({
+  CAMPUS_VERIFICATION_ENABLED: Joi.boolean().default(false),
+  CAMPUS_POLICY_VERSION: Joi.number().integer().min(1).default(1),
+  CAMPUS_RATE_SUBMIT_USER: Joi.number().integer().min(1).default(5),
+  CAMPUS_RATE_SUBMIT_SOURCE: Joi.number().integer().min(1).default(100),
+  CAMPUS_RATE_SUBMIT_GLOBAL: Joi.number().integer().min(1).default(500),
+  CAMPUS_RATE_CHALLENGE_USER: Joi.number().integer().min(1).default(5),
+  CAMPUS_RATE_CHALLENGE_SOURCE: Joi.number().integer().min(1).default(100),
+  CAMPUS_RATE_CHALLENGE_GLOBAL: Joi.number().integer().min(1).default(500),
   NODE_ENV: Joi.string()
     .valid("development", "test", "production")
     .default("development"),
@@ -118,5 +128,6 @@ export function validateEnvironment(
     throw error;
   }
 
+  campusSettings(value);
   return value as EnvironmentVariables;
 }

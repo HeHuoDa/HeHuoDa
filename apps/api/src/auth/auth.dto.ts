@@ -63,10 +63,10 @@ export class CredentialResponseDto {
 
 export class CampusStatusDto {
   @ApiProperty({
-    enum: ["unverified"],
-    description: "校园核验状态；核验模块接入前恒为 unverified",
+    enum: ["unverified", "valid", "expired", "revoked"],
+    description: "校园账号核验状态；不证明学生、实名或在读",
   })
-  status!: "unverified";
+  status!: "unverified" | "valid" | "expired" | "revoked";
   // nullable 字段必须显式声明 type，否则 openapi-typescript 生成 Record<string, never>。
   @ApiPropertyOptional({ type: String, nullable: true }) termId: string | null =
     null;

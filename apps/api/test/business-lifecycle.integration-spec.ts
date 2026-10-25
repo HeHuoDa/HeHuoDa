@@ -1,3 +1,5 @@
+import { CampusService } from "../src/campus/campus.service.js";
+import { SchoolAuthClient } from "@hehuoda/sicau-connectors/auth";
 import { ConfigService } from "@nestjs/config";
 import { AuthClock } from "../src/auth/auth-clock.js";
 import { AuthRateLimiter } from "../src/auth/auth-rate-limiter.js";
@@ -29,6 +31,12 @@ describe("退出与事务审计", () => {
       new StubWechatProvider(),
       clock,
       f.lifecycle,
+      new CampusService(
+        f.database,
+        new ConfigService(),
+        { now: () => f.now },
+        new SchoolAuthClient(),
+      ),
     );
     await f.isolated.pool
       .query(`CREATE FUNCTION reject_audit() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'synthetic audit failure'; END $$ LANGUAGE plpgsql;
@@ -77,6 +85,12 @@ describe("退出与事务审计", () => {
       new StubWechatProvider(),
       clock,
       f.lifecycle,
+      new CampusService(
+        f.database,
+        new ConfigService(),
+        { now: () => f.now },
+        new SchoolAuthClient(),
+      ),
     );
     const sessions = f.registry.provider("school-sessions")!.schoolSessions!;
     const original = sessions.destroy;
