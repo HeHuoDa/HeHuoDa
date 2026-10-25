@@ -67,9 +67,13 @@ export class CampusStatusDto {
     description: "校园核验状态；核验模块接入前恒为 unverified",
   })
   status!: "unverified";
-  @ApiPropertyOptional({ nullable: true }) termId: string | null = null;
-  @ApiPropertyOptional({ nullable: true }) verifiedAt: string | null = null;
-  @ApiPropertyOptional({ nullable: true }) validUntil: string | null = null;
+  // nullable 字段必须显式声明 type，否则 openapi-typescript 生成 Record<string, never>。
+  @ApiPropertyOptional({ type: String, nullable: true }) termId: string | null =
+    null;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  verifiedAt: string | null = null;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  validUntil: string | null = null;
 }
 
 export class AvailabilityDto {

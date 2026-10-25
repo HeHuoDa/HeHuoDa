@@ -147,7 +147,8 @@ export interface paths {
         /** 获取当前账号、校园核验状态与能力开放情况 */
         get: operations["AuthController_me"];
         put?: never;
-        post?: never;
+        /** 修改本人昵称（微信小程序端别名，wx.request 不支持 PATCH） */
+        post: operations["AuthController_updateProfileForWechat"];
         delete?: never;
         options?: never;
         head?: never;
@@ -333,9 +334,9 @@ export interface components {
              * @enum {string}
              */
             status: "unverified";
-            termId?: Record<string, never> | null;
-            verifiedAt?: Record<string, never> | null;
-            validUntil?: Record<string, never> | null;
+            termId?: string | null;
+            verifiedAt?: string | null;
+            validUntil?: string | null;
         };
         AvailabilityDto: {
             /**
@@ -675,6 +676,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileResponseDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AuthController_updateProfileForWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
                 };
             };
             401: {

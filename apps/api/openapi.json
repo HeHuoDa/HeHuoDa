@@ -526,6 +526,71 @@
         "tags": [
           "认证"
         ]
+      },
+      "post": {
+        "operationId": "AuthController_updateProfileForWechat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "修改本人昵称（微信小程序端别名，wx.request 不支持 PATCH）",
+        "tags": [
+          "认证"
+        ]
       }
     }
   },
@@ -1143,15 +1208,15 @@
             "description": "校园核验状态；核验模块接入前恒为 unverified"
           },
           "termId": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "verifiedAt": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           },
           "validUntil": {
-            "type": "object",
+            "type": "string",
             "nullable": true
           }
         },

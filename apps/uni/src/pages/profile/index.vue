@@ -6,6 +6,7 @@ import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
 import ProfileApplications from "../../components/ProfileApplications.vue";
 import ProfileTeams from "../../components/ProfileTeams.vue";
 import ProfileOverview from "../../components/ProfileOverview.vue";
+import ProfileAccountPanel from "../../components/ProfileAccountPanel.vue";
 import FormButton from "../../components/FormButton.vue";
 import { useSessionStore } from "../../stores/session";
 import {
@@ -243,7 +244,11 @@ useH5Query(
           >返回个人资料</FormButton
         >
       </template>
-      <ProfileOverview v-else />
+      <!-- 真实账号与示例资料分区展示：上方是平台账号，下方始终标注为示例。 -->
+      <template v-else>
+        <ProfileAccountPanel />
+        <ProfileOverview />
+      </template>
     </view>
   </view>
 </template>

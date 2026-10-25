@@ -431,3 +431,13 @@ H5 迁移后需回归模态隔离、遮罩不关闭、Escape 丢弃草稿、焦�
 - `h5-router.ts` 仅装饰 uni 的既有 router；`use-h5-query.ts` 同步列表与个人中心当前参数，筛选／页码／分区替换当前历史项，详情导航仍新增历史项并沿 uni 恢复滚动。DCloud 当前 H5 会在显式导航中再次编码、在 onLoad 再次解码；适配器只修正本次显式导航，页面从原地址解析一次，避免百分号和编码 ID 被重复处理。合法附加参数和通知稳定 ID 保留，定位仍由原有控制器校验。
 - 依据 [manifest H5 路由配置](https://uniapp.dcloud.net.cn/collocation/manifest.html)、[页面导航 API](https://uniapp.dcloud.net.cn/api/router.html) 和 [Vue Router 导航守卫](https://router.vuejs.org/guide/advanced/navigation-guards.html)；启动时序与再编码行为还结合锁定 DCloud 运行时代码和本地浏览器验证。浏览器 API 均在 H5 编译分支内；微信继续使用 switchTab、页面栈、原生标题和一次性 Pinia 交接，H5 成功不推断微信运行兼容。维护成本中等，后续升级 DCloud 时须重跑地址、显式导航、前进后退与通知定位回归。
 - 本地静态预览提供 `preview:h5`，只托管 uni 产物、不代理 API；真实公开 API／PostgreSQL、微信页面栈、应用前后台、设备滚动与安全区验证须分别记录。微信开发者工具可按 PR 指引人工验收，模拟器及真机剩余范围交 #85，生产部署与回滚交 #88。
+
+## Issue #132：微信一键登录与真实账号状态
+
+- 平台分支：小程序登录页挂 `components/WechatLoginPanel.vue`（微信一键登录），H5 继续挂 `AuthForm` 并保留“账号服务暂未开放”反馈；注册页在小程序 `onLoad` 自动 `redirectTo` 统一登录页，H5 保留原注册表单。H5 不调用 `uni.login`、不建立登录态、不保存凭据，公开浏览与演示不受影响。
+- 凭据边界：访问凭据只在内存（`src/auth/auth-session.ts`）；刷新凭据只写小程序存储（键 `hehuoda.auth.refresh`，`src/auth/platform-storage.ts` 按 `uniPlatform` 选择实现，H5 为空实现）；冷启动只凭刷新凭据恢复，`App.vue` 在 `onLaunch` 触发、`onShow` 检查会话绝对到期。不持久化微信 code、学校凭据或访问凭据。
+- 请求层：`api/http.ts` 只对“已带凭据且被明确拒绝”的 401 刷新并重发一次，并发 401 共享同一次刷新；无凭据的 401（登录码无效）、网络超时与结果不明的写请求都不重放；等待刷新期间取消仍按 `cancelled` 结算。刷新失败或旧刷新凭据被判重放时清本地并要求重新微信登录，不循环提交旧凭据。
+- 跨端契约差异：`wx.request` 的 method 不接受 PATCH（H5 与小程序共用 `uni.request` 类型），后端因此在 #131 的 `PATCH /auth/me` 之外补 `POST /auth/me` 别名，客户端只用 GET/POST；OpenAPI 与生成类型同步，未手写第二套类型。
+- 认证代次：登录成功、退出、账号受限（401/403）、会话到期与冷启动恢复都提升代次并取消在途资料请求，旧账号的迟到回调不写回；昵称入口（`components/ProfileAccountPanel.vue`）只显示 `/auth/me` 返回的真实账号与校园状态，与下方示例资料分区展示，演示学籍与联系方式不写入账号。
+- 验证记录：`node --test` 283 项通过（新增 23 项覆盖并发单飞刷新、迟到响应、退出远端失败、昵称校验、协议确认与连点）；`lint`、`typecheck`、`format:check` 通过；`build` 双端通过（H5 + mp-weixin，未配置 AppID，touristappid 仅用于编译检查）。H5 静态预览用无头 Chrome（CDP，DPR 2、移动模拟）在 320/375/390/430/1440 像素宽度实测 5 个状态——登录页初始态、空提交校验态、合法提交后的「认证服务暂未开放」反馈态、注册页、个人中心未登录态：文档与页面内容区 `scrollWidth` 均等于视口宽，可见元素无横向越界（`uni-app` 自身用于测量的隐藏节点已排除）。交互态必须用真实鼠标事件触发，合成 `click()` 不触发 `uni-view` 上的处理。截图与脚本留在本地 `apps/uni/dist/verify`，不提交。
+- 未验证：微信开发者工具与 iOS/Android 真机未运行（本机未安装微信开发者工具）；小程序端的微信授权弹窗、长昵称、键盘、安全区、系统大字号与读屏仍沿 #85，不能用 H5 结果推断。真实微信 AppID/AppSecret、HTTPS 合法域名与协议页面未接入，故不声称生产可用。真实接口联调需隔离后端环境（`WECHAT_LOGIN_ENABLED` 与替身 provider）。

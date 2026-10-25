@@ -1,25 +1,80 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { existsSync } from "node:fs";
+import { extname } from "node:path";
 import { preprocess } from "./component-host.mjs";
 
 const read = (path) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-test("登录注册页只组合品牌布局与共用表单，不各自复制规则", () => {
-  for (const page of ["pages/auth/login.vue", "pages/auth/register.vue"]) {
-    const source = read(page);
-    // 页面只负责挂载，校验与提交行为只在 AuthForm 中实现一份。
-    assert.doesNotMatch(
-      source,
-      /AUTH_MESSAGES|validateField|validateValues/,
-      `${page} 不应复制校验规则`,
-    );
-    assert.match(source, /<AuthForm mode="(login|register)" \/>/, page);
-    assert.match(source, /<AuthBrandLayout>/, page);
-    // 占位内容随本票移除，不再宣称“待开发”。
-    assert.doesNotMatch(source, /待开发|将在后续任务迁移/, page);
+const loader = registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith(".") && !extname(specifier)) {
+      const url = new URL(`${specifier}.ts`, context.parentURL);
+      if (existsSync(url)) return next(url.href, context);
+    }
+    return next(specifier, context);
+  },
+});
+after(() => loader.deregister());
+
+test("登录页按平台分支：小程序挂微信面板，H5 保留未开放表单", () => {
+  const source = read("pages/auth/login.vue");
+  const weixin = preprocess(source, "MP-WEIXIN");
+  const h5 = preprocess(source, "H5");
+  assert.match(weixin, /<WechatLoginPanel :return-to="returnTo" \/>/);
+  assert.doesNotMatch(weixin, /<AuthForm mode="login" \/>/);
+  assert.match(h5, /<AuthForm mode="login" \/>/);
+  assert.doesNotMatch(h5, /WechatLoginPanel/);
+  // 页面只负责组合，不复制表单校验或登录实现。
+  for (const platform of [weixin, h5]) {
+    assert.match(platform, /<AuthBrandLayout>/);
+    assert.doesNotMatch(platform, /AUTH_MESSAGES|validateField|validateValues/);
+    assert.doesNotMatch(platform, /待开发|将在后续任务迁移/);
   }
+});
+
+test("注册页在小程序自动跳统一登录页，H5 保留原注册表单", () => {
+  const source = read("pages/auth/register.vue");
+  const weixin = preprocess(source, "MP-WEIXIN");
+  const h5 = preprocess(source, "H5");
+  // 跳转调用写在 onLoad 内，H5 分支只保留表单。
+  assert.match(weixin, /\n {2}redirectToLogin\(\);/);
+  assert.doesNotMatch(weixin, /<AuthForm mode="register" \/>/);
+  assert.match(h5, /<AuthForm mode="register" \/>/);
+  assert.doesNotMatch(h5, /\n {2}redirectToLogin\(\);/);
+  assert.match(h5, /<AuthBrandLayout>/);
+});
+
+test("统一登录页地址只携带合法返回目标", async () => {
+  // 导航模块内部使用无扩展名导入，需在 loader 注册后动态加载。
+  const { withQuery } = await import("../src/navigation/navigate.ts");
+  const { routePath } = await import("../src/navigation/routes.ts");
+  assert.equal(
+    withQuery(routePath("login"), { returnTo: "team-new" }),
+    "/pages/auth/login?returnTo=team-new",
+  );
+  assert.equal(withQuery(routePath("login")), "/pages/auth/login");
+});
+
+test("微信登录面板不使用 DOM、浏览器存储与浏览器表单", () => {
+  const weixin = preprocess(
+    read("components/WechatLoginPanel.vue"),
+    "MP-WEIXIN",
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+  assert.doesNotMatch(
+    weixin,
+    /\b(?:document|window|localStorage|sessionStorage)\s*\.|querySelector|<form|showModal|history\./,
+  );
+  // 只允许跨端能力，不直接调用微信专有登录接口或索取手机号/头像。
+  assert.doesNotMatch(
+    weixin,
+    /wx\.login|wx\.request|getUserProfile|getPhoneNumber/,
+  );
 });
 
 test("认证表单在微信分支不使用 DOM 查询、浏览器表单与 dialog", () => {

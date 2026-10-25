@@ -141,13 +141,22 @@ describe("认证 HTTP 契约", () => {
     );
     expect(patched.statusCode).toBe(200);
     expect(patched.json().user.nickname).toBe("禾伙搭队长");
+    // POST 是同一处理器的微信小程序端别名（wx.request 不支持 PATCH）。
+    const aliased = await test.request(
+      "POST",
+      "auth/me",
+      { nickname: "禾伙搭队长二号" },
+      bearer(first.accessToken),
+    );
+    expect(aliased.statusCode).toBe(200);
+    expect(aliased.json().user.nickname).toBe("禾伙搭队长二号");
     const reread = await test.request(
       "GET",
       "auth/me",
       undefined,
       bearer(first.accessToken),
     );
-    expect(reread.json().user.nickname).toBe("禾伙搭队长");
+    expect(reread.json().user.nickname).toBe("禾伙搭队长二号");
 
     for (const nickname of ["", "   ", "x".repeat(21)])
       expect(
@@ -186,7 +195,7 @@ describe("认证 HTTP 契约", () => {
           bearer(first.accessToken),
         )
       ).json().user.nickname,
-    ).toBe("禾伙搭队长");
+    ).toBe("禾伙搭队长二号");
   });
 
   it("账号受限后旧凭据立即不可访问，退出仍可清理", async () => {
