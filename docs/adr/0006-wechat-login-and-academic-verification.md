@@ -42,3 +42,4 @@
 ## 实施记录
 
 - 2026-10-24：#131 落地五接口（`POST /auth/wechat/login`、`POST /auth/refresh`、`POST /auth/logout`、`GET /auth/me`、`PATCH /auth/me`）、`0004_auth.sql` 迁移（users、wechat_identities、auth_sessions、auth_tokens、auth_audit_logs、auth_rate_limits）、离线微信替身与真实兑换适配器、默认关闭的 `WECHAT_LOGIN_ENABLED` 及限流/审计/到期清理；契约经 OpenAPI 生成供 #132 消费。真实微信联调（AppID/AppSecret/HTTPS 域名/真机）为环境验收条件，未完成前不声称生产可用。
+- 2026-10-25：#132 落地小程序端接入：微信一键登录（登录前确认协议版本）、刷新凭据只写小程序存储、访问凭据仅内存、冷启动恢复、并发 401 单次刷新与写请求不盲目重放、认证代次隔离账号切换的迟到响应、真实账号昵称入口与退出清理。因 `wx.request` 不接受 PATCH，新增 `POST /auth/me` 别名（与 PATCH 共用服务与校验）并在 OpenAPI 中声明；H5 保留公开浏览与“服务未开放”反馈，不调用微信接口、不保存凭据。开发者工具与真机仍未验证。
