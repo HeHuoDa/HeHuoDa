@@ -423,3 +423,16 @@ test("不可见验证码不能提交，换图后才解除图片失败限制", as
   await pending;
   assert.equal(f.state.imageFailed, false);
 });
+
+test("连续取消只发送一次撤销请求", async () => {
+  const f = fixture();
+  await f.load();
+  await f.start();
+  const pending = f.controller.cancel();
+  void f.controller.cancel();
+  assert.equal(f.calls.filter((call) => call.name === "cancel").length, 1);
+  f.last("cancel").resolve(
+    transaction({ status: "cancelled", challenge: undefined }),
+  );
+  await pending;
+});

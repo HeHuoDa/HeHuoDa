@@ -82,6 +82,7 @@ watch(
   },
 );
 function retry() {
+  if (state.pending) return;
   controller.reset();
   void controller.show();
 }

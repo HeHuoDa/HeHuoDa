@@ -262,6 +262,7 @@ export function createCampusController(
     if (current(at, account) && state.uncertain) await query();
   }
   async function cancel() {
+    if (state.pending === "cancelling") return;
     if (!active || !state.transaction) {
       clearSecrets();
       return;
