@@ -38,6 +38,7 @@ export interface ResourceRelationship {
   isCaptain: boolean;
   contact?: {
     ownerId: string;
+    sameTeam: boolean;
     viewerIsMember: boolean;
     ownerIsMember: boolean;
     granted: boolean;

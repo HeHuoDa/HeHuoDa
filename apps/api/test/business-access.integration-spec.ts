@@ -82,6 +82,15 @@ describe("服务端业务权限与生命周期", () => {
       status: 403,
     });
   });
+  it("拒绝可能复用旧快照的事务隔离级别", async () => {
+    await expect(
+      f.database.db.transaction(
+        (tx) =>
+          f.policy.authorize(tx, actor.accessToken, "applyToTeam", owner.id),
+        { isolationLevel: "repeatable read" },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+  });
   it("有效资格不能替代资源规则，私人资源缺失返回404", async () => {
     await f.change(async (tx) => {
       await tx.execute(
@@ -112,6 +121,7 @@ describe("服务端业务权限与生命周期", () => {
   });
   it.each([
     "viewer-member",
+    "different-team",
     "owner-member",
     "grant",
     "owner-status",
@@ -119,6 +129,10 @@ describe("服务端业务权限与生命周期", () => {
   ])("联系方式重新读取 %s，不使用旧授权缓存", async (condition) => {
     await authorize("readMemberContact");
     await f.change(async (tx) => {
+      if (condition === "different-team")
+        await tx.execute(
+          sql`update test_business_state set same_team = false where user_id = ${actor.id}`,
+        );
       if (condition === "viewer-member")
         await tx.execute(
           sql`update test_business_state set member = false where user_id = ${actor.id}`,
@@ -161,7 +175,7 @@ describe("服务端业务权限与生命周期", () => {
       (await authorize("applyToTeam", owner.accessToken, owner.id)).user.id,
     ).toBe(owner.id);
     await expect(authorize("applyToTeam")).rejects.toMatchObject({
-      status: 403,
+      status: 401,
     });
   });
   it.each(["qualification", "account", "logout"])(
@@ -203,7 +217,7 @@ describe("服务端业务权限与生命周期", () => {
         );
       });
       const rejected = expect(business).rejects.toMatchObject({
-        status: kind === "logout" ? 401 : 403,
+        status: kind === "qualification" ? 403 : 401,
       });
       await started.promise;
       release.release();
@@ -248,6 +262,48 @@ describe("服务端业务权限与生命周期", () => {
     ).rejects.toThrow("audit failed");
     await authorize("readMemberContact");
     await f.change((tx) => f.lifecycle.revoke(tx, owner.id, f.now));
+    await expect(authorize("readMemberContact")).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("参与者检查、撤权或清理失败向上传播，整体回滚后可安全重试", async () => {
+    let phase: "check" | "revoke" | "cleanup" | null = "check";
+    const fail = async (current: typeof phase) => {
+      if (phase === current) throw new Error("participant failed");
+    };
+    f.registry.register({
+      id: "failure-participant",
+      kind: "test",
+      capabilities: [],
+      lifecycle: {
+        check: () => fail("check"),
+        revoke: () => fail("revoke"),
+        cleanup: () => fail("cleanup"),
+      },
+    });
+    await f.change(async (tx) => {
+      await tx.execute(
+        sql`update test_business_state set captain = false where user_id = ${owner.id}`,
+      );
+    });
+    for (const current of ["check", "revoke", "cleanup"] as const) {
+      phase = current;
+      await expect(
+        f.change((tx) =>
+          current === "check"
+            ? f.lifecycle.checkDeletion(tx, owner.id)
+            : f.lifecycle[current](tx, owner.id, f.now),
+        ),
+      ).rejects.toThrow("participant failed");
+      await authorize("readMemberContact");
+      expect(
+        await f.repository.findActiveAccess(owner.accessToken, f.now),
+      ).toBeDefined();
+    }
+    phase = null;
+    await f.change((tx) => f.lifecycle.cleanup(tx, owner.id, f.now));
+    await f.change((tx) => f.lifecycle.cleanup(tx, owner.id, f.now));
     await expect(authorize("readMemberContact")).rejects.toMatchObject({
       status: 404,
     });

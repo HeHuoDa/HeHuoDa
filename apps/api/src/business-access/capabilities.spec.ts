@@ -1,5 +1,5 @@
 import { CapabilityRegistry } from "./capabilities.js";
-import type { DataModule } from "./ports.js";
+import type { Capability, DataModule } from "./ports.js";
 
 const authModule = (): DataModule => ({
   id: "auth",
@@ -45,5 +45,52 @@ describe("敏感业务能力门禁", () => {
     const registry = new CapabilityRegistry();
     registry.seal(false);
     expect(() => registry.register(authModule())).toThrow("已封闭");
+  });
+  it("认证模式也不能漏注册清单中已持久化的模块", () => {
+    const registry = new CapabilityRegistry();
+    expect(() => registry.seal(false, ["auth"])).toThrow(
+      "持久模块未注册: auth",
+    );
+    registry.register(authModule());
+    expect(() => registry.seal(false, ["auth"])).not.toThrow();
+  });
+  it.each<Capability>([
+    "campus",
+    "resources",
+    "contact-revocation",
+    "business-cleanup",
+    "governance",
+    "school-sessions",
+  ])("缺少 %s 时不能启用", (capability) => {
+    const registry = new CapabilityRegistry(true);
+    const capabilities: Capability[] = [
+      "campus",
+      "resources",
+      "contact-revocation",
+      "business-cleanup",
+      "governance",
+      "school-sessions",
+    ];
+    registry.register({
+      ...authModule(),
+      kind: "test",
+      capabilities: capabilities.filter((value) => value !== capability),
+      campus:
+        capability === "campus"
+          ? undefined
+          : { read: async () => ({ status: "unavailable", validUntil: null }) },
+      resources:
+        capability === "resources"
+          ? undefined
+          : {
+              read: async () => undefined,
+              hasActiveCaptainTeam: async () => false,
+            },
+      schoolSessions:
+        capability === "school-sessions"
+          ? undefined
+          : { destroy: async () => {} },
+    });
+    expect(() => registry.assertReady(true)).toThrow(capability);
   });
 });

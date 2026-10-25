@@ -307,6 +307,39 @@ export class AuthRepository {
       );
   }
 
+  async assertCurrentContext(
+    tx: AccessTransaction,
+    access: AccessContext,
+    now: Date,
+  ): Promise<void> {
+    await lockAccessTransaction(tx);
+    const [session] = await tx
+      .select({
+        userId: authSessions.userId,
+        revokedAt: authSessions.revokedAt,
+        absoluteExpiresAt: authSessions.absoluteExpiresAt,
+        consumedAt: authTokens.consumedAt,
+        accessExpiresAt: authTokens.accessExpiresAt,
+      })
+      .from(authSessions)
+      .innerJoin(authTokens, eq(authTokens.sessionId, authSessions.id))
+      .where(
+        and(
+          eq(authSessions.id, access.sessionId),
+          eq(authTokens.generation, access.generation),
+        ),
+      );
+    if (
+      !session ||
+      session.userId !== access.user.id ||
+      session.revokedAt ||
+      session.consumedAt ||
+      now >= session.absoluteExpiresAt ||
+      now >= session.accessExpiresAt
+    )
+      throw createApiError(401, "INVALID_SESSION", "登录状态已失效");
+  }
+
   async updateNickname(
     userId: string,
     nickname: string,

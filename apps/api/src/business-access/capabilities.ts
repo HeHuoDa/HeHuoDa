@@ -79,7 +79,10 @@ export class CapabilityRegistry {
       throw new Error(`敏感业务缺少能力: ${missing.join(", ")}`);
   }
 
-  seal(enabled: boolean): void {
+  seal(enabled: boolean, expectedModuleIds: readonly string[] = []): void {
+    const missing = expectedModuleIds.filter((id) => !this.modules.has(id));
+    if (missing.length)
+      throw new Error(`持久模块未注册: ${missing.join(", ")}`);
     this.assertReady(enabled);
     this.sealed = true;
   }

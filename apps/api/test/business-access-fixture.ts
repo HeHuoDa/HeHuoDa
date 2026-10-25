@@ -6,6 +6,7 @@ import { generateTokenPair } from "../src/auth/auth-token.js";
 import { BusinessPolicy } from "../src/business-access/business-policy.service.js";
 import { CapabilityRegistry } from "../src/business-access/capabilities.js";
 import { AccountLifecycle } from "../src/business-access/lifecycle.service.js";
+import { authDataModule } from "../src/business-access/auth-data-module.js";
 import type {
   CampusQualification,
   DataModule,
@@ -28,11 +29,13 @@ export async function businessFixture() {
   clock.now = () => new Date(now);
   const config = new ConfigService({ SENSITIVE_BUSINESS_ENABLED: true });
   const registry = new CapabilityRegistry(true);
+  registry.register(authDataModule());
   await isolated.pool.query(`CREATE TABLE test_business_state (
     user_id text PRIMARY KEY, qualification text NOT NULL DEFAULT 'valid',
     valid_until timestamptz NOT NULL DEFAULT '2026-11-01T00:00:00Z',
     captain boolean NOT NULL DEFAULT true, member boolean NOT NULL DEFAULT true,
-    granted boolean NOT NULL DEFAULT true, allowed boolean NOT NULL DEFAULT true
+    granted boolean NOT NULL DEFAULT true, allowed boolean NOT NULL DEFAULT true,
+    same_team boolean NOT NULL DEFAULT true
   )`);
   const read = async (tx: AccessTransaction, userId: string) =>
     (
@@ -72,6 +75,7 @@ export async function businessFixture() {
           isCaptain: actor.captain === true,
           contact: {
             ownerId: resourceId,
+            sameTeam: actor.same_team === true,
             viewerIsMember: actor.member === true,
             ownerIsMember: owner.member === true,
             granted: owner.granted === true,

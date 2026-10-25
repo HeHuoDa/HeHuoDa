@@ -99,11 +99,14 @@ export class BusinessPolicy {
       ((captainActions as readonly string[]).includes(action) &&
         !relationship.isCaptain)
     )
-      throw createApiError(403, "RESOURCE_FORBIDDEN", "没有操作权限");
+      throw action === "readMemberContact"
+        ? createApiError(404, "RESOURCE_NOT_FOUND", "资源不可用")
+        : createApiError(403, "RESOURCE_FORBIDDEN", "没有操作权限");
     if (action === "readMemberContact") {
       const contact = relationship.contact;
       if (
         !contact ||
+        !contact.sameTeam ||
         !contact.viewerIsMember ||
         !contact.ownerIsMember ||
         !contact.granted
@@ -120,6 +123,7 @@ export class BusinessPolicy {
       if (
         qualification.status !== "valid" ||
         !qualification.validUntil ||
+        !Number.isFinite(qualification.validUntil.getTime()) ||
         qualification.validUntil <= now
       )
         throw createApiError(404, "RESOURCE_NOT_FOUND", "资源不可用");
@@ -135,7 +139,9 @@ export class BusinessPolicy {
     const qualification = await this.qualification(tx, userId);
     const status =
       qualification.status === "valid" &&
-      (!qualification.validUntil || qualification.validUntil <= now)
+      (!qualification.validUntil ||
+        !Number.isFinite(qualification.validUntil.getTime()) ||
+        qualification.validUntil <= now)
         ? "expired"
         : qualification.status;
     if (status !== "valid")

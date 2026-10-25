@@ -10,6 +10,7 @@ import { testDatabase } from "./competition-fixture.js";
 
 const ENV_KEYS = [
   "DATABASE_URL",
+  "SENSITIVE_BUSINESS_ENABLED",
   "WECHAT_LOGIN_ENABLED",
   "WECHAT_LOGIN_ADAPTER",
   "WECHAT_APP_ID",
@@ -23,6 +24,7 @@ const ENV_KEYS = [
 
 // 默认开启登录并使用离线替身；限流预算放宽，专项测试按需收紧。
 const BASE_ENV: Record<string, string> = {
+  SENSITIVE_BUSINESS_ENABLED: "false",
   WECHAT_LOGIN_ENABLED: "true",
   WECHAT_LOGIN_ADAPTER: "stub",
   WECHAT_APP_ID: "wxtestappid1234567",
@@ -54,16 +56,30 @@ export async function authTestApp(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   );
   Object.assign(process.env, BASE_ENV, env, { DATABASE_URL: db.url });
+  const restoreEnvironment = () => {
+    for (const key of ENV_KEYS) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
 
   const { AppModule } = await import("../src/app.module.js");
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
-    { logger: false },
+    { logger: false, abortOnError: false },
   );
-  configureApp(app);
-  await app.init();
-  await app.getHttpAdapter().getInstance().ready();
+  try {
+    configureApp(app);
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  } catch (error) {
+    await app.close();
+    await db.close();
+    restoreEnvironment();
+    throw error;
+  }
   const instance = app.getHttpAdapter().getInstance();
 
   const test: AuthTestApp = {
@@ -83,11 +99,7 @@ export async function authTestApp(
     async close() {
       await app.close();
       await db.close();
-      for (const key of ENV_KEYS) {
-        const value = previous[key];
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
+      restoreEnvironment();
     },
   };
   return test;

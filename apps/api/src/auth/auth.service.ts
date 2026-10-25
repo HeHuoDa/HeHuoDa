@@ -18,6 +18,7 @@ import { generateTokenPair, hashToken } from "./auth-token.js";
 import { AuthRateLimiter, windowStart } from "./auth-rate-limiter.js";
 import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { createApiError } from "../common/api-error.js";
+import { AccountLifecycle } from "../business-access/lifecycle.service.js";
 
 export interface RequestContext {
   requestId: string;
@@ -52,6 +53,7 @@ export class AuthService {
     private readonly rateLimiter: AuthRateLimiter,
     @Inject(WECHAT_PROVIDER) private readonly provider: WechatProvider,
     private readonly clock: AuthClock,
+    private readonly lifecycle: AccountLifecycle,
   ) {}
 
   async wechatLogin(
@@ -254,15 +256,25 @@ export class AuthService {
 
   // 退出只要求会话仍然有效（含受限账号），保证客户端总能清理远端会话。
   async logout(access: AccessContext, requestId: string): Promise<void> {
-    const now = this.clock.now();
-    await this.repository.revokeSession(access.sessionId, "logout", now);
-    await this.repository.recordAudit({
-      kind: "session_revoked",
+    await this.repository.withAccessTransaction(async (tx) => {
+      const now = this.clock.now();
+      await this.repository.assertCurrentContext(tx, access, now);
+      await this.repository.revokeSession(access.sessionId, "logout", now, tx);
+      await this.repository.recordAudit(
+        {
+          kind: "session_revoked",
+          userId: access.user.id,
+          sessionId: access.sessionId,
+          requestId,
+          metadata: { reason: "logout" },
+          now,
+        },
+        tx,
+      );
+    });
+    await this.lifecycle.destroySchoolSessions({
       userId: access.user.id,
       sessionId: access.sessionId,
-      requestId,
-      metadata: { reason: "logout" },
-      now,
     });
   }
 
