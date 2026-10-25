@@ -16,6 +16,7 @@ import { cleanupAuthArtifacts } from "./auth-cleanup.js";
 import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { RealWechatProvider } from "./wechat/real-wechat-provider.js";
 import { StubWechatProvider } from "./wechat/stub-wechat-provider.js";
+import { LifecycleModule } from "../business-access/lifecycle.module.js";
 
 @Injectable()
 export class AuthCleanupScheduler {
@@ -50,6 +51,7 @@ export class AuthCleanupScheduler {
 }
 
 @Module({
+  imports: [LifecycleModule],
   controllers: [AuthController],
   providers: [
     AuthClock,
@@ -67,5 +69,6 @@ export class AuthCleanupScheduler {
       inject: [ConfigService],
     },
   ],
+  exports: [AuthRepository, AuthClock],
 })
 export class AuthModule {}

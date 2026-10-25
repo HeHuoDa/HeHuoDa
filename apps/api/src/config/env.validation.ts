@@ -15,6 +15,7 @@ export interface EnvironmentVariables {
   INGESTION_RAW_DAYS: number;
   INGESTION_DNS_OVERRIDES: string;
   WECHAT_LOGIN_ENABLED: boolean;
+  SENSITIVE_BUSINESS_ENABLED: boolean;
   WECHAT_APP_ID: string;
   WECHAT_APP_SECRET: string;
   WECHAT_LOGIN_ADAPTER: "real" | "stub";
@@ -57,6 +58,7 @@ const environmentSchema = Joi.object({
     }),
   // 微信登录默认关闭；开启后才要求服务器配置有效 AppID/AppSecret。
   WECHAT_LOGIN_ENABLED: Joi.boolean().default(false),
+  SENSITIVE_BUSINESS_ENABLED: Joi.boolean().default(false),
   WECHAT_APP_ID: Joi.string()
     .allow("")
     .default("")
