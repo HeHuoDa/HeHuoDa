@@ -3,6 +3,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service.js";
 import {
+  lockAccessTransaction,
+  type AccessTransaction,
+} from "../database/access-transaction.js";
+import { createApiError } from "../common/api-error.js";
+import {
   authAuditLogs,
   authSessions,
   authTokens,
@@ -63,6 +68,15 @@ export function sessionExpiry(now: Date): Date {
 export class AuthRepository {
   constructor(private readonly database: DatabaseService) {}
 
+  async withAccessTransaction<T>(
+    run: (tx: AccessTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.db.transaction(async (tx) => {
+      await lockAccessTransaction(tx);
+      return run(tx);
+    });
+  }
+
   // 同一 (AppID,OpenID) 的并发登录用咨询锁串行，数据库唯一约束兜底，
   // 保证首次/重复/并发登录只落一个账号。
   async findOrCreateWechatUser(input: {
@@ -73,6 +87,7 @@ export class AuthRepository {
     now: Date;
   }): Promise<{ user: UserRecord; created: boolean }> {
     return this.database.db.transaction(async (tx) => {
+      await lockAccessTransaction(tx);
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${"wechat-identity:" + input.appId + ":" + input.openId}))`,
       );
@@ -128,6 +143,13 @@ export class AuthRepository {
   }): Promise<{ id: string; absoluteExpiresAt: Date; generation: number }> {
     const absoluteExpiresAt = sessionExpiry(input.now);
     return this.database.db.transaction(async (tx) => {
+      await lockAccessTransaction(tx);
+      const [user] = await tx
+        .select({ status: users.status })
+        .from(users)
+        .where(eq(users.id, input.userId));
+      if (user?.status !== "active")
+        throw createApiError(403, "ACCOUNT_RESTRICTED", "账号当前受限");
       const sessionId = newId();
       await tx.insert(authSessions).values({
         id: sessionId,
@@ -158,6 +180,7 @@ export class AuthRepository {
   }): Promise<RotateOutcome> {
     const refreshHash = hashToken(input.refreshToken);
     return this.database.db.transaction(async (tx): Promise<RotateOutcome> => {
+      await lockAccessTransaction(tx);
       const [token] = await tx
         .select()
         .from(authTokens)
@@ -230,8 +253,10 @@ export class AuthRepository {
   async findActiveAccess(
     accessToken: string,
     now: Date,
+    tx?: AccessTransaction,
   ): Promise<AccessContext | undefined> {
-    const [row] = await this.database.db
+    if (tx) await lockAccessTransaction(tx);
+    const [row] = await (tx ?? this.database.db)
       .select({
         sessionId: authTokens.sessionId,
         generation: authTokens.generation,
@@ -267,13 +292,52 @@ export class AuthRepository {
     sessionId: string,
     reason: SessionRevokeReason,
     now: Date,
+    tx?: AccessTransaction,
   ): Promise<void> {
-    await this.database.db
+    if (!tx)
+      return this.withAccessTransaction((current) =>
+        this.revokeSession(sessionId, reason, now, current),
+      );
+    await lockAccessTransaction(tx);
+    await tx
       .update(authSessions)
       .set({ revokedAt: now, revokedReason: reason })
       .where(
         and(eq(authSessions.id, sessionId), isNull(authSessions.revokedAt)),
       );
+  }
+
+  async assertCurrentContext(
+    tx: AccessTransaction,
+    access: AccessContext,
+    now: Date,
+  ): Promise<void> {
+    await lockAccessTransaction(tx);
+    const [session] = await tx
+      .select({
+        userId: authSessions.userId,
+        revokedAt: authSessions.revokedAt,
+        absoluteExpiresAt: authSessions.absoluteExpiresAt,
+        consumedAt: authTokens.consumedAt,
+        accessExpiresAt: authTokens.accessExpiresAt,
+      })
+      .from(authSessions)
+      .innerJoin(authTokens, eq(authTokens.sessionId, authSessions.id))
+      .where(
+        and(
+          eq(authSessions.id, access.sessionId),
+          eq(authTokens.generation, access.generation),
+        ),
+      );
+    if (
+      !session ||
+      session.userId !== access.user.id ||
+      session.revokedAt ||
+      session.consumedAt ||
+      now >= session.absoluteExpiresAt ||
+      now >= session.accessExpiresAt
+    )
+      throw createApiError(401, "INVALID_SESSION", "登录状态已失效");
   }
 
   async updateNickname(
@@ -294,15 +358,18 @@ export class AuthRepository {
   }
 
   // 审计只存内部引用与安全元数据，不保存原始凭据、code 或上游原报文。
-  async recordAudit(input: {
-    kind: AuditKind;
-    userId?: string | null;
-    sessionId?: string | null;
-    requestId: string;
-    metadata?: Record<string, unknown>;
-    now: Date;
-  }): Promise<void> {
-    await this.database.db.insert(authAuditLogs).values({
+  async recordAudit(
+    input: {
+      kind: AuditKind;
+      userId?: string | null;
+      sessionId?: string | null;
+      requestId: string;
+      metadata?: Record<string, unknown>;
+      now: Date;
+    },
+    tx?: AccessTransaction,
+  ): Promise<void> {
+    await (tx ?? this.database.db).insert(authAuditLogs).values({
       id: newId(),
       kind: input.kind,
       userId: input.userId ?? null,

@@ -10,6 +10,8 @@ import { hashToken } from "../src/auth/auth-token.js";
 import { StubWechatProvider } from "../src/auth/wechat/stub-wechat-provider.js";
 import { DatabaseService } from "../src/database/database.service.js";
 import { testDatabase } from "./competition-fixture.js";
+import { AccountLifecycle } from "../src/business-access/lifecycle.service.js";
+import { CapabilityRegistry } from "../src/business-access/capabilities.js";
 
 const CONTEXT = { requestId: "req-auth-test", ip: "127.0.0.1" };
 
@@ -53,6 +55,7 @@ describe("认证数据与真实 PG 事务", () => {
       new AuthRateLimiter(database),
       new StubWechatProvider(),
       clock,
+      new AccountLifecycle(new CapabilityRegistry()),
     );
   });
 
@@ -322,6 +325,7 @@ describe("认证数据与真实 PG 事务", () => {
       new AuthRateLimiter(database),
       new StubWechatProvider(),
       { now: () => current },
+      new AccountLifecycle(new CapabilityRegistry()),
     );
     await strict.wechatLogin(
       { code: "stub-identity:o-a", consentVersion: 1 },
@@ -352,6 +356,7 @@ describe("认证数据与真实 PG 事务", () => {
       new AuthRateLimiter(database),
       new StubWechatProvider(),
       { now: () => current },
+      new AccountLifecycle(new CapabilityRegistry()),
     );
     const error = await failure(
       disabled.wechatLogin(
