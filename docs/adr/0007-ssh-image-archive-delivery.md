@@ -21,17 +21,17 @@ GitHub artifact 保留 7 天，服务器保留最近三个成功版本。手动�
 
 该决策移除了服务器下载 API/Web 镜像的仓库链路，但会增加 runner 到服务器的 SSH 传输时间和服务器镜像导入所需空间。SSH 链路仍可能失败；有限重试和远端摘要校验可以安全复用完整文件，不能保证网络永不故障。单实例替换可能短暂中断，数据库迁移兼容性仍影响应用回滚。
 
-计划参数是每次传输最多 10 分钟、最多 2 次、间隔 10 秒；Deploy 总上限 45 分钟，日志按连接、探针、传输校验和交付阶段报告。交付报告分别记录代码测试、完整 CI、服务器 `prepare` 演练、首次部署和必要的回滚证据。CI 通过或 PR 合并不能证明服务器演练和生产上线已完成。
+现行 rsync 传输步骤上限为首次 25 分钟、续传 15 分钟、最多 2 次、间隔 10 秒；Deploy 总上限 75 分钟，日志按连接、探针、传输校验和交付阶段报告。交付报告分别记录代码测试、完整 CI、服务器 `prepare` 演练、首次部署和必要的回滚证据。CI 通过或 PR 合并不能证明服务器演练和生产上线已完成。
 
 ## 实施记录
 
 - CI：`image-smoke` 以 `hehuoda-local` 前缀构建并冒烟，用 `deploy/archive.mjs` 生成 `images.tar.gz` 与 `release.json`，上传 `release-archive-<sha>-<attempt>`（7 天）。`publish-images` 作业、`packages: write` 与 TCR 镜像步骤已删除，`ci-gate` 只要求 `quality` 与 `image-smoke` 成功。
-- Deploy：控制器固定从 `main` 检出，目标 SHA 只提供 Compose、Nginx 与清单；下载归档后先用 `deploy/archive.mjs verify` 复核仓库、run、attempt、摘要与平台，再打包传输。单次传输 10 分钟上限、最多 2 次、间隔 10 秒，远端已存在相同摘要时直接复用。
+- Deploy：控制器固定从 `main` 检出，目标 SHA 只提供 Compose、Nginx 与清单；下载归档后先用 `deploy/archive.mjs verify` 复核仓库、run、attempt、摘要与平台，再打包传输。传输时限按下方现行 rsync 决策执行，最多 2 次、间隔 10 秒，远端已存在相同摘要时直接复用。
 - 动作：`workflow_dispatch` 新增 `action`（`prepare`/`deploy`/`rollback`，默认 `prepare`）。自动 `workflow_run` 在 `DEPLOY_ARCHIVE_ACTIVATE` 关闭时整体跳过；`rollback` 只传输控制器，不依赖未过期的 artifact。
 - 验证边界：服务器 `prepare` 演练、`DEPLOY_ARCHIVE_ACTIVATE` 激活、首次正式部署与生产回滚仍待验收。新增 CI 以真实 loopback SSH 验证故障传输，并以真实 Docker 和独立数据库验证归档准备、更新失败恢复、归档文件不可用后的本地回滚及三版保留；隔离结果不代替生产证据。
 - 首次真实演练：[prepare #40096153574](https://github.com/HeHuoDa/HeHuoDa/actions/runs/40096153574) 的约 129 MB payload 首次 SSH 传输约 609 秒后超时，第二次尝试期间人工取消，未进入导入或应用更新，激活保持关闭。具体网络或接收端根因尚未定位；后续补充小包测速、接收字节进度、完整 payload 校验和取消清理，不据此延长既定传输预算。
 
-## SCP Action 传输调整（2026-10-25）
+## 历史 SCP Action 传输调整（2026-10-25，已被下节替代）
 
 - 最新 prepare #40102263453 的 SSH 基础检查成功，但 1 MiB 标准输入探针 60 秒未成功完成，未开始镜像导入或应用替换；具体链路根因仍未定位。
 - 使用与 iot-pillot 相同的 appleboy/scp-action v0.1.7，固定提交 917f8b81dfc1ccd331fef9e2d61bdc6c8be94634。保留现有密码或密钥认证，主机指纹从已信任的目标 known_hosts 条目生成，不自动扫描增加信任。
@@ -40,3 +40,10 @@ GitHub artifact 保留 7 天，服务器保留最近三个成功版本。手动�
 - CI 改用该 Action 的实际 drone-scp 镜像做隔离 SSH 验证。两仓库目标服务器不同，隔离验证或对照仓库成功均不能代替生产 prepare；激活、首次正式部署及生产回滚仍待真实验收。
 
 - SCP 主机密钥兼容：先经严格 OpenSSH 验证原有可信密钥，再以 `UpdateHostKeys` 持有证明扩展本次临时信任记录。扫描只确认当前可用的密钥，选定密钥须完整匹配认证记录；不从未认证扫描结果增加信任。真实双密钥 SSH 回归覆盖仅预置信任 ED25519、SCP 优先协商 ECDSA 的情况；生产 prepare 仍需独立验收。
+
+## rsync 同次工作流续传（2026-10-25，现行）
+
+- 只使用 rsync over SSH，不保留 SCP 自动回退；保留已有严格私有 known_hosts 验证和密码/密钥认证。移除 Go 客户端专属指纹生成，不自动扫描增加信任或更新主机密钥。服务器仅检查 rsync 能力，缺失/旧版明确停止，安装生产依赖由维护者单独处理。
+- 通过私有 `.rsync-partial` 复用同一运行内中断数据；首次/续传步骤上限为 25/15 分钟，进程内部为 24/14 分钟，I/O 停滞上限 120 秒。探针仍为 1 MiB、步骤 2 分钟、内部 90 秒，连接 30 秒；交付内部 20 分钟、步骤 22 分钟，清理步骤 2 分钟，job 为 75 分钟。
+- 两次客户端失败后都保留最终长度与 SHA-256 校验门禁。取消后禁止交付并清理本次暂存；不跨工作流缓存，不做镜像分包或跨版本差分承诺。脱敏日志区分逻辑进度、新传数据和匹配复用数据；原始诊断保存在私有临时目录。
+- SCP prepare #40159311556 曾通过，但 #40176834118 两次完整包超时，不能把单次成功视作长期稳定或认定双向带宽固定为 3 Mbps。rsync 的隔离限速及续传测试与生产 prepare、正式发布、回滚分别验收。
