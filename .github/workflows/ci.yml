@@ -47,10 +47,10 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm test:deployment
-      - name: Verify the SCP Action client on an isolated loopback SSH server
+      - name: Verify resumable rsync transfers on an isolated loopback SSH server
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq openssh-server > /dev/null
+          sudo apt-get install -y -qq openssh-server rsync sshpass > /dev/null
           sudo mkdir -p /run/sshd
           node --test deploy/test/scp.integration.mjs
       - run: pnpm api:generate

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# SCP Action owns uploads; this controller only prepares, verifies and activates them.
+# Resumable rsync uploads share the existing release verification and lifecycle.
 set -euo pipefail
 
 operation=${1:-}
-[[ "$operation" =~ ^(setup|probe|received|retry|verify|deliver|cleanup)$ ]]
-trap 'echo "phase=scp-control status=failed operation=$operation line=$LINENO" >&2' ERR
+[[ "$operation" =~ ^(setup|upload|probe|received|retry|verify|deliver|cleanup)$ ]]
+trap 'echo "phase=transfer-control status=failed operation=$operation line=$LINENO" >&2' ERR
 
 DEPLOY_PORT=${DEPLOY_PORT:-22}
 DEPLOY_PATH=${DEPLOY_PATH:-/opt/hehuoda}
@@ -29,15 +29,20 @@ task_dir="$RUNNER_TEMP/hehuoda-scp-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 umask 077
 mkdir -p "$task_dir"
 printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$task_dir/known_hosts"
-ssh_args=(-n -T -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts" -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+ssh_args=(-T -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no -o "UserKnownHostsFile=\"$task_dir/known_hosts\"" -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+install_runner_package() {
+  if ! { sudo apt-get update -qq && sudo apt-get install -y -qq "$1"; } > "$task_dir/install.log" 2>&1; then
+    echo 'phase=configuration status=failed category=dependency-missing side=runner' >&2
+    exit 44
+  fi
+}
 if [[ -n "${DEPLOY_SSH_KEY:-}" && -z "${DEPLOY_PASSWORD:-}" ]]; then
   printf '%s\n' "$DEPLOY_SSH_KEY" > "$task_dir/key"
   ssh_args+=(-o BatchMode=yes -o IdentitiesOnly=yes -i "$task_dir/key")
   transport=(ssh)
 elif [[ -n "${DEPLOY_PASSWORD:-}" && -z "${DEPLOY_SSH_KEY:-}" ]]; then
   if ! command -v sshpass >/dev/null; then
-    sudo apt-get update -qq > "$task_dir/install.log" 2>&1
-    sudo apt-get install -y -qq sshpass >> "$task_dir/install.log" 2>&1
+    install_runner_package sshpass
   fi
   export SSHPASS="$DEPLOY_PASSWORD"
   transport=(sshpass -e ssh)
@@ -49,7 +54,7 @@ fi
 
 remote() {
   local code category
-  if timeout --signal=TERM --kill-after=5s "${2:-60}" "${transport[@]}" "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "$1" 2> "$task_dir/ssh.stderr"; then
+  if timeout --signal=TERM --kill-after=5s "${2:-60}" "${transport[@]}" -n "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "$1" 2> "$task_dir/ssh.stderr"; then
     return 0
   else
     code=$?
@@ -61,6 +66,8 @@ remote() {
     6|7) category=host-key ;;
     127) category=command-unavailable ;;
     42) category=integrity-mismatch ;;
+    44) category=dependency-missing ;;
+    45) category=dependency-version ;;
     *)
       if grep -Eqi 'host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$task_dir/ssh.stderr"; then category=host-key;
       elif grep -Eqi 'permission denied|authentication failed' "$task_dir/ssh.stderr"; then category=authentication;
@@ -92,56 +99,58 @@ trusted_keys() {
   fi
 }
 
+require_rsync_version() {
+  local version major minor
+  version=$(awk '$1 == "rsync" && $2 == "version" {print $3; exit}' "$1")
+  if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\. ]]; then
+    major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}
+    if (( major > 3 || (major == 3 && minor >= 1) )); then return 0; fi
+  fi
+  echo "phase=configuration status=failed category=dependency-version side=$2 minimum=3.1" >&2
+  return 45
+}
+
 case "$operation" in
   setup)
-    # Only an endpoint key authenticated by OpenSSH may supply the Action fingerprint.
     lookup="$DEPLOY_HOST"
     if [[ "$DEPLOY_PORT" != 22 ]]; then lookup="[$DEPLOY_HOST]:$DEPLOY_PORT"; fi
     trusted_keys
     printf '::add-mask::%s\n' "$staging" "$destination"
     echo 'phase=connect status=started'
-    # OpenSSH authenticates the original pin, then verifies proof of possession for additional keys.
-    ssh_args+=(-o UpdateHostKeys=yes)
-    remote "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null && test -w '$DEPLOY_PATH' && umask 077 && mkdir -p '$staging/probe' '$staging/upload' && chmod 700 '$staging' '$staging/probe' '$staging/upload'"
-    trusted_keys
-    # Scanning discovers availability only: the selected key must also be authenticated above.
-    if ! timeout --signal=TERM --kill-after=5s 35 ssh-keyscan -T 10 -p "$DEPLOY_PORT" -t ecdsa,rsa,ed25519 "$DEPLOY_HOST" > "$task_dir/offered" 2> "$task_dir/scan.stderr"; then
-      echo 'phase=configuration status=host-key-discovery-failed' >&2
-      exit 1
+    remote "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null && test -w '$DEPLOY_PATH'"
+    if ! command -v rsync >/dev/null; then
+      install_runner_package rsync
     fi
-    awk '!/^#/ && NF >= 3 && $1 !~ /^@/ {print $2 " " $3}' "$task_dir/offered" | sort -u > "$task_dir/offered-keys"
-    # Match drone-scp 1.6.14's x/crypto v0.17 raw host-key preference.
-    awk '$1 == "ecdsa-sha2-nistp256" {print 1, $0} $1 == "ecdsa-sha2-nistp384" {print 2, $0} $1 == "ecdsa-sha2-nistp521" {print 3, $0} $1 == "ssh-rsa" {print 4, $0} $1 == "ssh-ed25519" {print 5, $0}' "$task_dir/offered-keys" | sort -k1,1n > "$task_dir/ranked"
-    selected=$(head -n 1 "$task_dir/ranked" | cut -d' ' -f2)
-    [[ -n "$selected" ]]
-    awk -v algorithm="$selected" '$1 == algorithm' "$task_dir/offered-keys" > "$task_dir/selected"
-    if [[ $(wc -l < "$task_dir/selected") != 1 ]]; then
-      echo 'phase=configuration status=ambiguous-host-keys' >&2
-      exit 1
-    fi
-    if ! grep -Fxq -- "$(cat "$task_dir/selected")" "$task_dir/keys"; then
-      echo 'phase=configuration status=untrusted-negotiated-host-key' >&2
-      exit 1
-    fi
-    fingerprint=$(ssh-keygen -lf "$task_dir/selected" -E sha256 2>/dev/null | awk '{print $2}')
-    [[ "$fingerprint" =~ ^SHA256:[A-Za-z0-9+/]+$ ]]
-    echo "phase=host-key status=verified algorithm=$selected"
-    printf '::add-mask::%s\n' "$fingerprint"
+    rsync --version > "$task_dir/local-rsync" 2> "$task_dir/rsync.stderr"
+    require_rsync_version "$task_dir/local-rsync" runner
+    remote 'command -v rsync >/dev/null || exit 44; rsync --version' > "$task_dir/remote-rsync"
+    require_rsync_version "$task_dir/remote-rsync" server
+    remote "umask 077 && mkdir -p '$staging/probe' '$staging/upload/.rsync-partial' && chmod 700 '$staging' '$staging/probe' '$staging/upload' '$staging/upload/.rsync-partial'"
     mkdir -p "$GITHUB_WORKSPACE/$source_dir"
     cp "$RUNNER_TEMP/payload.tar.gz" "$GITHUB_WORKSPACE/$source_dir/payload.tar.gz"
     head -c 1048576 /dev/urandom > "$GITHUB_WORKSPACE/$source_dir/probe"
-    # The pinned Action runs as UID 1000, not the hosted runner's user. No credentials live here.
-    chmod 755 "$GITHUB_WORKSPACE/$source_dir"
-    chmod 644 "$GITHUB_WORKSPACE/$source_dir/payload.tar.gz" "$GITHUB_WORKSPACE/$source_dir/probe"
-    printf 'SCP_SOURCE_DIR=%s\nSCP_STAGING=%s\nSCP_FINGERPRINT=%s\nSCP_PORT=%s\n' "$source_dir" "$staging" "$fingerprint" "$DEPLOY_PORT" >> "$GITHUB_ENV"
+    chmod 700 "$GITHUB_WORKSPACE/$source_dir"
+    chmod 600 "$GITHUB_WORKSPACE/$source_dir/payload.tar.gz" "$GITHUB_WORKSPACE/$source_dir/probe"
+    printf 'SCP_SOURCE_DIR=%s\nSCP_STAGING=%s\n' "$source_dir" "$staging" >> "$GITHUB_ENV"
     echo 'phase=connect status=verified'
+    ;;
+  upload)
+    kind=${2:-}
+    attempt=${3:-1}
+    [[ "$kind" =~ ^(probe|payload)$ && "$attempt" =~ ^[12]$ ]]
+    if [[ "$kind" == probe ]]; then name=probe; remote_path="$staging/probe/probe"; wall=90;
+    elif [[ "$attempt" == 1 ]]; then name=payload.tar.gz; remote_path="$staging/upload/payload.tar.gz"; wall=1440;
+    else name=payload.tar.gz; remote_path="$staging/upload/payload.tar.gz"; wall=840; fi
+    { printf '#!/usr/bin/env bash\nexec '; printf '%q ' "${transport[@]}" "${ssh_args[@]}"; printf '"$@"\n'; } > "$task_dir/rsync-ssh"
+    chmod 700 "$task_dir/rsync-ssh"
+    node "$(dirname "$0")/rsync.mjs" "$GITHUB_WORKSPACE/$source_dir/$name" "$DEPLOY_USER@$DEPLOY_HOST:$remote_path" "$task_dir/rsync-ssh" "$task_dir" "$kind" "$attempt" "$wall"
     ;;
   probe)
     check_file probe "$staging/probe/probe"
-    echo 'phase=link-probe status=verified bytes=1048576 transport=scp'
+    echo 'phase=link-probe status=verified bytes=1048576 transport=rsync'
     ;;
   received)
-    # A lost Action response need not retransmit a complete, verified file.
+    # A lost client response need not retransmit a complete, verified file.
     if check_file payload.tar.gz "$staging/upload/payload.tar.gz"; then
       echo 'valid=true' >> "$GITHUB_OUTPUT"
     else
@@ -149,17 +158,16 @@ case "$operation" in
     fi
     ;;
   retry)
-    remote "rm -f '$staging/upload/payload.tar.gz'"
-    echo 'phase=payload status=retrying attempt=2 transport=scp'
+    echo 'phase=payload status=retrying attempt=2 transport=rsync'
     sleep 10
     ;;
   verify)
     check_file payload.tar.gz "$staging/upload/payload.tar.gz"
     digest=$(sha256sum "$GITHUB_WORKSPACE/$source_dir/payload.tar.gz" | cut -d' ' -f1)
     bytes=$(wc -c < "$GITHUB_WORKSPACE/$source_dir/payload.tar.gz")
-    # The Action extracts only its wrapper. The application payload stays sealed until verified.
+    # The application payload stays sealed until its received bytes have been verified.
     remote "mkdir -p '$staging/verified' && tar -xzf '$staging/upload/payload.tar.gz' -C '$staging/verified' && printf '%s %s' '$digest' '$bytes' > '$staging/verified/.payload' && test ! -e '$destination' && mv '$staging/verified' '$destination'" 120
-    echo "phase=payload status=verified bytes=$bytes transport=scp"
+    echo "phase=payload status=verified bytes=$bytes transport=rsync"
     ;;
   deliver)
     echo "phase=delivery status=started action=$DEPLOY_ACTION"

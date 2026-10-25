@@ -39,7 +39,7 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository &&
        vars.DEPLOY_ARCHIVE_ACTIVATE == 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     environment: production
     env:
       GH_TOKEN: ${{ github.token }}
@@ -145,55 +145,28 @@ jobs:
             node controller/deploy/archive.mjs verify "$payload" "$CANDIDATE_SHA"
           fi
           tar -czf "$RUNNER_TEMP/payload.tar.gz" -C "$payload" .
-      - name: Prepare pinned SCP transport and isolated staging
+      - name: Prepare verified rsync transport and isolated staging
         id: transport
         if: steps.verified.outputs.sha != ''
         shell: bash
         run: bash controller/deploy/scp.sh setup
-      - name: Upload the 1 MiB probe with SCP
+      - name: Upload the 1 MiB probe with rsync
         id: probe
         if: steps.verified.outputs.sha != ''
-        # Bound the whole client; its connection timeout does not bound every SSH phase.
         timeout-minutes: 2
-        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          port: ${{ env.SCP_PORT }}
-          password: ${{ secrets.DEPLOY_PASSWORD }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          fingerprint: ${{ env.SCP_FINGERPRINT }}
-          source: ${{ env.SCP_SOURCE_DIR }}/probe
-          target: ${{ env.SCP_STAGING }}/probe
-          tar_tmp_path: ${{ env.SCP_STAGING }}/
-          strip_components: 1
-          overwrite: true
-          timeout: 30s
-          command_timeout: 90s
-      - name: Verify the SCP probe before uploading the archive
+        shell: bash
+        run: bash controller/deploy/scp.sh upload probe
+      - name: Verify the rsync probe before uploading the archive
         if: steps.verified.outputs.sha != ''
         shell: bash
         run: bash controller/deploy/scp.sh probe
-      - name: Upload the verified payload with SCP (attempt 1)
+      - name: Upload the verified payload with rsync (attempt 1)
         id: upload
         if: steps.verified.outputs.sha != ''
-        timeout-minutes: 10
+        timeout-minutes: 25
         continue-on-error: true
-        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          port: ${{ env.SCP_PORT }}
-          password: ${{ secrets.DEPLOY_PASSWORD }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          fingerprint: ${{ env.SCP_FINGERPRINT }}
-          source: ${{ env.SCP_SOURCE_DIR }}/payload.tar.gz
-          target: ${{ env.SCP_STAGING }}/upload
-          tar_tmp_path: ${{ env.SCP_STAGING }}/
-          strip_components: 1
-          overwrite: true
-          timeout: 30s
-          command_timeout: 10m
+        shell: bash
+        run: bash controller/deploy/scp.sh upload payload 1
       - name: Check for a complete payload even if the SCP response was lost
         id: received
         if: ${{ !cancelled() && steps.verified.outputs.sha != '' && (steps.upload.outcome == 'success' || steps.upload.outcome == 'failure') }}
@@ -203,35 +176,22 @@ jobs:
         if: steps.verified.outputs.sha != '' && steps.received.outputs.valid == 'false'
         shell: bash
         run: bash controller/deploy/scp.sh retry
-      - name: Upload the verified payload with SCP (attempt 2)
+      - name: Upload the verified payload with rsync (attempt 2)
         if: steps.verified.outputs.sha != '' && steps.received.outputs.valid == 'false'
-        timeout-minutes: 10
-        # Final length/hash verification decides whether the payload is usable.
+        timeout-minutes: 15
         continue-on-error: true
-        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          port: ${{ env.SCP_PORT }}
-          password: ${{ secrets.DEPLOY_PASSWORD }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          fingerprint: ${{ env.SCP_FINGERPRINT }}
-          source: ${{ env.SCP_SOURCE_DIR }}/payload.tar.gz
-          target: ${{ env.SCP_STAGING }}/upload
-          tar_tmp_path: ${{ env.SCP_STAGING }}/
-          strip_components: 1
-          overwrite: true
-          timeout: 30s
-          command_timeout: 10m
+        shell: bash
+        run: bash controller/deploy/scp.sh upload payload 2
       - name: Verify the received archive before extracting it
         if: steps.verified.outputs.sha != ''
         shell: bash
         run: bash controller/deploy/scp.sh verify
       - name: Run the existing release action
+        timeout-minutes: 22
         if: steps.verified.outputs.sha != ''
         shell: bash
         run: bash controller/deploy/scp.sh deliver
-      - name: Clean this attempt's SCP staging files
+      - name: Clean this attempt's rsync staging files
         if: ${{ always() && steps.verified.outputs.sha != '' && steps.transport.outcome != 'skipped' }}
         timeout-minutes: 2
         shell: bash

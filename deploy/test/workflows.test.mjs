@@ -228,7 +228,7 @@ test("explicit rollback does not require an artifact that may have expired", (t)
 
 test("the deploy controller comes from trusted main and the target only supplies its config", () => {
   const deploy = workflow("deploy").jobs.deploy;
-  assert.equal(deploy["timeout-minutes"], 45);
+  assert.equal(deploy["timeout-minutes"], 75);
   assert.equal(deploy.environment, "production");
   const checkouts = deploy.steps.filter((step) =>
     step.uses?.startsWith("actions/checkout"),
@@ -312,32 +312,38 @@ test("assembled payload retains the TLS bind source at its Compose path", async 
   );
 });
 
-test("SCP uploads share pinned credentials and verification, with only one bounded retry", () => {
+test("rsync uploads share verified SSH and bounded retry and delivery windows", () => {
   const deploy = workflow("deploy").jobs.deploy;
   const steps = deploy.steps;
   const uploads = steps.filter((step) =>
-    step.uses?.startsWith("appleboy/scp-action@"),
+    step.run?.startsWith("bash controller/deploy/scp.sh upload "),
   );
   assert.equal(uploads.length, 3);
-  for (const upload of uploads) {
-    assert.equal(
-      upload.uses,
-      "appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634",
-    );
-    assert.equal(upload.with.fingerprint, "${{ env.SCP_FINGERPRINT }}");
-    assert.equal(upload.with.password, "${{ secrets.DEPLOY_PASSWORD }}");
-    assert.equal(upload.with.key, "${{ secrets.DEPLOY_SSH_KEY }}");
-    assert.equal(upload.with.timeout, "30s");
-    assert.equal(upload.with.strip_components, 1);
-    assert.equal(upload.with.rm, undefined);
-    assert.equal(upload.with.debug, undefined);
-    assert.ok(upload.with.tar_tmp_path.includes("SCP_STAGING"));
-  }
-  assert.equal(uploads[0]["timeout-minutes"], 2);
-  assert.equal(uploads[1]["timeout-minutes"], 10);
-  assert.equal(uploads[2]["timeout-minutes"], 10);
+  assert.deepEqual(
+    uploads.map((step) => step.run),
+    [
+      "bash controller/deploy/scp.sh upload probe",
+      "bash controller/deploy/scp.sh upload payload 1",
+      "bash controller/deploy/scp.sh upload payload 2",
+    ],
+  );
+  assert.deepEqual(
+    uploads.map((step) => step["timeout-minutes"]),
+    [2, 25, 15],
+  );
   assert.equal(uploads[1]["continue-on-error"], true);
+  assert.equal(uploads[2]["continue-on-error"], true);
   assert.match(uploads[2].if, /steps.received.outputs.valid == 'false'/);
+  assert.doesNotMatch(
+    JSON.stringify(deploy),
+    /appleboy\/scp-action|SCP_FINGERPRINT|command_timeout/,
+  );
+  assert.equal(
+    steps.find((step) => step.run?.endsWith("scp.sh deliver"))[
+      "timeout-minutes"
+    ],
+    22,
+  );
   const index = (suffix) =>
     steps.findIndex((step) => step.run?.endsWith("scp.sh " + suffix));
   assert.ok(index("setup") < steps.indexOf(uploads[0]));
@@ -355,7 +361,7 @@ test("SCP uploads share pinned credentials and verification, with only one bound
   );
 });
 
-test("SCP failure and cancellation gates prevent delivery and still request staging cleanup", () => {
+test("rsync failure and cancellation gates prevent delivery and still request staging cleanup", () => {
   const steps = workflow("deploy").jobs.deploy.steps;
   const retry = steps.find((step) => step.name?.includes("attempt 2"));
   const received = steps.find((step) => step.id === "received");
@@ -387,7 +393,7 @@ test("SCP failure and cancellation gates prevent delivery and still request stag
   assert.equal(allowed(received, false, true, "failure", ""), false);
 });
 
-test("second SCP responses never bypass final verification or discard a complete reception", () => {
+test("second rsync responses never bypass final verification or discard a complete reception", () => {
   const steps = workflow("deploy").jobs.deploy.steps;
   const retry = steps.find((step) => step.name?.includes("attempt 2"));
   const verify = steps.find((step) => step.run?.endsWith("scp.sh verify"));

@@ -29,21 +29,21 @@ function fixture(t, body, extra = {}) {
     join(directory, "environment.bash"),
     `
 ssh() {
-  if [[ "\${FIXTURE_HOSTKEY_UPDATE:-}" != '' && " $* " == *' UpdateHostKeys=yes '* ]]; then
-    printf '%s\\n' "$FIXTURE_HOSTKEY_UPDATE" >> "$RUNNER_TEMP/hehuoda-scp-17-2/known_hosts"
-  fi
+  if [[ "\${REMOTE_RSYNC_MISSING:-}" == 1 && "\${*: -1}" == *rsync* ]]; then return 44; fi
   if [[ "\${REMOTE_FAIL:-}" != '' ]]; then
     echo 'fixture-private server.example password=fixture-private' >&2
     return "$REMOTE_FAIL"
   fi
+  if [[ "\${REMOTE_RSYNC_VERSION:-}" != '' && "\${*: -1}" == *rsync* ]]; then export FIXTURE_RSYNC_VERSION="$REMOTE_RSYNC_VERSION"; fi
   bash -c "\${*: -1}"
 }
 ssh-keyscan() { printf '%s\\n' "\${FIXTURE_OFFERED_KEYS:-$DEPLOY_KNOWN_HOSTS}"; }
 sshpass() { [[ "$SSHPASS" == fixture-private ]]; shift; "$@"; }
+rsync() { echo "rsync version \${FIXTURE_RSYNC_VERSION:-3.2.7} protocol version 31"; }
 docker() { return 0; }
 sleep() { return 0; }
 timeout() { shift 3; "$@"; }
-export -f ssh sshpass ssh-keyscan docker sleep timeout
+export -f ssh sshpass ssh-keyscan rsync docker sleep timeout
 `,
   );
   const result = spawnSync(bash, ["--noprofile", "--norc", "-s"], {
@@ -79,7 +79,7 @@ ${body}
   return { ...result, directory };
 }
 
-test("SCP preparation pins the endpoint key, verifies sealed uploads, reuses complete reception and preserves releases on cleanup", (t) => {
+test("rsync preparation validates the endpoint, verifies sealed uploads, reuses complete reception and preserves releases on cleanup", (t) => {
   const result = fixture(
     t,
     `
@@ -92,7 +92,7 @@ printf corrupt > "$staging/upload/payload.tar.gz"
 bash "$HELPER" received
 grep -q 'valid=false' "$GITHUB_OUTPUT"
 bash "$HELPER" retry
-test ! -e "$staging/upload/payload.tar.gz"
+test -f "$staging/upload/payload.tar.gz"
 cp "$SCP_SOURCE_DIR/payload.tar.gz" "$staging/upload/payload.tar.gz"
 bash "$HELPER" received
 grep -q 'valid=true' "$GITHUB_OUTPUT"
@@ -109,7 +109,7 @@ test ! -e "$SCP_SOURCE_DIR"
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(
     result.stdout,
-    /phase=link-probe status=verified bytes=1048576 transport=scp/,
+    /phase=link-probe status=verified bytes=1048576 transport=rsync/,
   );
   assert.match(result.stdout, /phase=payload status=retrying attempt=2/);
   assert.match(result.stderr, /category=integrity-mismatch/);
@@ -131,6 +131,13 @@ bash "$HELPER" verify
     existsSync(join(result.directory, "host/releases", "a".repeat(40), "17-2")),
     false,
   );
+});
+
+test("a missing server rsync stops preparation with a dependency error before any upload", (t) => {
+  const result = fixture(t, `REMOTE_RSYNC_MISSING=1 bash "$HELPER" setup`);
+  assert.equal(result.status, 44, result.stdout + result.stderr);
+  assert.match(result.stderr, /category=dependency-missing/);
+  assert.equal(existsSync(join(result.directory, "github-env")), false);
 });
 
 test("unknown endpoints fail before connecting, and SSH errors export only safe categories", (t) => {
@@ -176,7 +183,7 @@ test -f "$DEPLOY_PATH/releases/$RELEASE_SHA/18-1.incoming/other"
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
-test("multiple trusted key types follow the pinned SCP client's preference, while conflicting keys fail closed", (t) => {
+test("multiple trusted key types are accepted while conflicting and revoked keys fail closed", (t) => {
   const multiple = fixture(
     t,
     `
@@ -185,8 +192,7 @@ export DEPLOY_KNOWN_HOSTS="$DEPLOY_KNOWN_HOSTS
 [server.example]:2222 $(cat "$GITHUB_WORKSPACE/ecdsa.pub")"
 bash "$HELPER" setup
 source "$GITHUB_ENV"
-expected=$(ssh-keygen -lf "$GITHUB_WORKSPACE/ecdsa.pub" -E sha256 | awk '{print $2}')
-test "$SCP_FINGERPRINT" = "$expected"
+test -z "\${SCP_FINGERPRINT:-}"
 `,
   );
   assert.equal(multiple.status, 0, multiple.stdout + multiple.stderr);
@@ -213,43 +219,25 @@ bash "$HELPER" setup
   assert.match(revoked.stderr, /revoked-host-key/);
 });
 
-test("SCP pins the offered key authenticated by UpdateHostKeys, ignoring stale trusted types", (t) => {
-  for (const update of [true, false]) {
-    const result = fixture(
-      t,
-      `
-ssh-keygen -q -t ecdsa -b 256 -N '' -f "$GITHUB_WORKSPACE/ecdsa"
-ecdsa="[server.example]:2222 $(cat "$GITHUB_WORKSPACE/ecdsa.pub")"
-if ${update}; then
-  export FIXTURE_HOSTKEY_UPDATE="$ecdsa"
-  export FIXTURE_OFFERED_KEYS="$DEPLOY_KNOWN_HOSTS
-$ecdsa"
-  expected=$(ssh-keygen -lf "$GITHUB_WORKSPACE/ecdsa.pub" -E sha256 | awk '{print $2}')
-else
-  export FIXTURE_OFFERED_KEYS="$DEPLOY_KNOWN_HOSTS"
-  export DEPLOY_KNOWN_HOSTS="$DEPLOY_KNOWN_HOSTS
-$ecdsa"
-  expected=$(ssh-keygen -lf "$GITHUB_WORKSPACE/hostkey.pub" -E sha256 | awk '{print $2}')
-fi
-bash "$HELPER" setup
-source "$GITHUB_ENV"
-test "$SCP_FINGERPRINT" = "$expected"
-`,
-    );
-    assert.equal(result.status, 0, result.stdout + result.stderr);
+test("old runner and server rsync versions stop before an upload", (t) => {
+  for (const variable of ["FIXTURE_RSYNC_VERSION", "REMOTE_RSYNC_VERSION"]) {
+    const result = fixture(t, `${variable}=3.0.9 bash "$HELPER" setup`);
+    assert.equal(result.status, 45, result.stdout + result.stderr);
+    assert.match(result.stderr, /category=dependency-version/);
+    assert.equal(existsSync(join(result.directory, "github-env")), false);
   }
 });
 
-test("untrusted scanned keys never supply the Action fingerprint", (t) => {
+test("runner dependency installation failure is explicit and keeps package-manager output private", (t) => {
   const result = fixture(
     t,
     `
-ssh-keygen -q -t ecdsa -b 256 -N '' -f "$GITHUB_WORKSPACE/unknown"
-export FIXTURE_OFFERED_KEYS="[server.example]:2222 $(cat "$GITHUB_WORKSPACE/unknown.pub")"
+command() { if [[ "$*" == '-v rsync' ]]; then return 1; fi; builtin command "$@"; }
+sudo() { echo 'fixture-private package manager error' >&2; return 100; }
+export -f command sudo
 bash "$HELPER" setup
 `,
   );
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /untrusted-negotiated-host-key/);
-  assert.equal(existsSync(join(result.directory, "github-env")), false);
+  assert.equal(result.status, 44, result.stdout + result.stderr);
+  assert.match(result.stderr, /category=dependency-missing side=runner/);
 });
