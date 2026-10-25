@@ -2,11 +2,29 @@ import { TextEncoder } from "node:util";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  SchoolAuthClient,
+  SchoolAuthError,
+} from "@hehuoda/sicau-connectors/auth";
+import {
   BoundedFetcher,
   extractArticle,
   parseCandidate,
   sources,
 } from "../dist/notices/index.js";
+
+test("auth 自引用解析到构建 ESM，与 notices 共存且关闭后无需学校外联", async () => {
+  assert.ok(
+    import.meta
+      .resolve("@hehuoda/sicau-connectors/auth")
+      .endsWith("/dist/auth/index.js"),
+  );
+  const client = new SchoolAuthClient();
+  client.dispose();
+  await assert.rejects(
+    client.createChallenge(),
+    (error) => error instanceof SchoolAuthError && error.code === "disposed",
+  );
+});
 
 test("构建入口独立完成两院公开正文抓取与候选解析", async () => {
   for (const source of sources) {
