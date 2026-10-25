@@ -53,12 +53,31 @@ export interface PendingRequest<T> {
   cancel(): void;
 }
 
+/** 会话级认证能力：由认证状态模块提供，客户端据此注入头并协调刷新。 */
+export interface HttpClientAuth {
+  /** 当前访问凭据；null 表示未登录，请求不带认证头。 */
+  accessToken(): string | null;
+  /** 执行一次刷新并返回新访问凭据；客户端对并发 401 只调用一次。 */
+  refresh(): Promise<string>;
+}
+
+/**
+ * wx.request 的 method 不接受 PATCH，H5 与小程序共用 uni.request 类型，
+ * 因此客户端只发 GET/POST；需要局部更新的接口由后端提供 POST 别名。
+ */
+export type RequestTransportMethod = "GET" | "POST";
+
+/** 与 uni.request 的 data 参数兼容的请求体类型。 */
+export type RequestBody = Record<string, unknown> | string;
+
 /** 仅依赖本票所用的 uni.request 回调子集，平台替身也走此入口。 */
 export type RequestTransport = (options: {
   url: string;
-  method: "GET";
+  method: RequestTransportMethod;
   timeout: number;
   dataType: "json";
+  data?: RequestBody;
+  header?: Record<string, string>;
   success(response: {
     statusCode: number;
     data: unknown;
@@ -99,42 +118,85 @@ export function responseRequestId(
 export function createHttpClient(
   transport: RequestTransport,
   config: () => ApiConfig,
+  auth?: HttpClientAuth,
 ) {
-  return {
-    get<T>(
-      path: string,
-      validate: (data: unknown) => data is T,
-    ): PendingRequest<T> {
-      let settled = false;
-      let task: { abort(): void } | undefined;
-      let rejectRequest: (error: RequestError) => void;
-      const promise = new Promise<T>((resolve, reject) => {
-        rejectRequest = reject;
-        const fail = (error: RequestError) => {
-          if (settled) return;
-          settled = true;
-          reject(error);
-        };
-        let settings: ApiConfig;
-        try {
-          settings = config();
-          if (!/^\/(?!\/)/.test(path))
-            throw new Error("请求路径必须以单个 / 开头。");
-        } catch (error) {
+  let inflightRefresh: Promise<string> | null = null;
+  // 并发 401 共享同一次刷新；结束后清空，允许下一轮 401 再次协调。
+  const sharedRefresh = (): Promise<string> | null => {
+    if (!auth) return null;
+    inflightRefresh ??= auth.refresh().finally(() => {
+      inflightRefresh = null;
+    });
+    return inflightRefresh;
+  };
+
+  function request<T>(
+    method: RequestTransportMethod,
+    path: string,
+    validate: (data: unknown) => data is T,
+    body?: RequestBody,
+  ): PendingRequest<T> {
+    let settled = false;
+    let task: { abort(): void } | undefined;
+    let rejectRequest: (error: RequestError) => void;
+    const promise = new Promise<T>((resolve, reject) => {
+      rejectRequest = reject;
+      const fail = (error: RequestError) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      let settings: ApiConfig;
+      try {
+        settings = config();
+        if (!/^\/(?!\/)/.test(path))
+          throw new Error("请求路径必须以单个 / 开头。");
+      } catch (error) {
+        fail(
+          new RequestError(
+            "config",
+            error instanceof Error ? error.message : "API 配置无效。",
+          ),
+        );
+        return;
+      }
+      const attempt = (retry: boolean) => {
+        if (settled) return;
+        const token = auth?.accessToken() ?? null;
+        const finishHttpFailure = (
+          statusCode: number,
+          data: unknown,
+          requestId: string | null,
+        ) => {
+          const body = record(data);
           fail(
             new RequestError(
-              "config",
-              error instanceof Error ? error.message : "API 配置无效。",
+              "http",
+              safeText(body.message, 500) ?? "暂时无法连接服务，请稍后重试。",
+              {
+                code: safeText(body.code, 128),
+                requestId,
+                statusCode,
+                details:
+                  body.details !== null &&
+                  typeof body.details === "object" &&
+                  !Array.isArray(body.details)
+                    ? record(body.details)
+                    : undefined,
+              },
             ),
           );
-          return;
-        }
+        };
         try {
           task = transport({
             url: `${settings.baseUrl}${path}`,
-            method: "GET",
+            method,
             timeout: settings.timeout,
             dataType: "json",
+            ...(body !== undefined ? { data: body } : {}),
+            ...(token !== null
+              ? { header: { Authorization: `Bearer ${token}` } }
+              : {}),
             success(response) {
               if (settled) return;
               const requestId = responseRequestId(
@@ -149,28 +211,36 @@ export function createHttpClient(
                     { requestId },
                   ),
                 );
-              } else if (
-                response.statusCode < 200 ||
-                response.statusCode >= 300
+                return;
+              }
+              // 仅“已带凭据却被明确拒绝”的 401 才刷新重发一次：
+              // 无凭据的 401（如登录 code 无效）与未知结果（超时/网络）都不重试，
+              // 写请求也不会在业务可能已执行的情况下自动重放。
+              if (
+                response.statusCode === 401 &&
+                token !== null &&
+                auth &&
+                !retry
               ) {
-                const body = record(response.data);
-                fail(
-                  new RequestError(
-                    "http",
-                    safeText(body.message, 500) ??
-                      "暂时无法连接服务，请稍后重试。",
-                    {
-                      code: safeText(body.code, 128),
-                      requestId,
-                      statusCode: response.statusCode,
-                      details:
-                        body.details !== null &&
-                        typeof body.details === "object" &&
-                        !Array.isArray(body.details)
-                          ? record(body.details)
-                          : undefined,
-                    },
-                  ),
+                const refreshed = sharedRefresh();
+                if (refreshed) {
+                  refreshed.then(
+                    () => attempt(true),
+                    () =>
+                      finishHttpFailure(
+                        response.statusCode,
+                        response.data,
+                        requestId,
+                      ),
+                  );
+                  return;
+                }
+              }
+              if (response.statusCode < 200 || response.statusCode >= 300) {
+                finishHttpFailure(
+                  response.statusCode,
+                  response.data,
+                  requestId,
                 );
               } else if (!validate(response.data)) {
                 fail(
@@ -202,21 +272,41 @@ export function createHttpClient(
         } catch {
           fail(new RequestError("network", "暂时无法连接服务，请稍后重试。"));
         }
-      });
-      return {
-        promise,
-        cancel() {
-          if (settled) return;
-          settled = true;
-          rejectRequest(new RequestError("cancelled", "请求已取消。"));
-          // 平台可能不回调 fail，或同步回调；先结算再中断，迟到回调不改变结果。
-          try {
-            task?.abort();
-          } catch {
-            /* 取消已完成，不把平台 abort 异常显示为业务错误。 */
-          }
-        },
       };
+      attempt(false);
+    });
+    // 401 协调会把拒绝推迟到刷新微任务，调用方的 handler 可能晚于拒绝
+    // 本身挂接；预挂观察者避免虚假的未处理拒绝告警，拒绝仍照常传播。
+    promise.catch(() => {});
+    return {
+      promise,
+      cancel() {
+        if (settled) return;
+        settled = true;
+        rejectRequest(new RequestError("cancelled", "请求已取消。"));
+        // 平台可能不回调 fail，或同步回调；先结算再中断，迟到回调不改变结果。
+        try {
+          task?.abort();
+        } catch {
+          /* 取消已完成，不把平台 abort 异常显示为业务错误。 */
+        }
+      },
+    };
+  }
+
+  return {
+    get<T>(
+      path: string,
+      validate: (data: unknown) => data is T,
+    ): PendingRequest<T> {
+      return request("GET", path, validate);
+    },
+    post<T>(
+      path: string,
+      body: RequestBody | undefined,
+      validate: (data: unknown) => data is T,
+    ): PendingRequest<T> {
+      return request("POST", path, validate, body);
     },
   };
 }
