@@ -53,6 +53,12 @@ export const useSessionStore = defineStore("business-session", () => {
     teamActions.invitationProblem,
   );
   const sessionRevision = ref(0);
+  /** 真实账号昵称由认证模块写入；null 表示未登录，本人回退示例昵称。 */
+  const accountNickname = ref<string | null>(null);
+  function setAccountNickname(value: string | null) {
+    const next = value?.trim() ?? "";
+    accountNickname.value = next ? next : null;
+  }
   function observed<T>(action: () => T, now: number) {
     const before = captureNotificationBaseline(teamState);
     const result = action();
@@ -128,8 +134,9 @@ export const useSessionStore = defineStore("business-session", () => {
     notificationActions.reset();
   }
   function memberNickname(id: string, fallback: string) {
+    // 登录后本人显示真实账号昵称；未登录回退示例昵称。
     return id === DEMO_PARTICIPANT.id
-      ? profileState.profile.nickname
+      ? (accountNickname.value ?? profileState.profile.nickname)
       : fallback;
   }
   return {
@@ -152,6 +159,7 @@ export const useSessionStore = defineStore("business-session", () => {
     applications: computed(() => pendingApplications(teamState)),
     saveProfile: profileActions.save,
     memberNickname,
+    setAccountNickname,
     resetProfile: profileActions.reset,
     ...observedTeamActions,
     reset,

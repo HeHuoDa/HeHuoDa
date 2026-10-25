@@ -8,6 +8,7 @@ import {
 } from "@hehuoda/client-domain/profile";
 import { colleges } from "@hehuoda/client-domain/colleges";
 import { useSessionStore } from "../stores/session";
+import { useAuthStore } from "../stores/auth";
 import { useDraftForm } from "../forms/use-draft-form";
 import { openPage, openProfileSection } from "../navigation/navigate";
 import AppIcon from "./AppIcon.vue";
@@ -15,9 +16,11 @@ import FormInput from "./FormInput.vue";
 import FormPicker from "./FormPicker.vue";
 import FormDialog from "./FormDialog.vue";
 import FormButton from "./FormButton.vue";
+import ProfileMenu from "./ProfileMenu.vue";
 import ProfileTeamsReadOnly from "./ProfileTeamsReadOnly.vue";
 
 const session = useSessionStore();
+const auth = useAuthStore();
 const stats = computed(() => [
   ...["我的队伍", "待处理邀请", "我的申请"].map((label) => ({
     label,
@@ -27,7 +30,6 @@ const stats = computed(() => [
   { label: "收藏比赛", count: session.favoriteCount, note: "当前会话" },
 ]);
 const feedback = ref("");
-const aboutFeedback = ref("");
 const focusField = ref("");
 const {
   opened,
@@ -45,6 +47,11 @@ const {
   validate: validateProfile,
   save: session.saveProfile,
 });
+/** 昵称属于真实账号：登录后显示并修改 /auth/me 的值，未登录回退示例昵称。 */
+const nicknameDraft = ref("");
+const displayNickname = computed(() =>
+  auth.authenticated ? auth.nickname : session.profile.nickname,
+);
 const collegeName = computed(
   () =>
     colleges.find((c) => c.id === session.profile.collegeId)?.name ??
@@ -53,12 +60,11 @@ const collegeName = computed(
 const campusChoices = campusOptions.map((value) => ({ value, label: value }));
 const collegeChoices = colleges.map((c) => ({ value: c.id, label: c.name }));
 const fields: {
-  key: "nickname" | "major" | "grade" | "skills";
+  key: "major" | "grade" | "skills";
   label: string;
   max: number;
   hint?: string;
 }[] = [
-  { key: "nickname", label: "昵称", max: 20 },
   { key: "major", label: "专业", max: 60 },
   {
     key: "grade",
@@ -99,55 +105,37 @@ const links = [
     action: () => openPage("notifications"),
   },
 ];
-function openAbout() {
-  aboutFeedback.value = "";
-  openPage("about", undefined, () => {
-    aboutFeedback.value = "暂时无法打开关于页面，请重试。";
-  });
-}
 async function edit() {
   feedback.value = "";
   focusField.value = "";
+  nicknameDraft.value = auth.authenticated ? auth.nickname : "";
   begin();
   await nextTick();
   if (opened.value) focusField.value = "nickname";
 }
 async function save() {
   focusField.value = "";
+  // 真实昵称先写 /auth/me；未改动就不发请求，失败时保留弹窗。
+  if (auth.authenticated && nicknameDraft.value.trim() !== auth.nickname) {
+    const saved = await auth.updateNickname(nicknameDraft.value);
+    if (!saved) {
+      await nextTick();
+      if (opened.value) focusField.value = "nickname";
+      return;
+    }
+  }
   if (submit()) {
-    feedback.value =
-      "示例资料已更新，仅保留在当前会话内；未保存到服务器，刷新恢复初始示例。";
+    feedback.value = auth.authenticated
+      ? "昵称已保存到账号；其余示例资料仅保留在当前会话内。"
+      : "示例资料已更新，仅保留在当前会话内；未保存到服务器，刷新恢复初始示例。";
     return;
   }
   await nextTick();
   if (opened.value) focusField.value = firstError.value;
 }
-function reset() {
-  cancel();
-  session.resetProfile();
-  feedback.value = "资料与授权已重置为初始示例，联系方式默认不共享。";
-}
-function authorize(event: unknown) {
-  const value = (event as { detail?: { value?: unknown } })?.detail?.value;
-  if (typeof value !== "boolean") return;
-  session.contactShared = value;
-  feedback.value = session.contactShared
-    ? "已开启授权演示，仅在所有者授权且双方均为同队有效成员时允许展示；未提供真实联系方式。"
-    : "已关闭授权演示，联系方式不共享。";
-}
-function authorizationKey(event: {
-  key?: string;
-  repeat?: boolean;
-  preventDefault?: () => void;
-}) {
-  if (event.key !== " " && event.key !== "Enter") return;
-  event.preventDefault?.();
-  if (!event.repeat) authorize({ detail: { value: !session.contactShared } });
-}
 // 外部统一重置、页面切换均丢弃编辑草稿，避免旧资料再次写回。
 const unregister = session.registerReset("profile-editor", () => {
   cancel();
-  aboutFeedback.value = "";
   feedback.value = "演示会话已重置，联系方式默认不共享。";
 });
 watch(
@@ -167,12 +155,8 @@ onBeforeUnmount(unregister);
       >
       <view class="flex flex-wrap items-center justify-between gap-3">
         <text class="profile-title font-serif font-semibold">个人中心</text>
-        <FormButton
-          variant="secondary"
-          class="profile-edit-button"
-          @click="edit"
-          ><AppIcon name="pencil" :size="16" />编辑资料</FormButton
-        >
+        <!-- 账号与设置入口：编辑资料、登录、关于与重置都收在这个下拉里。 -->
+        <ProfileMenu @edit="edit" @notice="feedback = $event" />
       </view>
       <text class="block mt-2 text-sm text-muted"
         >把自己介绍给伙伴，也把下一次相遇留给可能。</text
@@ -185,9 +169,7 @@ onBeforeUnmount(unregister);
       <view class="profile-identity">
         <view class="profile-avatar" aria-hidden="true">苗</view>
         <view class="profile-identity-text">
-          <text class="profile-name font-serif">{{
-            session.profile.nickname
-          }}</text>
+          <text class="profile-name font-serif">{{ displayNickname }}</text>
           <text class="block mt-2 text-xs text-muted"
             >四川农业大学 · {{ session.profile.campus }} · {{ collegeName }} ·
             {{ session.profile.grade }} 级</text
@@ -247,89 +229,46 @@ onBeforeUnmount(unregister);
     </view>
     <view class="profile-lower">
       <ProfileTeamsReadOnly />
-      <view class="profile-panel">
-        <text class="font-serif text-xl">资料与设置</text>
-        <view class="profile-setting-row">
-          <AppIcon name="shield" :size="20" class="text-brand" />
-          <label class="flex-1 text-sm" for="profile-contact"
-            >联系方式授权<text class="block mt-1 text-xs text-muted">{{
-              session.contactShared ? "演示已授权" : "未授权 · 不共享"
-            }}</text></label
-          >
-          <switch
-            id="profile-contact"
-            class="profile-contact-switch"
-            :checked="session.contactShared"
-            color="var(--hhr-color-brand)"
-            role="switch"
-            tabindex="0"
-            :aria-checked="session.contactShared"
-            aria-label="允许同队有效成员查看（演示）"
-            @change="authorize"
-            @keydown="authorizationKey"
-          />
-        </view>
-        <FormButton
-          variant="secondary"
-          class="profile-setting-row profile-about-link"
-          @click="openAbout"
-        >
-          <AppIcon name="leaf" :size="20" class="text-brand" /><view
-            class="flex-1 text-sm"
-            >关于禾伙搭<text class="block mt-1 text-xs text-muted"
-              >一起成长，各有所长。</text
-            ></view
-          >
-        </FormButton>
-        <view
-          v-if="aboutFeedback"
-          role="status"
-          aria-live="polite"
-          class="hhr-notice text-caption"
-          >{{ aboutFeedback }}</view
-        >
-        <view class="profile-notice"
-          >默认不共享。仅在所有者授权后，同队有效成员才能查看；申请者、未确认的受邀者和已退出成员不能查看。仅演示授权状态，未提供真实联系方式。</view
-        >
-      </view>
     </view>
-    <view
-      class="mt-6 flex flex-wrap items-center justify-between gap-3 text-xs text-muted"
-    >
-      <text>当前展示示例资料，编辑仅影响本次会话。</text>
-      <FormButton variant="secondary" class="profile-reset" @click="reset"
-        >重置示例</FormButton
+    <view class="mt-6 text-xs text-muted">
+      <text v-if="auth.authenticated"
+        >昵称属于你的微信账号；其余资料为示例，编辑仅影响本次会话。</text
       >
-      <view class="flex gap-4"
-        ><FormButton
-          variant="secondary"
-          class="profile-auth-link"
-          @click="openPage('login')"
-        >
-          登录</FormButton
-        ><FormButton
-          variant="secondary"
-          class="profile-auth-link"
-          @click="openPage('register')"
-        >
-          注册
-        </FormButton></view
-      >
+      <text v-else>当前展示示例资料，编辑仅影响本次会话。</text>
     </view>
     <FormDialog
       id="profile-editor"
       :open="opened"
-      title="编辑示例资料"
-      save-label="保存示例资料"
+      title="编辑资料"
+      save-label="保存资料"
       :saving="submitting"
       :error-target="firstError ? `profile-${firstError}-field` : ''"
       @save="save"
       @cancel="cancel"
     >
       <text class="block mb-4 text-xs text-muted"
-        >请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
-        ID；均为自填信息。</text
+        >昵称属于你的微信账号；其余为示例资料，请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
+        ID。</text
       >
+      <FormInput
+        v-if="auth.authenticated"
+        id="profile-nickname"
+        v-model="nicknameDraft"
+        label="昵称（账号）"
+        :maxlength="20"
+        hint="首尾空格会被忽略，1–20 个字；保存后写入账号。"
+        :error="auth.nicknameError"
+        :focus="focusField === 'nickname'"
+        @confirm="save"
+      />
+      <FormInput
+        v-else
+        id="profile-nickname"
+        :model-value="displayNickname"
+        label="昵称"
+        disabled
+        hint="微信登录后可修改昵称。"
+      />
       <view class="profile-form">
         <FormInput
           v-for="field in fields"
@@ -371,9 +310,11 @@ onBeforeUnmount(unregister);
       <text v-if="submitError" role="alert" class="block text-sm text-danger">{{
         submitError
       }}</text>
-      <text class="block my-4 text-xs text-muted"
-        >保存仅更新会话内前端演示，不表示服务器保存。</text
-      >
+      <text class="block my-4 text-xs text-muted">{{
+        auth.authenticated
+          ? "昵称保存到账号；其余示例资料仅更新当前会话，刷新后恢复。"
+          : "保存仅更新会话内前端演示，不表示服务器保存。"
+      }}</text>
     </FormDialog>
   </view>
 </template>
@@ -411,12 +352,6 @@ onBeforeUnmount(unregister);
 .profile-name {
   display: block;
   font-size: 24px;
-}
-.profile-edit-button {
-  display: inline-flex;
-  width: auto;
-  gap: 8px;
-  align-items: center;
 }
 .profile-panel {
   background: var(--hhr-color-surface);
@@ -481,9 +416,7 @@ onBeforeUnmount(unregister);
   color: var(--hhr-color-ink);
   font-weight: 400;
 }
-.profile-shortcut::after,
-.profile-reset::after,
-.profile-auth-link::after {
+.profile-shortcut::after {
   border: 0;
 }
 .profile-link-text {
@@ -501,76 +434,8 @@ onBeforeUnmount(unregister);
 }
 .profile-lower {
   display: grid;
-  grid-template-columns: 1.45fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
-}
-.profile-setting-row {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 18px 0;
-}
-.profile-contact-switch {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  min-height: 44px;
-}
-.profile-setting-row:first-of-type {
-  margin-top: 16px;
-}
-.profile-setting-row + .profile-setting-row {
-  border-top: 1px solid var(--hhr-color-line);
-}
-.profile-about-link {
-  justify-content: flex-start;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--hhr-color-ink);
-  font-weight: 400;
-  text-align: left;
-}
-.profile-about-link::after {
-  border: 0;
-}
-.profile-notice {
-  margin-top: 20px;
-  padding: 14px;
-  border-radius: 10px;
-  background: var(--hhr-color-page);
-  color: var(--hhr-color-muted);
-  font-size: 11px;
-  line-height: 1.8;
-}
-.profile-reset {
-  width: auto;
-  border: 0;
-  font-weight: 400;
-  color: var(--hhr-color-muted);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  padding: 8px 0;
-  min-height: 44px;
-  background: transparent;
-  font-size: 12px;
-  margin: 0;
-}
-.profile-auth-link {
-  width: auto;
-  border: 0;
-  font-weight: 400;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  color: var(--hhr-color-brand);
-  background: transparent;
-  font-size: 12px;
-  margin: 0;
-  padding: 0;
 }
 .profile-form {
   display: grid;
@@ -581,15 +446,8 @@ onBeforeUnmount(unregister);
   .profile-shortcuts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .profile-lower {
-    grid-template-columns: 1fr;
-  }
 }
 @media (max-width: 600px) {
-  .profile-edit-button {
-    padding: 8px 10px;
-    font-size: 13px;
-  }
   .profile-panel {
     padding: 20px;
   }
