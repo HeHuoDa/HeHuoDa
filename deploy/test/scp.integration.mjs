@@ -155,9 +155,13 @@ exec /usr/bin/rsync --bwlimit=${large ? 128 : 256} "$@"
         DEPLOY_PORT: String(port),
         DEPLOY_USER: userInfo().username,
         DEPLOY_PATH: deployRoot,
-        DEPLOY_PASSWORD: large ? process.env.RSYNC_TEST_PASSWORD || "" : "",
+        DEPLOY_PASSWORD:
+          large || process.env.RSYNC_TEST_MAIN_PASSWORD === "true"
+            ? process.env.RSYNC_TEST_PASSWORD || ""
+            : "",
         DEPLOY_SSH_KEY:
-          large && process.env.RSYNC_TEST_PASSWORD
+          (large || process.env.RSYNC_TEST_MAIN_PASSWORD === "true") &&
+          process.env.RSYNC_TEST_PASSWORD
             ? ""
             : readFileSync(join(root, "client"), "utf8"),
         DEPLOY_KNOWN_HOSTS: `[127.0.0.1]:${port} ${readFileSync(join(root, "host.pub"), "utf8")}`,
@@ -285,18 +289,26 @@ exec /usr/bin/rsync --bwlimit=${large ? 128 : 256} "$@"
       );
       // An authenticated peer that stops speaking rsync is bounded by the I/O deadline.
       writeFileSync(join(root, "stall"), "");
-      const io = await upload({
-        source: join(root, ".scp-upload-17-2/probe"),
-        target: `${env.DEPLOY_USER}@127.0.0.1:${staging}/probe/probe`,
-        ssh: join(runner, "hehuoda-scp-17-2/rsync-ssh"),
-        logDirectory: runner,
-        kind: "probe",
-        attempt: 1,
-        wallSeconds: 10,
-        ioSeconds: 1,
-        command: ["/usr/bin/rsync"],
-        onEvent: () => {},
-      });
+      const previousPassword = process.env.SSHPASS;
+      if (env.DEPLOY_PASSWORD) process.env.SSHPASS = env.DEPLOY_PASSWORD;
+      let io;
+      try {
+        io = await upload({
+          source: join(root, ".scp-upload-17-2/probe"),
+          target: `${env.DEPLOY_USER}@127.0.0.1:${staging}/probe/probe`,
+          ssh: join(runner, "hehuoda-scp-17-2/rsync-ssh"),
+          logDirectory: runner,
+          kind: "probe",
+          attempt: 1,
+          wallSeconds: 10,
+          ioSeconds: 1,
+          command: ["/usr/bin/rsync"],
+          onEvent: () => {},
+        });
+      } finally {
+        if (previousPassword === undefined) delete process.env.SSHPASS;
+        else process.env.SSHPASS = previousPassword;
+      }
       assert.equal(io.category, "timeout");
       rmSync(join(root, "stall"));
       mkdirSync(join(deployRoot, "releases", env.RELEASE_SHA, "18-1.incoming"));
