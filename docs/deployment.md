@@ -150,10 +150,18 @@ H5 由同源 `/api/v1` 提供，静态资源缺失返回 404，API 保持 JSON �
 
 边界：本次只做了单次运行，发送端三项设置同时生效，未单独区分各自贡献；同一链路在上午曾用 cubic 取得 456 kB/s，因此仍需重复验证以排除链路波动（例如再跑 1–2 次 `prepare`，或做同一次运行内的 cubic/bbr 对照）。本次探针速率与整包速率再次明显不一致（80 kB/s 对 1.56 MB/s），进一步说明不能用探针推算整包时长。
 
+### 2026-10-25 首次真实归档发布成功（UTC 15:57–16:01）
+
+[Deploy #40209410441](https://github.com/HeHuoDa/HeHuoDa/actions/runs/40209410441)（`action=deploy`，目标 `9b7b50da2d66856306bf38f244cc3ab81c5b6393`）是归档直传流水线第一次完成真实生产发布，全程 3 分 06 秒：1 MiB 探针 8 秒，129,459,755 字节整包**首次尝试 89 秒**传完（约 1.45 MB/s），随后接收校验、镜像导入、`prepare` 复核（`application_unchanged=true`）、迁移前备份校验、数据库迁移、应用替换、健康与公开入口检查依次通过，最终输出 `Deployed and verified`；`state/current.json` 推进到该 SHA，api/web 容器运行 `hehuoda-local/{api,web}:9b7b50d…` 且健康。
+
+同一晚两次真实发布失败（[#40203110005](https://github.com/HeHuoDa/HeHuoDa/actions/runs/40203110005) 目标 `9e0a154`、[#40204895346](https://github.com/HeHuoDa/HeHuoDa/actions/runs/40204895346) 目标 `e027ada`）都发生在 `verifyPublicApplication`：候选版本切上去、容器内检查与迁移前备份校验全部通过之后，公开入口检查单次判定失败并触发回滚（生产保持旧版本、`current.json` 未推进）。用候选镜像起临时容器实测，四个检查项的响应与现网一致，说明失败是容器重建瞬间公网路径的瞬时不可达，而该检查当时是四类检查中唯一没有重试的。修复见 [PR #160](https://github.com/HeHuoDa/HeHuoDa/pull/160)：公开检查增加有界重试（默认 20 次 × 1.5 秒），并按路径输出脱敏原因 `phase=public-check status=verified|failed path=… reason=…`；本次成功运行的日志已能看到四个路径全部 `verified`。
+
+边界与待办：发布当晚同一载荷的传输耗时在 **89 秒至 718 秒**之间波动（BBR 之前 cubic 在同样载荷下 24 分钟只推进 21%），跨运行续传与分片仍未实现；**生产回滚尚未验收**；`DEPLOY_ARCHIVE_ACTIVATE` 同时充当自动发布闸门，开启后 main 每次 CI 成功都会触发一次真实发布。
+
 CI 在隔离 loopback SSH 服务器运行真实 rsync，使用不可压缩文件、限制速率并中断第一次传输进程；第二次必须出现匹配复用数据，且新传数据少于完整归档，最终摘要一致。测试还覆盖双主机公钥环境下的严格信任、错误主机密钥、缺少/旧版 rsync、密码和密钥认证、I/O 超时、同长度损坏包拒绝、完整接收复用及清理边界。常规 CI 使用缩小载荷；本地可用 `RSYNC_TEST_LARGE_PAYLOAD=true` 执行约 129 MB、128 KiB/s 的隔离限速验证。原有真实应用镜像与独立数据库的 prepare、失败恢复、无归档回滚和三版保留测试继续保留；隔离结果不能代替生产链路验收。
 
 仓库验证入口为 `pnpm install --frozen-lockfile`、`pnpm test:deployment`、`pnpm format:check`、`pnpm lint` 和 `pnpm test:images`。本地镜像冒烟要求 Docker 可用，并在随机项目名、测试密码和隔离卷内运行；不得连接生产 `.env`。
 
 最终交付须分别报告本地测试、完整远端 CI、artifact 来源和摘要、服务器 `prepare` 演练、激活记录、生产发布与必要的回滚证据。演练未执行时写明待办；不以 CI 通过、PR 合并或 workflow 存在推断服务器状态。Issue #143 全部真实验收完成前保持开放。
 
-rsync over SSH 不需要 rsync 守护进程或额外开放端口。runner 按需安装 rsync/sshpass，服务器只读检查 rsync；双方最低兼容版本为 **3.1**（进度参数兼容门槛），应使用发行版提供的安全更新包。服务器未安装时，以 `dependency-missing` 停止；版本不兼容以 `dependency-version` 停止，不自动安装生产依赖。需由维护者按系统包管理方式安装 rsync，再重新执行 prepare；认证、主机校验或连接失败使用各自类别，不归为缺少依赖。当前实现不修改部署变量、凭据或激活开关，rsync 生产 prepare、正式发布及生产回滚仍需分别验收。
+rsync over SSH 不需要 rsync 守护进程或额外开放端口。runner 按需安装 rsync/sshpass，服务器只读检查 rsync；双方最低兼容版本为 **3.1**（进度参数兼容门槛），应使用发行版提供的安全更新包。服务器未安装时，以 `dependency-missing` 停止；版本不兼容以 `dependency-version` 停止，不自动安装生产依赖。需由维护者按系统包管理方式安装 rsync，再重新执行 prepare；认证、主机校验或连接失败使用各自类别，不归为缺少依赖。当前实现不修改部署变量、凭据或激活开关，rsync 生产 prepare 与正式发布已有成功证据（见上），生产回滚仍待验收。
