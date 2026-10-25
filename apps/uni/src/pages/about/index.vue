@@ -95,14 +95,18 @@ const steps = [
             >站内通知展示组队进展与平台提醒演示，与比赛的官方来源通知不同，不代表消息真实发送或投递。</text
           >
           <text class="about-copy"
-            >演示变化仅保留在当前内存会话，页面间切换可继续使用；刷新、冷启动或统一重置会恢复初始示例，不会保存到账号或服务器。个人资料中的“重置示例”只重置资料与授权，不清空队伍、收藏或通知。</text
+            >演示变化仅保留在当前内存会话，页面间切换可继续使用；刷新、冷启动或统一重置会恢复初始示例，不会保存到账号或服务器。个人中心下拉中的“重置示例”会清空队伍、收藏、通知与资料演示，联系方式授权同时关闭。</text
           >
         </view>
         <view class="about-capability">
-          <text class="about-status about-status--pending">待开放</text>
-          <text class="about-item-title">账号服务</text>
+          <text class="about-status about-status--demo">小程序可用</text>
+          <text class="about-item-title">微信一键登录</text>
           <text class="about-copy"
-            >账号、登录注册与验证码真实服务尚未开放。现有表单用于校验与交互展示，当前不能完成真实注册或登录。</text
+            >微信小程序支持一键登录：首次登录自动创建平台账号，昵称默认“微信用户”，可在个人中心下拉里修改。登录只使用微信临时凭证，不获取手机号、头像或好友信息。</text
+          >
+          <text class="about-copy"
+            >H5
+            保留公开浏览与演示，不提供登录渠道；邮箱密码注册与验证码不再开发。</text
           >
         </view>
       </view>

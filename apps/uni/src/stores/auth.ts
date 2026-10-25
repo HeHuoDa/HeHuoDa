@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { CURRENT_CONSENT_VERSION } from "../api/auth-client.ts";
 import { authApi } from "../api/auth.ts";
 import { bindAuthSession } from "../api/client.ts";
@@ -12,6 +12,7 @@ import {
 } from "../auth/auth-session.ts";
 import { platformAuthStorage } from "../auth/platform-storage.ts";
 import { WechatCodeError, requestWechatCode } from "../auth/wechat-login.ts";
+import { useSessionStore } from "./session.ts";
 
 /**
  * 平台认证状态（Pinia 外壳）。
@@ -45,6 +46,14 @@ export const useAuthStore = defineStore("platform-auth", () => {
   const accountStatus = computed(() => state.user?.status ?? null);
   const campusStatus = computed(() => state.campus?.status ?? null);
   const teamingAvailable = computed(() => state.availability?.teaming === true);
+
+  // 真实昵称同步给业务会话：演示队伍里的本人也要显示账号昵称，避免同一页出现两个名字。
+  const business = useSessionStore();
+  watch(
+    () => state.user?.nickname ?? null,
+    (value) => business.setAccountNickname(value),
+    { immediate: true },
+  );
 
   /** 用户重新确认协议后调用，清除“协议已更新”提示。 */
   function acknowledgeConsent() {
