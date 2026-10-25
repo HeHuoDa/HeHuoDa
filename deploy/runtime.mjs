@@ -248,7 +248,82 @@ export function validateDeploymentConfig(tag, context) {
   }
 }
 
-export async function verifyPublicApplication(context) {
+const sleepFor = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+// A recreated web container can be briefly unreachable on its published port,
+// so a transient failure is retried and a deterministic shape mismatch is not.
+// Reasons are fixed strings: hosts, URLs and credentials never reach the log.
+async function checkPublicPath(path, base, fetchImpl, attempts, delayMs) {
+  let reason = "unreachable";
+  let code = "";
+  let message = "Public application check failed";
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    reason = "unreachable";
+    code = "";
+    message = "Public application check failed";
+    try {
+      const response = await fetchImpl(new URL(path, base), {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        reason = "status";
+        code = String(response.status);
+      } else if (path === "/") {
+        if (
+          !(response.headers.get("content-type") || "").includes("text/html") ||
+          !(await response.text()).includes("<html")
+        ) {
+          reason = "not-html";
+          message = "Public H5 entry is not HTML";
+        } else {
+          return { ok: true };
+        }
+      } else if (
+        !(response.headers.get("content-type") || "").includes(
+          "application/json",
+        )
+      ) {
+        reason = "non-json";
+        message = "Public API returned non-JSON";
+      } else {
+        const value = await response.json();
+        if (path.endsWith("/ready") && value.status !== "ready") {
+          reason = "not-ready";
+          message = "Public API is not ready";
+        } else if (path.endsWith("/colleges") && !Array.isArray(value)) {
+          return {
+            ok: false,
+            reason: "shape",
+            code: "",
+            message: "Public college query returned an invalid shape",
+          };
+        } else if (
+          path.endsWith("/competitions") &&
+          !Array.isArray(value.items)
+        ) {
+          return {
+            ok: false,
+            reason: "shape",
+            code: "",
+            message: "Public competition query returned an invalid shape",
+          };
+        } else {
+          return { ok: true };
+        }
+      }
+    } catch (error) {
+      reason = error?.name === "TimeoutError" ? "timeout" : "unreachable";
+    }
+    if (attempt < attempts - 1) await sleepFor(delayMs);
+  }
+  return { ok: false, reason, code, message };
+}
+
+export async function verifyPublicApplication(
+  context,
+  { attempts = 20, delayMs = 1500, fetchImpl = fetch, log = console.log } = {},
+) {
   const publicUrl = context?.publicUrl ?? process.env.DEPLOY_PUBLIC_URL;
   if (!publicUrl) return;
   const base = new URL(publicUrl);
@@ -260,30 +335,19 @@ export async function verifyPublicApplication(context) {
     "/api/v1/colleges",
     "/api/v1/competitions",
   ]) {
-    const response = await fetch(new URL(path, base), {
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error("Public application check failed");
-    if (path !== "/") {
-      if (
-        !(response.headers.get("content-type") || "").includes(
-          "application/json",
-        )
-      )
-        throw new Error("Public API returned non-JSON");
-      const value = await response.json();
-      if (path.endsWith("/ready") && value.status !== "ready")
-        throw new Error("Public API is not ready");
-      if (path.endsWith("/colleges") && !Array.isArray(value))
-        throw new Error("Public college query returned an invalid shape");
-      if (path.endsWith("/competitions") && !Array.isArray(value.items))
-        throw new Error("Public competition query returned an invalid shape");
-    } else {
-      if (
-        !(response.headers.get("content-type") || "").includes("text/html") ||
-        !(await response.text()).includes("<html")
-      )
-        throw new Error("Public H5 entry is not HTML");
+    const result = await checkPublicPath(
+      path,
+      base,
+      fetchImpl,
+      attempts,
+      delayMs,
+    );
+    if (!result.ok) {
+      log(
+        `phase=public-check status=failed path=${path} reason=${result.reason}${result.code ? ` code=${result.code}` : ""}`,
+      );
+      throw new Error(result.message);
     }
+    log(`phase=public-check status=verified path=${path}`);
   }
 }
