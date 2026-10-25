@@ -46,7 +46,7 @@ function makeApi() {
 
 test("登录与刷新走公开客户端；会话请求走认证客户端且路径与请求体正确", async () => {
   const { calls, api } = makeApi();
-  const pending = [api.wechatLogin("code-1"), api.refresh("rt-1")];
+  const pending = [api.wechatLogin("code-1", 1), api.refresh("rt-1")];
   assert.deepEqual(
     calls.slice(0, 2).map((c) => [c.label, c.options.method, c.options.url]),
     [
@@ -103,7 +103,7 @@ test("凭据与资料守卫拒绝畸形响应", async () => {
   );
   assert.equal(isProfileResponse(profile), true);
 
-  const pending = api.wechatLogin("c");
+  const pending = api.wechatLogin("c", 1);
   calls[0].options.success({ statusCode: 200, data: bad[0] });
   await assert.rejects(
     pending.promise,

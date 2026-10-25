@@ -58,10 +58,10 @@ export const CURRENT_CONSENT_VERSION = 1;
 /** bare 客户端发登录与刷新（不携带凭据、不参与 401 协调）；authed 发会话内请求。 */
 export function createAuthApi(bare: HttpClient, authed: HttpClient) {
   return {
-    wechatLogin(code: string) {
+    wechatLogin(code: string, consentVersion: number) {
       return bare.post(
         "/auth/wechat/login",
-        { code, consentVersion: CURRENT_CONSENT_VERSION },
+        { code, consentVersion },
         isCredentialResponse,
       );
     },
