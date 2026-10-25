@@ -36,7 +36,8 @@ test("关于页公开展示真实查询、会话演示和未开放服务，Logo 
       /默认不共享/,
       /同队有效成员.*所有者授权/s,
       /不收集.*真实联系方式/s,
-      /账号.*验证码.*尚未开放/s,
+      /微信一键登录/,
+      /H5.*不提供登录渠道/s,
     ])
       assert.match(content, expected);
     assert.doesNotMatch(content, /@|版本号|官方运营|立即注册/);
@@ -115,11 +116,20 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
       platform,
     );
     const activate = async () => {
-      const button = app.find(
-        (node) => node.props.onClick && textOf(node).includes("关于禾伙搭"),
+      // 关于入口已收进账号下拉：先点图标，再点条目。
+      const trigger = app.find(
+        (node) =>
+          node.props.role === "button" &&
+          node.props["aria-haspopup"] === "menu",
       );
-      assert.ok(button, "关于入口应可操作");
-      button.props.onClick();
+      assert.ok(trigger, "账号入口应可操作");
+      trigger.props.onClick();
+      await nextTick();
+      const item = app.find(
+        (node) => node.props.onClick && textOf(node).includes("关于我们"),
+      );
+      assert.ok(item, "关于入口应可操作");
+      item.props.onClick();
       await nextTick();
     };
     try {

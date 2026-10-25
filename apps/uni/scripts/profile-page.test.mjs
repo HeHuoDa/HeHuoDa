@@ -21,7 +21,7 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 
-test("资料编辑取消不写回，校验首错保留草稿，保存规范化且资料重置保留队伍", async () => {
+test("未登录时下拉承载授权开关与编辑资料，昵称只读", async () => {
   setActivePinia(createPinia());
   const session = useSessionStore();
   globalThis.uni = {
@@ -35,6 +35,26 @@ test("资料编辑取消不写回，校验首错保留草稿，保存规范化�
   };
   globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
   const app = await mount("../src/components/ProfileOverview.vue");
+  const openMenu = async () => {
+    const trigger = app.find(
+      (node) =>
+        node.props.role === "button" && node.props["aria-haspopup"] === "menu",
+    );
+    assert.ok(trigger, "账号入口应可操作");
+    trigger.props.onClick();
+    await nextTick();
+  };
+  const menuItem = async (label) => {
+    const node = app.find(
+      (n) =>
+        n.props.role === "menuitem" &&
+        n.props.onClick &&
+        textOf(n).includes(label),
+    );
+    assert.ok(node, label);
+    node.props.onClick();
+    await nextTick();
+  };
   const click = async (label) => {
     const button = app.find(
       (n) => n.type === "button" && textOf(n).includes(label),
@@ -50,63 +70,109 @@ test("资料编辑取消不写回，校验首错保留草稿，保存规范化�
     await nextTick();
   };
   try {
+    await openMenu();
     const toggle = app.find((n) => n.type === "switch");
     assert.equal(toggle.props.checked, false);
     toggle.props.onChange({ detail: { value: true } });
     await nextTick();
     assert.equal(session.contactShared, true);
-    assert.match(textOf(app.container), /未提供真实联系方式/);
-    toggle.props.onChange({ detail: { value: false } });
-    await nextTick();
-    assert.equal(session.contactShared, false);
+    assert.match(textOf(app.container), /演示已授权/);
+    // 开关不下拉关闭：同一份下拉里仍能找到编辑资料。
+    assert.ok(
+      app.find(
+        (n) => n.props.role === "menuitem" && textOf(n).includes("编辑资料"),
+      ),
+    );
     toggle.props.onKeydown({ key: " ", preventDefault() {} });
     await nextTick();
-    assert.equal(session.contactShared, true);
-    assert.equal(toggle.props["aria-checked"], true);
-    toggle.props.onKeydown({ key: "Enter", preventDefault() {} });
-    await nextTick();
     assert.equal(session.contactShared, false);
-    await click("编辑资料");
-    await input("profile-nickname", "不保存");
-    await click("取消并关闭");
-    await click("编辑资料");
     assert.equal(
-      app.find((n) => n.props.id === "profile-nickname").props.value,
-      "禾小苗",
+      app.find((n) => n.type === "switch").props["aria-checked"],
+      false,
     );
-    await input("profile-nickname", " ");
-    await click("保存示例资料");
-    assert.match(textOf(app.container), /请输入 1–20 字昵称/);
-    assert.equal(
-      app.find((n) => n.props.id === "profile-nickname").props.focus,
-      true,
-    );
-    assert.equal(session.profile.nickname, "禾小苗");
-    await input("profile-nickname", " 新伙伴 ");
+
+    await menuItem("编辑资料");
+    const nickname = app.find((n) => n.props.id === "profile-nickname");
+    assert.equal(nickname.props.value, "禾小苗");
+    assert.equal(nickname.props.disabled, true);
     await input("profile-skills", " 编程,设计、编程 ");
-    await click("保存示例资料");
-    assert.equal(session.profile.nickname, "新伙伴");
+    await click("保存资料");
     assert.equal(session.profile.skills, "编程、设计");
+    assert.equal(session.profile.nickname, "禾小苗", "未登录不改示例昵称");
     assert.match(textOf(app.container), /未保存到服务器/);
+  } finally {
+    app.unmount();
+    delete globalThis.uni;
+    delete globalThis.getCurrentPages;
+  }
+});
+
+test("重置示例先二次确认，取消不改动数据，确认后清空演示会话", async () => {
+  setActivePinia(createPinia());
+  const session = useSessionStore();
+  globalThis.uni = {
+    getWindowInfo: () => ({ windowHeight: 800 }),
+    onKeyboardHeightChange() {},
+    onWindowResize() {},
+    offWindowResize() {},
+    offKeyboardHeightChange() {},
+    hideTabBar() {},
+    showTabBar() {},
+  };
+  globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
+  const app = await mount("../src/components/ProfileOverview.vue");
+  const openMenu = async () => {
+    app
+      .find(
+        (node) =>
+          node.props.role === "button" &&
+          node.props["aria-haspopup"] === "menu",
+      )
+      .props.onClick();
+    await nextTick();
+  };
+  const menuItem = async (label) => {
+    const node = app.find(
+      (n) =>
+        n.props.role === "menuitem" &&
+        n.props.onClick &&
+        textOf(n).includes(label),
+    );
+    assert.ok(node, label);
+    node.props.onClick();
+    await nextTick();
+  };
+  const click = async (label) => {
+    const button = app.find(
+      (n) => n.type === "button" && textOf(n).includes(label),
+    );
+    assert.ok(button, label);
+    button.props.onClick();
+    await nextTick();
+  };
+  try {
     session.apply("demo-1", "调研", "保留申请");
     session.contactShared = true;
-    await click("重置示例");
-    assert.equal(session.profile.nickname, "禾小苗");
-    assert.equal(session.contactShared, false);
-    assert.ok(session.applications["demo-1"]);
-    await click("编辑资料");
-    await input("profile-nickname", "统一重置时丢弃");
-    session.reset();
-    await nextTick();
-    assert.equal(
+    session.saveProfile({ ...session.profile, skills: "编程" });
+
+    await openMenu();
+    await menuItem("重置示例");
+    assert.ok(
       app.find((n) => n.props.role === "dialog"),
-      undefined,
+      "重置必须先二次确认",
     );
-    await click("编辑资料");
-    assert.equal(
-      app.find((n) => n.props.id === "profile-nickname").props.value,
-      "禾小苗",
-    );
+    await click("取消并关闭");
+    assert.equal(session.contactShared, true, "取消不改动授权");
+    assert.equal(session.profile.skills, "编程", "取消不改动资料");
+    assert.ok(session.applications["demo-1"], "取消不清空申请");
+
+    await openMenu();
+    await menuItem("重置示例");
+    await click("确认重置");
+    assert.equal(session.contactShared, false);
+    assert.notEqual(session.profile.skills, "编程");
+    assert.equal(session.applications["demo-1"], undefined);
+    assert.match(textOf(app.container), /示例数据已重置/);
   } finally {
     app.unmount();
     delete globalThis.uni;
