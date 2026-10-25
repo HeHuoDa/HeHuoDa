@@ -46,6 +46,17 @@ jobs:
       GH_REPO: ${{ github.repository }}
       CANDIDATE_SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
       DEPLOY_ACTION: ${{ inputs.action || 'deploy' }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_TLS: ${{ vars.DEPLOY_TLS }}
+      DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
+      DEPLOY_ARCHIVE_ACTIVATE: ${{ vars.DEPLOY_ARCHIVE_ACTIVATE }}
+      RELEASE_SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
     steps:
       - name: Verify the exact main release passed CI and retained its archive
         id: verified
@@ -134,165 +145,92 @@ jobs:
             node controller/deploy/archive.mjs verify "$payload" "$CANDIDATE_SHA"
           fi
           tar -czf "$RUNNER_TEMP/payload.tar.gz" -C "$payload" .
-      - name: Transfer the verified payload and run the release action
+      - name: Prepare pinned SCP transport and isolated staging
+        id: transport
         if: steps.verified.outputs.sha != ''
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_TLS: ${{ vars.DEPLOY_TLS }}
-          DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
-          DEPLOY_ARCHIVE_ACTIVATE: ${{ vars.DEPLOY_ARCHIVE_ACTIVATE }}
-          RELEASE_SHA: ${{ steps.verified.outputs.sha }}
         shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
-          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
-          DEPLOY_PORT=${DEPLOY_PORT:-22}
-          DEPLOY_PATH=${DEPLOY_PATH:-/opt/hehuoda}
-          [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]]
-          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9/_-]+$ && "$DEPLOY_PATH" != / ]]
-          [[ "${DEPLOY_TLS:-false}" =~ ^(true|false)$ ]]
-          [[ "${DEPLOY_ARCHIVE_ACTIVATE:-false}" =~ ^(true|false)$ ]]
-          [[ -z "$DEPLOY_PUBLIC_URL" || "$DEPLOY_PUBLIC_URL" =~ ^https?://[a-zA-Z0-9.:-]+/?$ ]]
-          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
-          test -n "$DEPLOY_KNOWN_HOSTS"
-          task_dir=$(mktemp -d)
-          trap 'rm -rf -- "$task_dir"' EXIT
-          chmod 700 "$task_dir"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$task_dir/known_hosts"
-          ssh_args=(-p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$task_dir/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
-          if [[ -n "$DEPLOY_SSH_KEY" && -z "$DEPLOY_PASSWORD" ]]; then
-            printf '%s\n' "$DEPLOY_SSH_KEY" > "$task_dir/key"
-            chmod 600 "$task_dir/key"
-            ssh_args+=(-o BatchMode=yes -o IdentitiesOnly=yes -i "$task_dir/key")
-            transport=(ssh)
-          elif [[ -n "$DEPLOY_PASSWORD" && -z "$DEPLOY_SSH_KEY" ]]; then
-            if ! command -v sshpass >/dev/null; then
-              sudo apt-get update -qq
-              sudo apt-get install -y -qq sshpass
-            fi
-            export SSHPASS="$DEPLOY_PASSWORD"
-            transport=(sshpass -e ssh)
-            ssh_args+=(-o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no)
-          else
-            echo 'Configure exactly one of DEPLOY_PASSWORD or DEPLOY_SSH_KEY.' >&2
-            exit 1
-          fi
-          target="$DEPLOY_USER@$DEPLOY_HOST"
-          # The server stores its own .env and never receives credentials from the checkout.
-          remote() { timeout --signal=TERM --kill-after=5s "${2:-60}" "${transport[@]}" "${ssh_args[@]}" "$target" "$1" 2> "$task_dir/ssh.stderr"; }
-          echo 'phase=connect status=started'
-          if ! remote "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env' && command -v node >/dev/null && docker info >/dev/null && test -w '$DEPLOY_PATH'"; then
-            echo 'phase=connect status=failed-or-timed-out' >&2
-            exit 1
-          fi
-          echo 'phase=connect status=verified'
-          if [[ "$DEPLOY_ACTION" == rollback ]]; then
-            destination="$DEPLOY_PATH/controller/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          else
-            destination="$DEPLOY_PATH/releases/$RELEASE_SHA/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          fi
-          # One transfer attempt is bounded to ten minutes; two attempts reuse a
-          # complete remote copy instead of retransmitting it.
-          transfer() {
-            local label="$1" source="$2" directory="$3" digest bytes attempt started transferred
-            transfer_heartbeat=''
-            transfer_process=''
-            transfer_directory="$directory"
-            cleanup_transfer() {
-              if [[ -n "$transfer_process" ]]; then
-                kill "$transfer_process" 2>/dev/null || true
-                wait "$transfer_process" 2>/dev/null || true
-                transfer_process=''
-              fi
-              if [[ -n "$transfer_heartbeat" ]]; then
-                kill "$transfer_heartbeat" 2>/dev/null || true
-                wait "$transfer_heartbeat" 2>/dev/null || true
-                transfer_heartbeat=''
-              fi
-              if [[ -n "$transfer_directory" ]]; then
-                remote "rm -rf '$transfer_directory.incoming'" >/dev/null 2>&1 || true
-                transfer_directory=''
-              fi
-            }
-            trap 'cleanup_transfer; rm -rf -- "$task_dir"' EXIT
-            trap 'exit 130' INT
-            trap 'exit 143' TERM
-            digest=$(sha256sum "$source" | cut -d' ' -f1)
-            bytes=$(wc -c < "$source")
-            for attempt in 1 2; do
-              if [[ "$(remote "test -f '$directory/.payload' && cat '$directory/.payload'" 2>/dev/null || true)" == "$digest $bytes" ]]; then
-                echo "phase=$label status=reused attempt=$attempt bytes=$bytes"
-                cleanup_transfer
-                return 0
-              fi
-              echo "phase=$label status=transferring attempt=$attempt bytes=$bytes"
-              started=$(date +%s)
-              (
-                tick=''
-                probe=''
-                trap '[[ -z "$tick" ]] || kill "$tick" 2>/dev/null || true; [[ -z "$probe" ]] || kill "$probe" 2>/dev/null || true' EXIT
-                trap 'exit 0' TERM INT
-                while kill -0 "$$" 2>/dev/null; do
-                  sleep 30 & tick=$!
-                  wait "$tick" || break
-                  remote "if test -f '$directory.incoming/payload.tar.gz'; then wc -c < '$directory.incoming/payload.tar.gz'; else echo 0; fi" 5 > "$task_dir/progress" & probe=$!
-                  wait "$probe" || true
-                  received=$(cat "$task_dir/progress" 2>/dev/null || true)
-                  [[ "$received" =~ ^[0-9]+$ ]] || received=0
-                  elapsed=$(( $(date +%s) - started ))
-                  echo "phase=$label status=running attempt=$attempt elapsed=${elapsed}s received=$received total=$bytes bytes_per_second=$(( received / (elapsed + 1) ))"
-                done
-              ) &
-              transfer_heartbeat=$!
-              timeout --signal=TERM --kill-after=30s 600 "${transport[@]}" "${ssh_args[@]}" "$target" "umask 077 && rm -rf '$directory.incoming' && mkdir -p '$directory.incoming' && cat > '$directory.incoming/payload.tar.gz'" < "$source" 2> "$task_dir/transfer.stderr" &
-              transfer_process=$!
-              if wait "$transfer_process"; then
-                transferred=0
-              else
-                transferred=1
-              fi
-              transfer_process=''
-              kill "$transfer_heartbeat" 2>/dev/null || true
-              wait "$transfer_heartbeat" 2>/dev/null || true
-              transfer_heartbeat=''
-              if [[ "$transferred" == 0 ]] && remote "test \"\$(sha256sum '$directory.incoming/payload.tar.gz' | cut -d' ' -f1)\" = '$digest' && test \"\$(wc -c < '$directory.incoming/payload.tar.gz')\" = '$bytes' && tar -xzf '$directory.incoming/payload.tar.gz' -C '$directory.incoming' && rm '$directory.incoming/payload.tar.gz' && printf '%s %s' '$digest' '$bytes' > '$directory.incoming/.payload' && rm -rf '$directory' && mv '$directory.incoming' '$directory'"; then
-                echo "phase=$label status=transferred attempt=$attempt elapsed=$(( $(date +%s) - started ))s"
-                cleanup_transfer
-                return 0
-              fi
-              echo "phase=$label status=retrying attempt=$attempt elapsed=$(( $(date +%s) - started ))s" >&2
-              if [[ "$attempt" == 1 ]]; then sleep 10; fi
-            done
-            echo "phase=$label status=transfer-failed attempts=2" >&2
-            cleanup_transfer
-            return 1
-          }
-          # Measure the same SSH upload path before committing to a full archive.
-          # Include SSH setup in the estimate, so a marginal link fails conservatively.
-          payload_bytes=$(wc -c < "$RUNNER_TEMP/payload.tar.gz")
-          probe_bytes=$(( payload_bytes < 1048576 ? payload_bytes : 1048576 ))
-          echo "phase=link-probe status=started bytes=$probe_bytes"
-          head -c "$probe_bytes" /dev/urandom > "$task_dir/probe"
-          probe_started=$(date +%s)
-          if ! timeout --signal=TERM --kill-after=5s 60 "${transport[@]}" "${ssh_args[@]}" "$target" 'cat > /dev/null' < "$task_dir/probe" 2> "$task_dir/probe.stderr"; then
-            echo 'phase=link-probe status=failed-or-timed-out limit=60s' >&2
-            exit 1
-          fi
-          probe_elapsed=$(( $(date +%s) - probe_started ))
-          probe_elapsed=$(( probe_elapsed > 0 ? probe_elapsed : 1 ))
-          estimated=$(( payload_bytes * probe_elapsed / probe_bytes ))
-          echo "phase=link-probe status=measured elapsed=${probe_elapsed}s bytes_per_second=$(( probe_bytes / probe_elapsed )) estimated_payload_seconds=$estimated"
-          if [[ "$estimated" -gt 600 ]]; then
-            echo 'phase=link-probe status=insufficient-throughput transfer_limit=600s' >&2
-            exit 1
-          fi
-          transfer payload "$RUNNER_TEMP/payload.tar.gz" "$destination"
-          echo "phase=delivery status=started action=$DEPLOY_ACTION"
-          remote "cd '$destination' && DEPLOY_ROOT='$DEPLOY_PATH' DEPLOY_ENV_FILE='$DEPLOY_PATH/.env' DEPLOY_STATE_DIR='$DEPLOY_PATH/state' DEPLOY_BACKUP_DIR='$DEPLOY_PATH/backups' DEPLOY_TLS='${DEPLOY_TLS:-false}' DEPLOY_PUBLIC_URL='$DEPLOY_PUBLIC_URL' DEPLOY_ARCHIVE_ACTIVATE='${DEPLOY_ARCHIVE_ACTIVATE:-false}' node deploy/delivery.mjs '$DEPLOY_ACTION' '$RELEASE_SHA' '$destination'" 1200
+        run: bash controller/deploy/scp.sh setup
+      - name: Upload the 1 MiB probe with SCP
+        id: probe
+        if: steps.verified.outputs.sha != ''
+        # Bound the whole client; its connection timeout does not bound every SSH phase.
+        timeout-minutes: 2
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ env.SCP_PORT }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ env.SCP_FINGERPRINT }}
+          source: ${{ env.SCP_SOURCE_DIR }}/probe
+          target: ${{ env.SCP_STAGING }}/probe
+          tar_tmp_path: ${{ env.SCP_STAGING }}/
+          strip_components: 1
+          overwrite: true
+          timeout: 30s
+          command_timeout: 90s
+      - name: Verify the SCP probe before uploading the archive
+        if: steps.verified.outputs.sha != ''
+        shell: bash
+        run: bash controller/deploy/scp.sh probe
+      - name: Upload the verified payload with SCP (attempt 1)
+        id: upload
+        if: steps.verified.outputs.sha != ''
+        timeout-minutes: 10
+        continue-on-error: true
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ env.SCP_PORT }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ env.SCP_FINGERPRINT }}
+          source: ${{ env.SCP_SOURCE_DIR }}/payload.tar.gz
+          target: ${{ env.SCP_STAGING }}/upload
+          tar_tmp_path: ${{ env.SCP_STAGING }}/
+          strip_components: 1
+          overwrite: true
+          timeout: 30s
+          command_timeout: 10m
+      - name: Check for a complete payload even if the SCP response was lost
+        id: received
+        if: ${{ !cancelled() && steps.verified.outputs.sha != '' && (steps.upload.outcome == 'success' || steps.upload.outcome == 'failure') }}
+        shell: bash
+        run: bash controller/deploy/scp.sh received
+      - name: Prepare one retry for an incomplete payload
+        if: steps.verified.outputs.sha != '' && steps.received.outputs.valid == 'false'
+        shell: bash
+        run: bash controller/deploy/scp.sh retry
+      - name: Upload the verified payload with SCP (attempt 2)
+        if: steps.verified.outputs.sha != '' && steps.received.outputs.valid == 'false'
+        timeout-minutes: 10
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ env.SCP_PORT }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ env.SCP_FINGERPRINT }}
+          source: ${{ env.SCP_SOURCE_DIR }}/payload.tar.gz
+          target: ${{ env.SCP_STAGING }}/upload
+          tar_tmp_path: ${{ env.SCP_STAGING }}/
+          strip_components: 1
+          overwrite: true
+          timeout: 30s
+          command_timeout: 10m
+      - name: Verify the received archive before extracting it
+        if: steps.verified.outputs.sha != ''
+        shell: bash
+        run: bash controller/deploy/scp.sh verify
+      - name: Run the existing release action
+        if: steps.verified.outputs.sha != ''
+        shell: bash
+        run: bash controller/deploy/scp.sh deliver
+      - name: Clean this attempt's SCP staging files
+        if: ${{ always() && steps.verified.outputs.sha != '' && steps.transport.outcome != 'skipped' }}
+        timeout-minutes: 2
+        shell: bash
+        run: bash controller/deploy/scp.sh cleanup
