@@ -223,7 +223,7 @@ describe("学校认证包公开接口", () => {
     }
   });
 
-  it("账号别名采用相同上游标识，不从提交账号或个人字段推导身份", async () => {
+  it("不同账号输入仍采用替身返回的主体，不从输入或个人字段推导身份", async () => {
     const client = new SchoolAuthClient({}, async (request) =>
       request.method === "GET" ? captcha() : success("stable-id"),
     );

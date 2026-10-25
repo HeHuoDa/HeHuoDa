@@ -83,7 +83,7 @@ API 继续负责数据库锁、任务调度、游标和恢复链、运行记录�
 
 学校来源固定为 `https://auth.sicau.edu.cn`，应用为 `sicau-cas`。仅调用正常流程的 `GET /api/v1/captcha?appid=sicau-cas` 与 `POST /api/v1/cas/login`，提交 JSON `{appid, number, password, code, uuid}`。响应按 #130 与学校公开前端规则解密：MD5(requestId + ":sicau-cas") 的原始 16 字节为 AES-128-CBC 密钥，base64 响应前 16 字节为 IV，PKCS#7 填充，解密后解析 JSON。加密规则只用于兼容上游，不作为平台自己的加密设计。无需浏览器或额外依赖。
 
-可信成功要求业务 `code=200`、`msg=登录成功`、票据字段存在、`users=[]`，并取得单身份 `user.id`。只返回 `{source: "sicau-eauth", subject}`，不返回票据、学号、姓名、电话或原始响应。标识原样保留，不从用户输入推导，也不做大小写或数字转换。尚未验证的多身份分支安全返回 `unsupported_verification`，不擅取 `users[0]`；缺字段、HTML、未知结构和额外验证不返回成功。仅有 HTTP 200、页面跳转、自填学号、截图或客户端成功标记不能证明核验成功。
+可信成功要求业务 `code=200`、`msg=登录成功`、票据字段存在、`users=[]`，并取得单身份 `user.id`。只返回 `{source: "sicau-eauth", subject}`，不返回票据、学号、姓名、电话或原始响应。标识原样保留，不从用户输入推导，也不做大小写或数字转换。离线不同账号输入测试仅证明实现使用上游主体，不证明学校真实双别名归一；该行为仍取决于学校契约。尚未验证的多身份分支安全返回 `unsupported_verification`，不擅取 `users[0]`；缺字段、HTML、未知结构和额外验证不返回成功。仅有 HTTP 200、页面跳转、自填学号、截图或客户端成功标记不能证明核验成功。
 
 ### 服务端包接口
 
