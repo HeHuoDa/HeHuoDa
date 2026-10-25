@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import { eq } from "drizzle-orm";
 import { createApiError } from "../common/api-error.js";
 import {
@@ -10,6 +11,14 @@ import { CapabilityRegistry } from "./capabilities.js";
 
 @Injectable()
 export class AccountLifecycle {
+  private readonly logger = new Logger(AccountLifecycle.name);
+  private readonly pendingSchoolCleanup = new Map<
+    string,
+    {
+      input: { userId: string; sessionId?: string };
+      expiresAt: number;
+    }
+  >();
   constructor(private readonly registry: CapabilityRegistry) {}
 
   async checkDeletion(tx: AccessTransaction, userId: string): Promise<void> {
@@ -58,21 +67,52 @@ export class AccountLifecycle {
       await module.lifecycle.cleanup(tx, userId, now);
   }
 
-  // 只在数据库提交后调用；失败不得声称数据库已回滚。调用者持有重试责任。
+  // 只在数据库提交后调用；学校会话限于本进程且最长五分钟，进程退出即销毁。
   async destroySchoolSessions(input: {
     userId: string;
     sessionId?: string;
   }): Promise<void> {
+    const key = JSON.stringify([input.userId, input.sessionId ?? null]);
     try {
       await this.registry
         .provider("school-sessions")
         ?.schoolSessions?.destroy(input);
+      this.pendingSchoolCleanup.delete(key);
     } catch {
+      if (!this.pendingSchoolCleanup.has(key))
+        this.pendingSchoolCleanup.set(key, {
+          input: { ...input },
+          expiresAt: Date.now() + 5 * 60_000,
+        });
       throw createApiError(
         503,
         "SCHOOL_SESSION_CLEANUP_PENDING",
         "平台变更已提交，学校临时会话清理待重试",
       );
+    }
+  }
+
+  @Cron("*/10 * * * * *", {
+    name: "school-session-cleanup-retry",
+    waitForCompletion: true,
+  })
+  async retrySchoolSessionCleanup(): Promise<void> {
+    for (const [key, task] of this.pendingSchoolCleanup) {
+      if (Date.now() >= task.expiresAt) {
+        // #134 的学校会话已到最长寿命，不持久保存用户引用。
+        this.pendingSchoolCleanup.delete(key);
+        continue;
+      }
+      try {
+        await this.registry
+          .provider("school-sessions")
+          ?.schoolSessions?.destroy(task.input);
+        if (this.pendingSchoolCleanup.get(key) === task)
+          this.pendingSchoolCleanup.delete(key);
+      } catch {
+        // 不记录用户引用、学校报文或秘密；下一轮重试，无需已撤销的平台凭据。
+        this.logger.warn("学校临时会话清理尚未完成，将继续重试");
+      }
     }
   }
 }

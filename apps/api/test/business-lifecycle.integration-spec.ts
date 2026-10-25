@@ -61,4 +61,55 @@ describe("退出与事务审计", () => {
       sessions.destroy = original;
     }
   });
+  it("退出凭据已撤销后，服务端仍能重试学校清理且不撤销联系人授权", async () => {
+    const actor = await f.user("logout-retry");
+    const viewer = await f.user("logout-viewer");
+    const access = await f.repository.findActiveAccess(
+      actor.accessToken,
+      f.now,
+    );
+    const clock = new AuthClock();
+    clock.now = () => new Date(f.now);
+    const service = new AuthService(
+      new ConfigService(),
+      f.repository,
+      new AuthRateLimiter(f.database),
+      new StubWechatProvider(),
+      clock,
+      f.lifecycle,
+    );
+    const sessions = f.registry.provider("school-sessions")!.schoolSessions!;
+    const original = sessions.destroy;
+    let unavailable = true;
+    const liveSchoolSessions = new Set([access!.sessionId]);
+    sessions.destroy = async (input) => {
+      if (unavailable) throw new Error("synthetic failure");
+      if (input.sessionId) liveSchoolSessions.delete(input.sessionId);
+    };
+    try {
+      await expect(
+        service.logout(access!, "logout-retry"),
+      ).rejects.toMatchObject({ status: 503 });
+      expect(
+        await f.repository.findActiveAccess(actor.accessToken, f.now),
+      ).toBeUndefined();
+      expect(liveSchoolSessions.has(access!.sessionId)).toBe(true);
+      unavailable = false;
+      await f.lifecycle.retrySchoolSessionCleanup();
+      expect(liveSchoolSessions.size).toBe(0);
+      await f.lifecycle.retrySchoolSessionCleanup();
+      await expect(
+        f.database.db.transaction((tx) =>
+          f.policy.authorize(
+            tx,
+            viewer.accessToken,
+            "readMemberContact",
+            actor.id,
+          ),
+        ),
+      ).resolves.toMatchObject({ user: { id: viewer.id } });
+    } finally {
+      sessions.destroy = original;
+    }
+  });
 });
