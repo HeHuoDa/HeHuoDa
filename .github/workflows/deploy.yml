@@ -150,6 +150,25 @@ jobs:
         if: steps.verified.outputs.sha != ''
         shell: bash
         run: bash controller/deploy/scp.sh setup
+      # The runner is the sender for both the probe and the archive; the target
+      # host is only the receiver, so sender-side transport settings decide the
+      # usable rate on a lossy cross-border path. Absence of BBR must not stop
+      # the transfer, it is reported instead.
+      - name: Tune the runner's sender-side transport for the cross-border link
+        if: steps.verified.outputs.sha != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "phase=runner-tuning status=before cc=$(sysctl -n net.ipv4.tcp_congestion_control) qdisc=$(sysctl -n net.core.default_qdisc) mtu_probing=$(sysctl -n net.ipv4.tcp_mtu_probing) available=$(sysctl -n net.ipv4.tcp_available_congestion_control)"
+          sudo modprobe tcp_bbr || true
+          if sysctl -n net.ipv4.tcp_available_congestion_control | grep -qw bbr; then
+            sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
+            sudo sysctl -w net.core.default_qdisc=fq
+            sudo sysctl -w net.ipv4.tcp_mtu_probing=1
+            echo "phase=runner-tuning status=applied cc=$(sysctl -n net.ipv4.tcp_congestion_control) qdisc=$(sysctl -n net.core.default_qdisc) mtu_probing=$(sysctl -n net.ipv4.tcp_mtu_probing)"
+          else
+            echo "phase=runner-tuning status=unavailable reason=bbr-module-missing"
+          fi
       - name: Upload the 1 MiB probe with rsync
         id: probe
         if: steps.verified.outputs.sha != ''
