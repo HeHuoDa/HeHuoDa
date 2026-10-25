@@ -29,17 +29,21 @@ function fixture(t, body, extra = {}) {
     join(directory, "environment.bash"),
     `
 ssh() {
+  if [[ "\${FIXTURE_HOSTKEY_UPDATE:-}" != '' && " $* " == *' UpdateHostKeys=yes '* ]]; then
+    printf '%s\\n' "$FIXTURE_HOSTKEY_UPDATE" >> "$RUNNER_TEMP/hehuoda-scp-17-2/known_hosts"
+  fi
   if [[ "\${REMOTE_FAIL:-}" != '' ]]; then
     echo 'fixture-private server.example password=fixture-private' >&2
     return "$REMOTE_FAIL"
   fi
   bash -c "\${*: -1}"
 }
+ssh-keyscan() { printf '%s\\n' "\${FIXTURE_OFFERED_KEYS:-$DEPLOY_KNOWN_HOSTS}"; }
 sshpass() { [[ "$SSHPASS" == fixture-private ]]; shift; "$@"; }
 docker() { return 0; }
 sleep() { return 0; }
 timeout() { shift 3; "$@"; }
-export -f ssh sshpass docker sleep timeout
+export -f ssh sshpass ssh-keyscan docker sleep timeout
 `,
   );
   const result = spawnSync(bash, ["--noprofile", "--norc", "-s"], {
@@ -207,4 +211,45 @@ bash "$HELPER" setup
   );
   assert.notEqual(revoked.status, 0);
   assert.match(revoked.stderr, /revoked-host-key/);
+});
+
+test("SCP pins the offered key authenticated by UpdateHostKeys, ignoring stale trusted types", (t) => {
+  for (const update of [true, false]) {
+    const result = fixture(
+      t,
+      `
+ssh-keygen -q -t ecdsa -b 256 -N '' -f "$GITHUB_WORKSPACE/ecdsa"
+ecdsa="[server.example]:2222 $(cat "$GITHUB_WORKSPACE/ecdsa.pub")"
+if ${update}; then
+  export FIXTURE_HOSTKEY_UPDATE="$ecdsa"
+  export FIXTURE_OFFERED_KEYS="$DEPLOY_KNOWN_HOSTS
+$ecdsa"
+  expected=$(ssh-keygen -lf "$GITHUB_WORKSPACE/ecdsa.pub" -E sha256 | awk '{print $2}')
+else
+  export FIXTURE_OFFERED_KEYS="$DEPLOY_KNOWN_HOSTS"
+  export DEPLOY_KNOWN_HOSTS="$DEPLOY_KNOWN_HOSTS
+$ecdsa"
+  expected=$(ssh-keygen -lf "$GITHUB_WORKSPACE/hostkey.pub" -E sha256 | awk '{print $2}')
+fi
+bash "$HELPER" setup
+source "$GITHUB_ENV"
+test "$SCP_FINGERPRINT" = "$expected"
+`,
+    );
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+});
+
+test("untrusted scanned keys never supply the Action fingerprint", (t) => {
+  const result = fixture(
+    t,
+    `
+ssh-keygen -q -t ecdsa -b 256 -N '' -f "$GITHUB_WORKSPACE/unknown"
+export FIXTURE_OFFERED_KEYS="[server.example]:2222 $(cat "$GITHUB_WORKSPACE/unknown.pub")"
+bash "$HELPER" setup
+`,
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /untrusted-negotiated-host-key/);
+  assert.equal(existsSync(join(result.directory, "github-env")), false);
 });
