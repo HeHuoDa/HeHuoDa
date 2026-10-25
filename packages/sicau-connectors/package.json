@@ -10,6 +10,10 @@
     "dist"
   ],
   "exports": {
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js"
+    },
     "./notices": {
       "types": "./dist/notices/index.d.ts",
       "import": "./dist/notices/index.js"

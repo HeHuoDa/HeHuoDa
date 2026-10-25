@@ -78,7 +78,12 @@ try {
     `
     import assert from 'node:assert/strict';
     import { parseCandidate, sourceById } from '@hehuoda/sicau-connectors/notices';
+    import { SchoolAuthClient, SchoolAuthError } from '@hehuoda/sicau-connectors/auth';
     assert.ok(import.meta.resolve('@hehuoda/sicau-connectors/notices').endsWith('/dist/notices/index.js'));
+    assert.ok(import.meta.resolve('@hehuoda/sicau-connectors/auth').endsWith('/dist/auth/index.js'));
+    const auth = new SchoolAuthClient();
+    auth.dispose();
+    await assert.rejects(auth.createChallenge(), error => error instanceof SchoolAuthError && error.code === 'disposed');
     const paragraph = '报名截止：2026年10月20日。';
     const candidate = parseCandidate({
       title: '2026年测试竞赛报名通知', publishedAt: null,
