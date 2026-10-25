@@ -95,6 +95,15 @@ export function parseChallenge(envelope: Record<string, unknown>): {
   return { uuid, imageDataUrl };
 }
 
+function identityText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 128 &&
+    value.trim().length > 0 &&
+    !/\p{Cc}/u.test(value)
+  );
+}
+
 export function parseIdentity(envelope: Record<string, unknown>): AuthIdentity {
   if (envelope.code !== 200 || envelope.msg !== "登录成功") {
     if (envelope.msg === "验证码错误")
@@ -115,8 +124,13 @@ export function parseIdentity(envelope: Record<string, unknown>): AuthIdentity {
   // 多身份分支没有可靠实测契约；不能把 users[0] 当作本次核验身份。
   if (!Array.isArray(data.users) || data.users.length !== 0)
     throw new SchoolAuthError("unsupported_verification");
-  const subject = object(data.user).id;
+  const user = object(data.user);
+  const subject = user.id;
   if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject))
     throw new SchoolAuthError("unknown_response");
-  return { source: "sicau-eauth", subject };
+  const accountNumber = user.number,
+    name = user.name;
+  if (!identityText(accountNumber) || !identityText(name))
+    throw new SchoolAuthError("unknown_response");
+  return { source: "sicau-eauth", subject, accountNumber, name };
 }

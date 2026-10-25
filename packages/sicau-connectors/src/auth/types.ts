@@ -68,4 +68,8 @@ export interface AuthIdentity {
   source: "sicau-eauth";
   /** 学校可信标识，原样规范化；仅供后端短时使用，不得记日志或下发。 */
   subject: string;
+  /** 学校 user.number 原值（学号／工号），保留前导零；不等同于学生身份。 */
+  accountNumber: string;
+  /** 学校 user.name 原值；与账号编号均仅供服务端核对，不得记日志。 */
+  name: string;
 }

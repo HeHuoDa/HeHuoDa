@@ -22,12 +22,15 @@ const captcha = (id = "synthetic-challenge") =>
     requestId: "fixture-request",
     data: encryptedImage,
   });
-const success = (id = "synthetic-subject") =>
+const success = (
+  id = "synthetic-subject",
+  profile: Record<string, unknown> = { number: "00123456", name: "合成姓名" },
+) =>
   response({
     code: 200,
     msg: "登录成功",
     data: {
-      user: { id, number: "not-the-subject", phone: "SECRET_PHONE" },
+      user: { id, ...profile, phone: "SECRET_PHONE" },
       users: [],
       st: "SECRET_ST",
       tgt: "SECRET_TGT",
@@ -95,7 +98,7 @@ describe("学校认证包公开接口", () => {
       client.dispose();
     }
   });
-  it("只返回学校可信主体并在终态释放句柄，不返回学校票据或原始身份", async () => {
+  it("返回可信主体、学校账号及姓名并释放句柄，不返回票据、电话或原始响应", async () => {
     const replies = [captcha(), success()];
     const transport = jest.fn<AuthTransport>(async () => replies.shift()!);
     const client = new SchoolAuthClient({}, transport);
@@ -112,7 +115,12 @@ describe("学校认证包公开接口", () => {
           challengeVersion: challenge.challengeVersion,
           ...credentials,
         }),
-      ).toEqual({ source: "sicau-eauth", subject: "synthetic-subject" });
+      ).toEqual({
+        source: "sicau-eauth",
+        subject: "synthetic-subject",
+        accountNumber: "00123456",
+        name: "合成姓名",
+      });
       await expect(
         client.submit({
           handle: challenge.handle,
@@ -133,6 +141,52 @@ describe("学校认证包公开接口", () => {
     }
   });
 
+  it.each([
+    { number: undefined, name: "合成姓名" },
+    { number: null, name: "合成姓名" },
+    { number: 123456, name: "合成姓名" },
+    { number: "", name: "合成姓名" },
+    { number: "   ", name: "合成姓名" },
+    { number: "0012\nSECRET_NUMBER", name: "合成姓名" },
+    { number: "X".repeat(129), name: "合成姓名" },
+    { number: "00123456", name: undefined },
+    { number: "00123456", name: null },
+    { number: "00123456", name: 123 },
+    { number: "00123456", name: "" },
+    { number: "00123456", name: " \u3000 " },
+    { number: "00123456", name: "姓名\nSECRET_NAME" },
+    { number: "00123456", name: "名".repeat(129) },
+  ])(
+    "学校账号或姓名缺失、格式异常时不返回完整核验结果，也不使用提交账号补齐 %#",
+    async (profile) => {
+      const transport = jest.fn<AuthTransport>(async (request) =>
+        request.method === "GET"
+          ? captcha()
+          : success("valid-subject", profile),
+      );
+      const client = new SchoolAuthClient({}, transport);
+      try {
+        const challenge = await client.createChallenge();
+        const error = await submit(client, challenge).catch(
+          (value) => value as Error,
+        );
+        expect(error).toMatchObject({
+          code: "unknown_response",
+          message: "unknown_response",
+        });
+        expect(JSON.stringify(error)).not.toMatch(
+          /SECRET_|合成姓名|00123456|valid-subject/,
+        );
+        await expect(submit(client, challenge)).rejects.toMatchObject({
+          code: "invalid_session",
+        });
+        expect(transport).toHaveBeenCalledTimes(2);
+      } finally {
+        client.dispose();
+      }
+    },
+  );
+
   it("按学校公开前端契约解密固定合成成功响应，主体不作大小写或数字转换", async () => {
     const client = new SchoolAuthClient({}, async (request) =>
       request.method === "GET"
@@ -141,13 +195,15 @@ describe("学校认证包公开接口", () => {
             code: 200,
             msg: "登录成功",
             requestId: "identity-request",
-            data: "AwMDAwMDAwMDAwMDAwMDAycfAmt0IIOVo+hw19XrokHcHTliYDiK4am/enYITFAoC/DP21jdKEBeKzfTeQkVQXFcZYuqCK5UBFcNWLuc+pJxsaDkTVFLA7BkrEVvPTRY",
+            data: "AwMDAwMDAwMDAwMDAwMDAycfAmt0IIOVo+hw19XrokHA9CtmDemvAGZ4Jl557LrAKsqLjCvGSAF3Qp7EmzaUoTdG5mkA7WIoSdQbKdPT+Te58EPPwkRaaGi+vdxqYWyF8/JKEoHo+zj/xiOyJez4y7XVGBEcIz1L3I9yvZse8ekStol8EbsSyM3egmUVtk3d",
           }),
     );
     try {
       expect(await submit(client, await client.createChallenge())).toEqual({
         source: "sicau-eauth",
         subject: "stable-007",
+        accountNumber: "00123456",
+        name: "合成姓名",
       });
     } finally {
       client.dispose();
@@ -177,6 +233,8 @@ describe("学校认证包公开接口", () => {
       expect(await submit(client, fresh)).toEqual({
         source: "sicau-eauth",
         subject: "synthetic-subject",
+        accountNumber: "00123456",
+        name: "合成姓名",
       });
     } finally {
       client.dispose();
@@ -242,7 +300,12 @@ describe("学校认证包公开接口", () => {
         handle: b.handle,
         challengeVersion: b.challengeVersion,
       });
-      expect(one).toEqual({ source: "sicau-eauth", subject: "stable-id" });
+      expect(one).toEqual({
+        source: "sicau-eauth",
+        subject: "stable-id",
+        accountNumber: "00123456",
+        name: "合成姓名",
+      });
       expect(two).toEqual(one);
     } finally {
       client.dispose();

@@ -83,7 +83,9 @@ API 继续负责数据库锁、任务调度、游标和恢复链、运行记录�
 
 学校来源固定为 `https://auth.sicau.edu.cn`，应用为 `sicau-cas`。仅调用正常流程的 `GET /api/v1/captcha?appid=sicau-cas` 与 `POST /api/v1/cas/login`，提交 JSON `{appid, number, password, code, uuid}`。响应按 #130 与学校公开前端规则解密：MD5(requestId + ":sicau-cas") 的原始 16 字节为 AES-128-CBC 密钥，base64 响应前 16 字节为 IV，PKCS#7 填充，解密后解析 JSON。加密规则只用于兼容上游，不作为平台自己的加密设计。无需浏览器或额外依赖。
 
-可信成功要求业务 `code=200`、`msg=登录成功`、票据字段存在、`users=[]`，并取得单身份 `user.id`。只返回 `{source: "sicau-eauth", subject}`，不返回票据、学号、姓名、电话或原始响应。标识原样保留，不从用户输入推导，也不做大小写或数字转换。离线不同账号输入测试仅证明实现使用上游主体，不证明学校真实双别名归一；该行为仍取决于学校契约。尚未验证的多身份分支安全返回 `unsupported_verification`，不擅取 `users[0]`；缺字段、HTML、未知结构和额外验证不返回成功。仅有 HTTP 200、页面跳转、自填学号、截图或客户端成功标记不能证明核验成功。
+可信成功要求业务 `code=200`、`msg=登录成功`、票据字段存在、`users=[]`，并取得单身份 `user.id`、`user.number`、`user.name`。按用户于 2026-10-25 补充的学生信息核对需求，包向服务端调用方返回 `{source: "sicau-eauth", subject, accountNumber, name}`：`subject` 来自 `user.id`，`accountNumber` 来自 `user.number`（学号／工号），`name` 来自 `user.name`。学号／工号和姓名必须是非空、无控制字符、不超过 128 个 UTF-16 代码单元的字符串，缺失或异常时不返回完整核验结果；不得用提交的账号填补。字段原值保留，不做大小写或数字转换，账号前导零不丢失。不返回票据、电话或原始响应。新增两字段不替代稳定主体唯一绑定，也不能单凭账号编号或姓名认定学生类别、当前在读或操作者本人。
+
+这些字段仅供平台后端短时核对，不进入日志、异常、追踪、公开接口或公开队伍资料；包不持久保存。平台核对流程、是否需要留存、留存期限和本人信息展示由后续平台任务明确后实现，本次不新增数据库字段或 HTTP 输出。离线不同账号输入测试仅证明实现使用上游主体，不证明学校真实双别名归一；该行为仍取决于学校契约。尚未验证的多身份分支安全返回 `unsupported_verification`，不擅取 `users[0]`；缺字段、HTML、未知结构和额外验证不返回成功。仅有 HTTP 200、页面跳转、自填学号、截图或客户端成功标记不能证明核验成功。
 
 ### 服务端包接口
 
@@ -94,7 +96,7 @@ API 继续负责数据库锁、任务调度、游标和恢复链、运行记录�
 | `new SchoolAuthClient(options?)`                                          | 默认会话 5 分钟、单请求 10 秒、128 个活动会话、256 KiB 响应上限；期限和预算可收紧。来源不可由请求参数替换。                           |
 | `createChallenge({ttlMs?, signal?}?)`                                     | 返回仅服务端保存的 `handle`，以及可供平台转换的 `challengeVersion/imageDataUrl/mimeType/expiresAt`。句柄、版本均为独立 256 位随机值。 |
 | `refreshChallenge(handle, signal?)`                                       | 立即使旧版本失效，获取新图；刷新中拒绝刷新及提交，不延长总期限。                                                                      |
-| `submit({handle, challengeVersion, account, password, captcha, signal?})` | 校验版本后原子进入提交中，最多一次密码 POST，成功仅返回可信主体。                                                                     |
+| `submit({handle, challengeVersion, account, password, captcha, signal?})` | 校验版本后原子进入提交中，最多一次密码 POST，成功向服务端返回可信主体、学校账号编号与姓名。                                           |
 | `destroy(handle)`                                                         | 幂等取消并清理指定会话。                                                                                                              |
 | `dispose()`                                                               | 中止并清理全部会话，禁止创建新会话；API 关闭及退出清理由 #135 调用。                                                                  |
 
