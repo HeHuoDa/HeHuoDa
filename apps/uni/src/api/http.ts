@@ -63,9 +63,9 @@ export interface HttpClientAuth {
 
 /**
  * wx.request 的 method 不接受 PATCH，H5 与小程序共用 uni.request 类型，
- * 因此客户端只发 GET/POST；需要局部更新的接口由后端提供 POST 别名。
+ * 因此局部更新由后端提供 POST 别名；事务取消使用两端均支持的 DELETE。
  */
-export type RequestTransportMethod = "GET" | "POST";
+export type RequestTransportMethod = "GET" | "POST" | "DELETE";
 
 /** 与 uni.request 的 data 参数兼容的请求体类型。 */
 export type RequestBody = Record<string, unknown> | string;
@@ -295,6 +295,12 @@ export function createHttpClient(
   }
 
   return {
+    delete<T>(
+      path: string,
+      validate: (data: unknown) => data is T,
+    ): PendingRequest<T> {
+      return request("DELETE", path, validate);
+    },
     get<T>(
       path: string,
       validate: (data: unknown) => data is T,
