@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { CampusState } from "../campus/controller";
+import { initialCampusState, type CampusState } from "../campus/controller";
 import { beijingTime } from "../campus/presentation";
 import AppIcon from "./AppIcon.vue";
 import FormButton from "./FormButton.vue";
 import FormInput from "./FormInput.vue";
 
-const props = defineProps<{ state: CampusState }>();
+const props = withDefaults(defineProps<{ state?: CampusState }>(), {
+  // 小程序首次 attached 时属性可能尚未到达，先保持加载态。
+  state: () => ({ ...initialCampusState(), pending: "loading" }),
+});
 const emit = defineEmits<{
   restart: [];
   reload: [];
