@@ -28,6 +28,7 @@ export function initialCampusState() {
     profileError: "",
     uncertain: false,
     imageFailed: false,
+    creationFailed: false,
   };
 }
 export type CampusState = ReturnType<typeof initialCampusState>;
@@ -43,6 +44,7 @@ export function createCampusController(
   let active = false;
   /** 自动取码每次进入只尝试一次；失败后由用户主动重试，不循环创建。 */
   let autoAttempted = false;
+  let createRetryAt = 0;
   const requests = new Set<PendingRequest<unknown>>();
   function clearSecrets() {
     state.password = "";
@@ -64,6 +66,7 @@ export function createCampusController(
   function reset() {
     active = false;
     autoAttempted = false;
+    createRetryAt = 0;
     stop();
     Object.assign(state, initialCampusState());
     owner = generation();
@@ -190,6 +193,11 @@ export function createCampusController(
     }
   }
   async function start() {
+    if (state.creationFailed && now() < createRetryAt) {
+      state.message =
+        "创建结果尚未确认且没有事务编号，请在五分钟后点击“重新认证”。";
+      return;
+    }
     if (
       !active ||
       state.pending ||
@@ -211,10 +219,27 @@ export function createCampusController(
     clearSecrets();
     try {
       const v = await tracked(api.create());
-      if (current(at, account)) apply(v);
+      if (current(at, account)) {
+        state.creationFailed = false;
+        createRetryAt = 0;
+        apply(v);
+      }
     } catch (e) {
       if (!current(at, account)) return;
+      state.creationFailed = true;
       state.message = campusFailure(e);
+      if (
+        !(e instanceof RequestError) ||
+        ["network", "timeout", "invalid-response", "cancelled"].includes(
+          e.kind,
+        ) ||
+        (e.statusCode !== null && e.statusCode >= 500) ||
+        e.code === "CAMPUS_TRANSACTION_ACTIVE"
+      ) {
+        createRetryAt = now() + 300_000;
+        state.message =
+          "创建结果尚未确认且没有事务编号，请在五分钟后点击“重新认证”。";
+      }
       if (e instanceof RequestError && e.code === "CAMPUS_CONSENT_MISMATCH") {
         state.consented = false;
         await loadDetails(at, account);
@@ -228,9 +253,15 @@ export function createCampusController(
     if (!active || state.pending) return;
     if (
       state.transaction &&
-      ["waiting", "processing"].includes(state.transaction.status)
+      (state.transaction.status === "processing" ||
+        (state.transaction.status === "waiting" && state.transaction.challenge))
     )
       return;
+    if (state.transaction?.status === "waiting") {
+      const account = generation();
+      await cancel();
+      if (!active || generation() !== account || state.uncertain) return;
+    }
     state.transaction = null;
     state.uncertain = false;
     state.message = "";
@@ -242,6 +273,10 @@ export function createCampusController(
   /** 资格、告知或资料读取失败后的整页重查。 */
   async function reload() {
     if (state.pending) return;
+    if (state.creationFailed) {
+      await restart();
+      return;
+    }
     reset();
     await show();
   }
@@ -278,6 +313,7 @@ export function createCampusController(
       Date.parse(tx.challenge.expiresAt) <= now()
     ) {
       clearSecrets();
+      state.transaction = { ...tx, challenge: undefined };
       state.message = "验证码或事务已过期，请重新认证。";
       return;
     }

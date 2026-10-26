@@ -144,6 +144,7 @@ async function readyPage(
   {
     qualification: state = qualification,
     profile: saved = { profile: null },
+    transaction: created = tx,
   } = {},
 ) {
   const page = await mount("../src/pages/campus/index.vue");
@@ -154,7 +155,7 @@ async function readyPage(
   p.reply("/policy", { version: 1, content: "认证说明" });
   p.reply("/profile", saved);
   await tick();
-  if (p.last("/transactions")) p.reply("/transactions", tx);
+  if (p.last("/transactions")) p.reply("/transactions", created);
   await tick();
   return page;
 }
@@ -192,6 +193,58 @@ test("进入即见认证表单并只取一次验证码，字段只有框内提�
     assert.match(textOf(page.container), /密码、验证码仅用于本次认证/);
     assert.equal(button(page, "认证").props.disabled, true);
     assert.doesNotMatch(textOf(page.container), /获取验证码/);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("创建响应丢失时显示重试条件及重新认证入口，不立即重建", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await mount("../src/pages/campus/index.vue");
+  try {
+    for (const fn of globalThis.__campusShow) fn();
+    p.reply("/campus-verification", qualification);
+    p.reply("/policy", { version: 1, content: "认证说明" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    p.last("/transactions").fail({ errMsg: "network" });
+    await tick();
+    assert.match(textOf(page.container), /五分钟后.*重新认证/);
+    assert.ok(button(page, "重新认证"));
+    button(page, "重新认证").props.onClick();
+    await tick();
+    assert.equal(p.count("/transactions"), 1);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("本地验证码过期时显示重新认证，取消旧事务后才能新建", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p, {
+    transaction: {
+      ...tx,
+      challenge: { ...tx.challenge, expiresAt: "2000-01-01T00:00:00Z" },
+    },
+  });
+  try {
+    page
+      .find((n) => n.props["aria-label"] === "换一张验证码图片")
+      .props.onClick();
+    await tick();
+    assert.ok(button(page, "重新认证"));
+    button(page, "重新认证").props.onClick();
+    await tick();
+    assert.equal(p.last("/test-tx").method, "DELETE");
+    assert.equal(p.count("/transactions"), 1);
+    p.reply("/test-tx", { ...tx, status: "cancelled", challenge: undefined });
+    await tick();
+    assert.equal(p.count("/transactions"), 2);
+    p.reply("/transactions", tx);
+    await tick();
+    assert.ok(field(page, "campus-password"));
   } finally {
     page.unmount();
   }

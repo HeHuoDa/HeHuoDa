@@ -55,6 +55,7 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 function fixture() {
   const calls = [];
   let generation = 1;
+  let time = Date.parse("2026-10-26T00:00:00Z");
   const api = Object.fromEntries(
     [
       "policy",
@@ -95,7 +96,7 @@ function fixture() {
     state,
     api,
     () => generation,
-    () => Date.parse("2026-10-26T00:00:00Z"),
+    () => time,
   );
   const last = (name) => calls.filter((x) => x.name === name).at(-1);
   const count = (name) => calls.filter((x) => x.name === name).length;
@@ -136,6 +137,9 @@ function fixture() {
     load,
     restart,
     fill,
+    advance(ms) {
+      time += ms;
+    },
     changeAccount() {
       generation++;
       controller.reset();
@@ -189,13 +193,44 @@ test("创建失败不循环：重新显示页面只重读资格，不再自动�
   f.last("create").reject(new RequestError("network", "network"));
   await show;
   assert.equal(f.state.transaction, null);
-  assert.match(f.state.message, /连接中断|服务暂时无法完成认证/);
+  assert.match(f.state.message, /五分钟后.*重新认证/);
+  assert.equal(f.state.creationFailed, true);
+  await f.controller.restart();
+  assert.equal(f.count("create"), 1);
+  await f.controller.reload();
+  assert.equal(f.count("create"), 1);
   const again = f.controller.show();
   f.last("status").resolve(structuredClone(status));
   f.last("policy").resolve({ version: 1, content: "认证说明" });
   f.last("profile").resolve({ profile: null });
   await again;
   assert.equal(f.count("create"), 1);
+  f.advance(300_000);
+  const retry = f.controller.restart();
+  assert.equal(f.count("create"), 2);
+  f.last("create").resolve(transaction());
+  await retry;
+  assert.equal(f.state.creationFailed, false);
+});
+
+test("本地验证码过期后可主动取消旧事务并重新认证", async () => {
+  const f = fixture();
+  await f.load();
+  f.state.transaction.challenge.expiresAt = "2026-10-25T00:00:00Z";
+  f.fill();
+  await f.controller.submit();
+  assert.equal(f.last("submit"), undefined);
+  assert.equal(f.state.transaction.challenge, undefined);
+  const retry = f.controller.restart();
+  assert.equal(f.count("cancel"), 1);
+  f.last("cancel").resolve(
+    transaction({ status: "cancelled", challenge: undefined }),
+  );
+  await flush();
+  assert.equal(f.count("create"), 2);
+  f.last("create").resolve(transaction());
+  await retry;
+  assert.equal(f.state.transaction.status, "waiting");
 });
 
 test("提交携带姓名与告知版本，去空格但保留学号前导零和密码原值，立即清密", async () => {

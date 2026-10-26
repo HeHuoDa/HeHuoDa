@@ -82,6 +82,7 @@ const showForm = computed(
     !processing.value &&
     !ended.value &&
     !needRestart.value &&
+    !props.state.creationFailed &&
     !blocked.value,
 );
 const canSubmit = computed(
@@ -108,6 +109,9 @@ watch(
 );
 watch([succeeded, ended], ([done, failed]) => {
   if (done || failed) formOpen.value = false;
+});
+watch(waiting, (value) => {
+  if (value) formOpen.value = true;
 });
 
 function beginRenew() {
@@ -307,7 +311,11 @@ function refreshImage() {
     </view>
 
     <FormButton
-      v-if="!processing && !showCard && (ended || needRestart)"
+      v-if="
+        !processing &&
+        !showCard &&
+        (ended || needRestart || state.creationFailed)
+      "
       :disabled="busy"
       :loading="state.pending === 'creating'"
       @click="beginRenew"
