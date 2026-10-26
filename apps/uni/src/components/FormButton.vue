@@ -46,7 +46,7 @@ function keydown(event: {
     :disabled="disabled || loading"
     :loading="loading"
     class="hhr-button"
-    :class="`hhr-button--${variant}`"
+    :class="[`hhr-button--${variant}`, { 'is-disabled': disabled || loading }]"
     @click="activate"
   >
     <slot />
@@ -70,7 +70,6 @@ function keydown(event: {
   font-weight: 400;
   line-height: 1.65;
 }
-.hhr-button.hhr-button--reveal[disabled],
 .hhr-button.hhr-button--reveal.is-disabled {
   background: transparent;
   color: var(--hhr-color-brand);
