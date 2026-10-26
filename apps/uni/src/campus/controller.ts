@@ -103,13 +103,17 @@ export function createCampusController(
       state.message = "本次认证已取消，可继续浏览。";
   }
   async function loadDetails(at: number, account: number) {
+    const loadFailure = (error: unknown) =>
+      error instanceof RequestError && error.kind === "http"
+        ? campusFailure(error)
+        : "认证信息加载失败，请重新查询。";
     await Promise.all([
       (async () => {
         try {
           const v = await tracked(api.status());
           if (current(at, account)) state.qualification = v;
         } catch (e) {
-          if (current(at, account)) state.message = campusFailure(e);
+          if (current(at, account)) state.message = loadFailure(e);
         }
       })(),
       (async () => {
@@ -120,7 +124,7 @@ export function createCampusController(
             state.policy = v;
           }
         } catch (e) {
-          if (current(at, account)) state.message = campusFailure(e);
+          if (current(at, account)) state.message = loadFailure(e);
         }
       })(),
       (async () => {

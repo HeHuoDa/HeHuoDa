@@ -23,12 +23,15 @@ const emit = defineEmits<{
   imageError: [];
 }>();
 
-/** 认证说明固定短文案，不再提供长说明展开入口。 */
-const note =
-  "密码、验证码仅用于本次认证，不会保存。学校返回的姓名、学号加密保存，仅本人可见。认证仅核对学校账号信息，不证明当前在读或操作者本人。";
+const note = computed(
+  () => props.state.policy?.content ?? "认证说明正在加载，请稍候。",
+);
 
 const formOpen = ref(false);
 const busy = computed(() => !!props.state.pending);
+const identityDisabled = computed(
+  () => busy.value && !["creating", "refreshing"].includes(props.state.pending),
+);
 const challenge = computed(() => props.state.transaction?.challenge);
 const succeeded = computed(
   () => props.state.transaction?.status === "succeeded",
@@ -65,6 +68,9 @@ const blocked = computed(() => {
     return "当前没有学期配置，暂不可认证，可继续浏览。";
   return "";
 });
+const detailsMissing = computed(
+  () => !props.state.qualification || !props.state.policy,
+);
 const statusText = computed(() => {
   if (succeeded.value) return "认证成功";
   if (processing.value) return "正在认证，请稍候";
@@ -91,6 +97,7 @@ const canSubmit = computed(
     !!props.state.account.trim() &&
     !!props.state.password &&
     !!props.state.captcha &&
+    !!props.state.policy &&
     props.state.consented &&
     waiting.value &&
     !props.state.imageFailed,
@@ -136,8 +143,10 @@ function refreshImage() {
       </view>
     </view>
 
-    <view v-if="blocked" class="campus-card">
-      <text class="campus-copy">{{ blocked }}</text>
+    <view v-if="blocked || (!busy && detailsMissing)" class="campus-card">
+      <text class="campus-copy">{{
+        blocked || "认证信息加载失败，请重新查询。"
+      }}</text>
       <FormButton variant="secondary" :disabled="busy" @click="emit('reload')"
         >重新查询</FormButton
       >
@@ -181,7 +190,7 @@ function refreshImage() {
         placeholder="姓名"
         :model-value="state.name"
         :error="state.fieldErrors.name"
-        :disabled="busy"
+        :disabled="identityDisabled"
         :maxlength="128"
         autocomplete="off"
         @update:model-value="emit('name', $event)"
@@ -193,7 +202,7 @@ function refreshImage() {
         placeholder="学号"
         :model-value="state.account"
         :error="state.fieldErrors.account"
-        :disabled="busy"
+        :disabled="identityDisabled"
         :maxlength="128"
         autocomplete="off"
         @update:model-value="emit('account', $event)"
@@ -207,7 +216,7 @@ function refreshImage() {
         :model-value="state.password"
         :error="state.fieldErrors.password"
         secret
-        :disabled="busy"
+        :disabled="identityDisabled"
         :maxlength="512"
         autocomplete="off"
         @update:model-value="emit('password', $event)"
