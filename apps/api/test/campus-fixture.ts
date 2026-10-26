@@ -63,7 +63,9 @@ export function deferred<T>() {
   return { promise, resolve };
 }
 export const credentials = {
-  account: "synthetic-account",
+  name: "合成姓名",
+  account: "00123456",
+  consentVersion: 2,
   password: "SYNTHETIC_PASSWORD",
   captcha: "ABCD",
 };
@@ -80,7 +82,7 @@ export async function campusFixture() {
     AUTH_RATE_LOGIN_PER_IDENTITY: 100000,
     AUTH_RATE_LOGIN_GLOBAL: 100000,
     CAMPUS_VERIFICATION_ENABLED: true,
-    CAMPUS_POLICY_VERSION: 1,
+    CAMPUS_POLICY_VERSION: 2,
     CAMPUS_RATE_SUBMIT_USER: 5,
     CAMPUS_RATE_SUBMIT_SOURCE: 100,
     CAMPUS_RATE_SUBMIT_GLOBAL: 500,
@@ -190,9 +192,7 @@ export async function campusFixture() {
     }>();
   }
   async function create(token: string) {
-    const r = await request("POST", "campus-verification/transactions", token, {
-      consentVersion: 1,
-    });
+    const r = await request("POST", "campus-verification/transactions", token);
     if (r.statusCode !== 200) throw new Error("测试核验创建失败：" + r.body);
     return r.json<{
       id: string;

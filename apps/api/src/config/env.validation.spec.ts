@@ -20,6 +20,7 @@ describe("validateEnvironment", () => {
   });
   it("校园核验默认关闭，开启时必须配置独立密钥和明确学期", () => {
     expect(validateEnvironment({}).CAMPUS_VERIFICATION_ENABLED).toBe(false);
+    expect(validateEnvironment({}).CAMPUS_POLICY_VERSION).toBe(2);
     expect(() =>
       validateEnvironment({ CAMPUS_VERIFICATION_ENABLED: true }),
     ).toThrow();

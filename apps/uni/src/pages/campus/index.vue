@@ -83,8 +83,7 @@ watch(
 );
 function retry() {
   if (state.pending) return;
-  controller.reset();
-  void controller.show();
+  void controller.reload();
 }
 function finish() {
   dispose();
@@ -111,21 +110,22 @@ function finish() {
     <CampusVerificationPanel
       v-if="authenticated"
       :state="state"
-      @start="controller.start"
+      @restart="controller.restart"
+      @reload="retry"
       @refresh="controller.refresh"
       @submit="controller.submit"
       @query="controller.query"
       @cancel="controller.cancel"
-      @retry="retry"
       @back="finish"
       @consent="state.consented = $event"
-      @account="state.account = $event"
-      @password="state.password = $event"
-      @captcha="state.captcha = $event"
+      @name="controller.edit('name', $event)"
+      @account="controller.edit('account', $event)"
+      @password="controller.edit('password', $event)"
+      @captcha="controller.edit('captcha', $event)"
       @image-error="controller.imageError"
     />
     <view v-else class="campus-unavailable">
-      <text class="block">请先微信登录，再进行独立的校园账号核验。</text>
+      <text class="block">请先微信登录，再进行统一身份认证。</text>
       <FormButton
         @click="openPage('login', { returnTo: 'campus-verification' })"
         >前往微信登录</FormButton
@@ -138,7 +138,7 @@ function finish() {
     <!-- #ifndef MP-WEIXIN -->
     <view class="campus-unavailable">
       <text class="block"
-        >校园账号核验仅在微信小程序提供，当前可继续浏览公开内容。</text
+        >统一身份认证仅在微信小程序提供，当前可继续浏览公开内容。</text
       >
       <FormButton variant="secondary" @click="openTab('profile')"
         >返回个人中心</FormButton

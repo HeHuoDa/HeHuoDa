@@ -30,6 +30,11 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+const policy = {
+  version: 1,
+  content:
+    "密码、验证码仅用于本次认证，不会保存。学校返回的姓名、学号加密保存，仅本人可见。认证仅核对学校账号信息，不证明当前在读或操作者本人。",
+};
 const qualification = {
   status: "unverified",
   termId: null,
@@ -43,6 +48,22 @@ const qualification = {
     endAt: "2027-02-01T00:00:00Z",
   },
   policyVersion: 1,
+};
+const verified = {
+  ...qualification,
+  status: "valid",
+  termId: "test-term",
+  verifiedAt: "2026-10-26T00:00:00Z",
+  validUntil: "2027-02-01T00:00:00Z",
+  source: "sicau-eauth",
+};
+const profile = {
+  profile: {
+    accountNumber: "00123456",
+    name: "合成姓名",
+    source: "sicau-eauth",
+    updatedAt: "2026-10-26T00:00:00Z",
+  },
 };
 const tx = {
   id: "test-tx",
@@ -91,7 +112,9 @@ function platform() {
     assert.ok(request, suffix);
     request.success({ statusCode: 200, data });
   };
-  return { requests, last, reply };
+  const count = (suffix) =>
+    requests.filter((r) => r.url.endsWith(suffix)).length;
+  return { requests, last, reply, count };
 }
 async function loggedIn(p) {
   const { useAuthStore } = await import("../src/stores/auth.ts");
@@ -120,57 +143,489 @@ async function loggedIn(p) {
   await login;
   return auth;
 }
-async function readyPage(p) {
+/** 进入页面：读取资格、告知与资料；未认证时立即自动取码。 */
+async function readyPage(
+  p,
+  {
+    qualification: state = qualification,
+    profile: saved = { profile: null },
+    transaction: created = tx,
+    captchaPending = false,
+  } = {},
+) {
   const page = await mount("../src/pages/campus/index.vue");
   for (const fn of globalThis.__pageLoadHooks)
     fn({ returnTo: "https://evil.test" });
   for (const fn of globalThis.__campusShow) fn();
-  p.reply("/campus-verification", qualification);
-  p.reply("/policy", { version: 1, content: "独立核验告知" });
-  p.reply("/profile", { profile: null });
+  p.reply("/campus-verification", state);
+  p.reply("/policy", policy);
+  p.reply("/profile", saved);
   await tick();
-  page.find((n) => n.props.role === "checkbox").props.onClick();
-  await nextTick();
-  page
-    .find((n) => n.type === "button" && textOf(n).includes("同意并获取验证码"))
-    .props.onClick();
-  p.reply("/transactions", tx);
+  if (!captchaPending && p.last("/transactions"))
+    p.reply("/transactions", created);
   await tick();
   return page;
 }
+const field = (page, id) =>
+  page.find((n) => n.type === "input" && n.props.id === id);
+const button = (page, label) =>
+  page.find((n) => n.type === "button" && textOf(n).trim() === label);
+function type(page, id, value) {
+  field(page, id).props.onInput({ detail: { value } });
+}
+
+test("进入即见认证表单并只取一次验证码，字段只有框内提示且无框上标签", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    assert.equal(p.count("/transactions"), 1);
+    assert.equal(field(page, "campus-name").props.placeholder, "姓名");
+    assert.equal(field(page, "campus-name").props["aria-label"], "姓名");
+    assert.equal(field(page, "campus-account").props["aria-label"], "学号");
+    assert.equal(
+      field(page, "campus-password").props["aria-label"],
+      "统一身份认证密码",
+    );
+    assert.equal(field(page, "campus-captcha").props["aria-label"], "验证码");
+    assert.equal(
+      page.find((n) => n.type === "label"),
+      undefined,
+    );
+    assert.equal(
+      page.find((n) => n.props.role === "checkbox").props["aria-checked"],
+      false,
+    );
+    assert.match(textOf(page.container), /我已阅读并同意上述认证说明/);
+    assert.match(textOf(page.container), /密码、验证码仅用于本次认证/);
+    assert.equal(button(page, "认证").props.disabled, true);
+    assert.doesNotMatch(textOf(page.container), /获取验证码/);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("验证码加载期间可先填写身份字段，取码完成不丢输入且不能提前提交", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p, { captchaPending: true });
+  try {
+    for (const id of ["campus-name", "campus-account", "campus-password"])
+      assert.equal(field(page, id).props.disabled, false);
+    type(page, "campus-name", "合成姓名");
+    type(page, "campus-account", "00123456");
+    type(page, "campus-password", " pass ");
+    await nextTick();
+    assert.equal(button(page, "认证").props.disabled, true);
+    p.reply("/transactions", tx);
+    await tick();
+    assert.equal(field(page, "campus-name").props.value, "合成姓名");
+    assert.equal(field(page, "campus-account").props.value, "00123456");
+    assert.equal(field(page, "campus-password").props.value, " pass ");
+    assert.equal(p.count("/submit"), 0);
+  } finally {
+    page.unmount();
+  }
+});
+
+for (const failedPath of ["/campus-verification", "/policy"]) {
+  test(`首次${failedPath}加载失败后可在当前页重新查询并只创建一次事务`, async () => {
+    const p = platform();
+    await loggedIn(p);
+    const page = await mount("../src/pages/campus/index.vue");
+    try {
+      for (const fn of globalThis.__campusShow) fn();
+      for (const [path, data] of [
+        ["/campus-verification", qualification],
+        ["/policy", policy],
+        ["/profile", { profile: null }],
+      ]) {
+        if (path === failedPath) p.last(path).fail({ errMsg: "network" });
+        else p.reply(path, data);
+      }
+      await tick();
+      assert.equal(p.count("/transactions"), 0);
+      assert.ok(button(page, "重新查询"));
+      assert.doesNotMatch(textOf(page.container), /请查询本次结果/);
+      button(page, "重新查询").props.onClick();
+      p.reply("/campus-verification", qualification);
+      p.reply("/policy", policy);
+      p.reply("/profile", { profile: null });
+      await tick();
+      assert.equal(p.count("/transactions"), 1);
+      p.reply("/transactions", tx);
+      await tick();
+      assert.ok(field(page, "campus-name"));
+      assert.equal(button(page, "重新查询"), undefined);
+    } finally {
+      page.unmount();
+    }
+  });
+}
+
+test("创建响应丢失时显示重试条件及重新认证入口，不立即重建", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await mount("../src/pages/campus/index.vue");
+  try {
+    for (const fn of globalThis.__campusShow) fn();
+    p.reply("/campus-verification", qualification);
+    p.reply("/policy", { version: 1, content: "认证说明" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    p.last("/transactions").fail({ errMsg: "network" });
+    await tick();
+    assert.match(textOf(page.container), /五分钟后.*重新认证/);
+    assert.ok(button(page, "重新认证"));
+    button(page, "重新认证").props.onClick();
+    await tick();
+    assert.equal(p.count("/transactions"), 1);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("本地验证码过期时显示重新认证，取消旧事务后才能新建", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p, {
+    transaction: {
+      ...tx,
+      challenge: { ...tx.challenge, expiresAt: "2000-01-01T00:00:00Z" },
+    },
+  });
+  try {
+    page
+      .find((n) => n.props["aria-label"] === "换一张验证码图片")
+      .props.onClick();
+    await tick();
+    assert.ok(button(page, "重新认证"));
+    button(page, "重新认证").props.onClick();
+    await tick();
+    assert.equal(p.last("/test-tx").method, "DELETE");
+    assert.equal(p.count("/transactions"), 1);
+    p.reply("/test-tx", { ...tx, status: "cancelled", challenge: undefined });
+    await tick();
+    assert.equal(p.count("/transactions"), 2);
+    p.reply("/transactions", tx);
+    await tick();
+    assert.ok(field(page, "campus-password"));
+  } finally {
+    page.unmount();
+  }
+});
+
+test("眼睛图标切换密码明文，不丢输入也不触发提交", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    type(page, "campus-password", "synthetic-secret");
+    await nextTick();
+    assert.equal(field(page, "campus-password").props.password, true);
+    const reveal = page.find(
+      (n) => n.props["aria-label"] === "显示密码" && n.type === "button",
+    );
+    assert.ok(reveal);
+    assert.equal(reveal.props["aria-pressed"], false);
+    reveal.props.onClick();
+    await nextTick();
+    assert.equal(field(page, "campus-password").props.password, false);
+    assert.equal(
+      field(page, "campus-password").props.value,
+      "synthetic-secret",
+    );
+    assert.equal(
+      page.find((n) => n.props["aria-label"] === "隐藏密码").props[
+        "aria-pressed"
+      ],
+      true,
+    );
+    assert.equal(p.count("/submit"), 0);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("点击验证码图片换一张并清空旧答案；刷新提示可发现", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    assert.match(textOf(page.container), /看不清？点击图片换一张/);
+    type(page, "campus-captcha", "OLD");
+    await nextTick();
+    const image = page.find(
+      (n) =>
+        n.props.role === "button" &&
+        n.props["aria-label"] === "换一张验证码图片",
+    );
+    assert.ok(image);
+    image.props.onClick();
+    assert.equal(p.last("/captcha").method, "POST");
+    p.reply("/captcha", {
+      ...tx,
+      challenge: { ...tx.challenge, version: "v2" },
+    });
+    await tick();
+    assert.equal(field(page, "campus-captcha").props.value, "");
+  } finally {
+    page.unmount();
+  }
+});
+
+test("填写后提交携带姓名与告知版本，成功显示资料卡与返回原页面", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    type(page, "campus-name", " 合成姓名 ");
+    type(page, "campus-account", " 00123456 ");
+    type(page, "campus-password", "synthetic-secret");
+    type(page, "campus-captcha", "ABCD");
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    assert.equal(button(page, "认证").props.disabled, false);
+    button(page, "认证").props.onClick();
+    const submit = p.last("/submit");
+    assert.deepEqual(submit.data, {
+      name: "合成姓名",
+      account: "00123456",
+      password: "synthetic-secret",
+      captcha: "ABCD",
+      challengeVersion: "v1",
+      consentVersion: 1,
+    });
+    submit.success({
+      statusCode: 200,
+      data: { ...tx, status: "succeeded", challenge: undefined },
+    });
+    await tick();
+    p.reply("/campus-verification", verified);
+    p.reply("/policy", { version: 1, content: "认证说明" });
+    p.reply("/profile", profile);
+    await tick();
+    assert.match(textOf(page.container), /认证成功/);
+    assert.match(textOf(page.container), /合成姓名/);
+    assert.match(textOf(page.container), /00123456/);
+    assert.match(textOf(page.container), /2027-02-01/);
+    assert.ok(button(page, "返回原页面"));
+  } finally {
+    page.unmount();
+  }
+});
+
+test("说明版本变化后显示服务端新内容、取消同意且不重发密码", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    for (const [id, value] of [
+      ["campus-name", "合成姓名"],
+      ["campus-account", "00123456"],
+      ["campus-password", " pass "],
+      ["campus-captcha", "ABCD"],
+    ])
+      type(page, id, value);
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    p.last("/submit").success({
+      statusCode: 400,
+      data: { code: "CAMPUS_CONSENT_MISMATCH", message: "说明已更新" },
+    });
+    await tick();
+    p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
+    p.reply("/policy", {
+      version: 2,
+      content: "合成新版说明：请阅读当前内容后重新同意。",
+    });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.match(
+      textOf(page.container),
+      /合成新版说明：请阅读当前内容后重新同意。/,
+    );
+    assert.equal(textOf(page.container).includes(policy.content), false);
+    assert.equal(
+      page.find((n) => n.props.role === "checkbox").props["aria-checked"],
+      false,
+    );
+    assert.equal(field(page, "campus-password").props.value, "");
+    assert.equal(button(page, "认证").props.disabled, true);
+    assert.equal(p.count("/submit"), 1);
+    type(page, "campus-password", "new pass");
+    type(page, "campus-captcha", "ABCD");
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    assert.equal(p.last("/submit").data.consentVersion, 2);
+    p.reply("/submit", { ...tx, status: "failed", reason: "captcha_failed" });
+    await tick();
+  } finally {
+    page.unmount();
+  }
+});
+
+test("新版说明读取失败时旧说明失效，重查保留原事务且不重发密码", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    for (const [id, value] of [
+      ["campus-name", "合成姓名"],
+      ["campus-account", "00123456"],
+      ["campus-password", " pass "],
+      ["campus-captcha", "ABCD"],
+    ])
+      type(page, id, value);
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    p.last("/submit").success({
+      statusCode: 400,
+      data: { code: "CAMPUS_CONSENT_MISMATCH", message: "说明已更新" },
+    });
+    await tick();
+    p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
+    p.last("/policy").fail({ errMsg: "network" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.equal(textOf(page.container).includes(policy.content), false);
+    assert.ok(button(page, "重新查询"));
+    assert.equal(button(page, "认证").props.disabled, true);
+    button(page, "重新查询").props.onClick();
+    p.last("/campus-verification").fail({ errMsg: "network" });
+    p.reply("/policy", { version: 2, content: "合成新说明重试成功" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.ok(button(page, "重新查询"));
+    assert.equal(p.count("/transactions"), 1);
+    assert.equal(p.count("/submit"), 1);
+    button(page, "重新查询").props.onClick();
+    p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
+    p.reply("/policy", { version: 2, content: "合成新说明重试成功" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.match(textOf(page.container), /合成新说明重试成功/);
+    assert.equal(p.count("/transactions"), 1);
+    assert.equal(p.count("/submit"), 1);
+    assert.equal(
+      page.find((n) => n.props.role === "checkbox").props["aria-checked"],
+      false,
+    );
+    type(page, "campus-password", "new pass");
+    type(page, "campus-captcha", "ABCD");
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    assert.equal(p.last("/submit").url.endsWith("/test-tx/submit"), true);
+    assert.equal(p.last("/submit").data.consentVersion, 2);
+    p.reply("/submit", { ...tx, status: "failed", reason: "captcha_failed" });
+    await tick();
+  } finally {
+    page.unmount();
+  }
+});
+
+test("已有有效资格先看资料卡，不自动创建；点重新认证才创建事务", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p, { qualification: verified, profile });
+  try {
+    assert.equal(p.count("/transactions"), 0);
+    assert.match(textOf(page.container), /已认证/);
+    assert.match(textOf(page.container), /合成姓名/);
+    assert.equal(
+      page.find((n) => n.type === "input"),
+      undefined,
+    );
+    button(page, "重新认证").props.onClick();
+    assert.equal(p.last("/transactions").method, "POST");
+    p.reply("/transactions", tx);
+    await tick();
+    assert.ok(field(page, "campus-name"));
+    assert.equal(p.count("/transactions"), 1);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("身份不匹配完整显示，重新认证保留姓名学号并要求重填密码", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    type(page, "campus-name", "合成姓名");
+    type(page, "campus-account", "00123456");
+    type(page, "campus-password", "synthetic-secret");
+    type(page, "campus-captcha", "ABCD");
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    p.last("/submit").success({
+      statusCode: 200,
+      data: { ...tx, status: "failed", reason: "identity_mismatch" },
+    });
+    await tick();
+    assert.match(textOf(page.container), /验证失败，姓名与学号不匹配/);
+    button(page, "重新认证").props.onClick();
+    p.reply("/transactions", { ...tx, id: "test-tx-2" });
+    await tick();
+    assert.equal(field(page, "campus-name").props.value, "合成姓名");
+    assert.equal(field(page, "campus-account").props.value, "00123456");
+    assert.equal(field(page, "campus-password").props.value, "");
+  } finally {
+    page.unmount();
+  }
+});
+
+test("未开放时只提示，不创建事务", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p, {
+    qualification: { ...qualification, available: false },
+  });
+  try {
+    assert.equal(p.count("/transactions"), 0);
+    assert.match(textOf(page.container), /暂未开放/);
+  } finally {
+    page.unmount();
+  }
+});
 
 test("真实页面切后台清密、恢复只查询；退出同步清空私人页面", async () => {
   const p = platform();
   const auth = await loggedIn(p);
   const page = await readyPage(p);
   try {
-    const input = (id) =>
-      page.find((n) => n.type === "input" && n.props.id === id);
-    input("campus-password").props.onInput({
-      detail: { value: "synthetic-secret" },
-    });
-    input("campus-captcha").props.onInput({ detail: { value: "ABCD" } });
+    type(page, "campus-password", "synthetic-secret");
+    type(page, "campus-captcha", "ABCD");
     await nextTick();
-    assert.equal(input("campus-password").props.value, "synthetic-secret");
+    assert.equal(
+      field(page, "campus-password").props.value,
+      "synthetic-secret",
+    );
     const { useAppLifecycleStore } =
       await import("../src/stores/app-lifecycle.ts");
     const app = useAppLifecycleStore();
     app.hide();
     await tick();
-    assert.equal(input("campus-password"), undefined);
+    assert.equal(field(page, "campus-password"), undefined);
     app.show();
     const query = p.last("/transactions/test-tx");
     assert.equal(query.method, "GET");
     query.success({ statusCode: 200, data: { ...tx, challenge: undefined } });
     await tick();
-    assert.match(textOf(page.container), /旧输入已清空/);
-    assert.equal(p.requests.filter((r) => r.url.endsWith("/submit")).length, 0);
+    assert.match(textOf(page.container), /重新认证/);
+    assert.equal(p.count("/submit"), 0);
+    assert.equal(p.count("/transactions"), 1);
     const logout = auth.logout();
     await nextTick();
     assert.match(textOf(page.container), /请先微信登录/);
     assert.doesNotMatch(
       textOf(page.container),
-      /test-tx|独立核验告知|synthetic-secret/,
+      /test-tx|认证说明|synthetic-secret/,
     );
     p.reply("/auth/logout", undefined);
     await logout;
@@ -179,7 +634,7 @@ test("真实页面切后台清密、恢复只查询；退出同步清空私人�
   }
 });
 
-test("真实页面离开即取消；H5 说明页没有密码表单和核验请求", async () => {
+test("真实页面离开即取消；H5 说明页没有密码表单和认证请求", async () => {
   const p = platform();
   await loggedIn(p);
   const page = await readyPage(p);

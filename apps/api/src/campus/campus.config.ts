@@ -87,7 +87,7 @@ export function campusSettings(
       hmacKey,
       keys,
       keyId,
-      policyVersion: Number(config.CAMPUS_POLICY_VERSION ?? 1),
+      policyVersion: Number(config.CAMPUS_POLICY_VERSION ?? 2),
     };
   } catch {
     throw new Error("校园核验配置无效；检查学期区间和独立密钥配置");

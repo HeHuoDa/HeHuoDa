@@ -680,7 +680,7 @@
           }
         },
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -776,7 +776,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -872,7 +872,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -880,16 +880,6 @@
       "post": {
         "operationId": "CampusController_create",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CampusConsentDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
@@ -978,7 +968,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -1083,7 +1073,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -1198,7 +1188,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     },
@@ -1303,7 +1293,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       },
       "delete": {
@@ -1406,7 +1396,7 @@
           }
         ],
         "tags": [
-          "校园账号核验"
+          "统一身份认证"
         ]
       }
     }
@@ -2226,18 +2216,6 @@
           "profile"
         ]
       },
-      "CampusConsentDto": {
-        "type": "object",
-        "properties": {
-          "consentVersion": {
-            "type": "number",
-            "minimum": 1
-          }
-        },
-        "required": [
-          "consentVersion"
-        ]
-      },
       "CampusSummaryDto": {
         "type": "object",
         "properties": {
@@ -2339,6 +2317,14 @@
       "CampusSubmitDto": {
         "type": "object",
         "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "consentVersion": {
+            "type": "number",
+            "minimum": 1
+          },
           "account": {
             "type": "string",
             "maxLength": 128
@@ -2359,6 +2345,8 @@
           }
         },
         "required": [
+          "name",
+          "consentVersion",
           "account",
           "password",
           "captcha",

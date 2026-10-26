@@ -502,9 +502,6 @@ export interface components {
         CampusProfileResponseDto: {
             profile: components["schemas"]["CampusProfileDto"] | null;
         };
-        CampusConsentDto: {
-            consentVersion: number;
-        };
         CampusSummaryDto: {
             /** @enum {string} */
             status: "unverified" | "valid" | "expired" | "revoked";
@@ -532,6 +529,8 @@ export interface components {
             challenge?: components["schemas"]["CampusChallengeDto"];
         };
         CampusSubmitDto: {
+            name: string;
+            consentVersion: number;
             account: string;
             password: string;
             captcha: string;
@@ -1205,11 +1204,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CampusConsentDto"];
-            };
-        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {

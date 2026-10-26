@@ -8,7 +8,7 @@
     },
     {
       "path": "pages/campus/index",
-      "style": { "navigationBarTitleText": "校园账号核验" }
+      "style": { "navigationBarTitleText": "统一身份认证" }
     },
     {
       "path": "pages/source/index",
