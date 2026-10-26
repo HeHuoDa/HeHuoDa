@@ -69,6 +69,15 @@ test("失败的显式跳转清理地址意图，后续深链不会被旧参数�
   assert.equal(instance.currentRoute.value.query.id, "new");
 });
 
+test("从其他 tab 切回首页：根路径转成首页而不是 404", async () => {
+  const instance = router();
+  await instance.push("/pages/teams/index");
+  // uni H5 的 tabBar 把入口页归一化成 `/` 提交，不是 `/pages/index/index`。
+  await instance.push("/");
+  assert.equal(instance.currentRoute.value.path, "/pages/index/index");
+  assert.equal(instance.currentRoute.value.query.hosts, "all");
+});
+
 test("tab 交接保留通知稳定 ID 及重复附加参数，标题沿注册表", async () => {
   const instance = router();
   await instance.push("/pages/profile/index");

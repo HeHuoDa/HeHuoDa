@@ -49,6 +49,15 @@ export function installH5Router(router: Router): void {
       );
       if (target !== to.fullPath) return router.resolve(target);
     }
+    // uni H5 的 tabBar 把入口页（首页）归一化成根路径 `/` 提交给 router，
+    // 而 `/` 不在页面注册表里。先按地址规则转成首页，再判断是否未知页面，
+    // 否则每次点首页 tab 都会被当成非法地址送进 404。
+    if (to.path === "/") {
+      const home = resolveH5Address(
+        `${globalThis.location.origin}/#${to.fullPath}`,
+      );
+      if (home !== to.fullPath) return router.resolve(home);
+    }
     if (!Object.values(routeRegistry).some((route) => route.path === to.path))
       return { path: routeRegistry["not-found"].path, replace: true };
     const target = resolveH5Address(
