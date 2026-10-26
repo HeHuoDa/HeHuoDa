@@ -48,11 +48,12 @@ export const routeRegistry = {
   "campus-verification": {
     name: "campus-verification",
     path: "/pages/campus/index",
-    title: "校园账号核验",
+    title: "统一身份认证",
     kind: "page",
     status: "baseline",
     source: null,
-    description: "小程序独立核验、学期资格及本人学校资料，H5 仅说明开放范围。",
+    description:
+      "小程序统一身份认证、学期资格及本人学校资料，H5 仅说明开放范围。",
   },
   "source-webview": {
     name: "source-webview",

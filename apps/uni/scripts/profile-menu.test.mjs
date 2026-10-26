@@ -200,11 +200,11 @@ test("点遮罩或再点图标都能关闭下拉", async () => {
   }
 });
 
-test("真实资格状态仅显示校园账号结论，不宣称学生或在读", async () => {
+test("真实资格状态只显示认证结论，不宣称学生或在读", async () => {
   for (const [status, label] of [
-    ["valid", "校园账号已验证"],
-    ["expired", "校园账号核验已过期"],
-    ["revoked", "校园账号核验已撤销"],
+    ["valid", "已认证"],
+    ["expired", "认证已过期"],
+    ["revoked", "认证已撤销"],
   ]) {
     const platform = installPlatform();
     setActivePinia(createPinia());
@@ -232,7 +232,7 @@ test("已登录：图标显示首字，下拉显示昵称与账号状态，退�
     assert.match(view.text(), /微/, "图标显示昵称首字");
     assert.match(view.text(), /微信用户/);
     await view.openMenu();
-    assert.match(view.text(), /账号正常 · 校园账号未验证/);
+    assert.match(view.text(), /账号正常 · 未认证/);
     assert.ok(view.menuItem("退出登录"));
 
     view.menuItem("退出登录").props.onClick();
@@ -384,7 +384,7 @@ test("已登录：账号受限时下拉显示受限状态", async () => {
     assert.equal(auth.authenticated, true);
     assert.equal(auth.accountStatus, "restricted");
     await view.openMenu();
-    assert.match(view.text(), /账号受限 · 校园账号未验证/);
+    assert.match(view.text(), /账号受限 · 未认证/);
     assert.doesNotMatch(view.text(), /账号正常/);
   } finally {
     view.app.unmount();
