@@ -29,6 +29,7 @@ export function initialCampusState() {
     uncertain: false,
     imageFailed: false,
     creationFailed: false,
+    detailsFailed: false,
   };
 }
 export type CampusState = ReturnType<typeof initialCampusState>;
@@ -103,6 +104,7 @@ export function createCampusController(
       state.message = "本次认证已取消，可继续浏览。";
   }
   async function loadDetails(at: number, account: number) {
+    state.detailsFailed = false;
     const loadFailure = (error: unknown) =>
       error instanceof RequestError && error.kind === "http"
         ? campusFailure(error)
@@ -113,7 +115,10 @@ export function createCampusController(
           const v = await tracked(api.status());
           if (current(at, account)) state.qualification = v;
         } catch (e) {
-          if (current(at, account)) state.message = loadFailure(e);
+          if (current(at, account)) {
+            state.detailsFailed = true;
+            state.message = loadFailure(e);
+          }
         }
       })(),
       (async () => {
@@ -127,6 +132,7 @@ export function createCampusController(
           if (current(at, account)) {
             state.policy = null;
             state.consented = false;
+            state.detailsFailed = true;
             state.message = loadFailure(e);
           }
         }
@@ -174,6 +180,7 @@ export function createCampusController(
     const qualification = state.qualification;
     return (
       !autoAttempted &&
+      !state.detailsFailed &&
       !!qualification?.available &&
       !!qualification.currentTerm &&
       qualification.status !== "valid"
@@ -209,6 +216,7 @@ export function createCampusController(
     if (
       !active ||
       state.pending ||
+      state.detailsFailed ||
       !state.policy ||
       !state.qualification?.available ||
       !state.qualification.currentTerm ||
@@ -302,6 +310,10 @@ export function createCampusController(
     await show();
   }
   function validateSubmission() {
+    if (state.detailsFailed) {
+      state.message = "认证信息尚未更新，请先重新查询。";
+      return false;
+    }
     const errors: Partial<Record<CampusField, string>> = {};
     if (!state.name.trim()) errors.name = "请填写姓名";
     if (!state.account.trim()) errors.account = "请填写学号";

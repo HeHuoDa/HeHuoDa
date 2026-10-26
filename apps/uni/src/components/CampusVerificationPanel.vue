@@ -69,12 +69,16 @@ const blocked = computed(() => {
   return "";
 });
 const detailsMissing = computed(
-  () => !props.state.qualification || !props.state.policy,
+  () =>
+    props.state.detailsFailed ||
+    !props.state.qualification ||
+    !props.state.policy,
 );
 const statusText = computed(() => {
   if (succeeded.value) return "认证成功";
   if (processing.value) return "正在认证，请稍候";
   if (ended.value) return "本次认证未完成";
+  if (props.state.detailsFailed) return "认证信息待更新";
   if (verified.value) return "已认证";
   if (blocked.value) return "暂不可认证";
   if (props.state.pending === "creating") return "正在获取验证码";
@@ -98,6 +102,7 @@ const canSubmit = computed(
     !!props.state.password &&
     !!props.state.captcha &&
     !!props.state.policy &&
+    !props.state.detailsFailed &&
     props.state.consented &&
     waiting.value &&
     !props.state.imageFailed,
@@ -176,7 +181,7 @@ function refreshImage() {
       <FormButton
         v-else
         variant="secondary"
-        :disabled="busy || processing"
+        :disabled="busy || processing || state.detailsFailed"
         @click="beginRenew"
         >重新认证</FormButton
       >

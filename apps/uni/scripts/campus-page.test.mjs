@@ -495,6 +495,14 @@ test("新版说明读取失败时旧说明失效，重查保留原事务且不�
     assert.ok(button(page, "重新查询"));
     assert.equal(button(page, "认证").props.disabled, true);
     button(page, "重新查询").props.onClick();
+    p.last("/campus-verification").fail({ errMsg: "network" });
+    p.reply("/policy", { version: 2, content: "合成新说明重试成功" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.ok(button(page, "重新查询"));
+    assert.equal(p.count("/transactions"), 1);
+    assert.equal(p.count("/submit"), 1);
+    button(page, "重新查询").props.onClick();
     p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
     p.reply("/policy", { version: 2, content: "合成新说明重试成功" });
     p.reply("/profile", { profile: null });
