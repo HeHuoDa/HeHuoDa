@@ -11,7 +11,7 @@ import { beijingTime, renewalDue } from "../campus/presentation";
 function openCampus() {
   close();
   openPage("campus-verification", undefined, () =>
-    emit("notice", "暂时无法打开核验页，请重试。"),
+    emit("notice", "暂时无法打开认证页，请重试。"),
   );
 }
 // #endif
@@ -41,10 +41,10 @@ const statusText = computed(() => {
   if (!auth.accountStatus) return "账号状态未知";
   const account = auth.accountStatus === "active" ? "账号正常" : "账号受限";
   const campusLabels = {
-    unverified: "校园账号未验证",
-    valid: "校园账号已验证",
-    expired: "校园账号核验已过期",
-    revoked: "校园账号核验已撤销",
+    unverified: "未认证",
+    valid: "已认证",
+    expired: "认证已过期",
+    revoked: "认证已撤销",
   };
   if (auth.campusStatus)
     return `${account} · ${campusLabels[auth.campusStatus]}`;
@@ -184,7 +184,7 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
                 renewalDue(auth.campus.validUntil)
               "
               class="profile-menu__status"
-              >七天内到期，下一学期需重新核验。</text
+              >七天内到期，下一学期需重新认证。</text
             >
             <!-- #endif -->
           </view>
@@ -201,9 +201,9 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
         @keydown.space.prevent="openCampus"
       >
         <view class="profile-menu__text"
-          ><text class="profile-menu__label">校园账号核验与学校资料</text
+          ><text class="profile-menu__label">统一身份认证</text
           ><text class="profile-menu__hint"
-            >独立告知 · 本人只读 · 学期资格</text
+            >认证学校账号 · 资料仅本人可见</text
           ></view
         >
       </view>

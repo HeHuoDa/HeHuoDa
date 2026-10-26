@@ -99,12 +99,9 @@ export function createCampusApi(http: ReturnType<typeof createHttpClient>) {
     policy: () => http.get(`${base}/policy`, isCampusPolicy),
     status: () => http.get(base, isCampusQualification),
     profile: () => http.get(`${base}/profile`, isCampusProfile),
-    create: (consentVersion: number) =>
-      http.post(
-        `${base}/transactions`,
-        { consentVersion },
-        isCampusTransaction,
-      ),
+    /** 创建事务不再要求告知版本：未勾选同意也可先取验证码。 */
+    create: () =>
+      http.post(`${base}/transactions`, undefined, isCampusTransaction),
     refresh: (id: string) =>
       http.post(`${path(id)}/captcha`, undefined, isCampusTransaction),
     submit: (id: string, body: CampusSubmit) =>

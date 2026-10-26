@@ -18,7 +18,7 @@ const tx = {
     expiresAt: "2026-10-26T00:05:00Z",
   },
 };
-test("校园客户端使用真实平台路径、Bearer及DELETE取消，无学校URL或额外字段", async () => {
+test("校园客户端使用真实平台路径、Bearer及DELETE取消，创建不带告知版本", async () => {
   const requests = [];
   const transport = (options) => {
     requests.push(options);
@@ -31,21 +31,23 @@ test("校园客户端使用真实平台路径、Bearer及DELETE取消，无学�
       refresh: async () => "synthetic-refresh",
     }),
   );
-  await api.create(3).promise;
-  assert.deepEqual(requests[0].data, { consentVersion: 3 });
+  await api.create().promise;
+  assert.equal(requests[0].data, undefined);
   await api.refresh("tx-1").promise;
   assert.equal(
     requests[1].url,
     "/api/v1/campus-verification/transactions/tx-1/captcha",
   );
   const body = {
+    name: " 合成姓名 ",
     account: "001",
     password: " pass ",
     captcha: "AB",
     challengeVersion: "v1",
+    consentVersion: 2,
   };
   await api.submit("tx-1", body).promise;
-  assert.equal(requests[2].data.password, " pass ");
+  assert.deepEqual(requests[2].data, body);
   await api.query("tx-1").promise;
   await api.cancel("tx-1").promise;
   assert.equal(requests[4].method, "DELETE");

@@ -22,6 +22,10 @@ const props = withDefaults(
     adjustPosition?: boolean;
     autocomplete?: string;
     email?: boolean;
+    /** 只保留无障碍名称，不渲染框上标签；默认关闭，其他表单外观不变。 */
+    hideLabel?: boolean;
+    /** 密码可见性用眼睛图标而非文字；默认关闭。 */
+    revealIcon?: boolean;
   }>(),
   {
     type: "text",
@@ -76,7 +80,9 @@ function blur(event: unknown) {
 
 <template>
   <view :id="`${id}-field`" class="hhr-form-field">
-    <label :for="id" class="hhr-form-label">{{ label }}</label>
+    <label v-if="!hideLabel" :for="id" class="hhr-form-label">{{
+      label
+    }}</label>
     <view
       class="hhr-form-input-row"
       :class="{ 'has-error': error, 'is-disabled': disabled }"
@@ -166,12 +172,23 @@ function blur(event: unknown) {
       <FormButton
         v-if="secret && !multiline"
         variant="reveal"
+        class="hhr-form-reveal"
         :disabled="disabled"
-        :aria-label="`${visible ? '隐藏' : '显示'}${label}`"
+        :aria-label="visible ? '隐藏密码' : '显示密码'"
         :aria-pressed="visible"
         @click="reveal"
-        >{{ visible ? "隐藏" : "显示" }}</FormButton
       >
+        <view
+          v-if="revealIcon"
+          class="hhr-eye"
+          :class="{ 'is-hidden': visible }"
+          aria-hidden="true"
+        >
+          <view class="hhr-eye__pupil"></view>
+          <view class="hhr-eye__slash"></view>
+        </view>
+        <text v-else>{{ visible ? "隐藏" : "显示" }}</text>
+      </FormButton>
       <slot />
     </view>
     <text
@@ -186,3 +203,48 @@ function blur(event: unknown) {
     }}</text>
   </view>
 </template>
+
+<style scoped>
+/* 眼睛按钮：保持 44px 触控下限，图标用本地图形绘制，不依赖图标服务。 */
+.hhr-form-reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+}
+.hhr-eye {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 20px;
+  height: 13px;
+  border: 1.6px solid;
+  border-radius: 50%;
+}
+.hhr-eye__pupil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.hhr-eye__slash {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  width: 24px;
+  height: 1.6px;
+  margin-top: -0.8px;
+  background: currentColor;
+  transform: rotate(-45deg);
+}
+.hhr-eye.is-hidden .hhr-eye__slash {
+  display: block;
+}
+</style>

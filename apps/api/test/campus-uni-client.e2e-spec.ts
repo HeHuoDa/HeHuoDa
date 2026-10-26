@@ -1,4 +1,8 @@
-import { campusFixture, successResponse } from "./campus-fixture.js";
+import {
+  campusFixture,
+  successResponse,
+  challengeResponse,
+} from "./campus-fixture.js";
 import { readFileSync } from "node:fs";
 import { SourceTextModule } from "node:vm";
 import ts from "typescript";
@@ -6,8 +10,16 @@ import ts from "typescript";
 // 动态加载消费端公共接口，避免将 uni 编译进 API 构建；生产不导入前端。
 const campusModule = "../../uni/src/api/campus-client.ts";
 const httpModule = "../../uni/src/api/http.ts";
+const consumerModules = new Map<string, SourceTextModule>();
 async function consumerModule(path: string) {
-  const source = readFileSync(new URL(path, import.meta.url), "utf8");
+  const module = await loadConsumer(new URL(path, import.meta.url));
+  if (module.status === "linked") await module.evaluate();
+  return module.namespace;
+}
+async function loadConsumer(url: URL): Promise<SourceTextModule> {
+  const cached = consumerModules.get(url.href);
+  if (cached) return cached;
+  const source = readFileSync(url, "utf8");
   // uni 未声明 ESM；显式用其构建目标转译同一源码，避免 Jest 按 API 的 NodeNext 误编为 CJS。
   const module = new SourceTextModule(
     ts.transpileModule(source, {
@@ -16,12 +28,15 @@ async function consumerModule(path: string) {
         module: ts.ModuleKind.ESNext,
       },
     }).outputText,
+    { identifier: url.href },
   );
-  await module.link(() => {
-    throw new Error("消费端测试模块不应依赖运行时导入");
+  consumerModules.set(url.href, module);
+  await module.link((specifier, referencing) => {
+    if (!specifier.startsWith("."))
+      throw new Error("消费端测试不加载第三方运行时依赖");
+    return loadConsumer(new URL(specifier, referencing.identifier));
   });
-  await module.evaluate();
-  return module.namespace;
+  return module;
 }
 
 describe("uni 校园客户端与真实平台 HTTP/数据库联调", () => {
@@ -132,5 +147,62 @@ describe("uni 校园客户端与真实平台 HTTP/数据库联调", () => {
     expect(ended.status).toBe("failed");
     expect(methods).toContain("DELETE");
     expect(f.counts.post).toBe(2);
+    // 同时驱动实际页面控制器，防止只在联调脚本手工补齐字段而漏掉页面调用。
+    f.transport(async (r) =>
+      r.method === "GET" ? challengeResponse() : successResponse(),
+    );
+    const controllerModule = await consumerModule(
+      "../../uni/src/campus/controller.ts",
+    );
+    const initialCampusState = Reflect.get(
+      controllerModule,
+      "initialCampusState",
+    );
+    const createCampusController = Reflect.get(
+      controllerModule,
+      "createCampusController",
+    );
+    const state = initialCampusState();
+    const controller = createCampusController(
+      state,
+      api,
+      () => 1,
+      () => f.clock.now().getTime(),
+    );
+    await controller.show();
+    expect(state.qualification.status).toBe("valid");
+    await controller.restart();
+    Object.assign(state, {
+      name: " 合成姓名 ",
+      account: " 00123456 ",
+      password: " pass ",
+      captcha: "ABCD",
+      consented: true,
+    });
+    await controller.submit();
+    expect(state.transaction.status).toBe("succeeded");
+    expect(state.profile).toMatchObject({
+      name: "合成姓名",
+      accountNumber: "00123456",
+    });
+    const previousProfile = state.profile;
+    await controller.restart();
+    Object.assign(state, {
+      name: "错误姓名",
+      password: " pass ",
+      captcha: "ABCD",
+    });
+    await controller.submit();
+    expect(state.transaction).toMatchObject({
+      status: "failed",
+      reason: "identity_mismatch",
+    });
+    expect(state.message).toBe("验证失败，姓名与学号不匹配");
+    expect(state.qualification.status).toBe("valid");
+    expect(state.profile).toEqual(previousProfile);
+    expect(state.password).toBe("");
+    expect(state.captcha).toBe("");
+    expect(f.counts.post).toBe(4);
+    controller.hide(true);
   });
 });
