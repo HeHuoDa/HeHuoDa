@@ -125,7 +125,11 @@ export function parseIdentity(envelope: Record<string, unknown>): AuthIdentity {
   if (!Array.isArray(data.users) || data.users.length !== 0)
     throw new SchoolAuthError("unsupported_verification");
   const user = object(data.user);
-  const subject = user.id;
+  // 学校会返回数字 ID；仅接受正安全整数，避免精度丢失造成主体绑定碰撞。
+  const subject =
+    typeof user.id === "number" && Number.isSafeInteger(user.id) && user.id > 0
+      ? String(user.id)
+      : user.id;
   if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject))
     throw new SchoolAuthError("unknown_response");
   const accountNumber = user.number,

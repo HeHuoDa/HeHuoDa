@@ -23,7 +23,7 @@ const captcha = (id = "synthetic-challenge") =>
     data: encryptedImage,
   });
 const success = (
-  id = "synthetic-subject",
+  id: string | number = "synthetic-subject",
   profile: Record<string, unknown> = { number: "00123456", name: "合成姓名" },
 ) =>
   response({
@@ -280,6 +280,44 @@ describe("学校认证包公开接口", () => {
       client.dispose();
     }
   });
+
+  it.each([1, 123456, Number.MAX_SAFE_INTEGER])(
+    "学校数字主体 %s 规范化后与相同字符串主体一致",
+    async (id) => {
+      const subjects: string[] = [];
+      for (const upstreamId of [id, String(id)]) {
+        const client = new SchoolAuthClient({}, async (request) =>
+          request.method === "GET" ? captcha() : success(upstreamId),
+        );
+        try {
+          const challenge = await client.createChallenge();
+          const identity = await submit(client, challenge);
+          subjects.push(identity.subject);
+          expect(identity.accountNumber).toBe("00123456");
+        } finally {
+          client.dispose();
+        }
+      }
+      expect(subjects).toEqual([String(id), String(id)]);
+    },
+  );
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity])(
+    "拒绝无法安全规范化的数字主体 %s",
+    async (id) => {
+      const client = new SchoolAuthClient({}, async (request) =>
+        request.method === "GET" ? captcha() : success(id),
+      );
+      try {
+        const challenge = await client.createChallenge();
+        await expect(submit(client, challenge)).rejects.toMatchObject({
+          code: "unknown_response",
+        });
+      } finally {
+        client.dispose();
+      }
+    },
+  );
 
   it("不同账号输入仍采用替身返回的主体，不从输入或个人字段推导身份", async () => {
     const client = new SchoolAuthClient({}, async (request) =>

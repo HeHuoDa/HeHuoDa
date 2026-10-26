@@ -91,6 +91,14 @@ gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
 
 ## HTTP 与 HTTPS
 
+### 微信登录与校园核验配置
+
+服务器 `.env` 与开发机 `apps/api/.env` 分别维护，禁止整份覆盖服务器配置；保留服务器数据库、端口、镜像和网络参数。按 `deploy/.env.example` 添加微信 AppID/AppSecret、核验学期与独立资料密钥。生产环境优先生成自己的两类32字节随机密钥；已有绑定或加密资料时必须保留原键，不得直接重生成。配置文件通过已验证主机指纹的 SSH/SFTP 传输并保留 `600` 权限，不进入 Git、镜像、命令参数或日志。
+
+Compose 仅向 API 显式注入这组配置，默认关闭登录及核验。发布前检查精确 SHA 的 CI/镜像与所需数据库迁移，先 `prepare` 再激活；已有版本会校验有效配置指纹，不能直接改受管配置后跳过门禁。配置生效需重新创建 API 容器，`restart` 不会更新容器环境。服务器健康、无效 code 的真实微信错误分支、真实用户微信登录与学校核验分别记录；H5 的成功响应不证明小程序已发布或真机可用。
+
+微信小程序正式构建的 `VITE_API_BASE_URL` 必须是服务器完整 HTTPS API 地址，并配置匹配的 request 合法域名。开发者工具内本地 HTTP 联调不作为正式网络验收。
+
 HTTP 测试与正式 HTTPS 分开验收。证书置于主机受控目录，通过 `.env` 的 `TLS_CERT_DIR`、`HTTP_PORT`、`HTTPS_PORT` 配置；Deploy 使用 `DEPLOY_TLS=true` 与 HTTPS 的 `DEPLOY_PUBLIC_URL` 选择 TLS Compose。Nginx 挂载证书只读，以 TLS 1.2/1.3 终止 HTTPS 并将 HTTP 308 跳转。证书在镜像外申请和续期，禁止把私钥烘焙进镜像。续期后先运行 `nginx -t` 再 reload 并检查公开入口；不以跳过 TLS 校验或自签证书代替正式验收。
 
 ## 数据库备份与日常运维
