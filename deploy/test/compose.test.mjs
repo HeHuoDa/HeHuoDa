@@ -94,17 +94,14 @@ test(
       assert.equal(config.services.api.environment.CAMPUS_PROFILE_KEYS, "{}");
       assert.equal(
         config.services.api.environment.API_TRUSTED_PROXY_CIDRS,
-        "172.30.135.3/32",
+        undefined,
       );
       assert.equal(config.services.api.ports, undefined);
-      assert.deepEqual(Object.keys(config.services.db.networks), ["database"]);
-      assert.deepEqual(Object.keys(config.services.web.networks), ["proxy"]);
-      assert.equal(
-        config.services.web.networks.proxy.ipv4_address,
-        "172.30.135.3",
-      );
-      assert.equal(config.services.api.networks.proxy.ipv4_address, undefined);
-      assert.equal(config.networks.database.internal, true);
+      for (const service of ["db", "api", "web"])
+        assert.deepEqual(Object.keys(config.services[service].networks), [
+          "default",
+        ]);
+      assert.deepEqual(Object.keys(config.networks), ["default"]);
       assert.equal(config.services.web.image, images.web);
       assert.equal(config.services.api.stop_grace_period, `${seconds}s`);
     }
