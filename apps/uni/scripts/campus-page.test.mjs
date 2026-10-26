@@ -467,6 +467,59 @@ test("说明版本变化后显示服务端新内容、取消同意且不重发�
   }
 });
 
+test("新版说明读取失败时旧说明失效，重查保留原事务且不重发密码", async () => {
+  const p = platform();
+  await loggedIn(p);
+  const page = await readyPage(p);
+  try {
+    for (const [id, value] of [
+      ["campus-name", "合成姓名"],
+      ["campus-account", "00123456"],
+      ["campus-password", " pass "],
+      ["campus-captcha", "ABCD"],
+    ])
+      type(page, id, value);
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    p.last("/submit").success({
+      statusCode: 400,
+      data: { code: "CAMPUS_CONSENT_MISMATCH", message: "说明已更新" },
+    });
+    await tick();
+    p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
+    p.last("/policy").fail({ errMsg: "network" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.equal(textOf(page.container).includes(policy.content), false);
+    assert.ok(button(page, "重新查询"));
+    assert.equal(button(page, "认证").props.disabled, true);
+    button(page, "重新查询").props.onClick();
+    p.reply("/campus-verification", { ...qualification, policyVersion: 2 });
+    p.reply("/policy", { version: 2, content: "合成新说明重试成功" });
+    p.reply("/profile", { profile: null });
+    await tick();
+    assert.match(textOf(page.container), /合成新说明重试成功/);
+    assert.equal(p.count("/transactions"), 1);
+    assert.equal(p.count("/submit"), 1);
+    assert.equal(
+      page.find((n) => n.props.role === "checkbox").props["aria-checked"],
+      false,
+    );
+    type(page, "campus-password", "new pass");
+    type(page, "campus-captcha", "ABCD");
+    page.find((n) => n.props.role === "checkbox").props.onClick();
+    await nextTick();
+    button(page, "认证").props.onClick();
+    assert.equal(p.last("/submit").url.endsWith("/test-tx/submit"), true);
+    assert.equal(p.last("/submit").data.consentVersion, 2);
+    p.reply("/submit", { ...tx, status: "failed", reason: "captcha_failed" });
+    await tick();
+  } finally {
+    page.unmount();
+  }
+});
+
 test("已有有效资格先看资料卡，不自动创建；点重新认证才创建事务", async () => {
   const p = platform();
   await loggedIn(p);

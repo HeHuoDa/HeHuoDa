@@ -124,7 +124,11 @@ export function createCampusController(
             state.policy = v;
           }
         } catch (e) {
-          if (current(at, account)) state.message = loadFailure(e);
+          if (current(at, account)) {
+            state.policy = null;
+            state.consented = false;
+            state.message = loadFailure(e);
+          }
         }
       })(),
       (async () => {
@@ -276,9 +280,22 @@ export function createCampusController(
   }
   /** 资格、告知或资料读取失败后的整页重查。 */
   async function reload() {
-    if (state.pending) return;
+    if (!active || state.pending) return;
     if (state.creationFailed) {
       await restart();
+      return;
+    }
+    if (state.transaction) {
+      const at = epoch,
+        account = generation();
+      state.pending = "loading";
+      state.message = "";
+      clearSecrets();
+      try {
+        await loadDetails(at, account);
+      } finally {
+        if (current(at, account)) state.pending = "";
+      }
       return;
     }
     reset();
