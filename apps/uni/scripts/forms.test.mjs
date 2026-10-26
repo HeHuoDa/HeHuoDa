@@ -67,6 +67,35 @@ test("输入组件传递密码原值，显隐不提交，禁用及错误关联�
   app.unmount();
 });
 
+test("微信按钮禁用与加载态用类名表达，组件 WXSS 不包含属性选择器", async () => {
+  const source = readFileSync(
+    new URL("../src/components/FormButton.vue", import.meta.url),
+    "utf8",
+  );
+  const style = source.match(/<style scoped>([\s\S]*?)<\/style>/)[1];
+  assert.doesNotMatch(style, /\[[^\]]+\]/);
+  let clicks = 0;
+  const page = await mount("../src/components/FormButton.vue", {
+    variant: "reveal",
+    onClick: () => clicks++,
+  });
+  const button = () => page.find((node) => node.type === "button");
+  try {
+    button().props.onClick();
+    assert.equal(clicks, 1);
+    for (const state of [{ disabled: true }, { loading: true }]) {
+      page.render({ ...state, variant: "reveal", onClick: () => clicks++ });
+      await nextTick();
+      assert.equal(button().props.disabled, true);
+      assert.match(button().props.class, /is-disabled/);
+      button().props.onClick();
+      assert.equal(clicks, 1);
+    }
+  } finally {
+    page.unmount();
+  }
+});
+
 test("H5 按钮 Enter/Space 与点击可操作，加载/禁用不触发", async () => {
   let count = 0;
   const app = await mount(

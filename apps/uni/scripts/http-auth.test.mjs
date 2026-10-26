@@ -191,7 +191,7 @@ test("等待刷新期间取消：请求以 cancelled 结算，不再重发", asy
 test("204 无响应体可通过校验（登出场景）", async () => {
   const p = platform(authSession());
   const pending = p.client.post("/auth/logout", undefined, () => true);
-  assert.equal(p.calls[0].options.data, undefined);
+  assert.deepEqual(p.calls[0].options.data, {});
   p.respond(p.calls[0], 204, "");
   assert.equal(await pending.promise, "");
 });

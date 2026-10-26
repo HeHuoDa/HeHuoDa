@@ -136,6 +136,8 @@ export function createHttpClient(
     validate: (data: unknown) => data is T,
     body?: RequestBody,
   ): PendingRequest<T> {
+    // uni.request 默认发 JSON；无参数写请求也须有合法 JSON，避免空正文被拒绝。
+    const data = body ?? (method === "GET" ? undefined : {});
     let settled = false;
     let task: { abort(): void } | undefined;
     let rejectRequest: (error: RequestError) => void;
@@ -193,7 +195,7 @@ export function createHttpClient(
             method,
             timeout: settings.timeout,
             dataType: "json",
-            ...(body !== undefined ? { data: body } : {}),
+            ...(data !== undefined ? { data } : {}),
             ...(token !== null
               ? { header: { Authorization: `Bearer ${token}` } }
               : {}),

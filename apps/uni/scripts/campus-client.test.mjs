@@ -32,8 +32,9 @@ test("校园客户端使用真实平台路径、Bearer及DELETE取消，创建�
     }),
   );
   await api.create().promise;
-  assert.equal(requests[0].data, undefined);
+  assert.deepEqual(requests[0].data, {});
   await api.refresh("tx-1").promise;
+  assert.deepEqual(requests[1].data, {});
   assert.equal(
     requests[1].url,
     "/api/v1/campus-verification/transactions/tx-1/captcha",
@@ -51,7 +52,7 @@ test("校园客户端使用真实平台路径、Bearer及DELETE取消，创建�
   await api.query("tx-1").promise;
   await api.cancel("tx-1").promise;
   assert.equal(requests[4].method, "DELETE");
-  assert.equal(requests[4].data, undefined);
+  assert.deepEqual(requests[4].data, {});
   assert.ok(
     requests.every(
       (r) =>

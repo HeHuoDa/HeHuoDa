@@ -170,6 +170,30 @@ const field = (page, id) =>
   page.find((n) => n.type === "input" && n.props.id === id);
 const button = (page, label) =>
   page.find((n) => n.type === "button" && textOf(n).trim() === label);
+
+test("面板首次挂载尚无 state 时不崩溃，属性到达后显示实时认证状态", async () => {
+  const page = await mount("../src/components/CampusVerificationPanel.vue");
+  try {
+    assert.match(textOf(page.container), /认证说明正在加载/);
+    assert.equal(button(page, "认证").props.disabled, true);
+    const { initialCampusState } = await import("../src/campus/controller.ts");
+    const state = initialCampusState();
+    state.qualification = verified;
+    state.profile = profile.profile;
+    state.policy = policy;
+    page.render({ state });
+    await nextTick();
+    assert.match(textOf(page.container), /已认证/);
+    assert.match(textOf(page.container), /00123456/);
+    assert.equal(field(page, "campus-password"), undefined);
+    page.render({});
+    await nextTick();
+    assert.doesNotMatch(textOf(page.container), /00123456/);
+  } finally {
+    page.unmount();
+  }
+});
+
 function type(page, id, value) {
   field(page, id).props.onInput({ detail: { value } });
 }
