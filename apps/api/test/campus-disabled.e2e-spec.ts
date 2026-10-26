@@ -10,7 +10,7 @@ describe("校园核验默认关闭", () => {
   it("公开告知可读；有效会话看到未核验和关闭入口，不能外联", async () => {
     const policy = await f.request("GET", "campus-verification/policy");
     expect(policy.statusCode).toBe(200);
-    expect(policy.json().content).toContain("校园账号已验证");
+    expect(policy.json().content).toContain("认证仅核对学校账号信息");
     const login = await f.request("POST", "auth/wechat/login", {
       code: "stub-identity:campus-disabled",
       consentVersion: 1,
@@ -29,14 +29,8 @@ describe("校园核验默认关闭", () => {
       currentTerm: null,
     });
     expect(
-      (
-        await f.request(
-          "POST",
-          "campus-verification/transactions",
-          { consentVersion: 1 },
-          headers,
-        )
-      ).statusCode,
+      (await f.request("POST", "campus-verification/transactions", {}, headers))
+        .statusCode,
     ).toBe(503);
     expect(
       (

@@ -1,12 +1,23 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from "class-validator";
-export class CampusConsentDto {
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) consentVersion!: number;
-}
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MaxLength,
+  Min,
+} from "class-validator";
 export class CampusSubmitDto {
   @ApiProperty({ maxLength: 128 })
   @IsString()
+  @Matches(/\S/u)
+  @MaxLength(128)
+  name!: string;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) consentVersion!: number;
+  @ApiProperty({ maxLength: 128 })
+  @IsString()
   @IsNotEmpty()
+  @Matches(/\S/u)
   @MaxLength(128)
   account!: string;
   @ApiProperty({ maxLength: 512, writeOnly: true })

@@ -259,7 +259,7 @@ test("身份不匹配完整提示；重新认证保留姓名学号并清空密�
     }),
   );
   await pending;
-  assert.equal(f.state.message, "验证失败，姓名与学号不匹配。");
+  assert.equal(f.state.message, "验证失败，姓名与学号不匹配");
   assert.equal(f.state.profile, null);
   await f.restart();
   assert.equal(f.last("create").args.length, 0);

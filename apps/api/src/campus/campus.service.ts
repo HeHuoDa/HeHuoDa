@@ -85,8 +85,19 @@ const errorStatus: Record<AuthErrorCode, number> = {
   unknown_response: 503,
   cancelled: 409,
 };
-const safeReason = (error: unknown) =>
-  error instanceof SchoolAuthError ? error.code : "internal_failure";
+const safeReason = (error: unknown) => {
+  if (error instanceof SchoolAuthError) return error.code;
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    if (
+      typeof response === "object" &&
+      "code" in response &&
+      response.code === "CAMPUS_IDENTITY_MISMATCH"
+    )
+      return "identity_mismatch";
+  }
+  return "internal_failure";
+};
 
 @Injectable()
 export class CampusService implements OnApplicationShutdown {
@@ -119,7 +130,7 @@ export class CampusService implements OnApplicationShutdown {
     return {
       version: this.settings().policyVersion,
       content:
-        "校园账号核验独立告知：账号、密码及手填验证码将经平台短时处理并提交学校，密码、验证码、Cookie、票据不落库、不记录日志。仅证明校园账号已验证，不证明学生身份、实名、当前在读或操作者本人。学校返回的账号编号（可能为学号或工号）和登记姓名加密私密保存，用于本人查看及校园账号信息核对；本人只读，只能由同一学校主体成功重新核验更新。账号存续期间保留最新一份，资格过期不删除资料；正式注销七天冷静期后的清理流程删除私人资料，不提前释放主体唯一绑定。注销流程由后续功能提供。事务安全终态保留24小时，安全审计180天；历史备份按备份周期到期，恢复须重放已完成删除。学校验证码可能提前失效，平台事务最长五分钟。",
+        "密码、验证码仅用于本次认证，不会保存。学校返回的姓名、学号加密保存，仅本人可见。认证仅核对学校账号信息，不证明当前在读或操作者本人。",
     };
   }
   // 每个数据库权限事务都先取 #133 的统一锁，学校网络永远在锁外。
@@ -232,7 +243,7 @@ export class CampusService implements OnApplicationShutdown {
       throw createApiError(
         503,
         "CAMPUS_VERIFICATION_UNAVAILABLE",
-        "校园核验暂未开放",
+        "统一身份认证暂未开放",
       );
     return { settings, term };
   }
@@ -300,12 +311,16 @@ export class CampusService implements OnApplicationShutdown {
       throw createApiError(
         429,
         "CAMPUS_RATE_LIMITED",
-        "校园核验请求过于频繁，请稍后重试",
+        "统一身份认证请求过于频繁，请稍后重试",
       );
   }
   private async upstream<T>(run: () => Promise<T>): Promise<T> {
     if (this.inFlight >= 5)
-      throw createApiError(503, "CAMPUS_UPSTREAM_CAPACITY", "校园核验服务繁忙");
+      throw createApiError(
+        503,
+        "CAMPUS_UPSTREAM_CAPACITY",
+        "统一身份认证服务繁忙",
+      );
     this.inFlight++;
     try {
       return await run();
@@ -340,7 +355,7 @@ export class CampusService implements OnApplicationShutdown {
       throw createApiError(
         404,
         "CAMPUS_TRANSACTION_NOT_FOUND",
-        "核验事务不存在",
+        "认证事务不存在",
       );
     return row;
   }
@@ -409,20 +424,9 @@ export class CampusService implements OnApplicationShutdown {
       }
     });
   }
-  async create(
-    access: AccessContext,
-    consentVersion: number,
-    ip: string,
-    requestId: string,
-  ) {
+  async create(access: AccessContext, ip: string, requestId: string) {
     await this.maintain();
-    const { settings } = this.requireEnabled(this.clock.now());
-    if (consentVersion !== settings.policyVersion)
-      throw createApiError(
-        400,
-        "CAMPUS_CONSENT_MISMATCH",
-        "请确认当前校园核验告知",
-      );
+    this.requireEnabled(this.clock.now());
     await this.budget(access, ip, "challenge");
     const row = await this.transaction(async (tx) => {
       const now = this.clock.now();
@@ -436,13 +440,13 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_TRANSACTION_ACTIVE",
-          "已有正在进行的核验",
+          "已有正在进行的统一身份认证",
         );
       if (active.length >= 128)
         throw createApiError(
           503,
           "CAMPUS_SESSION_CAPACITY",
-          "校园核验服务繁忙",
+          "统一身份认证服务繁忙",
         );
       const id = randomUUID();
       const [created] = await tx
@@ -495,13 +499,13 @@ export class CampusService implements OnApplicationShutdown {
       return createApiError(
         errorStatus[error.code],
         `CAMPUS_${error.code.toUpperCase()}`,
-        "校园核验未完成，请根据状态重新发起",
+        "统一身份认证未完成，请根据状态重新发起",
       );
     if (error instanceof HttpException) return error;
     return createApiError(
       503,
       "CAMPUS_VERIFICATION_FAILED",
-      "校园核验暂不可用",
+      "统一身份认证暂不可用",
     );
   }
   private async acceptChallenge(
@@ -524,7 +528,7 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_TRANSACTION_ENDED",
-          "核验事务已结束，请重新发起",
+          "认证事务已结束，请重新发起",
         );
       const [updated] = await tx
         .update(campusTransactions)
@@ -554,7 +558,7 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_TRANSACTION_BUSY",
-          "核验事务当前不可刷新",
+          "认证事务当前不可刷新",
         );
     });
     await this.budget(access, ip, "challenge");
@@ -564,7 +568,7 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_TRANSACTION_BUSY",
-          "核验事务当前不可刷新",
+          "认证事务当前不可刷新",
         );
       await tx
         .update(campusTransactions)
@@ -626,6 +630,8 @@ export class CampusService implements OnApplicationShutdown {
     access: AccessContext,
     id: string,
     input: {
+      name: string;
+      consentVersion: number;
       account: string;
       password: string;
       captcha: string;
@@ -645,6 +651,7 @@ export class CampusService implements OnApplicationShutdown {
     });
     if (existing) return existing;
     this.requireEnabled(this.clock.now());
+    this.assertConsent(input.consentVersion);
     await this.budget(access, ip, "submit");
     const admitted = await this.transaction(async (tx) => {
       const row = await this.owned(tx, access, id),
@@ -652,6 +659,7 @@ export class CampusService implements OnApplicationShutdown {
       if (row.status !== "waiting")
         return { result: await this.result(tx, row) };
       const { term } = this.requireEnabled(now);
+      this.assertConsent(input.consentVersion);
       if (now >= row.expiresAt || row.termId !== term.id) {
         return {
           result: await this.result(
@@ -683,11 +691,23 @@ export class CampusService implements OnApplicationShutdown {
       if (!live?.handle) throw new SchoolAuthError("invalid_session");
       const identity = await this.upstream(() =>
         this.school.submit({
-          ...input,
+          account: input.account.trim(),
+          password: input.password,
+          captcha: input.captcha,
+          challengeVersion: input.challengeVersion,
           handle: live.handle!,
           signal: live.controller.signal,
         }),
       );
+      if (
+        input.name.trim() !== identity.name.trim() ||
+        input.account.trim() !== identity.accountNumber.trim()
+      )
+        throw createApiError(
+          400,
+          "CAMPUS_IDENTITY_MISMATCH",
+          "验证失败，姓名与学号不匹配",
+        );
       return await this.commitIdentity(
         access,
         id,
@@ -701,6 +721,14 @@ export class CampusService implements OnApplicationShutdown {
     } finally {
       this.drop(id);
     }
+  }
+  private assertConsent(version: number) {
+    if (version !== this.settings().policyVersion)
+      throw createApiError(
+        400,
+        "CAMPUS_CONSENT_MISMATCH",
+        "请确认当前统一身份认证说明",
+      );
   }
   private async commitIdentity(
     access: AccessContext,
@@ -724,7 +752,7 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_TRANSACTION_ENDED",
-          "核验事务已结束，请重新发起",
+          "认证事务已结束，请重新发起",
         );
       const digest = subjectIndex(settings, identity.source, identity.subject);
       const bindings = await tx
@@ -747,7 +775,7 @@ export class CampusService implements OnApplicationShutdown {
         throw createApiError(
           409,
           "CAMPUS_BINDING_CONFLICT",
-          "校园账号绑定冲突",
+          "学校账号绑定冲突",
         );
       await tx
         .insert(campusBindings)

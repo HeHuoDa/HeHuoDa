@@ -42,11 +42,101 @@ describe("校园核验 PG 原子性、密码学、时钟与生命周期", () => 
         : successResponse(subject, number, name),
     );
     const t = await f.create(token);
-    return f.submit(token, t);
+    return f.submit(token, t, { account: number, name });
   }
   async function access(token: string) {
     return (await f.repository.findActiveAccess(token, f.clock.now()))!;
   }
+  it.each([
+    ["不同姓名", "00123456"],
+    ["合成姓名", "123456"],
+    ["不同姓名", "00999999"],
+    ["合成 姓名", "00123456"],
+    ["合成姓名", "0012 3456"],
+    ["合成姓名", "synthetic-alias"],
+    ["合成姓亻名", "00123456"],
+  ])("姓名或学号差异安全失败（%s / %s）", async (name, account) => {
+    const a = await f.login(),
+      t = await f.create(a.accessToken);
+    const result = await f.submit(a.accessToken, t, { name, account });
+    expect(result.statusCode).toBe(400);
+    expect(result.json()).toMatchObject({
+      code: "CAMPUS_IDENTITY_MISMATCH",
+      message: "验证失败，姓名与学号不匹配",
+    });
+    const query = await f.request(
+      "GET",
+      `campus-verification/transactions/${t.id}`,
+      a.accessToken,
+    );
+    expect(query.json()).toMatchObject({
+      status: "failed",
+      reason: "identity_mismatch",
+    });
+    expect(await profile(a.accessToken)).toEqual({ profile: null });
+    expect(await status(a.accessToken)).toMatchObject({ status: "unverified" });
+    const audit = (
+      await f.isolated.pool.query(
+        "select kind, reason from campus_audit_logs where kind='failed'",
+      )
+    ).rows;
+    expect(audit).toEqual([{ kind: "failed", reason: "identity_mismatch" }]);
+    for (const table of [
+      "campus_bindings",
+      "campus_profiles",
+      "campus_qualifications",
+    ])
+      expect(
+        (await f.isolated.pool.query(`select count(*)::int c from ${table}`))
+          .rows[0].c,
+      ).toBe(0);
+    for (const secret of [
+      name,
+      account,
+      "SYNTHETIC_SUBJECT",
+      "00123456",
+      "合成姓名",
+    ])
+      expect(result.body + query.body + JSON.stringify(audit)).not.toContain(
+        secret,
+      );
+    const repeated = await f.submit(a.accessToken, t, { consentVersion: 1 });
+    expect(repeated.json()).toMatchObject({
+      status: "failed",
+      reason: "identity_mismatch",
+    });
+    expect(f.counts.post).toBe(1);
+  });
+  it("比对只忽略首尾空格，保存学校原值，重验不匹配保留旧资料和资格", async () => {
+    const a = await f.login();
+    f.transport(async (r) =>
+      r.method === "GET"
+        ? challengeResponse()
+        : successResponse("SYNTHETIC_SUBJECT", " 00123456 ", " 合成姓名 "),
+    );
+    const t = await f.create(a.accessToken);
+    expect(
+      (
+        await f.submit(a.accessToken, t, {
+          account: " 00123456 ",
+          name: "合成姓名",
+        })
+      ).statusCode,
+    ).toBe(200);
+    const oldProfile = await profile(a.accessToken),
+      oldStatus = await status(a.accessToken);
+    expect(oldProfile.profile).toMatchObject({
+      accountNumber: " 00123456 ",
+      name: " 合成姓名 ",
+    });
+    const renewal = await f.create(a.accessToken);
+    expect(
+      (await f.submit(a.accessToken, renewal, { name: "不同姓名" })).json()
+        .code,
+    ).toBe("CAMPUS_IDENTITY_MISMATCH");
+    expect(await profile(a.accessToken)).toEqual(oldProfile);
+    expect(await status(a.accessToken)).toEqual(oldStatus);
+  });
   it("真实校园提供者与业务权限组合：四类操作到期即拒绝，退出和队长操作不扩大限制", async () => {
     const a = await f.login();
     await verify(a.accessToken);

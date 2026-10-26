@@ -91,15 +91,6 @@ export function isCampusTransaction(v: unknown): v is CampusTransaction {
   return true;
 }
 
-/**
- * #167 尚未合入时的提交字段：姓名与告知版本。
- * 后端合入并重新生成 OpenAPI 后改用生成类型，不在此维护第二套接口定义。
- */
-export type CampusSubmitInput = CampusSubmit & {
-  name: string;
-  consentVersion: number;
-};
-
 /** 只请求平台 API；不接收学校 URL、Cookie 或稳定主体。 */
 export function createCampusApi(http: ReturnType<typeof createHttpClient>) {
   const base = "/campus-verification";
@@ -113,7 +104,7 @@ export function createCampusApi(http: ReturnType<typeof createHttpClient>) {
       http.post(`${base}/transactions`, undefined, isCampusTransaction),
     refresh: (id: string) =>
       http.post(`${path(id)}/captcha`, undefined, isCampusTransaction),
-    submit: (id: string, body: CampusSubmitInput) =>
+    submit: (id: string, body: CampusSubmit) =>
       http.post(`${path(id)}/submit`, { ...body }, isCampusTransaction),
     query: (id: string) => http.get(path(id), isCampusTransaction),
     cancel: (id: string) => http.delete(path(id), isCampusTransaction),

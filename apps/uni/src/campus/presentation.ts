@@ -11,7 +11,7 @@ export function campusFailure(error: unknown): string {
     binding_conflict:
       "校园账号绑定存在冲突。账号申诉入口尚未开放，请勿反复尝试。",
     consent_mismatch: "认证说明已更新，请重新阅读并同意。",
-    identity_mismatch: "验证失败，姓名与学号不匹配。",
+    identity_mismatch: "验证失败，姓名与学号不匹配",
     verification_unavailable:
       "统一身份认证暂未开放或没有当期配置，可继续浏览。",
     profile_unavailable: "学校资料暂时无法读取，请稍后重试。",

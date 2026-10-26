@@ -5,6 +5,7 @@ import {
   deferred,
 } from "./campus-fixture.js";
 import type { AuthHttpResponse } from "@hehuoda/sicau-connectors/auth";
+import { jest } from "@jest/globals";
 
 describe("校园核验真实 HTTP 与包构建产物", () => {
   let f: Awaited<ReturnType<typeof campusFixture>>;
@@ -13,6 +14,122 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
   });
   afterEach(async () => {
     await f?.close();
+  });
+  it("无需同意或私人输入即可创建统一身份认证事务", async () => {
+    const a = await f.login();
+    const result = await f.request(
+      "POST",
+      "campus-verification/transactions",
+      a.accessToken,
+    );
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toMatchObject({
+      status: "waiting",
+      challenge: { version: expect.any(String) },
+    });
+    expect(f.counts.post).toBe(0);
+  });
+  it("创建拒绝私人字段，提交拒绝空白、缺失、超长及伪造身份字段", async () => {
+    const a = await f.login();
+    for (const payload of [
+      { name: "伪造" },
+      { account: "00123456" },
+      { password: "secret" },
+      { consentVersion: 2 },
+      [],
+    ])
+      expect(
+        (
+          await f.request(
+            "POST",
+            "campus-verification/transactions",
+            a.accessToken,
+            payload,
+          )
+        ).statusCode,
+      ).toBe(400);
+    const t = await f.create(a.accessToken);
+    for (const extra of [
+      { name: undefined },
+      { name: " \t " },
+      { account: " \t " },
+      { name: "名".repeat(129) },
+      { account: "1".repeat(129) },
+      { password: "p".repeat(513) },
+      { captcha: "c".repeat(33) },
+      { challengeVersion: "c".repeat(129) },
+      { subject: "forged" },
+      { accountNumber: "forged" },
+      { qualification: { status: "valid" } },
+    ]) {
+      expect((await f.submit(a.accessToken, t, extra)).statusCode).toBe(400);
+      expect(f.counts.post).toBe(0);
+    }
+    expect(
+      (
+        await f.request(
+          "GET",
+          `campus-verification/transactions/${t.id}`,
+          a.accessToken,
+        )
+      ).json().status,
+    ).toBe("waiting");
+  });
+  it("创建仍检查登录、账号状态、开关、当期和单活动事务", async () => {
+    expect(
+      (await f.request("POST", "campus-verification/transactions")).statusCode,
+    ).toBe(401);
+    const a = await f.login();
+    f.config.set("CAMPUS_VERIFICATION_ENABLED", false);
+    expect(
+      (
+        await f.request(
+          "POST",
+          "campus-verification/transactions",
+          a.accessToken,
+        )
+      ).statusCode,
+    ).toBe(503);
+    f.config.set("CAMPUS_VERIFICATION_ENABLED", true);
+    f.time("2028-01-01T00:00:00Z");
+    const fresh = await f.login();
+    expect(
+      (
+        await f.request(
+          "POST",
+          "campus-verification/transactions",
+          fresh.accessToken,
+        )
+      ).statusCode,
+    ).toBe(503);
+    f.time("2026-10-25T00:00:00Z");
+    await f.isolated.pool.query(
+      "update users set status='restricted' where id=$1",
+      [a.user.id],
+    );
+    expect(
+      (
+        await f.request(
+          "POST",
+          "campus-verification/transactions",
+          a.accessToken,
+        )
+      ).statusCode,
+    ).toBe(403);
+    const b = await f.login();
+    await f.create(b.accessToken);
+    expect(
+      (
+        await f.request(
+          "POST",
+          "campus-verification/transactions",
+          b.accessToken,
+          {},
+        )
+      ).json().code,
+    ).toBe("CAMPUS_TRANSACTION_ACTIVE");
+    expect(f.counts.get).toBe(1);
+    expect(f.counts.post).toBe(0);
   });
   it("告知、刷新、旧版本拒绝、单次提交、统一摘要和本人加密资料闭环", async () => {
     const a = await f.login();
@@ -28,6 +145,11 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
     ).toBe(400);
     expect(f.counts.get).toBe(0);
     const t = await f.create(a.accessToken);
+    for (const consentVersion of [undefined, 1]) {
+      const rejected = await f.submit(a.accessToken, t, { consentVersion });
+      expect(rejected.statusCode).toBe(400);
+      expect(f.counts.post).toBe(0);
+    }
     const refresh = await f.request(
       "POST",
       `campus-verification/transactions/${t.id}/captcha`,
@@ -122,6 +244,36 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
       ).toBe(400);
     }
   });
+  it("告知在预算准入期间变化时再次拒绝，不发送密码", async () => {
+    const a = await f.login(),
+      t = await f.create(a.accessToken);
+    const get = f.config.get.bind(f.config);
+    const configRead = jest
+      .spyOn(f.config, "get")
+      .mockImplementation((key, fallback) => {
+        // 在读取预算配置这一外部边界切换版本，稳定复现两次准入检查之间的变化。
+        if (key === "CAMPUS_RATE_SUBMIT_GLOBAL")
+          f.config.set("CAMPUS_POLICY_VERSION", 3);
+        return get(key, fallback);
+      });
+    try {
+      const result = await f.submit(a.accessToken, t);
+      expect(result.statusCode).toBe(400);
+      expect(result.json().code).toBe("CAMPUS_CONSENT_MISMATCH");
+      expect(f.counts.post).toBe(0);
+      expect(
+        (
+          await f.request(
+            "GET",
+            `campus-verification/transactions/${t.id}`,
+            a.accessToken,
+          )
+        ).json().status,
+      ).toBe("waiting");
+    } finally {
+      configRead.mockRestore();
+    }
+  });
   it("跨用户／同用户其他会话404，校验额外身份输入，资料只属于本人", async () => {
     const a = await f.login("same"),
       b = await f.login(),
@@ -137,6 +289,8 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
               token,
               suffix === "/submit"
                 ? {
+                    name: "合成姓名",
+                    consentVersion: 2,
                     account: "x",
                     password: "x",
                     captcha: "ABCD",
@@ -148,7 +302,7 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
         ).toBe(404);
       }
     expect(
-      (await f.submit(a.accessToken, t, { name: "伪造" })).statusCode,
+      (await f.submit(a.accessToken, t, { accountNumber: "伪造" })).statusCode,
     ).toBe(400);
     expect(f.counts.post).toBe(0);
     await f.submit(a.accessToken, t);
@@ -227,7 +381,7 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
     });
     const pending = f.submit(a.accessToken, t);
     await started.promise;
-    const repeated = await f.submit(a.accessToken, t);
+    const repeated = await f.submit(a.accessToken, t, { consentVersion: 1 });
     expect(repeated.json().status).toBe("processing");
     expect(
       (

@@ -27,7 +27,6 @@ import { ApiErrorDto } from "../common/dto/api-error.dto.js";
 import { CampusService } from "./campus.service.js";
 import { createApiError } from "../common/api-error.js";
 import {
-  CampusConsentDto,
   CampusPolicyDto,
   CampusProfileResponseDto,
   CampusStatusResponseDto,
@@ -35,7 +34,7 @@ import {
   CampusTransactionDto,
 } from "./campus.dto.js";
 
-@ApiTags("校园账号核验")
+@ApiTags("统一身份认证")
 @Controller("campus-verification")
 @ApiBadRequestResponse({ type: ApiErrorDto })
 @ApiUnauthorizedResponse({ type: ApiErrorDto })
@@ -74,8 +73,9 @@ export class CampusController {
   @ApiBearerAuth()
   @Header("Cache-Control", "no-store")
   @ApiOkResponse({ type: CampusTransactionDto })
-  create(@Req() r: AuthenticatedRequest, @Body() b: CampusConsentDto) {
-    return this.campus.create(r.auth!, b.consentVersion, r.ip, r.id);
+  create(@Req() r: AuthenticatedRequest, @Body() body: unknown) {
+    this.assertEmptyBody(body);
+    return this.campus.create(r.auth!, r.ip, r.id);
   }
   @Post("transactions/:id/captcha")
   @HttpCode(200)

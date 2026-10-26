@@ -38,7 +38,7 @@ describe("校园核验滑动预算与共享容量", () => {
           "POST",
           "campus-verification/transactions",
           a.accessToken,
-          { consentVersion: 1 },
+          {},
         )
       ).statusCode,
     ).toBe(429);
@@ -118,7 +118,7 @@ describe("校园核验滑动预算与共享容量", () => {
             "POST",
             "campus-verification/transactions",
             b.accessToken,
-            { consentVersion: 1 },
+            {},
           )
         ).statusCode,
       ).toBe(429);
@@ -148,13 +148,18 @@ describe("校园核验滑动预算与共享容量", () => {
     });
     const requests = [
       f.submit(actors[0]!.accessToken, t).then((r) => r),
-      ...actors.slice(1, 5).map((a) =>
-        f
-          .request("POST", "campus-verification/transactions", a.accessToken, {
-            consentVersion: 1,
-          })
-          .then((r) => r),
-      ),
+      ...actors
+        .slice(1, 5)
+        .map((a) =>
+          f
+            .request(
+              "POST",
+              "campus-verification/transactions",
+              a.accessToken,
+              {},
+            )
+            .then((r) => r),
+        ),
     ];
     await Promise.race([
       started.promise,
@@ -169,7 +174,7 @@ describe("校园核验滑动预算与共享容量", () => {
       "POST",
       "campus-verification/transactions",
       actors[5]!.accessToken,
-      { consentVersion: 1 },
+      {},
     );
     expect(rejected.statusCode).toBe(503);
     expect(rejected.json().code).toBe("CAMPUS_UPSTREAM_CAPACITY");
@@ -193,7 +198,7 @@ describe("校园核验滑动预算与共享容量", () => {
       "POST",
       "campus-verification/transactions",
       a.accessToken,
-      { consentVersion: 1 },
+      {},
     );
     expect(response.statusCode).toBe(503);
     expect(response.json().code).toBe("CAMPUS_SESSION_CAPACITY");
