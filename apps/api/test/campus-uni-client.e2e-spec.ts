@@ -76,15 +76,17 @@ describe("uni 校园客户端与真实平台 HTTP/数据库联调", () => {
       ),
     );
     const policy = await api.policy().promise;
-    expect(policy.version).toBe(1);
+    expect(policy.version).toBe(2);
     expect((await api.status().promise).status).toBe("unverified");
     expect((await api.profile().promise).profile).toBeNull();
-    const created = await api.create(policy.version).promise;
+    const created = await api.create().promise;
     const refreshed = await api.refresh(created.id).promise;
     expect(refreshed.challenge.version).not.toBe(created.challenge.version);
     await expect(
       api.submit(created.id, {
-        account: "synthetic-account",
+        name: "合成姓名",
+        consentVersion: policy.version,
+        account: "00123456",
         password: " pass ",
         captcha: "ABCD",
         challengeVersion: created.challenge.version,
@@ -92,7 +94,9 @@ describe("uni 校园客户端与真实平台 HTTP/数据库联调", () => {
     ).rejects.toMatchObject({ code: "CAMPUS_STALE_CHALLENGE" });
     expect(f.counts.post).toBe(0);
     const success = await api.submit(created.id, {
-      account: "synthetic-account",
+      name: "合成姓名",
+      consentVersion: policy.version,
+      account: "00123456",
       password: " pass ",
       captcha: "ABCD",
       challengeVersion: refreshed.challenge.version,
@@ -105,11 +109,13 @@ describe("uni 校园客户端与真实平台 HTTP/数据库联调", () => {
       accountNumber: "00123456",
       name: "合成姓名",
     });
-    const renewal = await api.create(policy.version).promise;
+    const renewal = await api.create().promise;
     f.transport(async () => successResponse("ANOTHER_SYNTHETIC_SUBJECT"));
     await expect(
       api.submit(renewal.id, {
-        account: "other",
+        name: "合成姓名",
+        consentVersion: policy.version,
+        account: "00123456",
         password: "synthetic",
         captcha: "ABCD",
         challengeVersion: renewal.challenge.version,
