@@ -27,6 +27,31 @@ function platform() {
 const ok = (call, requestId = "req-1") =>
   call.options.success({ statusCode: 200, data: { status: "ok", requestId } });
 
+test("无参数写请求发送合法 JSON 空对象，GET 不附带请求体", async () => {
+  const calls = [];
+  const client = createHttpClient(
+    (options) => {
+      calls.push(options);
+      queueMicrotask(() =>
+        options.success({
+          statusCode: 200,
+          data: { status: "ok", requestId: "synthetic-request" },
+        }),
+      );
+      return { abort() {} };
+    },
+    () => ({ baseUrl: "/api/v1", timeout: 5000 }),
+  );
+  await client.post("/create", undefined, isHealthResponse).promise;
+  await client.delete("/cancel", isHealthResponse).promise;
+  await client.get("/status", isHealthResponse).promise;
+  await client.post("/submit", { captcha: "ABCD" }, isHealthResponse).promise;
+  assert.deepEqual(
+    calls.map((call) => call.data),
+    [{}, {}, undefined, { captcha: "ABCD" }],
+  );
+});
+
 test("H5 开发默认使用代理；小程序与正式环境缺配置明确失败", () => {
   assert.deepEqual(resolveApiConfig({ development: true, platform: "h5" }), {
     baseUrl: "/api/v1",
