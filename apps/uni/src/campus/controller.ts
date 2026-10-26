@@ -8,6 +8,9 @@ import type { createCampusApi } from "../api/campus-client.ts";
 import { RequestError, type PendingRequest } from "../api/http.ts";
 import { campusFailure } from "./presentation.ts";
 
+/** 页面上可编辑的身份字段；错误就地显示在对应输入框下。 */
+export type CampusField = "name" | "account" | "password" | "captcha";
+
 export function initialCampusState() {
   return {
     policy: null as CampusPolicy | null,
@@ -15,9 +18,11 @@ export function initialCampusState() {
     profile: null as CampusProfile["profile"],
     transaction: null as CampusTransaction | null,
     consented: false,
+    name: "",
     account: "",
     password: "",
     captcha: "",
+    fieldErrors: {} as Partial<Record<CampusField, string>>,
     pending: "",
     message: "",
     profileError: "",
@@ -36,6 +41,8 @@ export function createCampusController(
   let epoch = 0;
   let owner = generation();
   let active = false;
+  /** 自动取码每次进入只尝试一次；失败后由用户主动重试，不循环创建。 */
+  let autoAttempted = false;
   const requests = new Set<PendingRequest<unknown>>();
   function clearSecrets() {
     state.password = "";
@@ -44,7 +51,8 @@ export function createCampusController(
   function imageError() {
     clearSecrets();
     state.imageFailed = true;
-    state.message = "验证码图片加载失败，请换一张；不要填写不可见图片的答案。";
+    state.message =
+      "验证码图片加载失败，请点击图片换一张；不要填写不可见图片的答案。";
   }
   function stop() {
     epoch++;
@@ -55,6 +63,7 @@ export function createCampusController(
   }
   function reset() {
     active = false;
+    autoAttempted = false;
     stop();
     Object.assign(state, initialCampusState());
     owner = generation();
@@ -84,12 +93,11 @@ export function createCampusController(
           code: `CAMPUS_${transaction.reason?.toUpperCase() ?? "FAILED"}`,
         }),
       );
-    else if (transaction.status === "succeeded")
-      state.message = "校园账号已验证。返回后请自行确认原操作。";
+    else if (transaction.status === "succeeded") state.message = "认证成功。";
     else if (transaction.status === "expired")
-      state.message = "本次核验已过期，请重新开始。";
+      state.message = "本次认证已过期，请重新认证。";
     else if (transaction.status === "cancelled")
-      state.message = "本次核验已取消，可继续浏览。";
+      state.message = "本次认证已取消，可继续浏览。";
   }
   async function loadDetails(at: number, account: number) {
     await Promise.all([
@@ -150,6 +158,16 @@ export function createCampusController(
       if (current(at, account)) state.pending = "";
     }
   }
+  /** 只有可新认证、没有既有事务且尚无有效资格时才需要立刻取码。 */
+  function autoEligible() {
+    const qualification = state.qualification;
+    return (
+      !autoAttempted &&
+      !!qualification?.available &&
+      !!qualification.currentTerm &&
+      qualification.status !== "valid"
+    );
+  }
   async function show() {
     if (owner !== generation()) reset();
     owner = generation();
@@ -163,13 +181,18 @@ export function createCampusController(
       account = generation();
     state.pending = "loading";
     await loadDetails(at, account);
-    if (current(at, account)) state.pending = "";
+    if (!current(at, account)) return;
+    state.pending = "";
+    // 未认证用户进入即取码，不需要先勾选同意；已有有效资格先看资料卡。
+    if (autoEligible()) {
+      autoAttempted = true;
+      await start();
+    }
   }
   async function start() {
     if (
       !active ||
       state.pending ||
-      !state.consented ||
       !state.policy ||
       !state.qualification?.available ||
       !state.qualification.currentTerm ||
@@ -187,7 +210,7 @@ export function createCampusController(
     state.message = "";
     clearSecrets();
     try {
-      const v = await tracked(api.create(state.policy.version));
+      const v = await tracked(api.create());
       if (current(at, account)) apply(v);
     } catch (e) {
       if (!current(at, account)) return;
@@ -199,6 +222,46 @@ export function createCampusController(
     } finally {
       if (current(at, account)) state.pending = "";
     }
+  }
+  /** 失败、取消或过期后新建事务；保留姓名与学号，密码与验证码必须重填。 */
+  async function restart() {
+    if (!active || state.pending) return;
+    if (
+      state.transaction &&
+      ["waiting", "processing"].includes(state.transaction.status)
+    )
+      return;
+    state.transaction = null;
+    state.uncertain = false;
+    state.message = "";
+    state.imageFailed = false;
+    state.fieldErrors = {};
+    clearSecrets();
+    await start();
+  }
+  /** 资格、告知或资料读取失败后的整页重查。 */
+  async function reload() {
+    if (state.pending) return;
+    reset();
+    await show();
+  }
+  function validateSubmission() {
+    const errors: Partial<Record<CampusField, string>> = {};
+    if (!state.name.trim()) errors.name = "请填写姓名";
+    if (!state.account.trim()) errors.account = "请填写学号";
+    if (!state.password) errors.password = "请填写统一身份认证密码";
+    if (!state.captcha) errors.captcha = "请填写验证码";
+    state.fieldErrors = errors;
+    if (Object.keys(errors).length > 0) return false;
+    if (!state.policy) {
+      state.message = "认证说明未加载，请稍后重试。";
+      return false;
+    }
+    if (!state.consented) {
+      state.message = "请先勾选同意上述认证说明。";
+      return false;
+    }
+    return true;
   }
   async function mutate(kind: "refreshing" | "submitting") {
     const tx = state.transaction;
@@ -215,29 +278,28 @@ export function createCampusController(
       Date.parse(tx.challenge.expiresAt) <= now()
     ) {
       clearSecrets();
-      state.message = "验证码或事务已过期，请取消后重新开始。";
+      state.message = "验证码或事务已过期，请重新认证。";
       return;
     }
     if (kind === "submitting" && state.imageFailed) {
       clearSecrets();
       return;
     }
-    if (
-      kind === "submitting" &&
-      (!state.account || !state.password || !state.captcha)
-    ) {
-      state.message = "请填写账号、密码和图片验证码。";
-      return;
-    }
+    if (kind === "submitting" && !validateSubmission()) return;
+    const policy = state.policy;
+    if (!policy) return;
     const at = epoch,
       account = generation();
     state.pending = kind;
     state.message = "";
+    state.fieldErrors = {};
     const body = {
-      account: state.account,
+      name: state.name.trim(),
+      account: state.account.trim(),
       password: state.password,
       captcha: state.captcha,
       challengeVersion: tx.challenge.version,
+      consentVersion: policy.version,
     };
     clearSecrets();
     try {
@@ -251,9 +313,16 @@ export function createCampusController(
       if (v.status === "succeeded") await loadDetails(at, account);
     } catch (e) {
       if (!current(at, account)) return;
-      state.transaction = { ...tx, challenge: undefined };
-      state.uncertain = true;
-      state.message = campusFailure(e);
+      if (e instanceof RequestError && e.code === "CAMPUS_CONSENT_MISMATCH") {
+        // 告知已更新：取消勾选并重新读取说明，不自动重发凭据。
+        state.consented = false;
+        state.message = campusFailure(e);
+        await loadDetails(at, account);
+      } else {
+        state.transaction = { ...tx, challenge: undefined };
+        state.uncertain = true;
+        state.message = campusFailure(e);
+      }
     } finally {
       body.password = "";
       body.captcha = "";
@@ -302,11 +371,19 @@ export function createCampusController(
       state.transaction = null;
     }
   }
+  function edit(field: CampusField, value: string) {
+    state[field] = value;
+    if (state.fieldErrors[field])
+      state.fieldErrors = { ...state.fieldErrors, [field]: "" };
+  }
   return {
     show,
     hide,
     reset,
     start,
+    restart,
+    reload,
+    edit,
     refresh: () => mutate("refreshing"),
     submit: () => mutate("submitting"),
     query,
