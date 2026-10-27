@@ -77,11 +77,18 @@ describe("管理接口认证 HTTP 契约", () => {
       await test.request("GET", "admin/auth/csrf", undefined, { cookie })
     ).json().csrfToken;
     expect(csrf).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const otherCookie = cookieOf(await login());
+    const otherCsrf = (
+      await test.request("GET", "admin/auth/csrf", undefined, {
+        cookie: otherCookie,
+      })
+    ).json().csrfToken;
     const rejectedHeaders: Record<string, string>[] = [
       { cookie },
       { cookie, origin: "https://evil.invalid", "x-csrf-token": csrf },
       { cookie, origin: "http://localhost:5173" },
       { cookie, origin: "http://localhost:5173", "x-csrf-token": "wrong" },
+      { cookie, origin: "http://localhost:5173", "x-csrf-token": otherCsrf },
     ];
     for (const headers of rejectedHeaders)
       expect(
@@ -140,12 +147,16 @@ describe("管理接口认证 HTTP 契约", () => {
       (await test.request("GET", "admin/auth/session", undefined, { cookie }))
         .statusCode,
     ).toBe(401);
+    const expiringCookie = cookieOf(await login());
     await test.pool.query(
       "UPDATE admin_sessions SET expires_at=now()-interval '1 second'",
     );
     expect(
-      (await test.request("GET", "admin/auth/session", undefined, { cookie }))
-        .statusCode,
+      (
+        await test.request("GET", "admin/auth/session", undefined, {
+          cookie: expiringCookie,
+        })
+      ).statusCode,
     ).toBe(401);
   });
 

@@ -9,6 +9,11 @@ import {
 } from "../auth/auth.constants.js";
 
 export interface EnvironmentVariables {
+  ADMIN_ALLOWED_ORIGINS: string;
+  ADMIN_SESSION_HOURS: number;
+  ADMIN_RATE_LOGIN_SOURCE: number;
+  ADMIN_RATE_LOGIN_ACCOUNT: number;
+  ADMIN_RATE_LOGIN_GLOBAL: number;
   CAMPUS_VERIFICATION_ENABLED: boolean;
   CAMPUS_POLICY_VERSION: number;
   API_TRUSTED_PROXY_CIDRS: string;

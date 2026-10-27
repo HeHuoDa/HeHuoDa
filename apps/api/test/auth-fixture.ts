@@ -9,6 +9,7 @@ import { configureApp } from "../src/configure-app.js";
 import { testDatabase } from "./competition-fixture.js";
 
 const ENV_KEYS = [
+  "NODE_ENV",
   "DATABASE_URL",
   "SENSITIVE_BUSINESS_ENABLED",
   "WECHAT_LOGIN_ENABLED",
@@ -25,10 +26,13 @@ const ENV_KEYS = [
   "ADMIN_RATE_LOGIN_SOURCE",
   "ADMIN_RATE_LOGIN_ACCOUNT",
   "ADMIN_RATE_LOGIN_GLOBAL",
+  "CAMPUS_VERIFICATION_ENABLED",
+  "CAMPUS_TERMS",
 ] as const;
 
 // 默认开启登录并使用离线替身；限流预算放宽，专项测试按需收紧。
 const BASE_ENV: Record<string, string> = {
+  NODE_ENV: "test",
   SENSITIVE_BUSINESS_ENABLED: "false",
   WECHAT_LOGIN_ENABLED: "true",
   WECHAT_LOGIN_ADAPTER: "stub",
@@ -43,6 +47,8 @@ const BASE_ENV: Record<string, string> = {
   ADMIN_RATE_LOGIN_SOURCE: "10000",
   ADMIN_RATE_LOGIN_ACCOUNT: "10000",
   ADMIN_RATE_LOGIN_GLOBAL: "10000",
+  CAMPUS_VERIFICATION_ENABLED: "false",
+  CAMPUS_TERMS: "[]",
 };
 
 export interface AuthTestApp {
