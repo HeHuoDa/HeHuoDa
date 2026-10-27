@@ -6,11 +6,23 @@ import { AdminController } from "./admin.controller.js";
 import { AdminService } from "./admin.service.js";
 import { AdminGuard } from "./admin.guard.js";
 import { AdminOperationsService } from "./admin-operations.service.js";
+import { AdminIngestionOperation } from "../ingestion/admin-ingestion-operation.js";
+import { AdminIngestionController } from "../ingestion/admin-ingestion.controller.js";
+import { AdminIngestionService } from "../ingestion/admin-ingestion.service.js";
+import { AdminReviewController } from "./admin-review.controller.js";
+import { AdminReviewService } from "./admin-review.service.js";
 @Module({
   imports: [AuthPersistenceModule],
-  controllers: [AdminController],
+  controllers: [
+    AdminController,
+    AdminIngestionController,
+    AdminReviewController,
+  ],
   providers: [
     AdminOperationsService,
+    AdminIngestionOperation,
+    AdminIngestionService,
+    AdminReviewService,
     AdminService,
     AuthRateLimiter,
     { provide: APP_GUARD, useClass: AdminGuard },

@@ -55,7 +55,7 @@ export interface AuthTestApp {
   app: NestFastifyApplication;
   pool: Pool;
   request(
-    method: "GET" | "POST" | "PATCH" | "OPTIONS",
+    method: "GET" | "POST" | "PATCH" | "PUT" | "OPTIONS",
     url: string,
     payload?: unknown,
     headers?: Record<string, string>,

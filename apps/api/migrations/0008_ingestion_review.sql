@@ -25,4 +25,3 @@ CREATE TABLE ingestion_review_previews (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ingestion_review_previews_candidate ON ingestion_review_previews(candidate_id,purpose,created_at DESC);
-
