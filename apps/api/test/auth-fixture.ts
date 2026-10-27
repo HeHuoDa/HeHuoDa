@@ -20,6 +20,11 @@ const ENV_KEYS = [
   "AUTH_RATE_LOGIN_GLOBAL",
   "AUTH_RATE_REFRESH_PER_SUBJECT",
   "AUTH_RATE_REFRESH_GLOBAL",
+  "ADMIN_ALLOWED_ORIGINS",
+  "ADMIN_SESSION_HOURS",
+  "ADMIN_RATE_LOGIN_SOURCE",
+  "ADMIN_RATE_LOGIN_ACCOUNT",
+  "ADMIN_RATE_LOGIN_GLOBAL",
 ] as const;
 
 // 默认开启登录并使用离线替身；限流预算放宽，专项测试按需收紧。
@@ -34,18 +39,23 @@ const BASE_ENV: Record<string, string> = {
   AUTH_RATE_LOGIN_GLOBAL: "100000",
   AUTH_RATE_REFRESH_PER_SUBJECT: "100000",
   AUTH_RATE_REFRESH_GLOBAL: "100000",
+  ADMIN_ALLOWED_ORIGINS: "http://localhost:5173",
+  ADMIN_RATE_LOGIN_SOURCE: "10000",
+  ADMIN_RATE_LOGIN_ACCOUNT: "10000",
+  ADMIN_RATE_LOGIN_GLOBAL: "10000",
 };
 
 export interface AuthTestApp {
   app: NestFastifyApplication;
   pool: Pool;
   request(
-    method: "GET" | "POST" | "PATCH",
+    method: "GET" | "POST" | "PATCH" | "OPTIONS",
     url: string,
     payload?: unknown,
     headers?: Record<string, string>,
   ): Promise<LightMyRequestResponse>;
   close(): Promise<void>;
+  restart(): Promise<void>;
 }
 
 export async function authTestApp(
@@ -65,7 +75,7 @@ export async function authTestApp(
   };
 
   const { AppModule } = await import("../src/app.module.js");
-  const app = await NestFactory.create<NestFastifyApplication>(
+  let app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
     { logger: false, abortOnError: false },
@@ -80,11 +90,24 @@ export async function authTestApp(
     restoreEnvironment();
     throw error;
   }
-  const instance = app.getHttpAdapter().getInstance();
+  let instance = app.getHttpAdapter().getInstance();
 
   const test: AuthTestApp = {
     app,
     pool: db.pool,
+    async restart() {
+      await app.close();
+      app = await NestFactory.create<NestFastifyApplication>(
+        AppModule,
+        new FastifyAdapter(),
+        { logger: false, abortOnError: false },
+      );
+      configureApp(app);
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      instance = app.getHttpAdapter().getInstance();
+      test.app = app;
+    },
     request(method, url, payload, headers) {
       return instance.inject({
         method,

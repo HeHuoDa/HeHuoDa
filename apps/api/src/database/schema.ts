@@ -10,6 +10,7 @@ import {
   foreignKey,
   boolean,
   customType,
+  uuid,
 } from "drizzle-orm/pg-core";
 import type {
   EditionSummary,
@@ -386,3 +387,42 @@ export const authRateLimits = pgTable(
     }),
   ],
 );
+
+export const adminAccounts = pgTable("admin_accounts", {
+  id: uuid().primaryKey().defaultRandom(),
+  username: text().notNull().unique(),
+  displayName: text("display_name").notNull(),
+  passwordSalt: bytea("password_salt").notNull(),
+  passwordHash: bytea("password_hash").notNull(),
+  active: boolean().notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const adminSessions = pgTable("admin_sessions", {
+  id: uuid().primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => adminAccounts.id),
+  tokenHash: bytea("token_hash").notNull().unique(),
+  csrfHash: bytea("csrf_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const adminOperations = pgTable("admin_operations", {
+  operationId: uuid("operation_id").primaryKey().defaultRandom(),
+  actorType: text("actor_type").notNull(),
+  actorId: uuid("actor_id"),
+  action: text().notNull(),
+  objectType: text("object_type").notNull(),
+  objectId: text("object_id"),
+  reason: text().notNull(),
+  result: text().notNull(),
+  requestId: text("request_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

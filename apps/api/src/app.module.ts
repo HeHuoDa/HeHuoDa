@@ -13,6 +13,7 @@ import { Module } from "@nestjs/common";
 import { validateEnvironment } from "./config/env.validation.js";
 import { HealthController } from "./health/health.controller.js";
 import { HealthService } from "./health/health.service.js";
+import { AdminModule } from "./admin/admin.module.js";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { HealthService } from "./health/health.service.js";
     IngestionModule,
     AuthModule,
     BusinessAccessModule,
+    AdminModule,
   ],
   controllers: [HealthController, CompetitionController],
   providers: [

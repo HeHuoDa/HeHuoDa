@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { adminOrigins } from "../admin/admin-security.js";
 import { campusSettings } from "../campus/campus.config.js";
 import { trustedProxy } from "./http-adapter.js";
 import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
@@ -33,6 +34,33 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object({
+  ADMIN_ALLOWED_ORIGINS: Joi.string()
+    .allow("")
+    .default("")
+    .custom((value, helpers) => {
+      try {
+        adminOrigins(value);
+        return value;
+      } catch {
+        return helpers.error("any.invalid");
+      }
+    }),
+  ADMIN_SESSION_HOURS: Joi.number().integer().min(1).max(24).default(12),
+  ADMIN_RATE_LOGIN_SOURCE: Joi.number()
+    .integer()
+    .min(1)
+    .max(100000)
+    .default(30),
+  ADMIN_RATE_LOGIN_ACCOUNT: Joi.number()
+    .integer()
+    .min(1)
+    .max(100000)
+    .default(5),
+  ADMIN_RATE_LOGIN_GLOBAL: Joi.number()
+    .integer()
+    .min(1)
+    .max(100000)
+    .default(100),
   API_TRUSTED_PROXY_CIDRS: Joi.string()
     .allow("")
     .default("")
@@ -143,5 +171,9 @@ export function validateEnvironment(
   }
 
   campusSettings(value);
+  adminOrigins(
+    value.ADMIN_ALLOWED_ORIGINS as string,
+    value.NODE_ENV === "production",
+  );
   return value as EnvironmentVariables;
 }
