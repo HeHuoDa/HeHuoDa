@@ -1,6 +1,46 @@
 import { validateEnvironment } from "./env.validation.js";
 
 describe("validateEnvironment", () => {
+  it("管理员来源默认关闭，拒绝通配符、路径、非法预算与生产明文Origin", () => {
+    expect(validateEnvironment({})).toMatchObject({
+      ADMIN_ALLOWED_ORIGINS: "",
+      ADMIN_SESSION_HOURS: 12,
+    });
+    for (const origin of [
+      "*",
+      "null",
+      "https://admin.example/path",
+      "https://admin.example/",
+      "https://u:p@admin.example",
+      "https://*.example",
+    ])
+      expect(() =>
+        validateEnvironment({ ADMIN_ALLOWED_ORIGINS: origin }),
+      ).toThrow();
+    for (const config of [
+      { ADMIN_SESSION_HOURS: 0 },
+      { ADMIN_SESSION_HOURS: 25 },
+      { ADMIN_RATE_LOGIN_ACCOUNT: "bad" },
+      { ADMIN_RATE_LOGIN_SOURCE: 0 },
+    ])
+      expect(() => validateEnvironment(config)).toThrow();
+    const production = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test:test@db/test",
+    };
+    expect(() =>
+      validateEnvironment({
+        ...production,
+        ADMIN_ALLOWED_ORIGINS: "http://admin.example",
+      }),
+    ).toThrow();
+    expect(
+      validateEnvironment({
+        ...production,
+        ADMIN_ALLOWED_ORIGINS: "https://admin.example",
+      }),
+    ).toHaveProperty("ADMIN_ALLOWED_ORIGINS", "https://admin.example");
+  });
   it("可信代理默认禁用，拒绝任意来源和非法网段配置", () => {
     expect(validateEnvironment({}).API_TRUSTED_PROXY_CIDRS).toBe("");
     expect(

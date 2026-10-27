@@ -95,17 +95,24 @@ export class AdminService {
     oldCookie?: string,
   ) {
     const now = new Date();
+    await this.database.pool.query(
+      "DELETE FROM auth_rate_limits WHERE kind LIKE 'admin-login-%' AND window_started_at < $1",
+      [new Date(now.getTime() - 3600000)],
+    );
+    // Gate globally before allocating per-source/account keys, bounding new keys per minute.
+    const global = await this.limiter.consume(
+      "admin-login-global",
+      digest("all").toString("hex"),
+      now,
+    );
+    if (global > this.config.get<number>("ADMIN_RATE_LOGIN_GLOBAL", 100))
+      throw createApiError(429, "TOO_MANY_REQUESTS", "请求过于频繁");
     const budgets: [string, string, number][] = [
       ["source", ip, this.config.get<number>("ADMIN_RATE_LOGIN_SOURCE", 30)],
       [
         "account",
         body.username,
         this.config.get<number>("ADMIN_RATE_LOGIN_ACCOUNT", 5),
-      ],
-      [
-        "global",
-        "all",
-        this.config.get<number>("ADMIN_RATE_LOGIN_GLOBAL", 100),
       ],
     ];
     const counts = await Promise.all(

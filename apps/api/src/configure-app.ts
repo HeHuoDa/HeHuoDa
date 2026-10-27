@@ -8,14 +8,18 @@ import {
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter.js";
 import { createGlobalValidationPipe } from "./common/pipes/global-validation.pipe.js";
 import type { FastifyInstance } from "fastify";
-import { AdminService } from "./admin/admin.service.js";
+import { adminOrigins } from "./admin/admin-security.js";
 
 export function configureApp(app: INestApplication): OpenAPIObject {
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(createGlobalValidationPipe());
   app.useGlobalFilters(new ApiExceptionFilter());
 
-  const admin = app.get(AdminService);
+  const environment = app.get(ConfigService);
+  const allowedOrigins = adminOrigins(
+    environment.get<string>("ADMIN_ALLOWED_ORIGINS", ""),
+    environment.get("NODE_ENV") === "production",
+  );
   const server: FastifyInstance = app.getHttpAdapter().getInstance();
   server.addHook("onRequest", async (request, reply) => {
     const path = request.url.split("?")[0]!;
@@ -23,7 +27,7 @@ export function configureApp(app: INestApplication): OpenAPIObject {
     reply.header("Cache-Control", "no-store");
     reply.header("Vary", "Origin");
     const origin = request.headers.origin;
-    if (origin && admin.origins().includes(origin)) {
+    if (origin && allowedOrigins.includes(origin)) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
     }
@@ -38,7 +42,7 @@ export function configureApp(app: INestApplication): OpenAPIObject {
       .filter(Boolean);
     if (
       !origin ||
-      !admin.origins().includes(origin) ||
+      !allowedOrigins.includes(origin) ||
       typeof method !== "string" ||
       !["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD"].includes(method) ||
       headers.some(

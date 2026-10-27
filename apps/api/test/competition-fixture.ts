@@ -5,7 +5,7 @@ import type {
   ImportBatch,
   ImportCompetition,
 } from "../src/competitions/import.js";
-export async function testDatabase() {
+export async function testDatabase(migrationDirectory?: string) {
   const raw = process.env.TEST_DATABASE_URL;
   if (!raw || !new URL(raw).pathname.endsWith("_test"))
     throw new Error(
@@ -19,7 +19,7 @@ export async function testDatabase() {
   const url = new URL(raw);
   url.searchParams.set("options", "-c search_path=" + schema);
   const pool = new Pool({ connectionString: url.toString() });
-  await migrate(pool);
+  await migrate(pool, migrationDirectory);
   return {
     pool,
     url: url.toString(),

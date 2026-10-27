@@ -21,6 +21,7 @@ import {
   ApiBadRequestResponse,
   ApiHeader,
   ApiNotFoundResponse,
+  ApiSecurity,
 } from "@nestjs/swagger";
 import type { FastifyReply } from "fastify";
 import { ApiErrorDto } from "../common/dto/api-error.dto.js";
@@ -47,6 +48,7 @@ export class AdminController {
     private readonly operations: AdminOperationsService,
   ) {}
   @Post("auth/login")
+  @ApiSecurity({})
   @HttpCode(200)
   @ApiOkResponse({ type: AdminSessionDto })
   @ApiBadRequestResponse({ type: ApiErrorDto })
@@ -89,6 +91,8 @@ export class AdminController {
     return { csrfToken: csrfToken(sessionToken(request.headers.cookie)!) };
   }
   @Post("auth/logout")
+  @ApiSecurity({})
+  @ApiBadRequestResponse({ type: ApiErrorDto })
   @HttpCode(204)
   @ApiNoContentResponse()
   @ApiHeader({ name: "Origin", required: true })

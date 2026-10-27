@@ -47,6 +47,7 @@ export function adminOrigins(raw: string, production = false): string[] {
         const origin = value.trim();
         const url = new URL(origin);
         if (
+          url.hostname.includes("*") ||
           url.origin !== origin ||
           !["http:", "https:"].includes(url.protocol) ||
           (production && url.protocol !== "https:")

@@ -33,3 +33,15 @@ CREATE TABLE admin_sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX admin_sessions_account_idx ON admin_sessions(account_id);
+
+-- A re-enabled account must log in again; old sessions never revive.
+CREATE FUNCTION revoke_changed_admin_sessions() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF (OLD.active AND NOT NEW.active) OR OLD.password_hash IS DISTINCT FROM NEW.password_hash OR OLD.password_salt IS DISTINCT FROM NEW.password_salt THEN
+    UPDATE admin_sessions SET revoked_at=now() WHERE account_id=NEW.id AND revoked_at IS NULL;
+  END IF;
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER admin_account_credentials_changed AFTER UPDATE ON admin_accounts
+FOR EACH ROW EXECUTE FUNCTION revoke_changed_admin_sessions();
