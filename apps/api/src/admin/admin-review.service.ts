@@ -309,7 +309,9 @@ export class AdminReviewService {
 
   async review(candidateId: string, query: AdminReviewQueryDto) {
     try {
-      return await exportReview(this.pool(), candidateId, query.targetId);
+      return await exportReview(this.pool(), candidateId, query.targetId, {
+        reuseApproved: true,
+      });
     } catch (error) {
       return reviewException(error);
     }

@@ -87,6 +87,7 @@ export async function exportReview(
   pool: Pool | PoolClient,
   candidateId: string,
   targetId?: string,
+  options: { reuseApproved?: boolean } = {},
 ): Promise<ReviewFile> {
   return withReviewTransaction(pool, async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(22002)");
@@ -207,6 +208,7 @@ export async function exportReview(
     }
     const approved = candidate.approved_file as ReviewFile | null;
     if (
+      options.reuseApproved &&
       candidate.status === "approved" &&
       approved &&
       approved.candidateId === candidateId &&

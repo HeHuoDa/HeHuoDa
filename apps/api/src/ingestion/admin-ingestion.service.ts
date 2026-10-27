@@ -60,8 +60,22 @@ export class AdminIngestionService
       )
         return;
       await recoverInterruptedRuns(this.database.pool);
+      // The run may have committed before the process lost its request-result write.
       await client.query(
-        "UPDATE ingestion_requests SET status='interrupted',error='执行中断；请检查运行并显式续跑',finished_at=now() WHERE status='running' OR ($1 AND status='accepted')",
+        `WITH linked AS (
+        SELECT q.id AS request_id,r.* FROM ingestion_requests q JOIN LATERAL (
+          SELECT * FROM ingestion_runs r WHERE r.id=q.run_id OR r.options->>'requestId'=q.id::text
+          ORDER BY (r.id=q.run_id) DESC NULLS LAST,r.started_at DESC,r.id DESC LIMIT 1
+        ) r ON true WHERE q.status='running' OR ($1 AND q.status='accepted')
+      ) UPDATE ingestion_requests q SET run_id=r.id,
+        status=CASE WHEN r.status IN ('succeeded','partial','failed') THEN 'completed' ELSE 'interrupted' END,
+        result=jsonb_build_object('runId',r.id,'status',r.status,'source',r.source_id,'counts',r.counts,'errors',r.errors,'cursor',r.cursor),
+        error=CASE WHEN r.status IN ('succeeded','partial','failed') THEN NULL ELSE '执行中断；请检查运行并显式续跑' END,
+        finished_at=COALESCE(r.finished_at,now()) FROM linked r WHERE q.id=r.request_id`,
+        [includeAccepted],
+      );
+      await client.query(
+        "UPDATE ingestion_requests SET status='interrupted',error='执行中断；请检查请求及运行记录后显式恢复',finished_at=now() WHERE status='running' OR ($1 AND status='accepted')",
         [includeAccepted],
       );
     } finally {

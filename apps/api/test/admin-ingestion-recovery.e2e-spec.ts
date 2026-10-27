@@ -204,6 +204,60 @@ describe("异步采集受理与中断恢复", () => {
     });
   }, 60000);
 
+  it("运行已落账但请求结果未落账时，重启从真实运行恢复完成状态而不重扫", async () => {
+    const id = randomUUID(),
+      runId = randomUUID();
+    await test.pool.query(
+      "INSERT INTO ingestion_runs(id,source_id,trigger,status,options,cursor,counts,finished_at) VALUES($1,$2,'manual','succeeded',$3,$4,$5,now())",
+      [
+        runId,
+        source.id,
+        {
+          requestId: id,
+          sourceId: source.id,
+          from: "2026-01-01",
+          to: "2026-10-27",
+        },
+        { pages: [], pending: [], seen: [] },
+        {
+          discovered: 0,
+          new: 0,
+          changed: 0,
+          unchanged: 0,
+          ignored: 0,
+          failed: 0,
+        },
+      ],
+    );
+    await test.pool.query(
+      "INSERT INTO ingestion_requests(id,actor_id,source_id,status,options) VALUES($1,$2,$3,'running',$4)",
+      [id, actorId, source.id, { sourceId: source.id }],
+    );
+    await test.restart();
+    const response = await test.request(
+      "GET",
+      `admin/ingestion/requests/${id}`,
+      undefined,
+      headers,
+    );
+    expect(response.json()).toMatchObject({
+      status: "completed",
+      runId,
+      result: { status: "succeeded", runId },
+      error: null,
+    });
+    expect(
+      (
+        await test.request(
+          "POST",
+          `admin/ingestion/requests/${id}/retry`,
+          { operationId: randomUUID(), reason: "已完成运行不得重新触发" },
+          headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+  }, 60000);
+
   it("CLI或调度占用全局锁时HTTP返回409，不留下受理记录", async () => {
     const lock = await test.pool.connect();
     await lock.query("SELECT pg_advisory_lock(23000)");
