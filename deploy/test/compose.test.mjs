@@ -116,6 +116,11 @@ test(
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const envFile = join(directory, ".env");
     const settings = {
+      ADMIN_ALLOWED_ORIGINS: "https://admin.example",
+      ADMIN_SESSION_HOURS: "12",
+      ADMIN_RATE_LOGIN_ACCOUNT: "5",
+      ADMIN_RATE_LOGIN_SOURCE: "30",
+      ADMIN_RATE_LOGIN_GLOBAL: "100",
       WECHAT_LOGIN_ENABLED: "true",
       WECHAT_APP_ID: "wxsynthetic",
       WECHAT_APP_SECRET: "synthetic-secret",

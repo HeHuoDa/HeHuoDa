@@ -15,6 +15,7 @@
     "test:e2e": "pnpm build:connectors && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand",
     "openapi:write": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/write-openapi.js",
     "db:migrate": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/migrate.js",
+    "admin:init": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/admin-init.js",
     "data:import": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/import.js",
     "ingestion": "pnpm build:connectors && tsc -p tsconfig.openapi.json && node dist-openapi/scripts/ingestion.js",
     "build:connectors": "pnpm --filter @hehuoda/sicau-connectors build"

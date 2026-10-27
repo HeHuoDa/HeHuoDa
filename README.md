@@ -16,6 +16,8 @@
 
 单机容器化、镜像冒烟、SHA 发布、HTTPS 和备份恢复操作见[部署与恢复说明](docs/deployment.md)。原开发 Compose 保持独立；部署工作流是否执行取决于实际开关与环境条件，不能从默认关闭推断当前配置。
 
+管理员后端的受控初始化、Cookie／CSRF、事务审计和回退约束见[管理员认证说明](docs/admin-auth.md)；管理前端接线与生产启用仍须分别验收。
+
 仓库现由 [HeHuoDa 组织](https://github.com/HeHuoDa/HeHuoDa)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoDa/HeHuoDa.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
 
 ## 管理端前端演示
