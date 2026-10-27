@@ -47,6 +47,8 @@ function reviewException(error: unknown): never {
     error instanceof UnprocessableEntityException
   )
     throw error;
+  if (error instanceof ImportValidationError)
+    throw new UnprocessableEntityException();
   const message = error instanceof Error ? error.message : "";
   if (message.includes("候选不存在") || message.includes("通知不存在"))
     throw new NotFoundException();
@@ -56,8 +58,6 @@ function reviewException(error: unknown): never {
     )
   )
     throw new ConflictException();
-  if (error instanceof ImportValidationError)
-    throw new UnprocessableEntityException();
   if (
     error instanceof Error &&
     (error.name === "ValidationError" ||
@@ -632,7 +632,20 @@ export class AdminReviewService {
         reason: command.reason,
       },
       payload,
-      work,
+      async (client) => {
+        // Match CLI lock order before checking any snapshot or locking a preview receipt.
+        await client.query("SELECT pg_advisory_xact_lock(22002)");
+        const notice = await client.query(
+          "SELECT n.id FROM ingestion_notices n JOIN ingestion_candidates c ON c.notice_id=n.id WHERE c.id=$1 FOR UPDATE OF n",
+          [candidateId],
+        );
+        if (!notice.rowCount) throw new NotFoundException();
+        await client.query(
+          "SELECT id FROM ingestion_candidates WHERE id=$1 FOR UPDATE",
+          [candidateId],
+        );
+        return work(client);
+      },
     );
   }
 

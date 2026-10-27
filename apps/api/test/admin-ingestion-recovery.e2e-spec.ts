@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { sources } from "@hehuoda/sicau-connectors/notices";
+import {
+  BoundedFetcher,
+  sources,
+  type Transport,
+} from "@hehuoda/sicau-connectors/notices";
+import { AdminIngestionService } from "../src/ingestion/admin-ingestion.service.js";
+import { IngestionRunner } from "../src/ingestion/runner.js";
+import { informationArticle } from "./notice-fixtures.js";
 import { passwordHash } from "../src/admin/admin-security.js";
 import { authTestApp, type AuthTestApp } from "./auth-fixture.js";
 
@@ -37,7 +44,18 @@ describe("异步采集受理与中断恢复", () => {
     const id = randomUUID();
     await test.pool.query(
       "INSERT INTO ingestion_requests(id,actor_id,source_id,status,options) VALUES($1,$2,$3,'accepted',$4)",
-      [id, actorId, source.id, { sourceId: source.id, preview: true }],
+      [
+        id,
+        actorId,
+        source.id,
+        {
+          sourceId: source.id,
+          preview: true,
+          from: "2026-01-01",
+          to: "2026-10-27",
+          url: `https://${source.host}/info/1043/100.htm`,
+        },
+      ],
     );
     await test.restart();
     const response = await test.request(
@@ -64,6 +82,75 @@ describe("异步采集受理与中断恢复", () => {
         (await test.pool.query(`SELECT count(*)::int AS total FROM ${table}`))
           .rows[0].total,
       ).toBe(0);
+    let clock = 0;
+    const transport: Transport = async (url) => ({
+      status: url.pathname === "/robots.txt" ? 404 : 200,
+      headers: {},
+      body: new TextEncoder().encode(
+        url.pathname === "/robots.txt" ? "" : informationArticle,
+      ),
+    });
+    test.app.get(AdminIngestionService).runner = new IngestionRunner(
+      test.pool,
+      (configured, limits) =>
+        new BoundedFetcher(
+          configured,
+          limits,
+          transport,
+          () => clock,
+          async (ms) => {
+            clock += ms;
+          },
+        ),
+    );
+    const command = {
+      operationId: randomUUID(),
+      reason: "显式恢复未创建运行的原预览",
+    };
+    const retry = await test.request(
+      "POST",
+      `admin/ingestion/requests/${id}/retry`,
+      command,
+      headers,
+    );
+    expect(retry.statusCode).toBe(202);
+    expect(
+      (
+        await test.request(
+          "POST",
+          `admin/ingestion/requests/${id}/retry`,
+          command,
+          headers,
+        )
+      ).json(),
+    ).toEqual(retry.json());
+    let completed;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      completed = (
+        await test.request(
+          "GET",
+          `admin/ingestion/requests/${retry.json().requestId}`,
+          undefined,
+          headers,
+        )
+      ).json();
+      if (completed.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(completed).toMatchObject({
+      status: "completed",
+      runId: null,
+      options: { from: "2026-01-01", to: "2026-10-27", preview: true },
+      result: { status: "succeeded" },
+    });
+    expect(completed.result.previews).toHaveLength(1);
+    expect(
+      (
+        await test.pool.query(
+          "SELECT count(*)::int AS total FROM ingestion_sources",
+        )
+      ).rows[0].total,
+    ).toBe(0);
   }, 60000);
 
   it("扫描进程丢失后运行与请求都标记中断，并保留同一runId和游标", async () => {

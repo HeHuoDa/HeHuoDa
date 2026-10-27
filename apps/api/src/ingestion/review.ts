@@ -405,6 +405,19 @@ async function checkBaseline(client: PoolClient, file: ReviewFile) {
   const catalog = await readCatalog(client);
   if (formalBaseline(catalog, file.targetId) !== file.baseline)
     throw new Error("审核文件过期：正式记录或关系已变化，请重新导出审核");
+  const patch = file.batch.competitions![0];
+  for (const field of ["stages", "notices", "tracks"] as const) {
+    for (const item of patch[field] ?? []) {
+      if (
+        catalog.competitions.some(
+          (record) =>
+            record.id !== file.targetId &&
+            record[field].some((existing) => existing.id === item.id),
+        )
+      )
+        throw new Error("正式关系 ID 已占用，请重新导出审核");
+    }
+  }
   const before = catalog.competitions.find((c) => c.id === file.targetId);
   if (
     commandHash(file.formalBefore) !== commandHash(before ?? null) ||

@@ -239,6 +239,20 @@ export class AdminIngestionService
     };
     return this.accept(context, body, options, { runId: id, ...body });
   }
+  async retry(context: AdminContext, id: string, body: IngestionCommandDto) {
+    const request = await this.requestDetail(id);
+    if (!["failed", "interrupted"].includes(request.status))
+      throw new ConflictException();
+    if (request.runId) return this.resume(context, request.runId, body);
+    // No run was created: repeat the persisted original input, never a newly guessed date window.
+    const options = (
+      await this.database.pool.query(
+        "SELECT options FROM ingestion_requests WHERE id=$1",
+        [id],
+      )
+    ).rows[0].options as ScanOptions;
+    return this.accept(context, body, options, { requestId: id, ...body });
+  }
   private async accept(
     context: AdminContext,
     body: IngestionCommandDto,
@@ -394,7 +408,7 @@ export class AdminIngestionService
     const read = async () =>
       (
         await this.database.pool.query(
-          `SELECT q.id AS "requestId",q.source_id AS "sourceId",q.status,COALESCE(q.run_id,(SELECT r.id FROM ingestion_runs r WHERE r.options->>'requestId'=q.id::text ORDER BY r.started_at DESC,r.id DESC LIMIT 1)) AS "runId",q.result,q.error,q.created_at AS "createdAt",q.started_at AS "startedAt",q.finished_at AS "finishedAt" FROM ingestion_requests q WHERE q.id=$1`,
+          `SELECT q.id AS "requestId",q.source_id AS "sourceId",q.status,q.options,COALESCE(q.run_id,(SELECT r.id FROM ingestion_runs r WHERE r.options->>'requestId'=q.id::text ORDER BY r.started_at DESC,r.id DESC LIMIT 1)) AS "runId",q.result,q.error,q.created_at AS "createdAt",q.started_at AS "startedAt",q.finished_at AS "finishedAt" FROM ingestion_requests q WHERE q.id=$1`,
           [id],
         )
       ).rows[0];

@@ -252,6 +252,11 @@ export class IngestionAcceptedDto {
   @ApiProperty({ enum: ["accepted"] }) status!: string;
 }
 export class IngestionRequestDto {
+  @ApiProperty({
+    type: IngestionRunOptionsDto,
+    description: "原始受理范围与预览参数；中断后显式重试沿用",
+  })
+  options!: IngestionRunOptionsDto;
   @ApiProperty({ format: "uuid" }) requestId!: string;
   @ApiProperty() sourceId!: string;
   @ApiProperty({

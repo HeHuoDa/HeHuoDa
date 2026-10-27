@@ -91,6 +91,18 @@ export class AdminIngestionController {
   request(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.service.requestDetail(id);
   }
+  @Post("requests/:id/retry")
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: IngestionAcceptedDto })
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  retry(
+    @Req() request: AdminRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: IngestionCommandDto,
+  ) {
+    return this.service.retry(request.admin!, id, body);
+  }
   @Post("runs/:id/resume")
   @HttpCode(202)
   @ApiAcceptedResponse({ type: IngestionAcceptedDto })
