@@ -39,6 +39,8 @@ export const ADMIN_ACTIONS = [
   "competition.update",
   "competition.publish",
   "ingestion.scan",
+  "ingestion.configure",
+  "ingestion.resume",
   "candidate.review",
   "candidate.import",
 ] as const;
@@ -91,6 +93,13 @@ export class OperationsQueryDto {
 }
 export class AdminOperationDto {
   @ApiProperty({ format: "uuid" }) operationId!: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    format: "uuid",
+    description: "HTTP 写请求的幂等 operationId；旧操作为空",
+  })
+  commandOperationId!: string | null;
   @ApiProperty({ enum: ["admin", "maintenance", "anonymous"] })
   actorType!: string;
   @ApiProperty({ type: String, nullable: true }) actorId!: string | null;

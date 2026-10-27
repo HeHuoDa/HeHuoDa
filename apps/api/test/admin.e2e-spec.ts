@@ -283,7 +283,7 @@ describe("管理接口认证 HTTP 契约", () => {
     config.set("ADMIN_RATE_LOGIN_ACCOUNT", 10000);
   });
 
-  it("工作台区分真实空库0和未接入模块，审计只读接口分页过滤且不暴露凭据", async () => {
+  it("工作台返回真实空库与固定来源计数，审计只读接口分页过滤且不暴露凭据", async () => {
     const cookie = cookieOf(await login());
     const dashboard = await test.request("GET", "admin/dashboard", undefined, {
       cookie,
@@ -303,13 +303,13 @@ describe("管理接口认证 HTTP 契约", () => {
         }),
         expect.objectContaining({
           module: "pending",
-          available: false,
-          count: null,
+          available: true,
+          count: 0,
         }),
         expect.objectContaining({
           module: "sources",
-          available: false,
-          count: null,
+          available: true,
+          count: 2,
         }),
       ]),
     );
