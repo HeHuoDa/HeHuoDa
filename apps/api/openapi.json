@@ -7880,6 +7880,7 @@
           "kind": {
             "type": "string",
             "enum": [
+              "revise",
               "approve",
               "reject",
               "reopen",
@@ -7897,7 +7898,8 @@
           },
           "result": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "revise 条目包含 targetId、reason、batch、checkedAt、resolution 的历史快照；其他条目为对应操作摘要"
           }
         },
         "required": [

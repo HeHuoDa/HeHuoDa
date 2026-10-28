@@ -452,15 +452,26 @@ export class AdminCandidateOperationDto {
   @ApiProperty({ format: "uuid" }) sourceVersion!: string;
   @ApiProperty({ minimum: 1 }) candidateRevision!: number;
   @ApiProperty({
-    enum: ["approve", "reject", "reopen", "preview", "import", "publish"],
+    enum: [
+      "revise",
+      "approve",
+      "reject",
+      "reopen",
+      "preview",
+      "import",
+      "publish",
+    ],
   })
   kind!: string;
   @ApiProperty() reviewer!: string;
   @ApiProperty({ format: "date-time" }) createdAt!: string;
-  @ApiProperty({ type: "object", additionalProperties: true }) result!: Record<
-    string,
-    unknown
-  >;
+  @ApiProperty({
+    type: "object",
+    additionalProperties: true,
+    description:
+      "revise 条目包含 targetId、reason、batch、checkedAt、resolution 的历史快照；其他条目为对应操作摘要",
+  })
+  result!: Record<string, unknown>;
 }
 
 export class AdminCandidateOperationsDto extends AdminPageDto {

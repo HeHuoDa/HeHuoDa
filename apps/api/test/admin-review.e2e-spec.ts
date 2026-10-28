@@ -242,6 +242,17 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
         },
       )
     ).json();
+    const reapproval = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/approve`,
+      {
+        operationId: randomUUID(),
+        reason: "已导入候选不能借重新批准绕过拒绝限制",
+        review: correctedReview(publishReview),
+      },
+      auth.headers,
+    );
+    expect(reapproval.statusCode).toBe(409);
     const publishCommand = {
       operationId: randomUUID(),
       reason: "核对发布目标及正式数据基线",
@@ -285,7 +296,7 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(history.statusCode).toBe(200);
     expect(
       history.json().items.map((item: { kind: string }) => item.kind),
-    ).toEqual(["approve", "preview", "import", "publish"]);
+    ).toEqual(["revise", "approve", "preview", "import", "publish"]);
     const adminAudit = await test.request(
       "GET",
       "admin/operations?action=competition.publish",
@@ -386,6 +397,71 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     );
     expect(reopened.statusCode).toBe(200);
     expect(reopened.json().status).toBe("pending");
+  });
+
+  it("人工修订历史按分页返回原材料、可信操作者与理由，后续修订不覆盖历史", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const file = correctedReview(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/candidates/${id}/review`,
+          undefined,
+          { cookie: auth.cookie },
+        )
+      ).json(),
+    );
+    const first = await test.request(
+      "PUT",
+      `admin/ingestion/candidates/${id}/review`,
+      { operationId: randomUUID(), reason: "第一次核对", review: file },
+      auth.headers,
+    );
+    expect(first.statusCode).toBe(200);
+    const changed = structuredClone(first.json().review);
+    changed.batch.competitions[0].name = "复核后的比赛名称";
+    const next = await test.request(
+      "PUT",
+      `admin/ingestion/candidates/${id}/review`,
+      { operationId: randomUUID(), reason: "纠正比赛名称", review: changed },
+      auth.headers,
+    );
+    expect(next.statusCode).toBe(200);
+    const history = await test.request(
+      "GET",
+      `admin/ingestion/candidates/${id}/operations?page=1&pageSize=1`,
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(history.json()).toMatchObject({ total: 2, page: 1, pageSize: 1 });
+    expect(history.json().items[0]).toMatchObject({
+      kind: "revise",
+      reviewer: adminId,
+      candidateRevision: 2,
+      result: {
+        reason: "第一次核对",
+        batch: file.batch,
+        checkedAt: file.checkedAt,
+        resolution: file.resolution,
+      },
+    });
+    expect(history.json().items[0].result).not.toHaveProperty("article");
+    const second = await test.request(
+      "GET",
+      `admin/ingestion/candidates/${id}/operations?page=2&pageSize=1`,
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(second.json().items[0]).toMatchObject({
+      kind: "revise",
+      reviewer: adminId,
+      candidateRevision: 3,
+      result: { reason: "纠正比赛名称" },
+    });
+    expect(second.json().items[0].result.batch.competitions[0].name).toBe(
+      "复核后的比赛名称",
+    );
   });
 
   it("已批准后来源元信息变化时重读提供新证据，不永久返回过期批准材料", async () => {

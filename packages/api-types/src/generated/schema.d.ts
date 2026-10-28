@@ -1610,10 +1610,11 @@ export interface components {
             sourceVersion: string;
             candidateRevision: number;
             /** @enum {string} */
-            kind: "approve" | "reject" | "reopen" | "preview" | "import" | "publish";
+            kind: "revise" | "approve" | "reject" | "reopen" | "preview" | "import" | "publish";
             reviewer: string;
             /** Format: date-time */
             createdAt: string;
+            /** @description revise 条目包含 targetId、reason、batch、checkedAt、resolution 的历史快照；其他条目为对应操作摘要 */
             result: {
                 [key: string]: unknown;
             };

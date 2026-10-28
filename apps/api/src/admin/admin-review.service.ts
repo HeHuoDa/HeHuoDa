@@ -358,6 +358,10 @@ export class AdminReviewService {
       async (client) => {
         try {
           this.assertReviewTarget(candidateId, command.review);
+          if (
+            (await this.candidateRow(client, candidateId)).status === "imported"
+          )
+            throw new ConflictException();
           return await approveReview(client, command.review, context.id);
         } catch (error) {
           return reviewException(error);
@@ -592,12 +596,20 @@ export class AdminReviewService {
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
       );
       await this.candidateRow(client, candidateId);
+      const historySql = `SELECT id,source_version,candidate_revision,kind,reviewer,created_at,result->'summary' AS result
+        FROM ingestion_operations WHERE candidate_id=$1
+        UNION ALL
+        SELECT 'revision:' || candidate_id || ':' || candidate_revision::text,source_version,candidate_revision,
+          'revise',actor_id::text,created_at,
+          jsonb_build_object('candidateId',candidate_id,'candidateRevision',candidate_revision,'targetId',target_id,
+            'reason',reason,'batch',review->'batch','checkedAt',review->'checkedAt','resolution',review->'resolution')
+        FROM ingestion_review_revisions WHERE candidate_id=$1`;
       const count = await client.query<{ total: string }>(
-        "SELECT count(*) AS total FROM ingestion_operations WHERE candidate_id=$1",
+        `SELECT count(*) AS total FROM (${historySql}) history`,
         [candidateId],
       );
       const rows = await client.query(
-        'SELECT id AS "operationId",source_version AS "sourceVersion",candidate_revision AS "candidateRevision",kind,reviewer,created_at AS "createdAt",result->\'summary\' AS result FROM ingestion_operations WHERE candidate_id=$1 ORDER BY created_at,id LIMIT $2 OFFSET $3',
+        `SELECT id AS "operationId",source_version AS "sourceVersion",candidate_revision AS "candidateRevision",kind,reviewer,created_at AS "createdAt",result FROM (${historySql}) history ORDER BY created_at,id LIMIT $2 OFFSET $3`,
         [candidateId, query.pageSize, (query.page - 1) * query.pageSize],
       );
       return {

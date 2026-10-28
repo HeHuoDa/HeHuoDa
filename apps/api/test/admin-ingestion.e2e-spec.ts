@@ -300,6 +300,64 @@ describe("管理员采集运行 API", () => {
     });
   });
 
+  it("危险参数、无CSRF及停用来源不能绕过HTTP受理，配置边界由服务端验证", async () => {
+    const countBefore = (
+      await test.pool.query(
+        "SELECT count(*)::int AS total FROM ingestion_requests",
+      )
+    ).rows[0].total;
+    const valid = {
+      sourceId,
+      from: "2026-10-01",
+      to: "2026-10-31",
+      operationId: randomUUID(),
+      reason: "验证受理边界",
+    };
+    expect(
+      (
+        await test.request("POST", "admin/ingestion/scans", valid, {
+          cookie,
+          origin,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await test.request("POST", "admin/ingestion/scans", valid, {
+          ...authHeaders(),
+          origin: "https://untrusted.invalid",
+        })
+      ).statusCode,
+    ).toBe(403);
+    for (const url of [
+      "http://" + sources[0]!.host + "/info/1043/100.htm",
+      "https://untrusted.invalid/info/1043/100.htm",
+      "https://127.0.0.1/info/1043/100.htm",
+    ]) {
+      expect((await submitScan({ url })).statusCode).toBe(400);
+    }
+    expect((await submitScan({ sourceId: "unregistered" })).statusCode).toBe(
+      404,
+    );
+    expect((await submitScan({ from: "2026-02-30" })).statusCode).toBe(400);
+    expect(
+      (await submitScan({ from: "2024-01-01", to: "2026-10-31" })).statusCode,
+    ).toBe(400);
+    expect((await configure({ settings: { maxPages: 11 } })).statusCode).toBe(
+      400,
+    );
+    expect((await configure({ cron: "* * * * *" })).statusCode).toBe(400);
+    expect((await configure({ enabled: false })).statusCode).toBe(200);
+    expect((await submitScan({ preview: true })).statusCode).toBe(409);
+    expect(
+      (
+        await test.pool.query(
+          "SELECT count(*)::int AS total FROM ingestion_requests",
+        )
+      ).rows[0].total,
+    ).toBe(countBefore);
+  });
+
   it("工作台返回真实待审核与固定来源摘要", async () => {
     const response = await test.request("GET", "admin/dashboard", undefined, {
       cookie,
