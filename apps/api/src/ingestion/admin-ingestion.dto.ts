@@ -209,8 +209,29 @@ export class IngestionExecutionResultDto {
   @ApiPropertyOptional({ type: [IngestionPreviewItemDto] })
   previews?: IngestionPreviewItemDto[];
 }
+export class IngestionChannelDefinitionDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() listUrl!: string;
+  @ApiProperty({ enum: ["vsb-selectors"] }) adapterId!: string;
+  @ApiProperty() version!: string;
+  @ApiProperty() noticePath!: string;
+  @ApiProperty() listPath!: string;
+  @ApiProperty({
+    type: "object",
+    additionalProperties: { type: "string" },
+    description: "仓库发布的只读选择器；写接口不接受此字段",
+  })
+  selectors!: Record<string, string>;
+}
 export class IngestionSourceDto {
   @ApiProperty() id!: string;
+  @ApiProperty() collegeId!: string;
+  @ApiProperty() defaultChannelId!: string;
+  @ApiProperty({
+    type: [IngestionChannelDefinitionDto],
+    description: "静态栏目定义；运行状态与管理写接口尚未扩展",
+  })
+  channels!: IngestionChannelDefinitionDto[];
   @ApiProperty() publisher!: string;
   @ApiProperty() version!: string;
   @ApiProperty() host!: string;

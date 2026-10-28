@@ -5828,6 +5828,48 @@
           "pageSize"
         ]
       },
+      "IngestionChannelDefinitionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "listUrl": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string",
+            "enum": [
+              "vsb-selectors"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "noticePath": {
+            "type": "string"
+          },
+          "listPath": {
+            "type": "string"
+          },
+          "selectors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "仓库发布的只读选择器；写接口不接受此字段"
+          }
+        },
+        "required": [
+          "id",
+          "listUrl",
+          "adapterId",
+          "version",
+          "noticePath",
+          "listPath",
+          "selectors"
+        ]
+      },
       "SourceSettingsDto": {
         "type": "object",
         "properties": {
@@ -6096,6 +6138,19 @@
           "id": {
             "type": "string"
           },
+          "collegeId": {
+            "type": "string"
+          },
+          "defaultChannelId": {
+            "type": "string"
+          },
+          "channels": {
+            "description": "静态栏目定义；运行状态与管理写接口尚未扩展",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionChannelDefinitionDto"
+            }
+          },
           "publisher": {
             "type": "string"
           },
@@ -6132,6 +6187,9 @@
         },
         "required": [
           "id",
+          "collegeId",
+          "defaultChannelId",
+          "channels",
           "publisher",
           "version",
           "host",

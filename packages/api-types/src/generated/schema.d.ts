@@ -1074,6 +1074,19 @@ export interface components {
             page: number;
             pageSize: number;
         };
+        IngestionChannelDefinitionDto: {
+            id: string;
+            listUrl: string;
+            /** @enum {string} */
+            adapterId: "vsb-selectors";
+            version: string;
+            noticePath: string;
+            listPath: string;
+            /** @description 仓库发布的只读选择器；写接口不接受此字段 */
+            selectors: {
+                [key: string]: string;
+            };
+        };
         SourceSettingsDto: {
             maxPages?: number;
             frequencyMinutes?: number;
@@ -1142,6 +1155,10 @@ export interface components {
         };
         IngestionSourceDto: {
             id: string;
+            collegeId: string;
+            defaultChannelId: string;
+            /** @description 静态栏目定义；运行状态与管理写接口尚未扩展 */
+            channels: components["schemas"]["IngestionChannelDefinitionDto"][];
             publisher: string;
             version: string;
             host: string;
