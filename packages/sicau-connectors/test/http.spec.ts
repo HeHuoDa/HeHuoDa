@@ -45,6 +45,19 @@ function fetcher(responses: (HttpResponse | Error)[], limits = defaultLimits) {
   };
 }
 describe("有边界的 HTTP 采集", () => {
+  it("附件入口逐跳使用独立静态路径范围并保留文件查询标识", async () => {
+    const target = `https://${source.host}/system/_content/download.jsp?id=7&owner=1`;
+    const { fetcher: client } = fetcher([
+      response(404, ""),
+      response(200, "%PDF-test"),
+    ]);
+    await client.checkRobots();
+    await expect(client.get(target)).rejects.toThrow("路径");
+    expect((await client.getAttachment(target)).url).toBe(target);
+    await expect(
+      client.getAttachment(`https://${source.host}/admin/export.pdf`),
+    ).rejects.toThrow("路径");
+  });
   it("字节入口保留非 UTF-8 内容并与 HTML 入口共享 robots 和请求预算", async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0x00]);
     const { fetcher: client } = fetcher(

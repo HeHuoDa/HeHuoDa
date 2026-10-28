@@ -73,7 +73,11 @@ export function publicAddress(address: string): boolean {
   }
   return false;
 }
-export function safeUrl(value: string, source: Source): URL {
+export function safeUrl(
+  value: string,
+  source: Source,
+  attachment = false,
+): URL {
   const url = new URL(value);
   if (
     url.protocol !== "https:" ||
@@ -85,11 +89,15 @@ export function safeUrl(value: string, source: Source): URL {
     throw new Error("请求 URL 不在来源 HTTPS 白名单");
   if (
     url.pathname !== "/robots.txt" &&
-    !source.channels.some(
-      (channel) =>
-        new RegExp(channel.listPath).test(url.pathname) ||
-        new RegExp(channel.noticePath).test(url.pathname),
-    )
+    !(attachment
+      ? source.attachmentPaths?.some((pattern) =>
+          new RegExp(pattern).test(url.pathname),
+        )
+      : source.channels.some(
+          (channel) =>
+            new RegExp(channel.listPath).test(url.pathname) ||
+            new RegExp(channel.noticePath).test(url.pathname),
+        ))
   )
     throw new Error("请求路径不在来源注册栏目白名单");
   url.hash = "";
@@ -122,6 +130,13 @@ export function parseDnsOverrides(
 }
 export function normalizeUrl(value: string, source: Source): string {
   const url = safeUrl(value, source);
+  for (const key of [...url.searchParams.keys()])
+    if (/^utm_(source|medium|campaign|term|content)$/i.test(key))
+      url.searchParams.delete(key);
+  return url.toString();
+}
+export function normalizeAttachmentUrl(value: string, source: Source): string {
+  const url = safeUrl(value, source, true);
   for (const key of [...url.searchParams.keys()])
     if (/^utm_(source|medium|campaign|term|content)$/i.test(key))
       url.searchParams.delete(key);
@@ -302,8 +317,10 @@ export class BoundedFetcher {
   private async responseBytes(
     value: string,
     headers: Record<string, string> = {},
+    attachment = false,
   ): Promise<ByteFetchResult & { rawBody: Uint8Array }> {
-    let url = safeUrl(value, this.source);
+    let url = safeUrl(value, this.source, attachment);
+    const byteLimit = attachment ? 5 * 1024 * 1024 : this.limits.bytes;
     let redirects = 0;
     let retries = 0;
     while (true) {
@@ -334,6 +351,7 @@ export class BoundedFetcher {
           url,
           {
             ...this.limits,
+            bytes: byteLimit,
             onDownload: (bytes) => {
               reported += bytes;
               this.downloaded += bytes;
@@ -360,14 +378,14 @@ export class BoundedFetcher {
         await this.pause(2000 * 2 ** (retries - 1));
         continue;
       }
-      if (res.body.byteLength > this.limits.bytes)
-        throw new Error("响应体超过上限");
+      if (res.body.byteLength > byteLimit) throw new Error("响应体超过上限");
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         if (++redirects > 3 || !res.headers.location)
           throw new Error("异常重定向");
         url = safeUrl(
           new URL(res.headers.location, url).toString(),
           this.source,
+          attachment,
         );
         headers = {};
         continue;
@@ -392,15 +410,15 @@ export class BoundedFetcher {
       try {
         if (encoding === "gzip")
           decoded = gunzipSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding === "deflate")
           decoded = inflateSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding === "br")
           decoded = brotliDecompressSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding && encoding !== "identity")
           throw new Error("不支持的 HTTP 压缩编码");
@@ -460,6 +478,23 @@ export class BoundedFetcher {
   ): Promise<ByteFetchResult> {
     if (!this.robots) throw new Error("采集前必须核对 robots.txt");
     const result = await this.responseBytes(value, headers);
+    return {
+      status: result.status,
+      headers: result.headers,
+      body: result.body,
+      url: result.url,
+    };
+  }
+  async getAttachment(value: string): Promise<ByteFetchResult> {
+    if (!this.robots) throw new Error("采集前必须核对 robots.txt");
+    const result = await this.responseBytes(
+      value,
+      {
+        Accept:
+          "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+      true,
+    );
     return {
       status: result.status,
       headers: result.headers,
