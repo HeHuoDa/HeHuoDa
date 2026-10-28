@@ -88,6 +88,42 @@ describe("多栏目任务、全局预算与公平持续扫描", () => {
       () => new Date(clock),
     );
   }
+  it("轮协调锁阻止手动CLI/API扫描插入工作片之间，所有网络仍全局串行", async () => {
+    const coordinator = await db.pool.connect();
+    await coordinator.query("SELECT pg_advisory_lock(23006)");
+    const requests: string[] = [];
+    try {
+      expect(
+        (
+          await scanner({ [source.listUrl]: listing([100]) }, requests).scan({
+            sourceId: source.id,
+            phase: "fresh",
+          })
+        ).status,
+      ).toBe("locked");
+      expect(requests).toHaveLength(0);
+      expect(
+        (
+          await scanner({ [source.listUrl]: listing([100]) }, requests).scan({
+            sourceId: source.id,
+            phase: "fresh",
+            roundId: "00000000-0000-4000-8000-000000000174",
+          })
+        ).status,
+      ).toBe("locked");
+    } finally {
+      await coordinator.query("SELECT pg_advisory_unlock(23006)");
+      coordinator.release(true);
+    }
+    expect(
+      (
+        await scanner({ [source.listUrl]: listing([100]) }, requests).scan({
+          sourceId: source.id,
+          phase: "fresh",
+        })
+      ).status,
+    ).toBe("succeeded");
+  });
   it("同一来源双栏目发现同URL只维护一条版本候选链并保留两个关联", async () => {
     const runner = scanner(
       { [source.listUrl]: listing([100]), [second.listUrl]: listing([100]) },

@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
 } from "@nestjs/common";
@@ -27,7 +28,10 @@ import { ApiErrorDto } from "../common/dto/api-error.dto.js";
 import { AdminIngestionService } from "./admin-ingestion.service.js";
 import {
   ConfigureSourceDto,
+  ConfigureChannelDto,
+  CollegeVerificationCandidateDto,
   IngestionAcceptedDto,
+  IngestionChannelMutationDto,
   IngestionCommandDto,
   IngestionPageQueryDto,
   IngestionRequestDto,
@@ -35,6 +39,7 @@ import {
   IngestionRunsDto,
   IngestionSourceDto,
   ScanDto,
+  VerifyChannelDto,
 } from "./admin-ingestion.dto.js";
 
 @ApiTags("管理采集")
@@ -52,6 +57,11 @@ export class AdminIngestionController {
   sources() {
     return this.service.sourceList();
   }
+  @Get("coverage-candidates")
+  @ApiOkResponse({ type: CollegeVerificationCandidateDto, isArray: true })
+  coverageCandidates() {
+    return this.service.coverageCandidates();
+  }
   @Get("sources/:id")
   @ApiOkResponse({ type: IngestionSourceDto })
   source(@Param("id") id: string) {
@@ -67,6 +77,30 @@ export class AdminIngestionController {
     @Body() body: ConfigureSourceDto,
   ) {
     return this.service.configure(request.admin!, id, body);
+  }
+  @Patch("sources/:id/channels/:channelId")
+  @ApiOkResponse({ type: IngestionChannelMutationDto })
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  configureChannel(
+    @Req() request: AdminRequest,
+    @Param("id") id: string,
+    @Param("channelId") channelId: string,
+    @Body() body: ConfigureChannelDto,
+  ) {
+    return this.service.configureChannel(request.admin!, id, channelId, body);
+  }
+  @Put("sources/:id/channels/:channelId/verification")
+  @ApiOkResponse({ type: IngestionChannelMutationDto })
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  verifyChannel(
+    @Req() request: AdminRequest,
+    @Param("id") id: string,
+    @Param("channelId") channelId: string,
+    @Body() body: VerifyChannelDto,
+  ) {
+    return this.service.verifyChannel(request.admin!, id, channelId, body);
   }
   @Get("runs")
   @ApiOkResponse({ type: IngestionRunsDto })

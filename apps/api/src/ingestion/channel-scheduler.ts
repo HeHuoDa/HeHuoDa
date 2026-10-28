@@ -164,6 +164,7 @@ export class ChannelRoundRunner {
             ),
           },
           signal,
+          { roundId: round!.id },
         );
         const runId = "runId" in result ? result.runId : null;
         const row = runId

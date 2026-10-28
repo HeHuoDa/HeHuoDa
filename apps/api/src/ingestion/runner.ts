@@ -90,7 +90,13 @@ export class IngestionRunner {
     ) => new BoundedFetcher(source, limits),
     private readonly now = () => new Date(),
   ) {}
-  async scan(input: ScanOptions, signal?: AbortSignal) {
+  async scan(
+    input: ScanOptions,
+    signal?: AbortSignal,
+    roundContext?: { roundId: string },
+  ) {
+    // 调度权限来自调用上下文，持久化/HTTP续跑参数中的roundId不能授予锁绕过能力。
+    input = { ...input, roundId: roundContext?.roundId };
     if (
       input.phase &&
       !["fresh", "backfill", "revisit", "retry"].includes(input.phase)
@@ -132,6 +138,7 @@ export class IngestionRunner {
     const lock = await this.pool.connect();
     let globalLocked = false,
       sourceLocked = false;
+    let coordinatorLocked = false;
     let runId: string | null = null;
     let taskId: string | null = null;
     let fetcher: BoundedFetcher | undefined;
@@ -233,6 +240,13 @@ export class IngestionRunner {
       });
     };
     try {
+      if (!input.roundId) {
+        coordinatorLocked = (
+          await lock.query("SELECT pg_try_advisory_lock(23006) AS locked")
+        ).rows[0].locked;
+        if (!coordinatorLocked)
+          return { status: "locked", source: source.id, channelId: channel.id };
+      }
       sourceLocked = (
         await lock.query(
           "SELECT pg_try_advisory_lock(23001,hashtext($1)) AS locked",
@@ -581,6 +595,7 @@ export class IngestionRunner {
       if (input.requestId) options.requestId = input.requestId;
       else delete options.requestId;
       if (input.roundId) options.roundId = input.roundId;
+      else delete options.roundId;
       if (taskId) options.taskId = taskId;
       options.channelId = channel.id;
       delete options.workSliceRequests;
@@ -937,6 +952,8 @@ export class IngestionRunner {
           await lock.query("SELECT pg_advisory_unlock(23001,hashtext($1))", [
             source.id,
           ]);
+        if (coordinatorLocked)
+          await lock.query("SELECT pg_advisory_unlock(23006)");
       } finally {
         // 销毁持有会话锁的连接；即使连接异常导致显式解锁失败也不会回池。
         lock.release(true);
