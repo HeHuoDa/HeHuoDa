@@ -796,6 +796,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ingestion/notices/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminAttachmentController_attachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/attachments/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminAttachmentController_versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/attachments/{id}/versions/{versionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminAttachmentController_version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/attachments/{id}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminAttachmentController_recheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/attachments/{id}/reparse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminAttachmentController_reparse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1105,9 +1185,9 @@ export interface components {
             actorType: "admin" | "maintenance" | "anonymous";
             actorId: string | null;
             /** @enum {string} */
-            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "candidate.review" | "candidate.import";
+            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
             /** @enum {string} */
-            objectType: "account" | "session" | "competition" | "source" | "candidate";
+            objectType: "account" | "session" | "competition" | "source" | "candidate" | "attachment";
             objectId: string | null;
             reason: string;
             /** @enum {string} */
@@ -1492,7 +1572,7 @@ export interface components {
         };
         IngestionRequestDto: {
             /** @description 原始受理范围与预览参数；中断后显式重试沿用 */
-            options: components["schemas"]["IngestionRunOptionsDto"];
+            options?: components["schemas"]["IngestionRunOptionsDto"];
             channelId: string;
             phase: string | null;
             taskId: string | null;
@@ -1504,7 +1584,13 @@ export interface components {
             } | null;
             /** Format: uuid */
             requestId: string;
-            sourceId: string;
+            sourceId?: string;
+            /** Format: uuid */
+            attachmentId?: string;
+            /** Format: uuid */
+            versionId?: string | null;
+            /** @enum {string} */
+            operation?: "recheck" | "reparse";
             /** @enum {string} */
             status: "accepted" | "running" | "completed" | "failed" | "interrupted";
             runId: string | null;
@@ -1641,6 +1727,16 @@ export interface components {
             formalBefore: components["schemas"]["AdminFormalCompetitionDto"] | null;
             baseline: string;
             formalBaseline: string;
+            evidenceRevision: number;
+            /** @enum {string} */
+            evidenceState: "current" | "stale" | "blocked";
+            attachmentSummary: {
+                [key: string]: unknown;
+            }[];
+            attachmentVersions: {
+                [key: string]: unknown;
+            }[];
+            requiresReview: boolean;
             /** Format: date-time */
             updatedAt: string;
         };
@@ -1717,7 +1813,9 @@ export interface components {
             /** @description 正式映射快照；HTTP写入必须保留，历史CLI材料可缺省 */
             mappingBaseline: string;
             /** @enum {number} */
-            format: 1;
+            format: 1 | 2;
+            evidenceRevision?: number;
+            evidence?: Record<string, never>[];
             /** Format: uuid */
             operationId: string;
             /** Format: uuid */
@@ -1913,6 +2011,16 @@ export interface components {
             latestVersion: components["schemas"]["AdminLatestVersionDto"] | null;
             article: components["schemas"]["AdminArticleDto"] | null;
             candidate: components["schemas"]["AdminNoticeCandidateDto"] | null;
+            evidenceRevision: number;
+            /** @enum {string} */
+            evidenceState: "current" | "stale" | "blocked";
+            attachmentSummary: {
+                [key: string]: unknown;
+            }[];
+            attachmentVersions: {
+                [key: string]: unknown;
+            }[];
+            requiresReview: boolean;
         };
         AdminNoticeVersionListItemDto: {
             /** Format: uuid */
@@ -1953,6 +2061,94 @@ export interface components {
             article: components["schemas"]["AdminArticleDto"];
             previousArticle: components["schemas"]["AdminArticleDto"] | null;
             differences: components["schemas"]["AdminArticleDifferenceDto"][];
+        };
+        AttachmentSummaryDto: {
+            /** Format: uuid */
+            attachmentId: string;
+            /** Format: uuid */
+            noticeId: string;
+            url: string;
+            state: string;
+            lastCheckedAt: string | null;
+            latestVersion: string | null;
+            errorCode: string | null;
+            evidenceRevision: number;
+            evidenceState: string;
+        };
+        NoticeAttachmentsDto: {
+            /** Format: uuid */
+            noticeId: string;
+            evidenceRevision: number;
+            evidenceState: string;
+            items: components["schemas"]["AttachmentSummaryDto"][];
+        };
+        AttachmentVersionDto: {
+            /** Format: uuid */
+            versionId: string;
+            previousVersion: string | null;
+            revision: number;
+            sha256: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            mediaType: string;
+            extractorVersion: string;
+            status: string;
+            errorCode: string | null;
+        };
+        AttachmentVersionsDto: {
+            items: components["schemas"]["AttachmentVersionDto"][];
+            total: number;
+            page: number;
+            pageSize: number;
+        };
+        AttachmentSegmentDto: {
+            /** @enum {string} */
+            kind: "page" | "paragraph";
+            index: number;
+            text: string;
+            truncated: boolean;
+        };
+        AttachmentTextDto: {
+            /** Format: uuid */
+            versionId: string;
+            previousVersion: string | null;
+            revision: number;
+            sha256: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            mediaType: string;
+            extractorVersion: string;
+            status: string;
+            errorCode: string | null;
+            segments: components["schemas"]["AttachmentSegmentDto"][];
+            totalSegments: number;
+            page: number;
+            pageSize: number;
+        };
+        AttachmentCommandDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            /** @description 当前通知 evidenceRevision */
+            baseline: number;
+        };
+        AttachmentReparseCommandDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            /** @description 当前通知 evidenceRevision */
+            baseline: number;
+            /**
+             * Format: uuid
+             * @description 已有附件内容版本 ID
+             */
+            versionId: string;
         };
     };
     responses: never;
@@ -3215,8 +3411,8 @@ export interface operations {
                 pageSize?: components["schemas"]["Object"];
                 actorType?: "admin" | "maintenance" | "anonymous";
                 actorId?: string;
-                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "candidate.review" | "candidate.import";
-                objectType?: "account" | "session" | "competition" | "source" | "candidate";
+                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
+                objectType?: "account" | "session" | "competition" | "source" | "candidate" | "attachment";
                 from?: string;
                 to?: string;
             };
@@ -5183,6 +5379,182 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminAttachmentController_attachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeAttachmentsDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminAttachmentController_versions: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                sourceId?: string;
+                channelId?: string;
+                status?: "running" | "succeeded" | "partial" | "failed" | "interrupted";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentVersionsDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminAttachmentController_version: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                sourceId?: string;
+                channelId?: string;
+                status?: "running" | "succeeded" | "partial" | "failed" | "interrupted";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentTextDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminAttachmentController_recheck: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachmentCommandDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionAcceptedDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminAttachmentController_reparse: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachmentReparseCommandDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionAcceptedDto"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

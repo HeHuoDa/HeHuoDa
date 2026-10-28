@@ -403,12 +403,38 @@ export class IngestionAcceptedDto {
   @ApiProperty({ format: "uuid" }) requestId!: string;
   @ApiProperty({ enum: ["accepted"] }) status!: string;
 }
+export class AttachmentCommandDto extends IngestionCommandDto {
+  @ApiProperty({ minimum: 0, description: "当前通知 evidenceRevision" })
+  @IsInt()
+  @Min(0)
+  baseline!: number;
+}
+export class AttachmentReparseCommandDto extends AttachmentCommandDto {
+  @ApiProperty({ format: "uuid", description: "已有附件内容版本 ID" })
+  @IsUUID()
+  versionId!: string;
+}
+export class AttachmentRequestDto {
+  @ApiProperty({ format: "uuid" }) requestId!: string;
+  @ApiProperty({ format: "uuid" }) attachmentId!: string;
+  @ApiProperty({ type: String, nullable: true, format: "uuid" }) versionId!:
+    string | null;
+  @ApiProperty({ enum: ["recheck", "reparse"] }) operation!: string;
+  @ApiProperty({ enum: ["accepted", "running", "completed", "failed"] })
+  status!: string;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  result!: Record<string, unknown> | null;
+  @ApiProperty({ type: String, nullable: true }) errorCode!: string | null;
+  @ApiProperty({ format: "date-time" }) createdAt!: string;
+  @ApiProperty({ type: String, nullable: true, format: "date-time" })
+  finishedAt!: string | null;
+}
 export class IngestionRequestDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: IngestionRunOptionsDto,
     description: "原始受理范围与预览参数；中断后显式重试沿用",
   })
-  options!: IngestionRunOptionsDto;
+  options?: IngestionRunOptionsDto;
   @ApiProperty() channelId!: string;
   @ApiProperty({ type: String, nullable: true }) phase!: string | null;
   @ApiProperty({ type: String, nullable: true }) taskId!: string | null;
@@ -417,7 +443,11 @@ export class IngestionRequestDto {
   @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
   budgetUsage!: Record<string, unknown> | null;
   @ApiProperty({ format: "uuid" }) requestId!: string;
-  @ApiProperty() sourceId!: string;
+  @ApiPropertyOptional() sourceId?: string;
+  @ApiPropertyOptional({ format: "uuid" }) attachmentId?: string;
+  @ApiPropertyOptional({ type: String, nullable: true, format: "uuid" })
+  versionId?: string | null;
+  @ApiPropertyOptional({ enum: ["recheck", "reparse"] }) operation?: string;
   @ApiProperty({
     enum: ["accepted", "running", "completed", "failed", "interrupted"],
   })

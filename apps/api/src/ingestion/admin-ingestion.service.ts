@@ -1044,7 +1044,22 @@ export class AdminIngestionService
         )
       ).rows[0];
     const row = await read();
-    if (!row) throw new NotFoundException();
+    if (!row) {
+      const attachment = (
+        await this.database.pool.query(
+          `SELECT id AS "requestId",attachment_id AS "attachmentId",version_id AS "versionId",operation,status,result,
+          error_code AS "errorCode",created_at AS "createdAt",finished_at AS "finishedAt"
+         FROM ingestion_attachment_requests WHERE id=$1`,
+          [id],
+        )
+      ).rows[0];
+      if (!attachment) throw new NotFoundException();
+      return {
+        ...attachment,
+        createdAt: attachment.createdAt.toISOString(),
+        finishedAt: attachment.finishedAt?.toISOString() ?? null,
+      };
+    }
     if (row.status === "running" && !this.pending) {
       await this.recover(false);
       Object.assign(row, await read());

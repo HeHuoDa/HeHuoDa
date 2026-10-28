@@ -274,7 +274,9 @@ export class AdminReviewFileDto {
     description: "正式映射快照；HTTP写入必须保留，历史CLI材料可缺省",
   })
   mappingBaseline!: string;
-  @ApiProperty({ enum: [1] }) format!: 1;
+  @ApiProperty({ enum: [1, 2] }) format!: 1 | 2;
+  @ApiPropertyOptional({ minimum: 1 }) evidenceRevision?: number;
+  @ApiPropertyOptional({ type: [Object] }) evidence?: Record<string, unknown>[];
   @ApiProperty({ format: "uuid" }) operationId!: string;
   @ApiProperty({ format: "uuid" }) candidateId!: string;
   @ApiProperty({ format: "uuid" }) sourceVersion!: string;
@@ -343,6 +345,20 @@ export class AdminCandidateDetailDto {
   formalBefore!: AdminFormalCompetitionDto | null;
   @ApiProperty({ pattern: "^[a-f0-9]{64}$" }) baseline!: string;
   @ApiProperty({ pattern: "^[a-f0-9]{64}$" }) formalBaseline!: string;
+  @ApiProperty({ minimum: 0 }) evidenceRevision!: number;
+  @ApiProperty({ enum: ["current", "stale", "blocked"] })
+  evidenceState!: string;
+  @ApiProperty({
+    type: "array",
+    items: { type: "object", additionalProperties: true },
+  })
+  attachmentSummary!: Record<string, unknown>[];
+  @ApiProperty({
+    type: "array",
+    items: { type: "object", additionalProperties: true },
+  })
+  attachmentVersions!: Record<string, unknown>[];
+  @ApiProperty() requiresReview!: boolean;
   @ApiProperty({ format: "date-time" }) updatedAt!: string;
 }
 
@@ -390,6 +406,20 @@ export class AdminNoticeDetailDto {
   article!: AdminArticleDto | null;
   @ApiProperty({ type: AdminNoticeCandidateDto, nullable: true })
   candidate!: AdminNoticeCandidateDto | null;
+  @ApiProperty({ minimum: 0 }) evidenceRevision!: number;
+  @ApiProperty({ enum: ["current", "stale", "blocked"] })
+  evidenceState!: string;
+  @ApiProperty({
+    type: "array",
+    items: { type: "object", additionalProperties: true },
+  })
+  attachmentSummary!: Record<string, unknown>[];
+  @ApiProperty({
+    type: "array",
+    items: { type: "object", additionalProperties: true },
+  })
+  attachmentVersions!: Record<string, unknown>[];
+  @ApiProperty() requiresReview!: boolean;
 }
 
 export class AdminNoticeVersionListItemDto {
