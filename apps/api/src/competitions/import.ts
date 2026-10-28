@@ -10,6 +10,8 @@ import type {
   TrackRecord,
 } from "./competition.model.js";
 
+export class ImportValidationError extends Error {}
+
 const id = Joi.string()
   .pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(100);
@@ -139,7 +141,9 @@ export function validateInput(input: unknown): ImportBatch {
     convert: false,
   });
   if (result.error)
-    throw new Error(result.error.details.map((d) => d.message).join("; "));
+    throw new ImportValidationError(
+      result.error.details.map((d) => d.message).join("; "),
+    );
   return result.value as ImportBatch;
 }
 function mergeById<T extends { id: string }>(
@@ -225,7 +229,7 @@ function canonical(value: unknown): unknown {
 }
 function needString(value: unknown, label: string) {
   if (typeof value !== "string" || !value.trim())
-    throw new Error(label + "缺少必要字段");
+    throw new ImportValidationError(label + "缺少必要字段");
 }
 function validateEdition(
   record: RecordData,
@@ -235,7 +239,7 @@ function validateEdition(
   for (const key of ["name", "edition", "category", "organizer"] as const)
     needString(record[key], record.id + "." + key);
   if (production && record.origin === "demo")
-    throw new Error("生产禁止导入 demo");
+    throw new ImportValidationError("生产禁止导入 demo");
   for (const n of record.notices) {
     for (const key of ["title", "publisher", "kind", "url"] as const)
       needString(n[key], n.id + "." + key);
@@ -243,7 +247,7 @@ function validateEdition(
     try {
       url = new URL(n.url);
     } catch {
-      throw new Error(n.id + " URL 无效");
+      throw new ImportValidationError(n.id + " URL 无效");
     }
     if (
       url.protocol !== "https:" ||
@@ -255,7 +259,9 @@ function validateEdition(
         url.hostname.endsWith(".sicau.edu.cn")
       )
     )
-      throw new Error(n.id + " 官方 URL 必须使用学校 HTTPS 域名");
+      throw new ImportValidationError(
+        n.id + " 官方 URL 必须使用学校 HTTPS 域名",
+      );
   }
   for (const t of record.tracks)
     for (const key of ["name", "mode", "members", "rules"] as const)
@@ -264,14 +270,17 @@ function validateEdition(
     for (const key of ["name", "organizer", "registration"] as const)
       needString(s[key], s.id + "." + key);
     for (const c of [...s.hosts, ...s.scope.colleges])
-      if (!collegeIds.has(c)) throw new Error(s.id + " 引用未知学院 " + c);
+      if (!collegeIds.has(c))
+        throw new ImportValidationError(s.id + " 引用未知学院 " + c);
     for (const source of s.sourceIds)
       if (!record.notices.some((n) => n.id === source))
-        throw new Error(s.id + " 引用不存在或跨届来源 " + source);
+        throw new ImportValidationError(
+          s.id + " 引用不存在或跨届来源 " + source,
+        );
     if (s.scope.kind === "colleges" && !s.scope.colleges.length)
-      throw new Error(s.id + " 指定学院范围不能为空");
+      throw new ImportValidationError(s.id + " 指定学院范围不能为空");
     if (s.scope.kind === "all" && s.scope.colleges.length)
-      throw new Error(s.id + " 全校范围不能附指定学院");
+      throw new ImportValidationError(s.id + " 全校范围不能附指定学院");
     if (
       record.publication === "published" &&
       record.origin !== "demo" &&
@@ -285,13 +294,13 @@ function validateEdition(
         ),
       )
     ) {
-      throw new Error(
+      throw new ImportValidationError(
         s.id +
           " 精确报名窗口必须有报名或补充通知来源，新闻与获奖不能单独证明报名开放",
       );
     }
     if (s.conflict && (!s.timeNote.trim() || !s.sourceIds.length))
-      throw new Error(s.id + " 时间冲突须保留说明与来源");
+      throw new ImportValidationError(s.id + " 时间冲突须保留说明与来源");
     if (s.startsAt.value && s.deadline.value) {
       const earliestStart =
         s.startsAt.precision === "date"
@@ -308,7 +317,7 @@ function validateEdition(
         record.publication === "published" &&
         !s.conflict
       )
-        throw new Error(s.id + " 开始晚于截止，拒绝发布");
+        throw new ImportValidationError(s.id + " 开始晚于截止，拒绝发布");
     }
   }
   if (
@@ -320,7 +329,7 @@ function validateEdition(
         (s) => record.origin !== "demo" && !s.sourceIds.length,
       ))
   )
-    throw new Error(record.id + " 发布必须有赛段、赛道及来源");
+    throw new ImportValidationError(record.id + " 发布必须有赛段、赛道及来源");
 }
 async function relations(
   client: PoolClient,
@@ -397,7 +406,8 @@ export async function applyImportBatch(
     ] as const)
       for (const entity of entities) {
         const key = kind + ":" + entity.id;
-        if (idsByEntity.has(key)) throw new Error(key + " 重复或跨届 ID");
+        if (idsByEntity.has(key))
+          throw new ImportValidationError(key + " 重复或跨届 ID");
         idsByEntity.set(key, r.id);
       }
   }
@@ -411,7 +421,9 @@ export async function applyImportBatch(
       !options.confirmPublished &&
       !options.preview
     )
-      throw new Error("更改公开学院目录需要 --confirm-published");
+      throw new ImportValidationError(
+        "更改公开学院目录需要 --confirm-published",
+      );
     changes.push({
       entity: "college",
       id: c.id,
@@ -431,7 +443,9 @@ export async function applyImportBatch(
       !options.confirmPublished &&
       !options.preview
     )
-      throw new Error(r.id + " 更改已发布记录需要 --confirm-published");
+      throw new ImportValidationError(
+        r.id + " 更改已发布记录需要 --confirm-published",
+      );
     const removed: string[] = [];
     for (const s of r.stages) {
       const before = prev?.stages.find((v) => v.id === s.id);

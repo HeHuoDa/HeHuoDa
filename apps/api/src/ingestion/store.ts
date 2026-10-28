@@ -13,6 +13,23 @@ import { digestInput } from "./types.js";
 
 export const hash = (value: unknown) =>
   createHash("sha256").update(digestInput(value)).digest("hex");
+
+// HTTP commands preserve array order; historical ingestion digests keep their existing semantics.
+export function commandHash(value: unknown): string {
+  const canonical = (entry: unknown): unknown =>
+    Array.isArray(entry)
+      ? entry.map(canonical)
+      : entry && typeof entry === "object"
+        ? Object.fromEntries(
+            Object.entries(entry)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, item]) => [key, canonical(item)]),
+          )
+        : entry;
+  return createHash("sha256")
+    .update(JSON.stringify(canonical(value)))
+    .digest("hex");
+}
 export async function transaction<T>(
   pool: Pool,
   work: (client: PoolClient) => Promise<T>,
@@ -50,7 +67,7 @@ export interface CandidateRow {
   approved_file: unknown;
 }
 export async function configureSource(
-  pool: Pool,
+  pool: Pick<PoolClient, "query">,
   source: Source,
   enabled: boolean,
   settings: Record<string, number>,

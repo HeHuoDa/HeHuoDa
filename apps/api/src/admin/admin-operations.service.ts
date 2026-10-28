@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { sources } from "@hehuoda/sicau-connectors/notices";
 import { AdminService, type AdminContext } from "./admin.service.js";
 import {
   ADMIN_ACTIONS,
@@ -15,13 +16,14 @@ import {
 } from "./admin.dto.js";
 
 export interface AdminOperation {
+  commandOperationId?: string;
   action: (typeof ADMIN_ACTIONS)[number];
   objectType: (typeof ADMIN_OBJECTS)[number];
   objectId: string | null;
   reason: string;
 }
 
-const SELECT_OPERATION = `operation_id AS "operationId", actor_type AS "actorType", actor_id AS "actorId", action, object_type AS "objectType", object_id AS "objectId", reason, result, request_id AS "requestId", created_at AS "createdAt"`;
+const SELECT_OPERATION = `operation_id AS "operationId", command_operation_id AS "commandOperationId", actor_type AS "actorType", actor_id AS "actorId", action, object_type AS "objectType", object_id AS "objectId", reason, result, request_id AS "requestId", created_at AS "createdAt"`;
 type OperationRow = Omit<AdminOperationDto, "createdAt"> & { createdAt: Date };
 const operationDto = (row: OperationRow): AdminOperationDto => ({
   ...row,
@@ -42,6 +44,14 @@ export class AdminOperationsService {
     return this.insert(client, context, operation, "success");
   }
 
+  async recordFailure(
+    client: PoolClient,
+    context: AdminContext,
+    operation: AdminOperation,
+  ): Promise<string> {
+    return this.insert(client, context, operation, "failure");
+  }
+
   private async insert(
     client: PoolClient,
     context: AdminContext,
@@ -49,7 +59,7 @@ export class AdminOperationsService {
     result: "success" | "failure",
   ): Promise<string> {
     const inserted = await client.query<{ operation_id: string }>(
-      `INSERT INTO admin_operations(actor_type,actor_id,action,object_type,object_id,reason,result,request_id) VALUES ('admin',$1,$2,$3,$4,$5,$6,$7) RETURNING operation_id`,
+      `INSERT INTO admin_operations(actor_type,actor_id,action,object_type,object_id,reason,result,request_id,command_operation_id) VALUES ('admin',$1,$2,$3,$4,$5,$6,$7,$8) RETURNING operation_id`,
       [
         context.id,
         operation.action,
@@ -58,6 +68,7 @@ export class AdminOperationsService {
         result === "failure" ? "操作失败" : operation.reason,
         result,
         context.requestId,
+        operation.commandOperationId ?? null,
       ],
     );
     return inserted.rows[0]!.operation_id;
@@ -155,9 +166,10 @@ export class AdminOperationsService {
     const result = await this.admin.database.pool.query<{
       drafts: string;
       published: string;
+      pending: string;
       asOf: Date;
     }>(
-      `SELECT count(*) FILTER (WHERE publication='draft') AS drafts,count(*) FILTER (WHERE publication='published') AS published, statement_timestamp() AS "asOf" FROM competitions`,
+      `SELECT count(*) FILTER (WHERE publication='draft') AS drafts,count(*) FILTER (WHERE publication='published') AS published,(SELECT count(*) FROM ingestion_candidates WHERE status='pending') AS pending, statement_timestamp() AS "asOf" FROM competitions`,
     );
     const row = result.rows[0]!;
     const asOf = row.asOf.toISOString();
@@ -179,16 +191,16 @@ export class AdminOperationsService {
         },
         {
           module: "pending",
-          available: false,
-          count: null,
-          scope: "待审核候选：待后续管理模块接入",
+          available: true,
+          count: Number(row.pending),
+          scope: "全部采集候选：审核状态 pending（不含已批准、拒绝和已导入）",
           asOf,
         },
         {
           module: "sources",
-          available: false,
-          count: null,
-          scope: "采集来源：待后续管理模块接入",
+          available: true,
+          count: sources.length,
+          scope: "已实现的固定 HTML 采集来源（包含停用来源）",
           asOf,
         },
       ],

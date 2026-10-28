@@ -50,7 +50,7 @@ describe("采集审核发布与公开首页 API", () => {
     if (previousEnabled === undefined) delete process.env.INGESTION_ENABLED;
     else process.env.INGESTION_ENABLED = previousEnabled;
   });
-  it("测试环境关闭实际调度，公开请求不会触发官网采集", async () => {
+  it("测试环境关闭实际调度，采集HTTP只在受保护管理空间开放", async () => {
     await app.get(IngestionScheduler).scan();
     expect(
       app.get(SchedulerRegistry).getCronJob("official-notices").nextDate()
@@ -67,9 +67,21 @@ describe("采集审核发布与公开首页 API", () => {
     const swagger = (
       await app.inject({ method: "GET", url: "/docs-json" })
     ).json();
+    const paths = Object.keys(swagger.paths).filter((path) =>
+      path.includes("ingestion"),
+    );
+    expect(paths.length).toBeGreaterThan(0);
     expect(
-      Object.keys(swagger.paths).some((path) => path.includes("ingestion")),
-    ).toBe(false);
+      paths.every((path) => path.startsWith("/api/v1/admin/ingestion/")),
+    ).toBe(true);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/v1/admin/ingestion/sources",
+        })
+      ).statusCode,
+    ).toBe(401);
   });
   it("候选和草稿不公开，显式发布后首页和详情有官方来源，官网修改不影响公开记录", async () => {
     let time = 0;

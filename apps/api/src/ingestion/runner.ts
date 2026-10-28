@@ -21,6 +21,7 @@ import { noticeDirectory, platformCandidate } from "./connector-adapter.js";
 import { initializeSources, persistArticle } from "./store.js";
 
 export interface ScanOptions {
+  requestId?: string;
   sourceId: string;
   from?: string;
   to?: string;
@@ -242,6 +243,9 @@ export class IngestionRunner {
         }));
         if (input.trigger === "scheduled") options.scheduledPhase = "fresh";
       }
+      // A resumed HTTP execution belongs to its new request; CLI resumes have no HTTP owner.
+      if (input.requestId) options.requestId = input.requestId;
+      else delete options.requestId;
       if (!input.preview) {
         await this.pool.query(
           "UPDATE ingestion_runs SET status='interrupted',finished_at=now() WHERE source_id=$1 AND status='running'",

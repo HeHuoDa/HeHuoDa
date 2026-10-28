@@ -414,6 +414,7 @@ export const adminSessions = pgTable("admin_sessions", {
 });
 export const adminOperations = pgTable("admin_operations", {
   operationId: uuid("operation_id").primaryKey().defaultRandom(),
+  commandOperationId: uuid("command_operation_id"),
   actorType: text("actor_type").notNull(),
   actorId: uuid("actor_id"),
   action: text().notNull(),
@@ -422,6 +423,89 @@ export const adminOperations = pgTable("admin_operations", {
   reason: text().notNull(),
   result: text().notNull(),
   requestId: text("request_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const adminIngestionCommands = pgTable(
+  "admin_ingestion_commands",
+  {
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => adminAccounts.id),
+    operationId: uuid("operation_id").notNull(),
+    action: text().notNull(),
+    inputHash: text("input_hash").notNull(),
+    result: jsonb().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.actorId, table.operationId] })],
+);
+
+export const ingestionRequests = pgTable("ingestion_requests", {
+  id: uuid().primaryKey(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => adminAccounts.id),
+  sourceId: text("source_id").notNull(),
+  status: text().notNull(),
+  options: jsonb().notNull(),
+  runId: text("run_id").references(() => ingestionRuns.id),
+  result: jsonb(),
+  error: text(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export const ingestionReviewRevisions = pgTable(
+  "ingestion_review_revisions",
+  {
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => ingestionCandidates.id),
+    candidateRevision: integer("candidate_revision").notNull(),
+    sourceVersion: text("source_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    targetId: text("target_id").notNull(),
+    review: jsonb().notNull(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => adminAccounts.id),
+    reason: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.candidateId, table.candidateRevision] }),
+  ],
+);
+
+export const ingestionReviewPreviews = pgTable("ingestion_review_previews", {
+  id: uuid().primaryKey(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => adminAccounts.id),
+  purpose: text().notNull(),
+  candidateId: text("candidate_id")
+    .notNull()
+    .references(() => ingestionCandidates.id),
+  sourceVersion: text("source_version")
+    .notNull()
+    .references(() => ingestionVersions.id),
+  candidateRevision: integer("candidate_revision").notNull(),
+  targetId: text("target_id").notNull(),
+  baseline: text().notNull(),
+  reviewHash: text("review_hash").notNull(),
+  result: jsonb().notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
