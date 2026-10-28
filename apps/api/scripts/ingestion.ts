@@ -2,7 +2,7 @@ import "dotenv/config";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Pool } from "pg";
-import { IngestionRunner } from "../src/ingestion/runner.js";
+import { IngestionRunner, type ScanPhase } from "../src/ingestion/runner.js";
 import { sources, sourceById } from "@hehuoda/sicau-connectors/notices";
 import {
   approveReview,
@@ -24,6 +24,9 @@ const values: Record<string, string> = {},
   flags = new Set<string>();
 const valueNames = new Set([
   "source",
+  "channel",
+  "phase",
+  "rebuild-task",
   "from",
   "to",
   "url",
@@ -78,7 +81,17 @@ try {
     confirmPublished: flags.has("confirm-published"),
   };
   const allowedByCommand: Record<string, string[]> = {
-    scan: ["source", "from", "to", "url", "resume", "preview"],
+    scan: [
+      "source",
+      "channel",
+      "phase",
+      "rebuild-task",
+      "from",
+      "to",
+      "url",
+      "resume",
+      "preview",
+    ],
     sources: [],
     runs: [],
     candidates: [],
@@ -121,6 +134,17 @@ try {
   let result: unknown;
   switch (command) {
     case "scan": {
+      const phase = (value: string | undefined): ScanPhase | undefined => {
+        if (
+          value === undefined ||
+          value === "fresh" ||
+          value === "backfill" ||
+          value === "revisit" ||
+          value === "retry"
+        )
+          return value;
+        throw new Error("--phase 须为 fresh/backfill/revisit/retry");
+      };
       if (values.resume && (values.url || values.from || values.to))
         throw new Error("续跑沿用原记录范围，不能同时指定 URL 或日期");
       const selected = values.source
@@ -129,7 +153,9 @@ try {
       if (
         !selected.length ||
         (values.url && !values.source) ||
-        (values.resume && !values.source)
+        (values.resume && !values.source) ||
+        (values.channel && !values.source) ||
+        (values["rebuild-task"] && (!values.source || !values.phase))
       )
         throw new Error("URL 重跑/续跑须指定有效 --source");
       const runner = new IngestionRunner(pool),
@@ -139,6 +165,9 @@ try {
           await runner.scan(
             {
               sourceId: source.id,
+              channelId: values.channel,
+              phase: phase(values.phase),
+              rebuildTaskId: values["rebuild-task"],
               from: values.from,
               to: values.to,
               url: values.url,

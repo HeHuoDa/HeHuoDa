@@ -78,7 +78,7 @@ describe("多栏目存储迁移", () => {
         id: "default",
         data: source.channels[0],
         enabled: true,
-        settings: { requests: 37, maxPages: 4 },
+        settings: {},
         verification_status: "pending",
         verified_at: null,
         verified_by: null,

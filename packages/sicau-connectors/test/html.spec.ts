@@ -7,6 +7,7 @@ import {
   sources,
   channelById,
   validateSource,
+  publishedDate,
 } from "../dist/notices/index.js";
 
 import {
@@ -17,6 +18,57 @@ import {
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
+  it("仓库日期规则仍要求完整合法年月日，缺年与不存在的日期保持未知", () => {
+    expect(
+      publishedDate("发布时间：20261028", "(20\\d{2})(\\d{2})(\\d{2})"),
+    ).toBe("2026-10-28");
+    expect(publishedDate("20260230", "(20\\d{2})(\\d{2})(\\d{2})")).toBeNull();
+    expect(publishedDate("10-28")).toBeNull();
+  });
+  it.each(["query", "path"] as const)(
+    "复用%s页码分页规则，保持业务参数且不猜缺失日期",
+    (kind) => {
+      const pagination =
+        kind === "query"
+          ? {
+              mode: "numbered" as const,
+              current: ".current",
+              total: ".total",
+              target: { kind: "query" as const, parameter: "page" },
+            }
+          : {
+              mode: "numbered" as const,
+              current: ".current",
+              total: ".total",
+              target: {
+                kind: "path" as const,
+                template: "/xygl/tz/{page}.htm",
+              },
+            };
+      const source = {
+        ...sources[0],
+        channels: [{ ...sources[0].channels[0], pagination }],
+      };
+      const html = informationList.replace(
+        '<a href="tz/3.htm">下页</a>',
+        '<span class="current">1</span><span class="total">3</span>',
+      );
+      expect(
+        extractList(html, source.listUrl + "?edition=2026", source).next,
+      ).toBe(
+        kind === "query"
+          ? source.listUrl + "?edition=2026&page=2"
+          : "https://xxgc.sicau.edu.cn/xygl/tz/2.htm?edition=2026",
+      );
+      expect(() =>
+        extractList(
+          html.replace(">3</span>", ">bad</span>"),
+          source.listUrl,
+          source,
+        ),
+      ).toThrow("页码");
+    },
+  );
   it("发布配置拒绝重复栏目、越域入口、无界路径与未实现适配器", () => {
     const source = sources[0];
     const channel = channelById(source);

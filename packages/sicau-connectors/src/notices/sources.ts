@@ -6,6 +6,14 @@ export interface Channel {
   version: string;
   noticePath: string;
   listPath: string;
+  datePattern?: string;
+  pagination?: {
+    mode: "numbered";
+    current: string;
+    total: string;
+    target:
+      { kind: "query"; parameter: string } | { kind: "path"; template: string };
+  };
   selectors: {
     rows: string;
     link: string;
@@ -29,11 +37,14 @@ export interface Source {
   version: string;
   defaultChannelId: string;
   channels: readonly Channel[];
+  /** 仅保留迁移前已支持的默认栏目启用语义；新来源不得沿用此标记。 */
+  legacyDefaultEnabled?: boolean;
 }
 
 export const sources: Source[] = [
   {
     id: "information-engineering",
+    legacyDefaultEnabled: true,
     collegeId: "information-engineering",
     publisher: "信息工程学院",
     host: "xxgc.sicau.edu.cn",
@@ -64,6 +75,7 @@ export const sources: Source[] = [
   },
   {
     id: "life-sciences",
+    legacyDefaultEnabled: true,
     collegeId: "life-science",
     publisher: "生命科学学院",
     host: "smkx.sicau.edu.cn",
@@ -163,6 +175,29 @@ export function validateSource(source: Source): void {
       ])
         if (!selector.trim()) fail();
       new RegExp(channel.selectors.nextText, "i");
+      if (channel.datePattern) new RegExp(channel.datePattern);
+      if (channel.pagination) {
+        const p = channel.pagination;
+        if (p.mode !== "numbered" || !p.current.trim() || !p.total.trim())
+          fail();
+        if (p.target.kind === "query") {
+          if (!/^[a-zA-Z][\w-]{0,63}$/.test(p.target.parameter)) fail();
+        } else if (
+          p.target.kind !== "path" ||
+          !p.target.template.startsWith("/") ||
+          p.target.template.split("{page}").length !== 2 ||
+          !entryAllowed(
+            new URL(
+              p.target.template.replace("{page}", "1"),
+              channel.listUrl,
+            ).toString(),
+          ) ||
+          !new RegExp(channel.listPath).test(
+            p.target.template.replace("{page}", "1"),
+          )
+        )
+          fail();
+      }
     }
   } catch {
     fail();

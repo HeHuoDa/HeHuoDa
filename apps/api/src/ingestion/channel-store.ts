@@ -66,11 +66,17 @@ export async function initializeChannels(pool: Pool): Promise<void> {
   for (const source of sources) {
     for (const channel of source.channels) {
       await pool.query(
-        `INSERT INTO ingestion_channels(source_id,id,data,enabled,settings)
-         SELECT $1,$2,$3,false,'{}'::jsonb
+        `INSERT INTO ingestion_channels(source_id,id,data,enabled,settings,activated_on)
+         SELECT $1,$2,$3,($4 AND enabled),'{}'::jsonb,CASE WHEN $4 AND enabled THEN (now() AT TIME ZONE 'Asia/Shanghai')::date ELSE NULL END
          FROM ingestion_sources WHERE id=$1
          ON CONFLICT(source_id,id) DO UPDATE SET data=EXCLUDED.data`,
-        [source.id, channel.id, channel],
+        [
+          source.id,
+          channel.id,
+          channel,
+          !!source.legacyDefaultEnabled &&
+            channel.id === source.defaultChannelId,
+        ],
       );
     }
 
@@ -95,7 +101,7 @@ export async function readChannel(
 ): Promise<ChannelRow | undefined> {
   const result = await pool.query<ChannelRow>(
     `SELECT source_id,id,data,enabled,settings,verification_status,
-            verification,verified_at,verified_by,activated_on,last_started_at,
+            verification,verified_at,verified_by,activated_on::text AS activated_on,last_started_at,
             last_successful_check,failure_count,backoff_until,rotation_seq
        FROM ingestion_channels
       WHERE source_id=$1 AND id=$2`,

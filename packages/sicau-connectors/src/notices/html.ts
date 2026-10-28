@@ -3,9 +3,22 @@ import type { Article, Page } from "./types.js";
 import { channelById, type Source } from "./sources.js";
 import { normalizeUrl, safeUrl } from "./http.js";
 
-export function publishedDate(value: string): string | null {
-  const match = /\b(20\d{2})[年/.-](\d{1,2})[月/.-](\d{1,2})日?/.exec(value);
+export function publishedDate(value: string, pattern?: string): string | null {
+  const match = (
+    pattern
+      ? new RegExp(pattern)
+      : /\b(20\d{2})[年/.-](\d{1,2})[月/.-](\d{1,2})日?/
+  ).exec(value);
   if (!match) return null;
+  if (
+    !match[1] ||
+    !match[2] ||
+    !match[3] ||
+    !/^20\d{2}$/.test(match[1]) ||
+    !/^\d{1,2}$/.test(match[2]) ||
+    !/^\d{1,2}$/.test(match[3])
+  )
+    return null;
   const result = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
   const parsed = new Date(result);
   return Number.isFinite(parsed.getTime()) &&
@@ -87,7 +100,10 @@ export function extractList(
         {
           url: noticeUrl,
           title,
-          publishedAt: publishedDate(row.find(selectors.date).text()),
+          publishedAt: publishedDate(
+            row.find(selectors.date).text(),
+            channel.datePattern,
+          ),
         },
       ];
     } catch (error) {
@@ -113,9 +129,36 @@ export function extractList(
     )
     .first();
   const next = nextAnchor.attr("href");
-  const nextUrl = next
+  let nextUrl = next
     ? safeUrl(new URL(next, url).toString(), source).toString()
     : null;
+  if (channel.pagination) {
+    const config = channel.pagination;
+    const currentText = $(config.current).first().text().trim(),
+      totalText = $(config.total).first().text().trim();
+    const current = Number(currentText),
+      total = Number(totalText);
+    if (
+      !/^\d+$/.test(currentText) ||
+      !/^\d+$/.test(totalText) ||
+      current < 1 ||
+      total < current ||
+      total > 100000
+    )
+      throw new NoticeParseError("pagination", "页码规则失效或超出范围");
+    nextUrl = null;
+    if (current < total) {
+      const target = new URL(url);
+      if (config.target.kind === "query")
+        target.searchParams.set(config.target.parameter, String(current + 1));
+      else
+        target.pathname = config.target.template.replace(
+          "{page}",
+          String(current + 1),
+        );
+      nextUrl = safeUrl(target.toString(), source).toString();
+    }
+  }
   if (
     nextUrl &&
     (!new RegExp(channel.listPath).test(new URL(nextUrl).pathname) ||
@@ -139,7 +182,7 @@ export function extractArticle(
   source: Source,
   channelId?: string,
 ): Article {
-  const { selectors } = channelById(source, channelId);
+  const { selectors, datePattern } = channelById(source, channelId);
   const $ = checkPage(html);
   const title = clean($(selectors.title).first().text());
   const content = $(selectors.content).first();
@@ -173,7 +216,7 @@ export function extractArticle(
   });
   return {
     title,
-    publishedAt: publishedDate(meta),
+    publishedAt: publishedDate(meta, datePattern),
     text,
     paragraphs,
     attachments,

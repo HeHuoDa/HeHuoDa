@@ -45,6 +45,19 @@ function fetcher(responses: (HttpResponse | Error)[], limits = defaultLimits) {
   };
 }
 describe("有边界的 HTTP 采集", () => {
+  it("实际请求及下载字节累计包含robots、跳转和重试响应", async () => {
+    const replies = [
+      response(404, "robots"),
+      response(302, "redirect", { location: url }),
+      response(503, "busy"),
+      response(200, "ok"),
+    ];
+    const { fetcher: client } = fetcher(replies);
+    await client.checkRobots();
+    await client.get(url);
+    expect(client.usage).toMatchObject({ requests: 4, downloadedBytes: 20 });
+    expect(client.usage.elapsedMs).toBeGreaterThanOrEqual(8000);
+  });
   it("同源未注册路径与逐跳越界也拒绝，不能只检查域名", async () => {
     expect(() =>
       normalizeUrl(`https://${source.host}/admin/export`, source),
