@@ -11,6 +11,10 @@ import {
 import type { ParsedCandidate } from "./types.js";
 import { digestInput } from "./types.js";
 import { initializeChannels } from "./channel-store.js";
+import {
+  registerAttachments,
+  invalidateNoticeAttachments,
+} from "./attachment-store.js";
 
 export const hash = (value: unknown) =>
   createHash("sha256").update(digestInput(value)).digest("hex");
@@ -213,6 +217,31 @@ export async function persistArticle(
       "INSERT INTO ingestion_candidates(id,notice_id,source_version,status,data) VALUES($1,$2,$3,'pending',$4) ON CONFLICT(notice_id) DO UPDATE SET source_version=EXCLUDED.source_version,revision=ingestion_candidates.revision+1,status='pending',data=EXCLUDED.data,reviewer=NULL,checked_at=NULL,reason=NULL,approved_file=NULL,updated_at=now() RETURNING id",
       [randomUUID(), noticeId, versionId, parsed],
     );
+    const storageReady = (
+      await client.query(
+        "SELECT to_regclass('ingestion_attachments') IS NOT NULL AS ready",
+      )
+    ).rows[0].ready;
+    if (!storageReady && process.env.INGESTION_ATTACHMENTS_ENABLED === "true")
+      throw new Error("附件存储迁移尚未完成");
+    const activeAttachments = storageReady
+      ? await client.query(
+          "SELECT 1 FROM ingestion_attachments WHERE notice_id=$1 LIMIT 1",
+          [noticeId],
+        )
+      : { rowCount: 0 };
+    if (
+      process.env.INGESTION_ATTACHMENTS_ENABLED === "true" ||
+      activeAttachments.rowCount
+    ) {
+      await registerAttachments(
+        client,
+        noticeId,
+        versionId,
+        article.attachments.map((a) => a.url),
+      );
+      await invalidateNoticeAttachments(client, noticeId);
+    }
     return {
       action: previous ? "changed" : "new",
       noticeId,

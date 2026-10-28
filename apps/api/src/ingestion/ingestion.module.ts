@@ -9,6 +9,7 @@ import { Cron, ScheduleModule } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
 import { ChannelRoundRunner } from "./channel-scheduler.js";
 import { cleanupResponses } from "./store.js";
+import { cleanupAttachmentBodies } from "./attachment-store.js";
 
 @Injectable()
 export class IngestionScheduler implements BeforeApplicationShutdown {
@@ -46,6 +47,10 @@ export class IngestionScheduler implements BeforeApplicationShutdown {
       );
       this.logger.log(JSON.stringify(result));
       await cleanupResponses(
+        this.database.pool,
+        this.config.get<number>("INGESTION_RAW_DAYS", 30),
+      );
+      await cleanupAttachmentBodies(
         this.database.pool,
         this.config.get<number>("INGESTION_RAW_DAYS", 30),
       );
