@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { testDatabase } from "./competition-fixture.js";
 import { directory } from "./competition-fixture.js";
 import { importBatch } from "../src/competitions/import.js";
@@ -13,6 +14,7 @@ import {
   getAttachmentVersion,
   listAttachments,
   listAttachmentVersions,
+  markAttachmentNeedsReview,
   persistAttachment,
   registerAttachments,
   queueDueAttachments,
@@ -176,6 +178,250 @@ describe("附件版本与通知证据集合 PostgreSQL 行为", () => {
     expect(
       await listAttachmentVersions(db.pool, first.attachmentId),
     ).toHaveLength(2);
+  });
+
+  it("名单预筛会擦除该附件全部旧版本及只读审核副本，不影响其它附件", async () => {
+    const first = await persistAttachment(db.pool, {
+      noticeId,
+      noticeVersion,
+      url: `https://${source.host}/files/applicant-list.pdf`,
+      mediaType: "application/pdf",
+      extractorVersion: "test/1",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "敏感名单旧版内容" }],
+      body: Buffer.from("%PDF private list revision one"),
+    });
+    const second = await persistAttachment(db.pool, {
+      noticeId,
+      noticeVersion,
+      url: `https://${source.host}/files/applicant-list.pdf`,
+      mediaType: "application/pdf",
+      extractorVersion: "test/1",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "敏感名单当前内容" }],
+      body: Buffer.from("%PDF private list revision two"),
+    });
+    const unrelated = await persistAttachment(db.pool, {
+      noticeId,
+      noticeVersion,
+      url: `https://${source.host}/files/rules.pdf`,
+      mediaType: "application/pdf",
+      extractorVersion: "test/1",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "公开竞赛规则" }],
+      body: Buffer.from("%PDF public rules"),
+    });
+    const candidate = (
+      await db.pool.query(
+        "SELECT id FROM ingestion_candidates WHERE notice_id=$1",
+        [noticeId],
+      )
+    ).rows[0];
+    const file = await exportReview(db.pool, candidate.id);
+    const adminId = randomUUID();
+    const commandId = randomUUID();
+    const previewId = randomUUID();
+    await db.pool.query(
+      "INSERT INTO admin_accounts(id,username,display_name,password_salt,password_hash) VALUES($1,$2,$3,$4,$5)",
+      [
+        adminId,
+        `privacy-${adminId}`,
+        "隐私回归测试",
+        Buffer.alloc(16),
+        Buffer.alloc(32),
+      ],
+    );
+    await db.pool.query(
+      "UPDATE ingestion_candidates SET status='approved',approved_file=$2::jsonb WHERE id=$1",
+      [candidate.id, JSON.stringify(file)],
+    );
+    await db.pool.query(
+      "INSERT INTO ingestion_review_revisions(candidate_id,candidate_revision,source_version,target_id,review,actor_id,reason) VALUES($1,$2,$3,$4,$5,$6,$7)",
+      [
+        candidate.id,
+        file.candidateRevision + 1,
+        file.sourceVersion,
+        file.targetId,
+        JSON.stringify(file),
+        adminId,
+        "隐私擦除测试快照",
+      ],
+    );
+    await db.pool.query(
+      "INSERT INTO ingestion_operations(id,candidate_id,source_version,candidate_revision,kind,reviewer,input_hash,result) VALUES($1,$2,$3,$4,'approve',$5,$6,$7)",
+      [
+        `privacy-${commandId}`,
+        candidate.id,
+        file.sourceVersion,
+        file.candidateRevision,
+        adminId,
+        "a".repeat(64),
+        JSON.stringify({ summary: { status: "approved" }, review: file }),
+      ],
+    );
+    await db.pool.query(
+      "INSERT INTO admin_operations(actor_type,actor_id,action,object_type,object_id,reason,result,request_id,command_operation_id) VALUES('admin',$1,'candidate.review','candidate',$2,'隐私擦除测试','success',$3,$4)",
+      [adminId, candidate.id, randomUUID(), commandId],
+    );
+    await db.pool.query(
+      "INSERT INTO admin_ingestion_commands(actor_id,operation_id,action,input_hash,result) VALUES($1,$2,'candidate.review',$3,$4)",
+      [adminId, commandId, "b".repeat(64), JSON.stringify({ review: file })],
+    );
+    await db.pool.query(
+      "INSERT INTO ingestion_review_previews(id,actor_id,purpose,candidate_id,source_version,candidate_revision,target_id,baseline,review_hash,result) VALUES($1,$2,'import',$3,$4,$5,$6,$7,$8,$9)",
+      [
+        previewId,
+        adminId,
+        candidate.id,
+        file.sourceVersion,
+        file.candidateRevision,
+        file.targetId,
+        file.baseline,
+        "c".repeat(64),
+        JSON.stringify({ previewed: true }),
+      ],
+    );
+
+    await markAttachmentNeedsReview(
+      db.pool,
+      first.attachmentId,
+      "applicant-list",
+      "blocked",
+    );
+
+    const redactedVersions = await db.pool.query(
+      "SELECT id,sha256,body,segments,status,error_code FROM ingestion_attachment_versions WHERE attachment_id=$1 ORDER BY revision",
+      [first.attachmentId],
+    );
+    expect(redactedVersions.rows).toHaveLength(2);
+    for (const row of redactedVersions.rows)
+      expect(row).toMatchObject({
+        sha256: null,
+        body: null,
+        segments: [],
+        status: "blocked",
+        error_code: "applicant-list",
+      });
+    const preserved = (
+      await db.pool.query(
+        "SELECT sha256,body,segments,status FROM ingestion_attachment_versions WHERE id=$1",
+        [unrelated.versionId],
+      )
+    ).rows[0];
+    expect(preserved).toMatchObject({
+      sha256: expect.any(String),
+      body: Buffer.from("%PDF public rules"),
+      segments: [{ kind: "page", index: 1, text: "公开竞赛规则" }],
+      status: "extracted",
+    });
+
+    const saved = (
+      await db.pool.query(
+        "SELECT review FROM ingestion_review_revisions WHERE candidate_id=$1",
+        [candidate.id],
+      )
+    ).rows[0].review;
+    const operation = (
+      await db.pool.query(
+        "SELECT input_hash,result FROM ingestion_operations WHERE id=$1",
+        [`privacy-${commandId}`],
+      )
+    ).rows[0];
+    const command = (
+      await db.pool.query(
+        "SELECT input_hash,result FROM admin_ingestion_commands WHERE actor_id=$1 AND operation_id=$2",
+        [adminId, commandId],
+      )
+    ).rows[0];
+    for (const snapshot of [
+      saved,
+      operation.result.review,
+      command.result.review,
+    ]) {
+      expect(
+        snapshot.evidence.find(
+          (item: { attachmentId: string }) =>
+            item.attachmentId === first.attachmentId,
+        ).sha256,
+      ).toBeNull();
+      expect(
+        snapshot.evidence.find(
+          (item: { attachmentId: string }) =>
+            item.attachmentId === unrelated.attachmentId,
+        ).sha256,
+      ).toEqual(expect.any(String));
+      expect(
+        snapshot.evidenceReferences.find(
+          (item: { attachmentVersion: string | null }) =>
+            item.attachmentVersion === second.versionId,
+        ).excerpt,
+      ).toBe("");
+    }
+    expect(operation.input_hash).toBe("privacy-redacted");
+    expect(command.input_hash).toBe("privacy-redacted");
+    expect(
+      (
+        await db.pool.query(
+          "SELECT review_hash FROM ingestion_review_previews WHERE id=$1",
+          [previewId],
+        )
+      ).rows[0].review_hash,
+    ).toBe("privacy-redacted");
+    expect(
+      (
+        await db.pool.query(
+          "SELECT approved_file FROM ingestion_candidates WHERE id=$1",
+          [candidate.id],
+        )
+      ).rows[0].approved_file,
+    ).toBeNull();
+    expect(
+      (
+        await db.pool.query(
+          "SELECT reason FROM ingestion_attachment_events WHERE notice_id=$1",
+          [noticeId],
+        )
+      ).rows.map((row) => row.reason),
+    ).toEqual(expect.arrayContaining(["applicant-list", "privacy-redaction"]));
+  });
+
+  it("format2 导出保留 HTML/PDF 的来源、版本和定位证据", async () => {
+    const saved = await persistAttachment(db.pool, {
+      noticeId,
+      noticeVersion,
+      url: `https://${source.host}/files/rules.pdf`,
+      mediaType: "application/pdf",
+      extractorVersion: "test/1",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "报名规则" }],
+      body: Buffer.from("%PDF-rules"),
+    });
+    const candidate = (
+      await db.pool.query(
+        "SELECT id FROM ingestion_candidates WHERE notice_id=$1",
+        [noticeId],
+      )
+    ).rows[0];
+    const file = await exportReview(db.pool, candidate.id);
+    expect(file).toHaveProperty(
+      "evidenceReferences",
+      expect.arrayContaining([
+        expect.objectContaining({
+          format: "html",
+          noticeVersion,
+          attachmentVersion: null,
+        }),
+        {
+          format: "pdf",
+          url: `https://${source.host}/files/rules.pdf`,
+          noticeVersion,
+          attachmentVersion: saved.versionId,
+          page: 1,
+          field: "attachmentText",
+          excerpt: "报名规则",
+        },
+      ]),
+    );
   });
 
   it("调度复查按通知置陈旧一次；同哈希重新验证恢复证据但不恢复旧批准", async () => {

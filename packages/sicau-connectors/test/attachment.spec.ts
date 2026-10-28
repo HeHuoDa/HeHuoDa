@@ -44,32 +44,59 @@ function zip(files: Record<string, string>): Buffer {
 }
 
 describe("官方通知附件识别与文本提取", () => {
+  it.each(["竞赛个人资料.pdf", "比赛学生明细.docx", "参赛清单.pdf"])(
+    "个人资料类标题禁止下载：%s",
+    (title) => {
+      expect(attachmentEligibility(title, "比赛报名规则")).toBe("blocked");
+    },
+  );
   it("中文文字 PDF 按页定位，页数和输入体积限制可触发", async () => {
     const cmap =
       "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Test def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange 2 beginbfchar <01> <6BD4> <02> <8D5B> endbfchar endcmap CMapName currentdict /CMap defineresource pop end end";
     const stream = "BT /F1 12 Tf 10 100 Td <0102> Tj ET";
-    const objects = [
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>",
-      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-      `<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`,
-    ];
-    let pdf = "%PDF-1.4\n";
-    const offsets = [0];
-    for (const [i, object] of objects.entries()) {
-      offsets.push(pdf.length);
-      pdf += `${i + 1} 0 obj\n${object}\nendobj\n`;
-    }
-    const xref = pdf.length;
-    pdf += `xref\n0 7\n0000000000 65535 f \n${offsets
-      .slice(1)
-      .map((offset) => String(offset).padStart(10, "0") + " 00000 n ")
-      .join(
-        "\n",
-      )}\ntrailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-    const bytes = Buffer.from(pdf);
+    const buildPdf = (
+      pageCount: number,
+      text = stream,
+      blankLast = false,
+      encrypted = false,
+    ) => {
+      const objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        `<< /Type /Pages /Kids [${Array.from({ length: pageCount }, (_, i) => (blankLast && i === pageCount - 1 ? "7 0 R" : "3 0 R")).join(" ")}] /Count ${pageCount} >>`,
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>",
+        `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+        `<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`,
+      ];
+      if (blankLast)
+        objects.push(
+          "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 8 0 R >>",
+          "<< /Length 0 >>\nstream\n\nendstream",
+        );
+      if (encrypted)
+        objects.push(
+          "<< /Filter /Standard /V 1 /R 2 /Length 40 /O <" +
+            "00".repeat(32) +
+            "> /U <" +
+            "00".repeat(32) +
+            "> /P -4 >>",
+        );
+      let pdf = "%PDF-1.4\n";
+      const offsets = [0];
+      for (const [i, object] of objects.entries()) {
+        offsets.push(pdf.length);
+        pdf += `${i + 1} 0 obj\n${object}\nendobj\n`;
+      }
+      const xref = pdf.length;
+      pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((offset) => String(offset).padStart(10, "0") + " 00000 n ")
+        .join(
+          "\n",
+        )}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R ${encrypted ? "/Encrypt 7 0 R /ID [<" + "00".repeat(16) + "><" + "00".repeat(16) + ">]" : ""} >>\nstartxref\n${xref}\n%%EOF`;
+      return Buffer.from(pdf);
+    };
+    const bytes = buildPdf(1);
     expect(
       (await extractAttachmentText(bytes, "application/pdf")).segments,
     ).toEqual([{ kind: "page", index: 1, text: "比赛" }]);
@@ -91,6 +118,30 @@ describe("官方通知附件识别与文本提取", () => {
         maxTextBytes: 1024 * 1024,
       }),
     ).rejects.toThrow("100页");
+    expect(
+      (await extractAttachmentText(buildPdf(100), "application/pdf")).segments,
+    ).toHaveLength(100);
+    await expect(
+      extractAttachmentText(buildPdf(101), "application/pdf"),
+    ).rejects.toThrow("100页");
+    await expect(
+      extractAttachmentText(buildPdf(1, ""), "application/pdf"),
+    ).rejects.toThrow("无可提取文字");
+    await expect(
+      extractAttachmentText(buildPdf(2, stream, true), "application/pdf"),
+    ).rejects.toThrow("文字");
+    await expect(
+      extractAttachmentText(
+        buildPdf(1, stream, false, true),
+        "application/pdf",
+      ),
+    ).rejects.toMatchObject({ code: "encrypted-pdf" });
+    await expect(
+      extractAttachmentText(
+        Buffer.alloc(5 * 1024 * 1024 + 1),
+        "application/pdf",
+      ),
+    ).rejects.toThrow("5MiB");
   });
   it("只按真实PDF签名识别，不信URL或声明类型", () => {
     expect(
@@ -154,6 +205,27 @@ describe("官方通知附件识别与文本提取", () => {
     ]);
   });
 
+  it("DOCX表格文字按段落定位，含未覆盖的页眉时转人工", async () => {
+    const mediaType =
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const files = {
+      "[Content_Types].xml": "<Types/>",
+      "word/document.xml":
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>比赛规则</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>表格资格要求</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
+    };
+    expect(
+      (await extractAttachmentText(zip(files), mediaType)).segments,
+    ).toEqual([
+      { kind: "paragraph", index: 1, text: "比赛规则" },
+      { kind: "paragraph", index: 2, text: "表格资格要求" },
+    ]);
+    await expect(
+      extractAttachmentText(
+        zip({ ...files, "word/header1.xml": "<header>仅限大三学生</header>" }),
+        mediaType,
+      ),
+    ).rejects.toThrow("页眉");
+  });
   it("DOCX中疑似名单内容在输出前清空，实际解压大小超限拒绝", async () => {
     const mediaType =
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

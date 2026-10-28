@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { passwordHash } from "../src/admin/admin-security.js";
 import { authTestApp, type AuthTestApp } from "./auth-fixture.js";
 import { initializeSources, persistArticle } from "../src/ingestion/store.js";
-import { persistAttachment } from "../src/ingestion/attachment-store.js";
+import {
+  markAttachmentNeedsReview,
+  persistAttachment,
+} from "../src/ingestion/attachment-store.js";
 import { AdminAttachmentService } from "../src/ingestion/admin-attachment.service.js";
 import {
   extractArticle,
@@ -10,6 +13,8 @@ import {
   sources,
 } from "@hehuoda/sicau-connectors/notices";
 import { informationArticle } from "./notice-fixtures.js";
+import { exportReview } from "../src/ingestion/review.js";
+import { correctedReview } from "./ingestion-fixture.js";
 
 describe("附件管理 HTTP 权限、分页与受理", () => {
   let test: AuthTestApp, cookie: string, csrf: string;
@@ -112,6 +117,43 @@ describe("附件管理 HTTP 权限、分页与受理", () => {
         )
       ).statusCode,
     ).toBe(409);
+
+    await markAttachmentNeedsReview(
+      test.pool,
+      attachmentId,
+      "applicant-list",
+      "blocked",
+    );
+    const redacted = await test.request("GET", path, undefined, { cookie });
+    expect(redacted.statusCode).toBe(200);
+    expect(redacted.json()).toMatchObject({
+      sha256: null,
+      status: "blocked",
+      errorCode: "applicant-list",
+      segments: [],
+      totalSegments: 0,
+    });
+    expect(JSON.stringify(redacted.json())).not.toContain("规则纯文本");
+  });
+  it("已启用附件的旧格式审核材料返回409并提示重新导出", async () => {
+    const candidate = (
+      await test.pool.query(
+        "SELECT id FROM ingestion_candidates WHERE notice_id=$1",
+        [noticeId],
+      )
+    ).rows[0];
+    const file = correctedReview(await exportReview(test.pool, candidate.id));
+    file.format = 1;
+    delete file.evidence;
+    delete file.evidenceRevision;
+    delete file.evidenceReferences;
+    const response = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${candidate.id}/approve`,
+      { operationId: randomUUID(), reason: "旧材料校验", review: file },
+      { cookie, origin, "x-csrf-token": csrf },
+    );
+    expect(response.statusCode).toBe(409);
   });
   it("原字节清理后重解析409；空队列释放运行锁", async () => {
     await test.pool.query(
