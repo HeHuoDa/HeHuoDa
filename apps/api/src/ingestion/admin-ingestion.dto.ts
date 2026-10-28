@@ -176,7 +176,9 @@ export class IngestionCursorDto {
 export class IngestionRunErrorDto {
   @ApiProperty() url!: string;
   @ApiProperty() message!: string;
-  @ApiPropertyOptional({ enum: ["skipped", "budget"] }) kind?: string;
+  @ApiPropertyOptional({ description: "安全的解析诊断代码" }) code?: string;
+  @ApiPropertyOptional({ enum: ["skipped", "budget", "diagnostic"] })
+  kind?: string;
 }
 export class IngestionPreviewItemDto {
   @ApiProperty() url!: string;

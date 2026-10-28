@@ -14,6 +14,7 @@ import {
   parseCandidate,
   sourceById,
   type ListItem,
+  NoticeParseError,
 } from "@hehuoda/sicau-connectors/notices";
 
 import { noticeDirectory, platformCandidate } from "./connector-adapter.js";
@@ -63,7 +64,8 @@ export function dateRange(options: ScanOptions, now = new Date()) {
   return { from, to };
 }
 const errorSummary = (error: unknown) =>
-  error instanceof Error && !("code" in error)
+  error instanceof NoticeParseError ||
+  (error instanceof Error && !("code" in error))
     ? error.message.slice(0, 500)
     : "数据库或网络错误；未输出连接信息";
 
@@ -95,7 +97,8 @@ export class IngestionRunner {
     const errors: {
       url: string;
       message: string;
-      kind?: "skipped" | "budget";
+      kind?: "skipped" | "budget" | "diagnostic";
+      code?: string;
     }[] = [];
     let cursor: Cursor = {
       pages: input.url ? [] : [source.listUrl],
@@ -301,6 +304,15 @@ export class IngestionRunner {
         if (response.status !== 200)
           throw new Error("列表 HTTP " + response.status);
         const page = extractList(response.html, response.url, source);
+        for (const item of page.items)
+          if (!item.publishedAt)
+            errors.push({
+              url: item.url,
+              kind: "diagnostic",
+              code: "missing-list-date",
+              message:
+                "列表未提供可解析的完整发布日期；保留未知，不据此截断分页",
+            });
         for (const skipped of page.skipped ?? []) {
           counts.ignored++;
           errors.push({
@@ -383,6 +395,14 @@ export class IngestionRunner {
                 "通知 HTTP " + response.status + "，保留原正式数据",
               );
             const article = extractArticle(response.html, response.url, source);
+            if (!article.publishedAt)
+              errors.push({
+                url: item.url,
+                kind: "diagnostic",
+                code: "missing-article-date",
+                message:
+                  "正文未提供可解析的完整发布日期；保留未知，不计算小时级发现延迟",
+              });
             if (containsApplicantList(article.title))
               throw new Error("通知涉及报名者名单，停止采集并保留正式数据");
             if (
@@ -425,6 +445,7 @@ export class IngestionRunner {
           errors.push({
             url: item.url,
             message: errorSummary(error),
+            ...(error instanceof NoticeParseError ? { code: error.code } : {}),
             ...(error instanceof BudgetExhaustedError
               ? { kind: "budget" as const }
               : {}),
@@ -478,6 +499,7 @@ export class IngestionRunner {
       errors.push({
         url: cursor.pages[0] ?? cursor.pending[0]?.url ?? source.listUrl,
         message: errorSummary(error),
+        ...(error instanceof NoticeParseError ? { code: error.code } : {}),
         ...(error instanceof BudgetExhaustedError
           ? { kind: "budget" as const }
           : {}),

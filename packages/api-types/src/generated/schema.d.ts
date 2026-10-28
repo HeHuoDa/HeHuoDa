@@ -1123,8 +1123,10 @@ export interface components {
         IngestionRunErrorDto: {
             url: string;
             message: string;
+            /** @description 安全的解析诊断代码 */
+            code?: string;
             /** @enum {string} */
-            kind?: "skipped" | "budget";
+            kind?: "skipped" | "budget" | "diagnostic";
         };
         IngestionPendingNoticeDto: {
             url: string;

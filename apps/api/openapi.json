@@ -5999,11 +5999,16 @@
           "message": {
             "type": "string"
           },
+          "code": {
+            "type": "string",
+            "description": "安全的解析诊断代码"
+          },
           "kind": {
             "type": "string",
             "enum": [
               "skipped",
-              "budget"
+              "budget",
+              "diagnostic"
             ]
           }
         },
