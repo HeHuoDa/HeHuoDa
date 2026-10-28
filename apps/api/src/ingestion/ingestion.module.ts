@@ -7,8 +7,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { Cron, ScheduleModule } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
-import { IngestionRunner } from "./runner.js";
-import { sources } from "@hehuoda/sicau-connectors/notices";
+import { ChannelRoundRunner } from "./channel-scheduler.js";
 import { cleanupResponses } from "./store.js";
 
 @Injectable()
@@ -41,24 +40,11 @@ export class IngestionScheduler implements BeforeApplicationShutdown {
   }
   private async run() {
     try {
-      const runner = new IngestionRunner(this.database.pool);
-      for (const source of sources) {
-        if (this.stop.signal.aborted) break;
-        const result = await runner.scan(
-          {
-            sourceId: source.id,
-            trigger: "scheduled",
-          },
-          this.stop.signal,
-        );
-        this.logger.log(
-          JSON.stringify({
-            source: source.id,
-            runId: "runId" in result ? result.runId : null,
-            status: result.status,
-          }),
-        );
-      }
+      const result = await new ChannelRoundRunner(this.database.pool).run(
+        {},
+        this.stop.signal,
+      );
+      this.logger.log(JSON.stringify(result));
       await cleanupResponses(
         this.database.pool,
         this.config.get<number>("INGESTION_RAW_DAYS", 30),

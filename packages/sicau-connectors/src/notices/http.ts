@@ -21,6 +21,14 @@ export interface HttpLimits {
   durationMs: number;
   bytes: number;
   signal?: AbortSignal;
+  /** 传输层逐块记录实际接收量，含超限/取消前已收到的字节。 */
+  onDownload?: (bytes: number) => void;
+  beforeRequest?: (url: URL) => Promise<void>;
+  onUsage?: (usage: {
+    requests: number;
+    downloadedBytes: number;
+    elapsedMs: number;
+  }) => Promise<void>;
 }
 export const defaultLimits: HttpLimits = {
   requests: 80,
@@ -73,6 +81,15 @@ export function safeUrl(value: string, source: Source): URL {
     url.port
   )
     throw new Error("请求 URL 不在来源 HTTPS 白名单");
+  if (
+    url.pathname !== "/robots.txt" &&
+    !source.channels.some(
+      (channel) =>
+        new RegExp(channel.listPath).test(url.pathname) ||
+        new RegExp(channel.noticePath).test(url.pathname),
+    )
+  )
+    throw new Error("请求路径不在来源注册栏目白名单");
   url.hash = "";
   return url;
 }
@@ -180,6 +197,7 @@ export const nativeTransport: Transport = async (url, limits, headers) => {
         const parts: Buffer[] = [];
         let size = 0;
         res.on("data", (chunk: Buffer) => {
+          limits.onDownload?.(chunk.length);
           size += chunk.length;
           if (size > limits.bytes) res.destroy(new Error("响应体超过上限"));
           else parts.push(chunk);
@@ -206,6 +224,7 @@ export const nativeTransport: Transport = async (url, limits, headers) => {
 };
 export class BoundedFetcher {
   private used = 0;
+  private downloaded = 0;
   private readonly started: number;
   private lastRequest: number | null = null;
   private robots: {
@@ -214,6 +233,13 @@ export class BoundedFetcher {
   } | null = null;
   get remainingRequests() {
     return this.limits.requests - this.used;
+  }
+  get usage() {
+    return {
+      requests: this.used,
+      downloadedBytes: this.downloaded,
+      elapsedMs: Math.max(0, this.now() - this.started),
+    };
   }
   constructor(
     readonly source: Source,
@@ -295,14 +321,21 @@ export class BoundedFetcher {
                 (this.now() - this.lastRequest),
             ),
       );
+      await this.limits.beforeRequest?.(url);
       this.used++;
+      await this.limits.onUsage?.(this.usage);
       this.lastRequest = this.now();
       let res: HttpResponse;
+      let reported = 0;
       try {
         res = await this.transport(
           url,
           {
             ...this.limits,
+            onDownload: (bytes) => {
+              reported += bytes;
+              this.downloaded += bytes;
+            },
             timeoutMs: Math.min(
               this.limits.timeoutMs,
               this.limits.durationMs - (this.now() - this.started),
@@ -310,7 +343,10 @@ export class BoundedFetcher {
           },
           headers,
         );
+        if (!reported) this.downloaded += res.body.byteLength;
+        await this.limits.onUsage?.(this.usage);
       } catch (error) {
+        await this.limits.onUsage?.(this.usage);
         if (this.limits.signal?.aborted)
           throw new Error("采集已停止", { cause: error });
         if (error instanceof Error && /危险|白名单|上限/.test(error.message))

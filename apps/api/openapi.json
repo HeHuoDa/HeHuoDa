@@ -2006,6 +2006,85 @@
         ]
       }
     },
+    "/api/v1/admin/ingestion/coverage-candidates": {
+      "get": {
+        "operationId": "AdminIngestionController_coverageCandidates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CollegeVerificationCandidateDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
     "/api/v1/admin/ingestion/sources/{id}": {
       "get": {
         "operationId": "AdminIngestionController_source",
@@ -2200,6 +2279,244 @@
         ]
       }
     },
+    "/api/v1/admin/ingestion/sources/{id}/channels/{channelId}": {
+      "patch": {
+        "operationId": "AdminIngestionController_configureChannel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureChannelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionChannelMutationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/sources/{id}/channels/{channelId}/verification": {
+      "put": {
+        "operationId": "AdminIngestionController_verifyChannel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyChannelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionChannelMutationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
     "/api/v1/admin/ingestion/runs": {
       "get": {
         "operationId": "AdminIngestionController_runs",
@@ -2233,6 +2550,14 @@
           },
           {
             "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
             "required": false,
             "in": "query",
             "schema": {
@@ -5828,6 +6153,55 @@
           "pageSize"
         ]
       },
+      "IngestionChannelDefinitionDto": {
+        "type": "object",
+        "properties": {
+          "datePattern": {
+            "type": "string"
+          },
+          "pagination": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "listUrl": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string",
+            "enum": [
+              "vsb-selectors"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "noticePath": {
+            "type": "string"
+          },
+          "listPath": {
+            "type": "string"
+          },
+          "selectors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "仓库发布的只读选择器；写接口不接受此字段"
+          }
+        },
+        "required": [
+          "id",
+          "listUrl",
+          "adapterId",
+          "version",
+          "noticePath",
+          "listPath",
+          "selectors"
+        ]
+      },
       "SourceSettingsDto": {
         "type": "object",
         "properties": {
@@ -5867,6 +6241,101 @@
             "maximum": 5242880
           }
         }
+      },
+      "IngestionChannelStateDto": {
+        "type": "object",
+        "properties": {
+          "verification": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "backoffUntil": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCount": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettingsDto"
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "rejected"
+            ]
+          },
+          "verifiedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "activatedOn": {
+            "type": "string",
+            "nullable": true,
+            "format": "date"
+          },
+          "pendingCount": {
+            "type": "number"
+          },
+          "coverage": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "lastSuccessfulCheck": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "budgetUsage": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "latestRound": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "discoveryDelay": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "backoffUntil",
+          "failureCount",
+          "id",
+          "enabled",
+          "settings",
+          "baseline",
+          "verificationStatus",
+          "verifiedAt",
+          "verifiedBy",
+          "activatedOn",
+          "pendingCount",
+          "coverage",
+          "lastSuccessfulCheck",
+          "budgetUsage",
+          "latestRound",
+          "discoveryDelay"
+        ]
       },
       "IngestionRunOptionsDto": {
         "type": "object",
@@ -5909,12 +6378,31 @@
               "fresh",
               "resume"
             ]
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "backfill",
+              "revisit",
+              "retry"
+            ]
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "roundId": {
+            "type": "string"
+          },
+          "rebuildTaskId": {
+            "type": "string"
           }
         },
         "required": [
-          "sourceId",
-          "from",
-          "to"
+          "sourceId"
         ]
       },
       "IngestionCountsDto": {
@@ -5957,11 +6445,16 @@
           "message": {
             "type": "string"
           },
+          "code": {
+            "type": "string",
+            "description": "安全的解析诊断代码"
+          },
           "kind": {
             "type": "string",
             "enum": [
               "skipped",
-              "budget"
+              "budget",
+              "diagnostic"
             ]
           }
         },
@@ -6027,6 +6520,30 @@
           "sourceId": {
             "type": "string"
           },
+          "channelId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "nullable": true
+          },
+          "configHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskId": {
+            "type": "string",
+            "nullable": true
+          },
+          "roundId": {
+            "type": "string",
+            "nullable": true
+          },
+          "budgetUsage": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -6079,6 +6596,12 @@
         "required": [
           "id",
           "sourceId",
+          "channelId",
+          "phase",
+          "configHash",
+          "taskId",
+          "roundId",
+          "budgetUsage",
           "status",
           "trigger",
           "startedAt",
@@ -6095,6 +6618,25 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "collegeId": {
+            "type": "string"
+          },
+          "defaultChannelId": {
+            "type": "string"
+          },
+          "channels": {
+            "description": "仓库登记的静态栏目定义；选择器、路径和主机不可由 HTTP 修改",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionChannelDefinitionDto"
+            }
+          },
+          "channelStates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionChannelStateDto"
+            }
           },
           "publisher": {
             "type": "string"
@@ -6132,6 +6674,9 @@
         },
         "required": [
           "id",
+          "collegeId",
+          "defaultChannelId",
+          "channels",
           "publisher",
           "version",
           "host",
@@ -6141,6 +6686,94 @@
           "baseline",
           "available",
           "latestRun"
+        ]
+      },
+      "IngestionCandidateChannelDto": {
+        "type": "object",
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "channelUrl": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_full_validation"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "channelId",
+          "channelUrl",
+          "status",
+          "enabled"
+        ]
+      },
+      "CollegeVerificationCandidateDto": {
+        "type": "object",
+        "properties": {
+          "collegeId": {
+            "type": "string"
+          },
+          "collegeName": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "officialUrl": {
+            "type": "string"
+          },
+          "candidateChannels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionCandidateChannelDto"
+            }
+          },
+          "sampleNoticeUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "observations": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "collegeId",
+          "collegeName",
+          "sourceId",
+          "officialUrl",
+          "candidateChannels",
+          "sampleNoticeUrls",
+          "checkedAt",
+          "status",
+          "reason",
+          "observations"
         ]
       },
       "ConfigureSourceDto": {
@@ -6170,6 +6803,180 @@
           "operationId",
           "reason",
           "baseline"
+        ]
+      },
+      "ConfigureChannelDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "baseline": {
+            "type": "string",
+            "description": "当前栏目状态与静态定义基线"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettingsDto"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "baseline"
+        ]
+      },
+      "IngestionChannelMutationDto": {
+        "type": "object",
+        "properties": {
+          "datePattern": {
+            "type": "string"
+          },
+          "pagination": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "listUrl": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string",
+            "enum": [
+              "vsb-selectors"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "noticePath": {
+            "type": "string"
+          },
+          "listPath": {
+            "type": "string"
+          },
+          "selectors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "仓库发布的只读选择器；写接口不接受此字段"
+          },
+          "verification": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettingsDto"
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "rejected"
+            ]
+          },
+          "verifiedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "activatedOn": {
+            "type": "string",
+            "nullable": true,
+            "format": "date"
+          }
+        },
+        "required": [
+          "id",
+          "listUrl",
+          "adapterId",
+          "version",
+          "noticePath",
+          "listPath",
+          "selectors",
+          "enabled",
+          "settings",
+          "baseline",
+          "verificationStatus",
+          "verifiedAt",
+          "verifiedBy",
+          "activatedOn"
+        ]
+      },
+      "VerifyChannelDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "rejected",
+              "pending"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "example": "2026-10-28",
+            "format": "date"
+          },
+          "sampleUrls": {
+            "minItems": 1,
+            "description": "已核验的公开通知样本 URL",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "paginationResult": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed",
+              "inconclusive"
+            ]
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "status",
+          "checkedAt",
+          "sampleUrls",
+          "paginationResult"
         ]
       },
       "IngestionRunsDto": {
@@ -6229,6 +7036,23 @@
           "preview": {
             "type": "boolean",
             "default": false
+          },
+          "channelId": {
+            "type": "string",
+            "description": "已登记的静态栏目 ID"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "backfill",
+              "revisit",
+              "retry"
+            ]
+          },
+          "rebuildTaskId": {
+            "type": "string",
+            "description": "因配置变化显式重建的扫描任务 ID"
           }
         },
         "required": [
@@ -6570,6 +7394,29 @@
       "IngestionExecutionResultDto": {
         "type": "object",
         "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskId": {
+            "type": "string",
+            "nullable": true
+          },
+          "roundId": {
+            "type": "string",
+            "nullable": true
+          },
+          "range": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "budgetUsage": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -6629,6 +7476,27 @@
               }
             ]
           },
+          "channelId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskId": {
+            "type": "string",
+            "nullable": true
+          },
+          "taskProgress": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "budgetUsage": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
           "requestId": {
             "type": "string",
             "format": "uuid"
@@ -6681,6 +7549,11 @@
         },
         "required": [
           "options",
+          "channelId",
+          "phase",
+          "taskId",
+          "taskProgress",
+          "budgetUsage",
           "requestId",
           "sourceId",
           "status",

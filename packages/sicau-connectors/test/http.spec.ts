@@ -45,6 +45,31 @@ function fetcher(responses: (HttpResponse | Error)[], limits = defaultLimits) {
   };
 }
 describe("有边界的 HTTP 采集", () => {
+  it("实际请求及下载字节累计包含robots、跳转和重试响应", async () => {
+    const replies = [
+      response(404, "robots"),
+      response(302, "redirect", { location: url }),
+      response(503, "busy"),
+      response(200, "ok"),
+    ];
+    const { fetcher: client } = fetcher(replies);
+    await client.checkRobots();
+    await client.get(url);
+    expect(client.usage).toMatchObject({ requests: 4, downloadedBytes: 20 });
+    expect(client.usage.elapsedMs).toBeGreaterThanOrEqual(8000);
+  });
+  it("同源未注册路径与逐跳越界也拒绝，不能只检查域名", async () => {
+    expect(() =>
+      normalizeUrl(`https://${source.host}/admin/export`, source),
+    ).toThrow("路径");
+    const redirected = fetcher([
+      response(404),
+      response(302, "", { location: "/admin/export" }),
+    ]);
+    await redirected.fetcher.checkRobots();
+    await expect(redirected.fetcher.get(url)).rejects.toThrow("路径");
+    expect(redirected.transport).toHaveBeenCalledTimes(2);
+  });
   it("解压官网 gzip 正文，同时限制解压后的响应大小", async () => {
     const compressed = (html: string): HttpResponse => ({
       status: 200,
@@ -130,15 +155,13 @@ describe("有边界的 HTTP 采集", () => {
     expect(dangerous.transport).toHaveBeenCalledTimes(2);
     const loop = fetcher([
       response(404),
-      ...Array.from({ length: 4 }, () =>
-        response(302, "", { location: "/loop" }),
-      ),
+      ...Array.from({ length: 4 }, () => response(302, "", { location: url })),
     ]);
     await loop.fetcher.checkRobots();
     await expect(loop.fetcher.get(url)).rejects.toThrow("重定向");
     const robot = fetcher([
-      response(200, "User-agent: *\nDisallow: /private"),
-      response(302, "", { location: "/private" }),
+      response(200, "User-agent: *\nDisallow: /info/1/2.htm"),
+      response(302, "", { location: "/info/1/2.htm" }),
     ]);
     await robot.fetcher.checkRobots();
     await expect(robot.fetcher.get(url)).rejects.toThrow("robots");

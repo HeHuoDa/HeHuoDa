@@ -83,6 +83,49 @@ describe("采集增量与自动恢复", () => {
   }
   const due = () =>
     db.pool.query("UPDATE ingestion_sources SET last_started_at=NULL");
+  it("列表和正文缺日期分别留下诊断，不猜日期也不计失败", async () => {
+    const result = await scanner(
+      {
+        [source.listUrl]: listing([100]).replace("2026-10-08", "10-08"),
+        [url(100)]: informationArticle.replace("2026/10/08", "10/08"),
+      },
+      [],
+    ).scan({ sourceId: source.id });
+    expect(result).toMatchObject({
+      status: "succeeded",
+      counts: { new: 1, failed: 0 },
+    });
+    expect("errors" in result && result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: url(100),
+          kind: "diagnostic",
+          code: "missing-list-date",
+        }),
+        expect.objectContaining({
+          url: url(100),
+          kind: "diagnostic",
+          code: "missing-article-date",
+        }),
+      ]),
+    );
+  });
+  it("结构失效的诊断代码和原始安全说明可从运行结果查询", async () => {
+    expect(
+      await scanner(
+        { [source.listUrl]: "<html>栏目结构已变化</html>" },
+        [],
+      ).scan({ sourceId: source.id }),
+    ).toMatchObject({
+      status: "failed",
+      errors: [
+        expect.objectContaining({
+          code: "list-selector",
+          message: expect.stringContaining("列表选择器"),
+        }),
+      ],
+    });
+  });
   it("默认80请求预算下78条旧通知不能挤掉首页新通知", async () => {
     const ids = Array.from({ length: 78 }, (_, i) => 200 + i);
     for (const id of ids) await seed(id);

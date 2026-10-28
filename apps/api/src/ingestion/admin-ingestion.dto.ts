@@ -6,6 +6,8 @@ import {
 } from "../admin/admin-review-response.dto.js";
 import {
   IsBoolean,
+  IsArray,
+  ArrayMaxSize,
   IsIn,
   IsInt,
   IsObject,
@@ -50,6 +52,20 @@ export class ScanDto extends IngestionCommandDto {
   @IsOptional()
   @IsBoolean()
   preview?: boolean;
+  @ApiPropertyOptional({ description: "已登记的静态栏目 ID" })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  channelId?: string;
+  @ApiPropertyOptional({ enum: ["fresh", "backfill", "revisit", "retry"] })
+  @IsOptional()
+  @IsIn(["fresh", "backfill", "revisit", "retry"])
+  phase?: "fresh" | "backfill" | "revisit" | "retry";
+  @ApiPropertyOptional({ description: "因配置变化显式重建的扫描任务 ID" })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  rebuildTaskId?: string;
 }
 export class SourceSettingsDto {
   @ApiPropertyOptional({ minimum: 1, maximum: 10 })
@@ -105,6 +121,44 @@ export class ConfigureSourceDto extends IngestionCommandDto {
   @Type(() => SourceSettingsDto)
   settings?: SourceSettingsDto;
 }
+export class ConfigureChannelDto extends IngestionCommandDto {
+  @ApiProperty({ description: "当前栏目状态与静态定义基线" })
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  baseline!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+  @ApiPropertyOptional({ type: SourceSettingsDto })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SourceSettingsDto)
+  settings?: SourceSettingsDto;
+}
+export class VerifyChannelDto extends IngestionCommandDto {
+  @ApiProperty({ enum: ["verified", "rejected", "pending"] })
+  @IsIn(["verified", "rejected", "pending"])
+  status!: "verified" | "rejected" | "pending";
+  @ApiProperty({ example: "2026-10-28", format: "date" })
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  checkedAt!: string;
+  @ApiProperty({
+    type: [String],
+    minItems: 1,
+    description: "已核验的公开通知样本 URL",
+  })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @Length(1, 2048, { each: true })
+  sampleUrls!: string[];
+  @ApiProperty({ enum: ["success", "failed", "inconclusive"] })
+  @IsIn(["success", "failed", "inconclusive"])
+  paginationResult!: "success" | "failed" | "inconclusive";
+}
 export class IngestionPageQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
@@ -125,6 +179,11 @@ export class IngestionPageQueryDto {
   @IsString()
   @Length(1, 100)
   sourceId?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  channelId?: string;
   @ApiPropertyOptional({
     enum: ["running", "succeeded", "partial", "failed", "interrupted"],
   })
@@ -144,8 +203,8 @@ export class IngestionPageQueryDto {
 }
 export class IngestionRunOptionsDto {
   @ApiProperty() sourceId!: string;
-  @ApiProperty({ example: "2026-01-01" }) from!: string;
-  @ApiProperty({ example: "2026-10-27" }) to!: string;
+  @ApiPropertyOptional({ example: "2026-01-01" }) from?: string;
+  @ApiPropertyOptional({ example: "2026-10-27" }) to?: string;
   @ApiPropertyOptional() url?: string;
   @ApiPropertyOptional() preview?: boolean;
   @ApiPropertyOptional() resume?: string;
@@ -153,6 +212,12 @@ export class IngestionRunOptionsDto {
   @ApiPropertyOptional({ enum: ["manual", "scheduled", "resume"] })
   trigger?: string;
   @ApiPropertyOptional({ enum: ["fresh", "resume"] }) scheduledPhase?: string;
+  @ApiPropertyOptional() channelId?: string;
+  @ApiPropertyOptional({ enum: ["fresh", "backfill", "revisit", "retry"] })
+  phase?: string;
+  @ApiPropertyOptional() taskId?: string;
+  @ApiPropertyOptional() roundId?: string;
+  @ApiPropertyOptional() rebuildTaskId?: string;
 }
 export class IngestionCountsDto {
   @ApiProperty() discovered!: number;
@@ -176,7 +241,9 @@ export class IngestionCursorDto {
 export class IngestionRunErrorDto {
   @ApiProperty() url!: string;
   @ApiProperty() message!: string;
-  @ApiPropertyOptional({ enum: ["skipped", "budget"] }) kind?: string;
+  @ApiPropertyOptional({ description: "安全的解析诊断代码" }) code?: string;
+  @ApiPropertyOptional({ enum: ["skipped", "budget", "diagnostic"] })
+  kind?: string;
 }
 export class IngestionPreviewItemDto {
   @ApiProperty() url!: string;
@@ -185,6 +252,15 @@ export class IngestionPreviewItemDto {
   candidate!: AdminParsedCandidateDto;
 }
 export class IngestionExecutionResultDto {
+  @ApiPropertyOptional() channelId?: string;
+  @ApiPropertyOptional({ type: String, nullable: true }) phase?: string | null;
+  @ApiPropertyOptional({ type: String, nullable: true }) taskId?: string | null;
+  @ApiPropertyOptional({ type: String, nullable: true }) roundId?:
+    string | null;
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
+  range?: Record<string, string>;
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
+  budgetUsage?: Record<string, number>;
   @ApiProperty({
     enum: [
       "succeeded",
@@ -209,8 +285,77 @@ export class IngestionExecutionResultDto {
   @ApiPropertyOptional({ type: [IngestionPreviewItemDto] })
   previews?: IngestionPreviewItemDto[];
 }
+export class IngestionChannelDefinitionDto {
+  @ApiPropertyOptional() datePattern?: string;
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
+  pagination?: Record<string, unknown>;
+  @ApiProperty() id!: string;
+  @ApiProperty() listUrl!: string;
+  @ApiProperty({ enum: ["vsb-selectors"] }) adapterId!: string;
+  @ApiProperty() version!: string;
+  @ApiProperty() noticePath!: string;
+  @ApiProperty() listPath!: string;
+  @ApiProperty({
+    type: "object",
+    additionalProperties: { type: "string" },
+    description: "仓库发布的只读选择器；写接口不接受此字段",
+  })
+  selectors!: Record<string, string>;
+}
+export class IngestionChannelStateDto {
+  @ApiPropertyOptional({ type: [Object] }) verification?: unknown[];
+  @ApiProperty({ type: String, nullable: true }) backoffUntil!: string | null;
+  @ApiProperty() failureCount!: number;
+  @ApiProperty() id!: string;
+  @ApiProperty() enabled!: boolean;
+  @ApiProperty({ type: SourceSettingsDto }) settings!: SourceSettingsDto;
+  @ApiProperty() baseline!: string;
+  @ApiProperty({ enum: ["pending", "verified", "rejected"] })
+  verificationStatus!: string;
+  @ApiProperty({ type: String, nullable: true }) verifiedAt!: string | null;
+  @ApiProperty({ type: String, nullable: true }) verifiedBy!: string | null;
+  @ApiProperty({ type: String, nullable: true, format: "date" })
+  activatedOn!: string | null;
+  @ApiProperty() pendingCount!: number;
+  @ApiProperty({ type: "object", additionalProperties: true })
+  coverage!: Record<string, unknown>;
+  @ApiProperty({ type: String, nullable: true, format: "date-time" })
+  lastSuccessfulCheck!: string | null;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  budgetUsage!: Record<string, unknown> | null;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  latestRound!: Record<string, unknown> | null;
+  @ApiProperty({ type: "object", additionalProperties: true })
+  discoveryDelay!: {
+    precision: "days";
+    sampleCount: number;
+    averageDays: number | null;
+    maxDays: number | null;
+  };
+}
+export class IngestionChannelMutationDto extends IngestionChannelDefinitionDto {
+  @ApiPropertyOptional({ type: [Object] }) verification?: unknown[];
+  @ApiProperty() enabled!: boolean;
+  @ApiProperty({ type: SourceSettingsDto }) settings!: SourceSettingsDto;
+  @ApiProperty() baseline!: string;
+  @ApiProperty({ enum: ["pending", "verified", "rejected"] })
+  verificationStatus!: string;
+  @ApiProperty({ type: String, nullable: true }) verifiedAt!: string | null;
+  @ApiProperty({ type: String, nullable: true }) verifiedBy!: string | null;
+  @ApiProperty({ type: String, nullable: true, format: "date" })
+  activatedOn!: string | null;
+}
 export class IngestionSourceDto {
   @ApiProperty() id!: string;
+  @ApiProperty() collegeId!: string;
+  @ApiProperty() defaultChannelId!: string;
+  @ApiProperty({
+    type: [IngestionChannelDefinitionDto],
+    description: "仓库登记的静态栏目定义；选择器、路径和主机不可由 HTTP 修改",
+  })
+  channels!: IngestionChannelDefinitionDto[];
+  @ApiPropertyOptional({ type: [IngestionChannelStateDto] })
+  channelStates?: IngestionChannelStateDto[];
   @ApiProperty() publisher!: string;
   @ApiProperty() version!: string;
   @ApiProperty() host!: string;
@@ -225,6 +370,13 @@ export class IngestionSourceDto {
 export class IngestionRunDto {
   @ApiProperty() id!: string;
   @ApiProperty() sourceId!: string;
+  @ApiProperty() channelId!: string;
+  @ApiProperty({ type: String, nullable: true }) phase!: string | null;
+  @ApiProperty({ type: String, nullable: true }) configHash!: string | null;
+  @ApiProperty({ type: String, nullable: true }) taskId!: string | null;
+  @ApiProperty({ type: String, nullable: true }) roundId!: string | null;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  budgetUsage!: Record<string, unknown> | null;
   @ApiProperty({
     enum: ["running", "succeeded", "partial", "failed", "interrupted"],
   })
@@ -257,6 +409,13 @@ export class IngestionRequestDto {
     description: "原始受理范围与预览参数；中断后显式重试沿用",
   })
   options!: IngestionRunOptionsDto;
+  @ApiProperty() channelId!: string;
+  @ApiProperty({ type: String, nullable: true }) phase!: string | null;
+  @ApiProperty({ type: String, nullable: true }) taskId!: string | null;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  taskProgress!: Record<string, unknown> | null;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  budgetUsage!: Record<string, unknown> | null;
   @ApiProperty({ format: "uuid" }) requestId!: string;
   @ApiProperty() sourceId!: string;
   @ApiProperty({
@@ -276,4 +435,25 @@ export class IngestionRequestDto {
   startedAt!: string | null;
   @ApiProperty({ type: String, nullable: true, format: "date-time" })
   finishedAt!: string | null;
+}
+export class IngestionCandidateChannelDto {
+  @ApiProperty() channelId!: string;
+  @ApiProperty() channelUrl!: string;
+  @ApiProperty({ enum: ["pending_full_validation"] }) status!: string;
+  @ApiProperty({ default: false }) enabled!: false;
+}
+export class CollegeVerificationCandidateDto {
+  @ApiProperty() collegeId!: string;
+  @ApiProperty() collegeName!: string;
+  @ApiProperty() sourceId!: string;
+  @ApiProperty() officialUrl!: string;
+  @ApiProperty({ type: [IngestionCandidateChannelDto] })
+  candidateChannels!: IngestionCandidateChannelDto[];
+  @ApiProperty({ type: [String] }) sampleNoticeUrls!: string[];
+  @ApiProperty({ format: "date" }) checkedAt!: string;
+  @ApiProperty({ enum: ["pending"] }) status!: string;
+  @ApiProperty() reason!: string;
+  @ApiProperty({ type: "object", additionalProperties: true })
+  observations!: Record<string, unknown>;
+  @ApiPropertyOptional() note?: string;
 }

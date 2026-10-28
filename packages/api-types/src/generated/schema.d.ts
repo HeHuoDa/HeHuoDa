@@ -396,6 +396,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ingestion/coverage-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_coverageCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ingestion/sources/{id}": {
         parameters: {
             query?: never;
@@ -410,6 +426,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["AdminIngestionController_configure"];
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/sources/{id}/channels/{channelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["AdminIngestionController_configureChannel"];
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/sources/{id}/channels/{channelId}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AdminIngestionController_verifyChannel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/ingestion/runs": {
@@ -1074,6 +1122,23 @@ export interface components {
             page: number;
             pageSize: number;
         };
+        IngestionChannelDefinitionDto: {
+            datePattern?: string;
+            pagination?: {
+                [key: string]: unknown;
+            };
+            id: string;
+            listUrl: string;
+            /** @enum {string} */
+            adapterId: "vsb-selectors";
+            version: string;
+            noticePath: string;
+            listPath: string;
+            /** @description 仓库发布的只读选择器；写接口不接受此字段 */
+            selectors: {
+                [key: string]: string;
+            };
+        };
         SourceSettingsDto: {
             maxPages?: number;
             frequencyMinutes?: number;
@@ -1083,12 +1148,42 @@ export interface components {
             durationMs?: number;
             bytes?: number;
         };
+        IngestionChannelStateDto: {
+            verification?: Record<string, never>[];
+            backoffUntil: string | null;
+            failureCount: number;
+            id: string;
+            enabled: boolean;
+            settings: components["schemas"]["SourceSettingsDto"];
+            baseline: string;
+            /** @enum {string} */
+            verificationStatus: "pending" | "verified" | "rejected";
+            verifiedAt: string | null;
+            verifiedBy: string | null;
+            /** Format: date */
+            activatedOn: string | null;
+            pendingCount: number;
+            coverage: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            lastSuccessfulCheck: string | null;
+            budgetUsage: {
+                [key: string]: unknown;
+            } | null;
+            latestRound: {
+                [key: string]: unknown;
+            } | null;
+            discoveryDelay: {
+                [key: string]: unknown;
+            };
+        };
         IngestionRunOptionsDto: {
             sourceId: string;
             /** @example 2026-01-01 */
-            from: string;
+            from?: string;
             /** @example 2026-10-27 */
-            to: string;
+            to?: string;
             url?: string;
             preview?: boolean;
             resume?: string;
@@ -1098,6 +1193,12 @@ export interface components {
             trigger?: "manual" | "scheduled" | "resume";
             /** @enum {string} */
             scheduledPhase?: "fresh" | "resume";
+            channelId?: string;
+            /** @enum {string} */
+            phase?: "fresh" | "backfill" | "revisit" | "retry";
+            taskId?: string;
+            roundId?: string;
+            rebuildTaskId?: string;
         };
         IngestionCountsDto: {
             discovered: number;
@@ -1110,8 +1211,10 @@ export interface components {
         IngestionRunErrorDto: {
             url: string;
             message: string;
+            /** @description 安全的解析诊断代码 */
+            code?: string;
             /** @enum {string} */
-            kind?: "skipped" | "budget";
+            kind?: "skipped" | "budget" | "diagnostic";
         };
         IngestionPendingNoticeDto: {
             url: string;
@@ -1126,6 +1229,14 @@ export interface components {
         IngestionRunDto: {
             id: string;
             sourceId: string;
+            channelId: string;
+            phase: string | null;
+            configHash: string | null;
+            taskId: string | null;
+            roundId: string | null;
+            budgetUsage: {
+                [key: string]: unknown;
+            } | null;
             /** @enum {string} */
             status: "running" | "succeeded" | "partial" | "failed" | "interrupted";
             /** @enum {string} */
@@ -1142,6 +1253,11 @@ export interface components {
         };
         IngestionSourceDto: {
             id: string;
+            collegeId: string;
+            defaultChannelId: string;
+            /** @description 仓库登记的静态栏目定义；选择器、路径和主机不可由 HTTP 修改 */
+            channels: components["schemas"]["IngestionChannelDefinitionDto"][];
+            channelStates?: components["schemas"]["IngestionChannelStateDto"][];
             publisher: string;
             version: string;
             host: string;
@@ -1151,6 +1267,31 @@ export interface components {
             baseline: string;
             available: boolean;
             latestRun: components["schemas"]["IngestionRunDto"] | null;
+        };
+        IngestionCandidateChannelDto: {
+            channelId: string;
+            channelUrl: string;
+            /** @enum {string} */
+            status: "pending_full_validation";
+            /** @default false */
+            enabled: boolean;
+        };
+        CollegeVerificationCandidateDto: {
+            collegeId: string;
+            collegeName: string;
+            sourceId: string;
+            officialUrl: string;
+            candidateChannels: components["schemas"]["IngestionCandidateChannelDto"][];
+            sampleNoticeUrls: string[];
+            /** Format: date */
+            checkedAt: string;
+            /** @enum {string} */
+            status: "pending";
+            reason: string;
+            observations: {
+                [key: string]: unknown;
+            };
+            note?: string;
         };
         ConfigureSourceDto: {
             /**
@@ -1162,6 +1303,64 @@ export interface components {
             baseline: string;
             enabled?: boolean;
             settings?: components["schemas"]["SourceSettingsDto"];
+        };
+        ConfigureChannelDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            /** @description 当前栏目状态与静态定义基线 */
+            baseline: string;
+            enabled?: boolean;
+            settings?: components["schemas"]["SourceSettingsDto"];
+        };
+        IngestionChannelMutationDto: {
+            datePattern?: string;
+            pagination?: {
+                [key: string]: unknown;
+            };
+            id: string;
+            listUrl: string;
+            /** @enum {string} */
+            adapterId: "vsb-selectors";
+            version: string;
+            noticePath: string;
+            listPath: string;
+            /** @description 仓库发布的只读选择器；写接口不接受此字段 */
+            selectors: {
+                [key: string]: string;
+            };
+            verification?: Record<string, never>[];
+            enabled: boolean;
+            settings: components["schemas"]["SourceSettingsDto"];
+            baseline: string;
+            /** @enum {string} */
+            verificationStatus: "pending" | "verified" | "rejected";
+            verifiedAt: string | null;
+            verifiedBy: string | null;
+            /** Format: date */
+            activatedOn: string | null;
+        };
+        VerifyChannelDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            /** @enum {string} */
+            status: "verified" | "rejected" | "pending";
+            /**
+             * Format: date
+             * @example 2026-10-28
+             */
+            checkedAt: string;
+            /** @description 已核验的公开通知样本 URL */
+            sampleUrls: string[];
+            /** @enum {string} */
+            paginationResult: "success" | "failed" | "inconclusive";
         };
         IngestionRunsDto: {
             items: components["schemas"]["IngestionRunDto"][];
@@ -1185,6 +1384,12 @@ export interface components {
             url?: string;
             /** @default false */
             preview: boolean;
+            /** @description 已登记的静态栏目 ID */
+            channelId?: string;
+            /** @enum {string} */
+            phase?: "fresh" | "backfill" | "revisit" | "retry";
+            /** @description 因配置变化显式重建的扫描任务 ID */
+            rebuildTaskId?: string;
         };
         IngestionAcceptedDto: {
             /** Format: uuid */
@@ -1264,6 +1469,16 @@ export interface components {
             candidate: components["schemas"]["AdminParsedCandidateDto"];
         };
         IngestionExecutionResultDto: {
+            channelId?: string;
+            phase?: string | null;
+            taskId?: string | null;
+            roundId?: string | null;
+            range?: {
+                [key: string]: unknown;
+            };
+            budgetUsage?: {
+                [key: string]: unknown;
+            };
             /** @enum {string} */
             status: "succeeded" | "partial" | "failed" | "interrupted" | "locked" | "disabled";
             source: string;
@@ -1278,6 +1493,15 @@ export interface components {
         IngestionRequestDto: {
             /** @description 原始受理范围与预览参数；中断后显式重试沿用 */
             options: components["schemas"]["IngestionRunOptionsDto"];
+            channelId: string;
+            phase: string | null;
+            taskId: string | null;
+            taskProgress: {
+                [key: string]: unknown;
+            } | null;
+            budgetUsage: {
+                [key: string]: unknown;
+            } | null;
             /** Format: uuid */
             requestId: string;
             sourceId: string;
@@ -3148,6 +3372,65 @@ export interface operations {
             };
         };
     };
+    AdminIngestionController_coverageCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollegeVerificationCandidateDto"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
     AdminIngestionController_source: {
         parameters: {
             query?: never;
@@ -3277,12 +3560,151 @@ export interface operations {
             };
         };
     };
+    AdminIngestionController_configureChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigureChannelDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionChannelMutationDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_verifyChannel: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyChannelDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionChannelMutationDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
     AdminIngestionController_runs: {
         parameters: {
             query?: {
                 page?: components["schemas"]["Object"];
                 pageSize?: components["schemas"]["Object"];
                 sourceId?: string;
+                channelId?: string;
                 status?: "running" | "succeeded" | "partial" | "failed" | "interrupted";
                 from?: string;
                 to?: string;

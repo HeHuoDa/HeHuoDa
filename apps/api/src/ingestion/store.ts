@@ -10,6 +10,7 @@ import {
 } from "@hehuoda/sicau-connectors/notices";
 import type { ParsedCandidate } from "./types.js";
 import { digestInput } from "./types.js";
+import { initializeChannels } from "./channel-store.js";
 
 export const hash = (value: unknown) =>
   createHash("sha256").update(digestInput(value)).digest("hex");
@@ -54,6 +55,7 @@ export async function initializeSources(pool: Pool) {
       "INSERT INTO ingestion_sources(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
       [source.id, source],
     );
+  await initializeChannels(pool);
 }
 export interface CandidateRow {
   id: string;
@@ -139,6 +141,7 @@ export async function persistArticle(
   response: FetchResult,
   article: Article,
   parsed: ParsedCandidate,
+  channelId?: string,
 ) {
   return transaction(pool, async (client) => {
     const bodyHash = hash(article);
@@ -159,6 +162,11 @@ export async function persistArticle(
         response.headers["last-modified"] ?? null,
       ],
     );
+    if (channelId)
+      await client.query(
+        "INSERT INTO ingestion_notice_channels(notice_id,source_id,channel_id) VALUES($1,$2,$3) ON CONFLICT(notice_id,source_id,channel_id) DO UPDATE SET last_discovered_at=now()",
+        [noticeId, source.id, channelId],
+      );
     if (
       previous?.body_hash === bodyHash &&
       previous?.adapter_version === source.version
