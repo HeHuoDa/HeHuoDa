@@ -22,6 +22,9 @@ import { noticeDirectory, platformCandidate } from "./connector-adapter.js";
 
 import { initializeSources, persistArticle, transaction } from "./store.js";
 import { channelFingerprint, readChannel } from "./channel-store.js";
+import { checkNoticeAttachments } from "./attachment-runner.js";
+import { parseAttachmentIsolated } from "./attachment-parser.js";
+import { reserveAttachmentNetworkRequest } from "./attachment-budget.js";
 
 export type ScanPhase = "fresh" | "backfill" | "revisit" | "retry";
 
@@ -89,6 +92,7 @@ export class IngestionRunner {
       limits: HttpLimits,
     ) => new BoundedFetcher(source, limits),
     private readonly now = () => new Date(),
+    private readonly attachmentParser = parseAttachmentIsolated,
   ) {}
   async scan(
     input: ScanOptions,
@@ -341,10 +345,15 @@ export class IngestionRunner {
             );
         },
         beforeRequest: async (url) => {
+          if (process.env.INGESTION_ATTACHMENTS_ENABLED === "true")
+            await reserveAttachmentNetworkRequest(this.pool, this.now());
           if (
             url.pathname !== "/robots.txt" &&
             !new RegExp(channel.listPath).test(url.pathname) &&
-            !new RegExp(channel.noticePath).test(url.pathname)
+            !new RegExp(channel.noticePath).test(url.pathname) &&
+            !source.attachmentPaths?.some((pattern) =>
+              new RegExp(pattern).test(url.pathname),
+            )
           )
             throw new Error("请求路径不在所选栏目白名单");
           if (
@@ -777,6 +786,14 @@ export class IngestionRunner {
                 "INSERT INTO ingestion_notice_channels(notice_id,source_id,channel_id) VALUES($1,$2,$3) ON CONFLICT(notice_id,source_id,channel_id) DO UPDATE SET last_discovered_at=now()",
                 [known.id, source.id, channel.id],
               );
+            if (!input.preview)
+              await checkNoticeAttachments(
+                this.pool,
+                fetcher,
+                known.id,
+                (bytes, mediaType) =>
+                  this.attachmentParser(bytes, mediaType, { signal }),
+              );
           } else {
             if (response.status !== 200)
               throw new Error(
@@ -826,6 +843,13 @@ export class IngestionRunner {
                   article,
                   parsed,
                   channel.id,
+                );
+                await checkNoticeAttachments(
+                  this.pool,
+                  fetcher,
+                  result.noticeId,
+                  (bytes, mediaType) =>
+                    this.attachmentParser(bytes, mediaType, { signal }),
                 );
                 if (result.action === "new") counts.new++;
                 else if (result.action === "changed") counts.changed++;

@@ -74,11 +74,21 @@ describe("采集审核发布与公开首页 API", () => {
     expect(
       paths.every((path) => path.startsWith("/api/v1/admin/ingestion/")),
     ).toBe(true);
+    expect(paths).toContain("/api/v1/admin/ingestion/attachments/{id}/recheck");
+    expect(paths).toContain("/api/v1/admin/ingestion/attachments/{id}/reparse");
     expect(
       (
         await app.inject({
           method: "GET",
           url: "/api/v1/admin/ingestion/sources",
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/v1/admin/ingestion/attachments/${"00000000-0000-4000-8000-000000000001"}/versions`,
         })
       ).statusCode,
     ).toBe(401);

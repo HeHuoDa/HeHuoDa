@@ -41,6 +41,8 @@ export const ADMIN_ACTIONS = [
   "ingestion.scan",
   "ingestion.configure",
   "ingestion.resume",
+  "ingestion.attachment.recheck",
+  "ingestion.attachment.reparse",
   "candidate.review",
   "candidate.import",
 ] as const;
@@ -50,6 +52,7 @@ export const ADMIN_OBJECTS = [
   "competition",
   "source",
   "candidate",
+  "attachment",
 ] as const;
 export class OperationsQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })

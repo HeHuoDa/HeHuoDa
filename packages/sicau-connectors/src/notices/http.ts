@@ -10,8 +10,10 @@ export interface HttpResponse {
   headers: Record<string, string>;
   body: Uint8Array;
 }
-export interface FetchResult extends HttpResponse {
+export interface ByteFetchResult extends HttpResponse {
   url: string;
+}
+export interface FetchResult extends ByteFetchResult {
   html: string;
 }
 export interface HttpLimits {
@@ -71,7 +73,11 @@ export function publicAddress(address: string): boolean {
   }
   return false;
 }
-export function safeUrl(value: string, source: Source): URL {
+export function safeUrl(
+  value: string,
+  source: Source,
+  attachment = false,
+): URL {
   const url = new URL(value);
   if (
     url.protocol !== "https:" ||
@@ -83,11 +89,15 @@ export function safeUrl(value: string, source: Source): URL {
     throw new Error("请求 URL 不在来源 HTTPS 白名单");
   if (
     url.pathname !== "/robots.txt" &&
-    !source.channels.some(
-      (channel) =>
-        new RegExp(channel.listPath).test(url.pathname) ||
-        new RegExp(channel.noticePath).test(url.pathname),
-    )
+    !(attachment
+      ? source.attachmentPaths?.some((pattern) =>
+          new RegExp(pattern).test(url.pathname),
+        )
+      : source.channels.some(
+          (channel) =>
+            new RegExp(channel.listPath).test(url.pathname) ||
+            new RegExp(channel.noticePath).test(url.pathname),
+        ))
   )
     throw new Error("请求路径不在来源注册栏目白名单");
   url.hash = "";
@@ -120,6 +130,13 @@ export function parseDnsOverrides(
 }
 export function normalizeUrl(value: string, source: Source): string {
   const url = safeUrl(value, source);
+  for (const key of [...url.searchParams.keys()])
+    if (/^utm_(source|medium|campaign|term|content)$/i.test(key))
+      url.searchParams.delete(key);
+  return url.toString();
+}
+export function normalizeAttachmentUrl(value: string, source: Source): string {
+  const url = safeUrl(value, source, true);
   for (const key of [...url.searchParams.keys()])
     if (/^utm_(source|medium|campaign|term|content)$/i.test(key))
       url.searchParams.delete(key);
@@ -297,11 +314,13 @@ export class BoundedFetcher {
     }
     if (this.limits.signal?.aborted) throw new Error("采集已停止");
   }
-  private async response(
+  private async responseBytes(
     value: string,
     headers: Record<string, string> = {},
-  ): Promise<FetchResult> {
-    let url = safeUrl(value, this.source);
+    attachment = false,
+  ): Promise<ByteFetchResult & { rawBody: Uint8Array }> {
+    let url = safeUrl(value, this.source, attachment);
+    const byteLimit = attachment ? 5 * 1024 * 1024 : this.limits.bytes;
     let redirects = 0;
     let retries = 0;
     while (true) {
@@ -332,6 +351,7 @@ export class BoundedFetcher {
           url,
           {
             ...this.limits,
+            bytes: byteLimit,
             onDownload: (bytes) => {
               reported += bytes;
               this.downloaded += bytes;
@@ -358,14 +378,14 @@ export class BoundedFetcher {
         await this.pause(2000 * 2 ** (retries - 1));
         continue;
       }
-      if (res.body.byteLength > this.limits.bytes)
-        throw new Error("响应体超过上限");
+      if (res.body.byteLength > byteLimit) throw new Error("响应体超过上限");
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         if (++redirects > 3 || !res.headers.location)
           throw new Error("异常重定向");
         url = safeUrl(
           new URL(res.headers.location, url).toString(),
           this.source,
+          attachment,
         );
         headers = {};
         continue;
@@ -390,32 +410,39 @@ export class BoundedFetcher {
       try {
         if (encoding === "gzip")
           decoded = gunzipSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding === "deflate")
           decoded = inflateSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding === "br")
           decoded = brotliDecompressSync(res.body, {
-            maxOutputLength: this.limits.bytes,
+            maxOutputLength: byteLimit,
           });
         else if (encoding && encoding !== "identity")
           throw new Error("不支持的 HTTP 压缩编码");
       } catch (error) {
         throw new Error("压缩响应损坏或解压体积超过上限", { cause: error });
       }
-      const html =
-        res.status === 304
-          ? ""
-          : decodeHtml(decoded, res.headers["content-type"]);
-      if (
-        res.status === 200 &&
-        /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(html)
-      )
-        throw new Error("出现验证码、登录或拦截页，停止来源采集");
-      return { ...res, url: url.toString(), html };
+      return { ...res, body: decoded, rawBody: res.body, url: url.toString() };
     }
+  }
+  private async response(
+    value: string,
+    headers: Record<string, string> = {},
+  ): Promise<FetchResult> {
+    const { rawBody, ...res } = await this.responseBytes(value, headers);
+    const html =
+      res.status === 304
+        ? ""
+        : decodeHtml(res.body, res.headers["content-type"]);
+    if (
+      res.status === 200 &&
+      /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(html)
+    )
+      throw new Error("出现验证码、登录或拦截页，停止来源采集");
+    return { ...res, body: rawBody, html };
   }
   async checkRobots() {
     const result = await this.response(
@@ -443,6 +470,37 @@ export class BoundedFetcher {
     const result = await this.response(url.toString(), headers);
     // 重定向后的路径也必须被允许；response 在每次跟随后先校验路径。
     return result;
+  }
+  /** 共用本实例的请求预算；调用方仍须持有 API 的全局采集锁。 */
+  async getBytes(
+    value: string,
+    headers: Record<string, string> = {},
+  ): Promise<ByteFetchResult> {
+    if (!this.robots) throw new Error("采集前必须核对 robots.txt");
+    const result = await this.responseBytes(value, headers);
+    return {
+      status: result.status,
+      headers: result.headers,
+      body: result.body,
+      url: result.url,
+    };
+  }
+  async getAttachment(value: string): Promise<ByteFetchResult> {
+    if (!this.robots) throw new Error("采集前必须核对 robots.txt");
+    const result = await this.responseBytes(
+      value,
+      {
+        Accept:
+          "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+      true,
+    );
+    return {
+      status: result.status,
+      headers: result.headers,
+      body: result.body,
+      url: result.url,
+    };
   }
 }
 export function parseRobots(text: string) {

@@ -11,18 +11,22 @@ import { AdminIngestionController } from "../ingestion/admin-ingestion.controlle
 import { AdminIngestionService } from "../ingestion/admin-ingestion.service.js";
 import { AdminReviewController } from "./admin-review.controller.js";
 import { AdminReviewService } from "./admin-review.service.js";
+import { AdminAttachmentController } from "../ingestion/admin-attachment.controller.js";
+import { AdminAttachmentService } from "../ingestion/admin-attachment.service.js";
 @Module({
   imports: [AuthPersistenceModule],
   controllers: [
     AdminController,
     AdminIngestionController,
     AdminReviewController,
+    AdminAttachmentController,
   ],
   providers: [
     AdminOperationsService,
     AdminIngestionOperation,
     AdminIngestionService,
     AdminReviewService,
+    AdminAttachmentService,
     AdminService,
     AuthRateLimiter,
     { provide: APP_GUARD, useClass: AdminGuard },

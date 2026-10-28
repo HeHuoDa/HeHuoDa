@@ -262,6 +262,8 @@ export const ingestionNotices = pgTable(
     etag: text(),
     lastModified: text("last_modified"),
     health: text().notNull(),
+    evidenceRevision: integer("evidence_revision").notNull().default(1),
+    evidenceState: text("evidence_state").notNull().default("current"),
   },
   (t) => [unique().on(t.sourceId, t.url), unique().on(t.id, t.sourceId)],
 );
@@ -333,6 +335,92 @@ export const ingestionCandidates = pgTable("ingestion_candidates", {
     .notNull()
     .defaultNow(),
 });
+export const ingestionAttachments = pgTable(
+  "ingestion_attachments",
+  {
+    id: uuid().primaryKey(),
+    noticeId: text("notice_id")
+      .notNull()
+      .references(() => ingestionNotices.id),
+    canonicalUrl: text("canonical_url").notNull(),
+    discoveredVersion: text("discovered_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    latestVersion: uuid("latest_version"),
+    state: text().notNull(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    errorCode: text("error_code"),
+  },
+  (t) => [unique().on(t.noticeId, t.canonicalUrl)],
+);
+export const ingestionNetworkWindows = pgTable("ingestion_network_windows", {
+  dueAt: timestamp("due_at", { withTimezone: true }).primaryKey(),
+  requests: integer().notNull(),
+});
+export const ingestionAttachmentEvents = pgTable(
+  "ingestion_attachment_events",
+  {
+    id: uuid().primaryKey(),
+    noticeId: text("notice_id")
+      .notNull()
+      .references(() => ingestionNotices.id),
+    sourceVersion: text("source_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    evidenceRevision: integer("evidence_revision").notNull(),
+    reason: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+export const ingestionAttachmentVersions = pgTable(
+  "ingestion_attachment_versions",
+  {
+    id: uuid().primaryKey(),
+    attachmentId: uuid("attachment_id")
+      .notNull()
+      .references(() => ingestionAttachments.id),
+    previousVersion: uuid("previous_version"),
+    revision: integer().notNull(),
+    sha256: text(),
+    noticeVersion: text("notice_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    mediaType: text("media_type").notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    status: text().notNull(),
+    segments: jsonb().notNull(),
+    errorCode: text("error_code"),
+    body: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType: () => "bytea",
+    })(),
+  },
+  (t) => [
+    unique().on(t.attachmentId, t.revision),
+    unique().on(t.id, t.attachmentId),
+  ],
+);
+export const ingestionEvidenceSets = pgTable(
+  "ingestion_evidence_sets",
+  {
+    noticeId: text("notice_id")
+      .notNull()
+      .references(() => ingestionNotices.id),
+    revision: integer().notNull(),
+    sourceVersion: text("source_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    attachmentVersions: jsonb("attachment_versions").notNull(),
+    state: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.noticeId, t.revision] })],
+);
 export const ingestionMappings = pgTable("ingestion_mappings", {
   candidateId: text("candidate_id")
     .primaryKey()
@@ -607,6 +695,30 @@ export const ingestionRequests = pgTable("ingestion_requests", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
+
+export const ingestionAttachmentRequests = pgTable(
+  "ingestion_attachment_requests",
+  {
+    id: uuid().primaryKey(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => adminAccounts.id),
+    attachmentId: uuid("attachment_id").notNull(),
+    versionId: uuid("version_id"),
+    operationId: uuid("operation_id").notNull(),
+    operation: text().notNull(),
+    expectedEvidenceRevision: integer("expected_evidence_revision").notNull(),
+    reason: text().notNull(),
+    status: text().notNull(),
+    result: jsonb(),
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+);
 
 export const ingestionReviewRevisions = pgTable(
   "ingestion_review_revisions",

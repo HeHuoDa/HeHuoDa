@@ -1761,6 +1761,8 @@
                 "ingestion.scan",
                 "ingestion.configure",
                 "ingestion.resume",
+                "ingestion.attachment.recheck",
+                "ingestion.attachment.reparse",
                 "candidate.review",
                 "candidate.import"
               ]
@@ -1777,7 +1779,8 @@
                 "session",
                 "competition",
                 "source",
-                "candidate"
+                "candidate",
+                "attachment"
               ]
             }
           },
@@ -4973,6 +4976,439 @@
           "管理员采集审核"
         ]
       }
+    },
+    "/api/v1/admin/ingestion/notices/{id}/attachments": {
+      "get": {
+        "operationId": "AdminAttachmentController_attachments",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeAttachmentsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "附件审核证据"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/attachments/{id}/versions": {
+      "get": {
+        "operationId": "AdminAttachmentController_versions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "succeeded",
+                "partial",
+                "failed",
+                "interrupted"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentVersionsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "附件审核证据"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/attachments/{id}/versions/{versionId}": {
+      "get": {
+        "operationId": "AdminAttachmentController_version",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "succeeded",
+                "partial",
+                "failed",
+                "interrupted"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentTextDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "附件审核证据"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/attachments/{id}/recheck": {
+      "post": {
+        "operationId": "AdminAttachmentController_recheck",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionAcceptedDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "附件审核证据"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/attachments/{id}/reparse": {
+      "post": {
+        "operationId": "AdminAttachmentController_reparse",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentReparseCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionAcceptedDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "附件审核证据"
+        ]
+      }
     }
   },
   "info": {
@@ -6077,6 +6513,8 @@
               "ingestion.scan",
               "ingestion.configure",
               "ingestion.resume",
+              "ingestion.attachment.recheck",
+              "ingestion.attachment.reparse",
               "candidate.review",
               "candidate.import"
             ]
@@ -6088,7 +6526,8 @@
               "session",
               "competition",
               "source",
-              "candidate"
+              "candidate",
+              "attachment"
             ]
           },
           "objectId": {
@@ -7080,6 +7519,30 @@
           "status"
         ]
       },
+      "AttachmentExecutionResultDto": {
+        "type": "object",
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string"
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "historical": {
+            "type": "boolean"
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "attachmentId"
+        ]
+      },
       "AdminArticleAttachmentDto": {
         "type": "object",
         "properties": {
@@ -7477,7 +7940,8 @@
             ]
           },
           "channelId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "phase": {
             "type": "string",
@@ -7504,6 +7968,22 @@
           "sourceId": {
             "type": "string"
           },
+          "attachmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "recheck",
+              "reparse"
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -7519,14 +7999,20 @@
             "nullable": true
           },
           "result": {
-            "nullable": true,
-            "description": "执行结果；status 为采集运行结果，与本对象受理状态分别表达",
-            "type": "object",
-            "allOf": [
+            "oneOf": [
               {
                 "$ref": "#/components/schemas/IngestionExecutionResultDto"
+              },
+              {
+                "$ref": "#/components/schemas/AttachmentExecutionResultDto"
               }
-            ]
+            ],
+            "nullable": true,
+            "description": "执行结果；status 为采集运行结果，与本对象受理状态分别表达"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
           },
           "error": {
             "type": "string",
@@ -7548,14 +8034,12 @@
           }
         },
         "required": [
-          "options",
           "channelId",
           "phase",
           "taskId",
           "taskProgress",
           "budgetUsage",
           "requestId",
-          "sourceId",
           "status",
           "runId",
           "result",
@@ -8036,6 +8520,35 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
           },
+          "evidenceRevision": {
+            "type": "number",
+            "minimum": 0
+          },
+          "evidenceState": {
+            "type": "string",
+            "enum": [
+              "current",
+              "stale",
+              "blocked"
+            ]
+          },
+          "attachmentSummary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "attachmentVersions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "requiresReview": {
+            "type": "boolean"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
@@ -8055,7 +8568,55 @@
           "formalBefore",
           "baseline",
           "formalBaseline",
+          "evidenceRevision",
+          "evidenceState",
+          "attachmentSummary",
+          "attachmentVersions",
+          "requiresReview",
           "updatedAt"
+        ]
+      },
+      "EvidenceReferenceDto": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "html",
+              "pdf",
+              "docx"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "attachmentVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "number"
+          },
+          "paragraph": {
+            "type": "number"
+          },
+          "field": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "url",
+          "noticeVersion",
+          "attachmentVersion",
+          "field",
+          "excerpt"
         ]
       },
       "AdminMergeSuggestionDto": {
@@ -8326,8 +8887,25 @@
           "format": {
             "type": "number",
             "enum": [
-              1
+              1,
+              2
             ]
+          },
+          "evidenceRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "evidenceReferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceReferenceDto"
+            }
           },
           "operationId": {
             "type": "string",
@@ -8430,7 +9008,7 @@
             "maxLength": 2000
           },
           "review": {
-            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "description": "服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致",
             "allOf": [
               {
                 "$ref": "#/components/schemas/AdminReviewFileDto"
@@ -8640,7 +9218,7 @@
             "maxLength": 2000
           },
           "review": {
-            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "description": "服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致",
             "allOf": [
               {
                 "$ref": "#/components/schemas/AdminReviewFileDto"
@@ -9052,6 +9630,35 @@
                 "$ref": "#/components/schemas/AdminNoticeCandidateDto"
               }
             ]
+          },
+          "evidenceRevision": {
+            "type": "number",
+            "minimum": 0
+          },
+          "evidenceState": {
+            "type": "string",
+            "enum": [
+              "current",
+              "stale",
+              "blocked"
+            ]
+          },
+          "attachmentSummary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "attachmentVersions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "requiresReview": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -9064,7 +9671,12 @@
           "source",
           "latestVersion",
           "article",
-          "candidate"
+          "candidate",
+          "evidenceRevision",
+          "evidenceState",
+          "attachmentSummary",
+          "attachmentVersions",
+          "requiresReview"
         ]
       },
       "AdminNoticeVersionListItemDto": {
@@ -9258,6 +9870,314 @@
           "article",
           "previousArticle",
           "differences"
+        ]
+      },
+      "AttachmentSummaryDto": {
+        "type": "object",
+        "properties": {
+          "attachmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "lastCheckedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "latestVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "evidenceState": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "noticeId",
+          "url",
+          "state",
+          "lastCheckedAt",
+          "latestVersion",
+          "errorCode",
+          "evidenceRevision",
+          "evidenceState"
+        ]
+      },
+      "NoticeAttachmentsDto": {
+        "type": "object",
+        "properties": {
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "evidenceState": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttachmentSummaryDto"
+            }
+          }
+        },
+        "required": [
+          "noticeId",
+          "evidenceRevision",
+          "evidenceState",
+          "items"
+        ]
+      },
+      "AttachmentVersionDto": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previousVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "number"
+          },
+          "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "extractorVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "versionId",
+          "previousVersion",
+          "revision",
+          "sha256",
+          "noticeVersion",
+          "fetchedAt",
+          "mediaType",
+          "extractorVersion",
+          "status",
+          "errorCode"
+        ]
+      },
+      "AttachmentVersionsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttachmentVersionDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "AttachmentSegmentDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "page",
+              "paragraph"
+            ]
+          },
+          "index": {
+            "type": "number",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "index",
+          "text",
+          "truncated"
+        ]
+      },
+      "AttachmentTextDto": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previousVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "number"
+          },
+          "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "extractorVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttachmentSegmentDto"
+            }
+          },
+          "totalSegments": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "versionId",
+          "previousVersion",
+          "revision",
+          "sha256",
+          "noticeVersion",
+          "fetchedAt",
+          "mediaType",
+          "extractorVersion",
+          "status",
+          "errorCode",
+          "segments",
+          "totalSegments",
+          "page",
+          "pageSize"
+        ]
+      },
+      "AttachmentCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "baseline": {
+            "type": "number",
+            "minimum": 0,
+            "description": "当前通知 evidenceRevision"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "baseline"
+        ]
+      },
+      "AttachmentReparseCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "baseline": {
+            "type": "number",
+            "minimum": 0,
+            "description": "当前通知 evidenceRevision"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "已有附件内容版本 ID"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "baseline",
+          "versionId"
         ]
       }
     }

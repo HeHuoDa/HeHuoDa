@@ -26,12 +26,16 @@
     "test:unit": "pnpm build && node --test test/entry.test.mjs && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config test/jest.json --runInBand"
   },
   "dependencies": {
-    "cheerio": "1.2.0"
+    "cheerio": "1.2.0",
+    "mammoth": "1.11.0",
+    "pdfjs-dist": "5.4.624",
+    "yauzl": "3.2.1"
   },
   "devDependencies": {
     "@jest/globals": "30.5.2",
     "@types/jest": "30.0.0",
     "@types/node": "^24.0.0",
+    "@types/yauzl": "2.10.3",
     "jest": "30.5.2",
     "ts-jest": "29.4.14",
     "typescript": "6.0.3"

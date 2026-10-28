@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { initializeSources } from "./store.js";
 import { IngestionRunner, type ScanPhase } from "./runner.js";
+import { queueDueAttachments } from "./attachment-store.js";
 
 /** 北京时间最近的09/18时隙；nextDueAt是该轮必须完成的下个触发点。 */
 export function scheduledWindow(now: Date) {
@@ -90,6 +91,8 @@ export class ChannelRoundRunner {
           )
         ).rows[0];
       if (!round) throw new Error("调度轮未创建");
+      // Queue before checking the round status: old approvals cannot outlive a due recheck.
+      await queueDueAttachments(this.pool, window.dueAt);
       // 工作进程可能在片完成、轮统计落账前退出；以逐请求持久化的run消耗重建预算。
       const consumed = (
         await lock.query(
@@ -118,7 +121,7 @@ export class ChannelRoundRunner {
       const fresh = round.fresh_check_status;
       const save = async () =>
         lock.query(
-          "UPDATE ingestion_rounds SET fresh_check_status=$2,budget_usage=$3 WHERE id=$1",
+          "UPDATE ingestion_rounds SET fresh_check_status=$2,budget_usage=budget_usage || $3::jsonb WHERE id=$1",
           [
             round!.id,
             JSON.stringify(fresh),
@@ -143,15 +146,17 @@ export class ChannelRoundRunner {
         channelId: string,
         phase: ScanPhase,
         taskId?: string,
+        attachmentUrl?: string,
       ) => {
         const result = await this.runner.scan(
           {
             sourceId,
             channelId,
-            phase,
+            phase: attachmentUrl ? undefined : phase,
+            url: attachmentUrl,
             taskId,
             roundId: round!.id,
-            trigger: "scheduled",
+            trigger: attachmentUrl ? "manual" : "scheduled",
             workSliceRequests: Math.min(
               slice,
               requestLimit - used - (round!.budget_usage.requests ?? 0),
@@ -246,6 +251,43 @@ export class ChannelRoundRunner {
           ...(runId ? { runId } : {}),
         };
         await save();
+      }
+      // 附件积压按栏目轮转；不让历史补抓占满预算，也不因 HTML 304 跳过附件。
+      if (process.env.INGESTION_ATTACHMENTS_ENABLED === "true") {
+        const attemptedAttachments = new Set<string>();
+        let progressed = true;
+        while (room() && progressed) {
+          progressed = false;
+          for (const c of channels) {
+            if (!room()) break;
+            if (c.backoff_until && new Date(c.backoff_until) > this.now())
+              continue;
+            const next = (
+              await lock.query(
+                `SELECT DISTINCT n.id,n.url FROM ingestion_attachments a
+               JOIN ingestion_notices n ON n.id=a.notice_id
+               JOIN ingestion_notice_channels nc ON nc.notice_id=n.id
+               WHERE n.source_id=$1 AND nc.channel_id=$2 AND a.state='stale'
+                 AND NOT (n.id=ANY($3::text[])) ORDER BY n.id LIMIT 1`,
+                [c.source_id, c.id, [...attemptedAttachments]],
+              )
+            ).rows[0];
+            if (!next) continue;
+            attemptedAttachments.add(next.id);
+            progressed = true;
+            const { result } = await work(
+              c.source_id,
+              c.id,
+              "revisit",
+              undefined,
+              next.url,
+            );
+            if (result.status === "locked") {
+              progressed = false;
+              break;
+            }
+          }
+        }
       }
       // 新通知机会全部分配后，再建立/接续各自独立范围的历史、复查和重试任务。
       if (
@@ -345,7 +387,14 @@ export class ChannelRoundRunner {
             )
           ).rows[0].count
         : 0;
+      const pendingAttachments = (
+        await lock.query(
+          `SELECT count(*)::int AS count FROM ingestion_attachments a JOIN ingestion_notices n ON n.id=a.notice_id
+         WHERE a.state='stale' AND EXISTS(SELECT 1 FROM ingestion_notice_channels nc JOIN ingestion_channels c ON c.source_id=nc.source_id AND c.id=nc.channel_id JOIN ingestion_sources s ON s.id=c.source_id WHERE nc.notice_id=n.id AND c.enabled AND s.enabled)`,
+        )
+      ).rows[0].count;
       const complete =
+        !pendingAttachments &&
         !incomplete &&
         channels.every((c) =>
           ["checked", "backoff"].includes(
@@ -358,10 +407,11 @@ export class ChannelRoundRunner {
         [round.id, complete ? "succeeded" : "partial", complete, this.now()],
       );
       // 后续轮完成旧任务时补记旧轮真实完成时刻，保留是否逾期的证据。
-      await lock.query(
-        `UPDATE ingestion_rounds r SET status='succeeded',finished_at=$1,fresh_check_status=COALESCE((SELECT jsonb_object_agg(f.key,CASE WHEN EXISTS(SELECT 1 FROM ingestion_scan_tasks t WHERE t.id=f.value->>'taskId' AND t.status='succeeded') THEN f.value || '{"status":"checked"}'::jsonb ELSE f.value END) FROM jsonb_each(r.fresh_check_status) f),'{}'::jsonb) WHERE r.id<>$2 AND r.finished_at IS NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(r.budget_usage->'taskIds','[]')) j JOIN ingestion_scan_tasks t ON t.id=j#>>'{}' WHERE t.status NOT IN ('succeeded','superseded')) AND NOT EXISTS(SELECT 1 FROM jsonb_each(r.fresh_check_status) f WHERE f.value->>'status' NOT IN ('checked','backoff') AND NOT EXISTS(SELECT 1 FROM ingestion_scan_tasks t WHERE t.id=f.value->>'taskId' AND t.status='succeeded'))`,
-        [this.now(), round.id],
-      );
+      if (!pendingAttachments)
+        await lock.query(
+          `UPDATE ingestion_rounds r SET status='succeeded',finished_at=$1,fresh_check_status=COALESCE((SELECT jsonb_object_agg(f.key,CASE WHEN EXISTS(SELECT 1 FROM ingestion_scan_tasks t WHERE t.id=f.value->>'taskId' AND t.status='succeeded') THEN f.value || '{"status":"checked"}'::jsonb ELSE f.value END) FROM jsonb_each(r.fresh_check_status) f),'{}'::jsonb) WHERE r.id<>$2 AND r.finished_at IS NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(r.budget_usage->'taskIds','[]')) j JOIN ingestion_scan_tasks t ON t.id=j#>>'{}' WHERE t.status NOT IN ('succeeded','superseded')) AND NOT EXISTS(SELECT 1 FROM jsonb_each(r.fresh_check_status) f WHERE f.value->>'status' NOT IN ('checked','backoff') AND NOT EXISTS(SELECT 1 FROM ingestion_scan_tasks t WHERE t.id=f.value->>'taskId' AND t.status='succeeded'))`,
+          [this.now(), round.id],
+        );
       return {
         status: complete ? "succeeded" : "partial",
         roundId: round.id,

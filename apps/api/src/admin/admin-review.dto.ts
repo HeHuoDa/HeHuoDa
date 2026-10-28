@@ -102,7 +102,8 @@ export class AdminReviewCommandDto {
 export class AdminReviewMaterialCommandDto extends AdminReviewCommandDto {
   @ApiProperty({
     type: AdminReviewFileDto,
-    description: "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+    description:
+      "服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致",
   })
   @IsObject()
   review!: Record<string, unknown>;

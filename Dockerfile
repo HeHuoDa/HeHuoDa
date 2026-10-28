@@ -23,7 +23,13 @@ RUN --mount=type=cache,id=hehuoda-pnpm,target=/root/.local/share/pnpm/store,shar
     && pnpm --filter @hehuoda/api exec tsc -p tsconfig.openapi.json \
     && pnpm --config.inject-workspace-packages=true --filter @hehuoda/api deploy --prod --offline --frozen-lockfile /runtime
 
+FROM node:24.15.0-bookworm-slim AS attachment-sandbox-build
+RUN apt-get update && apt-get install --no-install-recommends -y gcc libc6-dev linux-libc-dev
+COPY apps/api/native/attachment-sandbox.c /tmp/attachment-sandbox.c
+RUN gcc -O2 -Wall -Wextra -Werror /tmp/attachment-sandbox.c -o /tmp/attachment-sandbox
+
 FROM node:24.15.0-bookworm-slim AS api
+COPY --from=attachment-sandbox-build /tmp/attachment-sandbox /usr/local/bin/attachment-sandbox
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 SWAGGER_ENABLED=false
 WORKDIR /app
 COPY --from=api-build --chown=node:node /runtime/node_modules ./node_modules

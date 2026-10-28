@@ -37,6 +37,8 @@ export interface Source {
   version: string;
   defaultChannelId: string;
   channels: readonly Channel[];
+  /** 经代码审阅的同源附件下载路径；未配置的来源禁止下载附件。 */
+  attachmentPaths?: readonly string[];
   /** 仅保留迁移前已支持的默认栏目启用语义；新来源不得沿用此标记。 */
   legacyDefaultEnabled?: boolean;
 }
@@ -48,6 +50,7 @@ export const sources: Source[] = [
     collegeId: "information-engineering",
     publisher: "信息工程学院",
     host: "xxgc.sicau.edu.cn",
+    attachmentPaths: ["^/system/_content/download\\.jsp$"],
     listUrl: "https://xxgc.sicau.edu.cn/xygl/tz.htm",
     version: "1",
     defaultChannelId: "default",
@@ -79,6 +82,7 @@ export const sources: Source[] = [
     collegeId: "life-science",
     publisher: "生命科学学院",
     host: "smkx.sicau.edu.cn",
+    attachmentPaths: ["^/system/_content/download\\.jsp$"],
     listUrl: "https://smkx.sicau.edu.cn/xwjtz/tzgg.htm",
     version: "1",
     defaultChannelId: "default",

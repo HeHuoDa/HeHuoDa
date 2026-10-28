@@ -50,10 +50,12 @@ function reviewException(error: unknown): never {
   if (error instanceof ImportValidationError)
     throw new UnprocessableEntityException();
   const message = error instanceof Error ? error.message : "";
+  if (message.includes("旧格式审核材料"))
+    throw new ConflictException("旧格式审核材料已失效，请重新导出 format=2");
   if (message.includes("候选不存在") || message.includes("通知不存在"))
     throw new NotFoundException();
   if (
-    /过期|已拒绝|已导入|已批准|须先|只有|不存在映射|冲突|变化|占用/.test(
+    /过期|失效|已拒绝|已导入|已批准|须先|只有|不存在映射|冲突|变化|占用/.test(
       message,
     )
   )
@@ -142,6 +144,7 @@ export class AdminReviewService {
     return transaction(this.pool(), async (client) => {
       const review = await exportReview(client, candidateId);
       const row = await this.candidateRow(client, candidateId);
+      const attachmentState = await this.attachmentState(client, row.noticeId);
       const targetId = review.targetId;
       const catalog = await readCatalog(client);
       return {
@@ -169,6 +172,7 @@ export class AdminReviewService {
           catalog.competitions.find((item) => item.id === targetId) ?? null,
         baseline: this.stateBaseline(row),
         formalBaseline: review.baseline,
+        ...attachmentState,
         updatedAt: row.updatedAt.toISOString(),
       };
     });
@@ -219,11 +223,12 @@ export class AdminReviewService {
   async noticeDetail(noticeId: string) {
     return transaction(this.pool(), async (client) => {
       const result = await client.query(
-        `SELECT n.id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",n.latest_version AS "latestVersion",n.health,n.fetched_at AS "fetchedAt",s.data AS source,v.revision,v.article,c.id AS "candidateId",c.status AS "candidateStatus",m.competition_id AS "competitionId" FROM ingestion_notices n JOIN ingestion_sources s ON s.id=n.source_id LEFT JOIN ingestion_versions v ON v.id=n.latest_version LEFT JOIN ingestion_candidates c ON c.notice_id=n.id LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id WHERE n.id=$1`,
+        `SELECT n.id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",n.latest_version AS "latestVersion",n.health,n.fetched_at AS "fetchedAt",n.evidence_revision AS "evidenceRevision",n.evidence_state AS "evidenceState",s.data AS source,v.revision,v.article,c.id AS "candidateId",c.status AS "candidateStatus",m.competition_id AS "competitionId" FROM ingestion_notices n JOIN ingestion_sources s ON s.id=n.source_id LEFT JOIN ingestion_versions v ON v.id=n.latest_version LEFT JOIN ingestion_candidates c ON c.notice_id=n.id LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id WHERE n.id=$1`,
         [noticeId],
       );
       const row = result.rows[0];
       if (!row) throw new NotFoundException();
+      const attachmentState = await this.attachmentState(client, noticeId);
       return {
         noticeId: row.noticeId,
         sourceId: row.sourceId,
@@ -243,8 +248,41 @@ export class AdminReviewService {
               competitionId: row.competitionId,
             }
           : null,
+        ...attachmentState,
       };
     });
+  }
+
+  private async attachmentState(client: PoolClient, noticeId: string) {
+    const result = await client.query(
+      `SELECT a.id AS "attachmentId",a.canonical_url AS url,a.state,
+        v.id AS "versionId",v.revision,v.sha256,v.media_type AS "mediaType",
+        v.status AS "extractionStatus",COALESCE(a.error_code,v.error_code) AS "errorCode"
+       FROM ingestion_notices n LEFT JOIN ingestion_attachments a ON a.notice_id=n.id
+       LEFT JOIN ingestion_attachment_versions v ON v.id=a.latest_version
+       WHERE n.id=$1 ORDER BY a.canonical_url,a.id`,
+      [noticeId],
+    );
+    const notice = await client.query<{
+      evidenceRevision: number;
+      evidenceState: string;
+    }>(
+      'SELECT evidence_revision AS "evidenceRevision",evidence_state AS "evidenceState" FROM ingestion_notices WHERE id=$1',
+      [noticeId],
+    );
+    const row = notice.rows[0];
+    const items = result.rows.filter((entry) => entry.attachmentId);
+    return {
+      evidenceRevision: row?.evidenceRevision ?? 0,
+      evidenceState: row?.evidenceState ?? "current",
+      attachmentSummary: items,
+      attachmentVersions: items.filter((entry) => entry.versionId),
+      requiresReview:
+        row?.evidenceState !== "current" ||
+        items.some((entry) =>
+          ["stale", "blocked", "needs-review"].includes(entry.state),
+        ),
+    };
   }
 
   async noticeVersions(noticeId: string, query: AdminReviewPageQueryDto) {

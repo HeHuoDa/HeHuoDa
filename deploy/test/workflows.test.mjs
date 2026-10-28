@@ -124,6 +124,38 @@ test("main CI archives the verified images without publishing to a registry", ()
   }
 });
 
+test("API image smoke exercises the packaged, fail-closed attachment sandbox", () => {
+  const smoke = readFileSync(new URL("../smoke.mjs", import.meta.url), "utf8");
+  assert.match(smoke, /INGESTION_ENABLED:\s*"false"/);
+  assert.match(smoke, /parseAttachmentIsolated/);
+  for (const marker of [
+    "isolated-Chinese-PDF-ok",
+    "isolated-Chinese-DOCX-ok",
+    "parse-timeout",
+    "file=",
+    "network=EPERM",
+    "Landlock ABI 3",
+  ])
+    assert.ok(smoke.includes(marker), `image smoke must cover ${marker}`);
+
+  const sectionStart = smoke.indexOf("// Run the real packaged parser");
+  const sectionEnd = smoke.indexOf("const fixture =", sectionStart);
+  assert.ok(sectionStart >= 0 && sectionEnd > sectionStart);
+  const section = smoke.slice(sectionStart, sectionEnd);
+  const templateStart = section.indexOf("`");
+  const templateEnd = section.lastIndexOf("`");
+  assert.ok(templateStart >= 0 && templateEnd > templateStart);
+  const inlineScript = runInNewContext(
+    section.slice(templateStart, templateEnd + 1),
+  );
+  const syntax = spawnSync(
+    process.execPath,
+    ["--check", "--input-type=module"],
+    { encoding: "utf8", input: inlineScript },
+  );
+  assert.equal(syntax.status, 0, syntax.stderr);
+});
+
 test("the deployable archive is attempt-scoped, self-describing and retained for seven days", () => {
   const smoke = workflow("ci").jobs["image-smoke"];
   const upload = smoke.steps.find(

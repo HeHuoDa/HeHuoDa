@@ -1,4 +1,10 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiExtraModels,
+  getSchemaPath,
+} from "@nestjs/swagger";
+import { AttachmentExecutionResultDto } from "./attachment-response.dto.js";
 import { Type } from "class-transformer";
 import {
   AdminArticleDto,
@@ -403,13 +409,40 @@ export class IngestionAcceptedDto {
   @ApiProperty({ format: "uuid" }) requestId!: string;
   @ApiProperty({ enum: ["accepted"] }) status!: string;
 }
+export class AttachmentCommandDto extends IngestionCommandDto {
+  @ApiProperty({ minimum: 0, description: "当前通知 evidenceRevision" })
+  @IsInt()
+  @Min(0)
+  baseline!: number;
+}
+export class AttachmentReparseCommandDto extends AttachmentCommandDto {
+  @ApiProperty({ format: "uuid", description: "已有附件内容版本 ID" })
+  @IsUUID()
+  versionId!: string;
+}
+export class AttachmentRequestDto {
+  @ApiProperty({ format: "uuid" }) requestId!: string;
+  @ApiProperty({ format: "uuid" }) attachmentId!: string;
+  @ApiProperty({ type: String, nullable: true, format: "uuid" }) versionId!:
+    string | null;
+  @ApiProperty({ enum: ["recheck", "reparse"] }) operation!: string;
+  @ApiProperty({ enum: ["accepted", "running", "completed", "failed"] })
+  status!: string;
+  @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
+  result!: Record<string, unknown> | null;
+  @ApiProperty({ type: String, nullable: true }) errorCode!: string | null;
+  @ApiProperty({ format: "date-time" }) createdAt!: string;
+  @ApiProperty({ type: String, nullable: true, format: "date-time" })
+  finishedAt!: string | null;
+}
+@ApiExtraModels(AttachmentExecutionResultDto, IngestionExecutionResultDto)
 export class IngestionRequestDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: IngestionRunOptionsDto,
     description: "原始受理范围与预览参数；中断后显式重试沿用",
   })
-  options!: IngestionRunOptionsDto;
-  @ApiProperty() channelId!: string;
+  options?: IngestionRunOptionsDto;
+  @ApiProperty({ type: String, nullable: true }) channelId!: string | null;
   @ApiProperty({ type: String, nullable: true }) phase!: string | null;
   @ApiProperty({ type: String, nullable: true }) taskId!: string | null;
   @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
@@ -417,18 +450,27 @@ export class IngestionRequestDto {
   @ApiProperty({ type: "object", nullable: true, additionalProperties: true })
   budgetUsage!: Record<string, unknown> | null;
   @ApiProperty({ format: "uuid" }) requestId!: string;
-  @ApiProperty() sourceId!: string;
+  @ApiPropertyOptional() sourceId?: string;
+  @ApiPropertyOptional({ format: "uuid" }) attachmentId?: string;
+  @ApiPropertyOptional({ type: String, nullable: true, format: "uuid" })
+  versionId?: string | null;
+  @ApiPropertyOptional({ enum: ["recheck", "reparse"] }) operation?: string;
   @ApiProperty({
     enum: ["accepted", "running", "completed", "failed", "interrupted"],
   })
   status!: string;
   @ApiProperty({ type: String, nullable: true }) runId!: string | null;
   @ApiProperty({
-    type: IngestionExecutionResultDto,
+    oneOf: [
+      { $ref: getSchemaPath(IngestionExecutionResultDto) },
+      { $ref: getSchemaPath(AttachmentExecutionResultDto) },
+    ],
     nullable: true,
     description: "执行结果；status 为采集运行结果，与本对象受理状态分别表达",
   })
-  result!: IngestionExecutionResultDto | null;
+  result!: IngestionExecutionResultDto | AttachmentExecutionResultDto | null;
+  @ApiPropertyOptional({ type: String, nullable: true }) errorCode?:
+    string | null;
   @ApiProperty({ type: String, nullable: true }) error!: string | null;
   @ApiProperty({ format: "date-time" }) createdAt!: string;
   @ApiProperty({ type: String, nullable: true, format: "date-time" })
