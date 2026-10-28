@@ -3,6 +3,7 @@ import {
   ApiPropertyOptional,
   getSchemaPath,
 } from "@nestjs/swagger";
+import { EvidenceReferenceDto } from "../ingestion/attachment-response.dto.js";
 
 export class AdminCandidateMappingDto {
   @ApiProperty() competitionId!: string;
@@ -277,6 +278,8 @@ export class AdminReviewFileDto {
   @ApiProperty({ enum: [1, 2] }) format!: 1 | 2;
   @ApiPropertyOptional({ minimum: 1 }) evidenceRevision?: number;
   @ApiPropertyOptional({ type: [Object] }) evidence?: Record<string, unknown>[];
+  @ApiPropertyOptional({ type: [EvidenceReferenceDto] })
+  evidenceReferences?: EvidenceReferenceDto[];
   @ApiProperty({ format: "uuid" }) operationId!: string;
   @ApiProperty({ format: "uuid" }) candidateId!: string;
   @ApiProperty({ format: "uuid" }) sourceVersion!: string;

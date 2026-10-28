@@ -1477,6 +1477,15 @@ export interface components {
             /** @enum {string} */
             status: "accepted";
         };
+        AttachmentExecutionResultDto: {
+            attachmentId: string;
+            versionId?: string;
+            evidenceRevision?: number;
+            historical?: boolean;
+            usage?: {
+                [key: string]: unknown;
+            };
+        };
         AdminArticleAttachmentDto: {
             title: string;
             /** Format: uri */
@@ -1573,7 +1582,7 @@ export interface components {
         IngestionRequestDto: {
             /** @description 原始受理范围与预览参数；中断后显式重试沿用 */
             options?: components["schemas"]["IngestionRunOptionsDto"];
-            channelId: string;
+            channelId: string | null;
             phase: string | null;
             taskId: string | null;
             taskProgress: {
@@ -1595,7 +1604,8 @@ export interface components {
             status: "accepted" | "running" | "completed" | "failed" | "interrupted";
             runId: string | null;
             /** @description 执行结果；status 为采集运行结果，与本对象受理状态分别表达 */
-            result: components["schemas"]["IngestionExecutionResultDto"] | null;
+            result: (components["schemas"]["IngestionExecutionResultDto"] | components["schemas"]["AttachmentExecutionResultDto"]) | null;
+            errorCode?: string | null;
             error: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -1740,6 +1750,17 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        EvidenceReferenceDto: {
+            /** @enum {string} */
+            format: "html" | "pdf" | "docx";
+            url: string;
+            noticeVersion: string;
+            attachmentVersion: string | null;
+            page?: number;
+            paragraph?: number;
+            field: string;
+            excerpt: string;
+        };
         AdminMergeSuggestionDto: {
             id: string;
             name: string;
@@ -1816,6 +1837,7 @@ export interface components {
             format: 1 | 2;
             evidenceRevision?: number;
             evidence?: Record<string, never>[];
+            evidenceReferences?: components["schemas"]["EvidenceReferenceDto"][];
             /** Format: uuid */
             operationId: string;
             /** Format: uuid */
@@ -1840,7 +1862,7 @@ export interface components {
             /** Format: uuid */
             operationId: string;
             reason: string;
-            /** @description 服务端导出的 format=1 审核材料；只读字段须与服务器一致 */
+            /** @description 服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致 */
             review: components["schemas"]["AdminReviewFileDto"];
         };
         AdminReviewSavedResultDto: {
@@ -1894,7 +1916,7 @@ export interface components {
             /** Format: uuid */
             operationId: string;
             reason: string;
-            /** @description 服务端导出的 format=1 审核材料；只读字段须与服务器一致 */
+            /** @description 服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致 */
             review: components["schemas"]["AdminReviewFileDto"];
             /**
              * Format: uuid
@@ -2087,7 +2109,8 @@ export interface components {
             versionId: string;
             previousVersion: string | null;
             revision: number;
-            sha256: string;
+            sha256: string | null;
+            noticeVersion: string;
             /** Format: date-time */
             fetchedAt: string;
             mediaType: string;
@@ -2113,7 +2136,8 @@ export interface components {
             versionId: string;
             previousVersion: string | null;
             revision: number;
-            sha256: string;
+            sha256: string | null;
+            noticeVersion: string;
             /** Format: date-time */
             fetchedAt: string;
             mediaType: string;

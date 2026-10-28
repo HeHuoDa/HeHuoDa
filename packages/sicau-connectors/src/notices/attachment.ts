@@ -39,7 +39,7 @@ export class AttachmentParseError extends Error {
 }
 
 const forbiddenListWords =
-  /报名(?:者|人员|学生)?(?:信息|名单|汇总)|参赛(?:者|人员|学生)?名单|获奖名单|晋级名单|入围名单|身份证号|联系方式/;
+  /报名(?:者|人员|学生)?(?:信息|名单|清单|汇总)|参赛(?:者|人员|学生)?(?:名单|清单|明细)|个人资料|学生明细|人员明细|获奖名单|晋级名单|入围名单|身份证号|联系方式/;
 export type AttachmentEligibility = "eligible" | "blocked" | "manual";
 export function attachmentEligibility(
   title: string,
@@ -72,7 +72,7 @@ function containsApplicantContent(text: string): boolean {
     )
       identityRows++;
   }
-  return identityRows >= 2;
+  return identityRows >= 1;
 }
 
 const docxMediaType =
@@ -161,6 +161,17 @@ function inspectDocxArchive(bytes: Buffer, limits: AttachmentParseLimits) {
         });
         archive.on("entry", (entry: Entry) => {
           members++;
+          if (
+            /^word\/(?:header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/i.test(
+              entry.fileName,
+            )
+          )
+            return fail(
+              new AttachmentParseError(
+                "unsupported-docx-parts",
+                "DOCX含未覆盖的页眉、页脚或附注，需人工核对",
+              ),
+            );
           if (members > limits.maxArchiveMembers)
             return fail(
               new AttachmentParseError(
@@ -234,6 +245,21 @@ function inspectDocxArchive(bytes: Buffer, limits: AttachmentParseLimits) {
   });
 }
 
+/** pdfjs 抛出的库异常没有稳定错误码，统一映射为可持久化的安全原因。 */
+function pdfParseError(error: unknown): AttachmentParseError {
+  if (error instanceof AttachmentParseError) return error;
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : "";
+  if (name === "PasswordException" || /password/i.test(message))
+    return new AttachmentParseError("encrypted-pdf", "加密PDF需人工核对");
+  if (
+    name === "InvalidPDFException" ||
+    /invalid pdf|invalid pdf structure/i.test(message)
+  )
+    return new AttachmentParseError("invalid-pdf", "PDF损坏或格式无效");
+  return new AttachmentParseError("parse-failed", "PDF解析失败，需人工核对");
+}
+
 async function parsePdf(
   bytes: Uint8Array,
   limits: AttachmentParseLimits,
@@ -270,6 +296,11 @@ async function parsePdf(
         .filter(Boolean)
         .join(" ")
         .trim();
+      if (!text)
+        throw new AttachmentParseError(
+          "no-text-layer",
+          "PDF页无可提取文字，可能为扫描件，需人工核对",
+        );
       textBytes += Buffer.byteLength(text);
       if (textBytes > limits.maxTextBytes)
         throw new AttachmentParseError("text-size-limit", "PDF提取文本超限");
@@ -281,8 +312,10 @@ async function parsePdf(
         "PDF无可提取文字，可能为扫描件",
       );
     return segments;
+  } catch (error) {
+    throw pdfParseError(error);
   } finally {
-    await task.destroy();
+    await task.destroy().catch(() => undefined);
   }
 }
 
@@ -293,6 +326,11 @@ async function parseDocx(
   const buffer = Buffer.from(bytes);
   await inspectDocxArchive(buffer, limits);
   const result = await mammoth.extractRawText({ buffer });
+  if (result.messages.length)
+    throw new AttachmentParseError(
+      "incomplete-docx",
+      "DOCX含未覆盖内容，需人工核对",
+    );
   if (Buffer.byteLength(result.value) > limits.maxTextBytes)
     throw new AttachmentParseError("text-size-limit", "DOCX提取文本超限");
   const paragraphs = result.value

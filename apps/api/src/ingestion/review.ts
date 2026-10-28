@@ -12,12 +12,15 @@ import { commandHash, hash, transaction, type CandidateRow } from "./store.js";
 import {
   assertEvidenceBaseline,
   readCurrentEvidence,
+  readAttachmentEvidenceReferences,
+  type EvidenceReference,
 } from "./attachment-store.js";
 
 import type { ParsedCandidate } from "./types.js";
 
 export interface ReviewFile {
   format: 1 | 2;
+  evidenceReferences?: EvidenceReference[];
   evidenceRevision?: number;
   evidence?: {
     attachmentId: string;
@@ -184,6 +187,18 @@ export async function exportReview(
       : null;
     const review: ReviewFile = {
       format: 2,
+      evidenceReferences: [
+        ...candidate.data.evidence.map((entry) => ({
+          format: "html" as const,
+          url: entry.url,
+          noticeVersion: candidate.source_version,
+          attachmentVersion: null,
+          paragraph: entry.paragraph,
+          field: entry.field,
+          excerpt: entry.excerpt,
+        })),
+        ...(await readAttachmentEvidenceReferences(client, notice.id)),
+      ],
       evidenceRevision: Number(evidence.evidence_revision),
       evidence: evidence.attachments,
       operationId: randomUUID(),
@@ -273,7 +288,12 @@ function validateReview(value: unknown): ReviewFile {
     Object.keys(value).some(
       (key) =>
         !keys.includes(key) &&
-        !["mappingBaseline", "evidenceRevision", "evidence"].includes(key),
+        ![
+          "mappingBaseline",
+          "evidenceRevision",
+          "evidence",
+          "evidenceReferences",
+        ].includes(key),
     )
   )
     throw new Error("审核文件包含未定义字段");
@@ -333,6 +353,8 @@ function validateReview(value: unknown): ReviewFile {
       ))
   )
     throw new Error("审核材料附件证据基线无效");
+  if (file.format === 2 && !Array.isArray(file.evidenceReferences))
+    throw new Error("审核材料缺少定位证据，请重新导出");
   if (
     batch.colleges ||
     batch.competitions?.length !== 1 ||
@@ -416,6 +438,25 @@ async function checkBaseline(client: PoolClient, file: ReviewFile) {
       commandHash(file.evidence)
     )
       throw new Error("审核附件证据集合已变化，请重新导出审核");
+    const expectedReferences: EvidenceReference[] = [
+      ...candidate.data.evidence.map(
+        (entry) =>
+          ({
+            format: "html",
+            url: entry.url,
+            noticeVersion: candidate.source_version,
+            attachmentVersion: null,
+            paragraph: entry.paragraph,
+            field: entry.field,
+            excerpt: entry.excerpt,
+          }) as EvidenceReference,
+      ),
+      ...(await readAttachmentEvidenceReferences(client, notice.id)),
+    ];
+    if (
+      commandHash(expectedReferences) !== commandHash(file.evidenceReferences)
+    )
+      throw new Error("审核定位证据已变化，请重新导出审核");
   }
   if (file.mappingBaseline !== undefined) {
     const mapping = (

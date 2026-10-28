@@ -384,7 +384,10 @@ export const ingestionAttachmentVersions = pgTable(
       .references(() => ingestionAttachments.id),
     previousVersion: uuid("previous_version"),
     revision: integer().notNull(),
-    sha256: text().notNull(),
+    sha256: text(),
+    noticeVersion: text("notice_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
     mediaType: text("media_type").notNull(),
     extractorVersion: text("extractor_version").notNull(),

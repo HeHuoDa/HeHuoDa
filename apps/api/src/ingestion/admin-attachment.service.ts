@@ -65,7 +65,7 @@ export class AdminAttachmentService implements BeforeApplicationShutdown {
         [attachmentId],
       ),
       this.database.pool.query(
-        `SELECT id AS "versionId",previous_version AS "previousVersion",revision,sha256,fetched_at AS "fetchedAt",
+        `SELECT id AS "versionId",previous_version AS "previousVersion",revision,sha256,notice_version AS "noticeVersion",fetched_at AS "fetchedAt",
           media_type AS "mediaType",extractor_version AS "extractorVersion",status,error_code AS "errorCode"
          FROM ingestion_attachment_versions WHERE attachment_id=$1 ORDER BY revision DESC,id
          LIMIT $2 OFFSET $3`,
@@ -90,7 +90,7 @@ export class AdminAttachmentService implements BeforeApplicationShutdown {
   ) {
     const offset = (query.page - 1) * query.pageSize;
     const result = await this.database.pool.query(
-      `SELECT v.id AS "versionId",v.previous_version AS "previousVersion",v.revision,v.sha256,v.fetched_at AS "fetchedAt",
+      `SELECT v.id AS "versionId",v.previous_version AS "previousVersion",v.revision,v.sha256,v.notice_version AS "noticeVersion",v.fetched_at AS "fetchedAt",
         v.media_type AS "mediaType",v.extractor_version AS "extractorVersion",v.status,v.error_code AS "errorCode",
         jsonb_array_length(v.segments) AS "totalSegments",
         COALESCE((SELECT jsonb_agg(x.segment ORDER BY x.position) FROM (
@@ -114,6 +114,7 @@ export class AdminAttachmentService implements BeforeApplicationShutdown {
       previousVersion: row.previousVersion,
       revision: row.revision,
       sha256: row.sha256,
+      noticeVersion: row.noticeVersion,
       fetchedAt: row.fetchedAt.toISOString(),
       mediaType: row.mediaType,
       extractorVersion: row.extractorVersion,
@@ -176,10 +177,6 @@ export class AdminAttachmentService implements BeforeApplicationShutdown {
           if (row.evidence_revision !== command.baseline)
             throw new ConflictException("附件证据基线已变化");
           if (operation === "reparse") {
-            if (row.latest_version !== versionId)
-              throw new ConflictException(
-                "仅可重解析当前附件版本，需重新获取或查看历史证据",
-              );
             const existing = await client.query(
               "SELECT id,body FROM ingestion_attachment_versions WHERE id=$1 AND attachment_id=$2 FOR UPDATE",
               [versionId, attachmentId],

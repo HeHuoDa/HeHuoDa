@@ -16,8 +16,16 @@ export interface IsolatedAttachmentResult {
 export function parseAttachmentIsolated(
   bytes: Uint8Array,
   mediaType: AttachmentMediaType,
-  options: { timeoutMs?: number; workerPath?: string } = {},
+  options: {
+    timeoutMs?: number;
+    workerPath?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<IsolatedAttachmentResult> {
+  if (options.signal?.aborted)
+    return Promise.reject(
+      new AttachmentParseError("parse-cancelled", "附件解析已停止"),
+    );
   const timeoutMs = options.timeoutMs ?? 30_000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30_000)
     return Promise.reject(
@@ -70,6 +78,7 @@ export function parseAttachmentIsolated(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
       if (error) reject(error);
       else resolve(result!);
     };
@@ -80,6 +89,15 @@ export function parseAttachmentIsolated(
       );
       child.kill("SIGKILL");
     }, timeoutMs);
+    const onAbort = () => {
+      terminationError = new AttachmentParseError(
+        "parse-cancelled",
+        "附件解析已停止",
+      );
+      child.kill("SIGKILL");
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
     child.on("error", () =>
       finish(
         new AttachmentParseError(
@@ -88,14 +106,13 @@ export function parseAttachmentIsolated(
         ),
       ),
     );
-    child.stdin.on("error", () =>
-      finish(
-        new AttachmentParseError(
-          "parser-input-failed",
-          "隔离解析子进程未接收输入",
-        ),
-      ),
-    );
+    child.stdin.on("error", () => {
+      terminationError = new AttachmentParseError(
+        "parser-input-failed",
+        "隔离解析子进程未接收输入",
+      );
+      child.kill("SIGKILL");
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       outputBytes += chunk.byteLength;
       if (outputBytes > 1024 * 1024) {

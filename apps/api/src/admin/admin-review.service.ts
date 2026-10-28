@@ -50,10 +50,12 @@ function reviewException(error: unknown): never {
   if (error instanceof ImportValidationError)
     throw new UnprocessableEntityException();
   const message = error instanceof Error ? error.message : "";
+  if (message.includes("旧格式审核材料"))
+    throw new ConflictException("旧格式审核材料已失效，请重新导出 format=2");
   if (message.includes("候选不存在") || message.includes("通知不存在"))
     throw new NotFoundException();
   if (
-    /过期|已拒绝|已导入|已批准|须先|只有|不存在映射|冲突|变化|占用/.test(
+    /过期|失效|已拒绝|已导入|已批准|须先|只有|不存在映射|冲突|变化|占用/.test(
       message,
     )
   )

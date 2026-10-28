@@ -7519,6 +7519,30 @@
           "status"
         ]
       },
+      "AttachmentExecutionResultDto": {
+        "type": "object",
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string"
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "historical": {
+            "type": "boolean"
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "attachmentId"
+        ]
+      },
       "AdminArticleAttachmentDto": {
         "type": "object",
         "properties": {
@@ -7916,7 +7940,8 @@
             ]
           },
           "channelId": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "phase": {
             "type": "string",
@@ -7974,14 +7999,20 @@
             "nullable": true
           },
           "result": {
-            "nullable": true,
-            "description": "执行结果；status 为采集运行结果，与本对象受理状态分别表达",
-            "type": "object",
-            "allOf": [
+            "oneOf": [
               {
                 "$ref": "#/components/schemas/IngestionExecutionResultDto"
+              },
+              {
+                "$ref": "#/components/schemas/AttachmentExecutionResultDto"
               }
-            ]
+            ],
+            "nullable": true,
+            "description": "执行结果；status 为采集运行结果，与本对象受理状态分别表达"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
           },
           "error": {
             "type": "string",
@@ -8545,6 +8576,49 @@
           "updatedAt"
         ]
       },
+      "EvidenceReferenceDto": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "html",
+              "pdf",
+              "docx"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "attachmentVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "number"
+          },
+          "paragraph": {
+            "type": "number"
+          },
+          "field": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "url",
+          "noticeVersion",
+          "attachmentVersion",
+          "field",
+          "excerpt"
+        ]
+      },
       "AdminMergeSuggestionDto": {
         "type": "object",
         "properties": {
@@ -8827,6 +8901,12 @@
               "type": "object"
             }
           },
+          "evidenceReferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceReferenceDto"
+            }
+          },
           "operationId": {
             "type": "string",
             "format": "uuid"
@@ -8928,7 +9008,7 @@
             "maxLength": 2000
           },
           "review": {
-            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "description": "服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致",
             "allOf": [
               {
                 "$ref": "#/components/schemas/AdminReviewFileDto"
@@ -9138,7 +9218,7 @@
             "maxLength": 2000
           },
           "review": {
-            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "description": "服务端导出的 format=2 审核材料；未激活附件证据时兼容旧format=1，只读字段须与服务器一致",
             "allOf": [
               {
                 "$ref": "#/components/schemas/AdminReviewFileDto"
@@ -9882,6 +9962,10 @@
             "type": "number"
           },
           "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "noticeVersion": {
             "type": "string"
           },
           "fetchedAt": {
@@ -9907,6 +9991,7 @@
           "previousVersion",
           "revision",
           "sha256",
+          "noticeVersion",
           "fetchedAt",
           "mediaType",
           "extractorVersion",
@@ -9983,6 +10068,10 @@
             "type": "number"
           },
           "sha256": {
+            "type": "string",
+            "nullable": true
+          },
+          "noticeVersion": {
             "type": "string"
           },
           "fetchedAt": {
@@ -10023,6 +10112,7 @@
           "previousVersion",
           "revision",
           "sha256",
+          "noticeVersion",
           "fetchedAt",
           "mediaType",
           "extractorVersion",

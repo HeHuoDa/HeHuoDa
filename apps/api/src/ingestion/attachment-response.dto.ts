@@ -1,4 +1,16 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+export class EvidenceReferenceDto {
+  @ApiProperty({ enum: ["html", "pdf", "docx"] }) format!: string;
+  @ApiProperty() url!: string;
+  @ApiProperty() noticeVersion!: string;
+  @ApiProperty({ type: String, nullable: true }) attachmentVersion!:
+    string | null;
+  @ApiPropertyOptional() page?: number;
+  @ApiPropertyOptional() paragraph?: number;
+  @ApiProperty() field!: string;
+  @ApiProperty() excerpt!: string;
+}
 
 export class AttachmentSegmentDto {
   @ApiProperty({ enum: ["page", "paragraph"] }) kind!: string;
@@ -11,12 +23,21 @@ export class AttachmentVersionDto {
   @ApiProperty({ type: String, nullable: true }) previousVersion!:
     string | null;
   @ApiProperty() revision!: number;
-  @ApiProperty() sha256!: string;
+  @ApiProperty({ type: String, nullable: true }) sha256!: string | null;
+  @ApiProperty() noticeVersion!: string;
   @ApiProperty({ format: "date-time" }) fetchedAt!: string;
   @ApiProperty() mediaType!: string;
   @ApiProperty() extractorVersion!: string;
   @ApiProperty() status!: string;
   @ApiProperty({ type: String, nullable: true }) errorCode!: string | null;
+}
+export class AttachmentExecutionResultDto {
+  @ApiProperty() attachmentId!: string;
+  @ApiPropertyOptional() versionId?: string;
+  @ApiPropertyOptional() evidenceRevision?: number;
+  @ApiPropertyOptional() historical?: boolean;
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
+  usage?: Record<string, unknown>;
 }
 export class AttachmentVersionsDto {
   @ApiProperty({ type: [AttachmentVersionDto] }) items!: AttachmentVersionDto[];

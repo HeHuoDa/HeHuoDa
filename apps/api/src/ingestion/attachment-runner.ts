@@ -16,8 +16,17 @@ import {
   persistAttachment,
   readAttachmentPlan,
   markAttachmentNeedsReview,
-  readAttachmentBytesForReparse,
+  readAttachmentVersionForReparse,
+  persistAttachmentReparseRevision,
+  canonicalAttachmentUrl,
 } from "./attachment-store.js";
+import type { IsolatedAttachmentResult } from "./attachment-parser.js";
+
+type AttachmentParser = (
+  bytes: Uint8Array,
+  mediaType: AttachmentMediaType,
+  options?: { signal?: AbortSignal },
+) => Promise<IsolatedAttachmentResult>;
 
 /** Called only while the scanner owns the global network lock and shared fetcher. */
 export async function checkNoticeAttachments(
@@ -37,7 +46,14 @@ export async function checkNoticeAttachments(
   if (!row) throw new Error("附件来源通知不存在");
   const article = row.article as Article;
   const known = await readAttachmentPlan(pool, { noticeId, limit: 1000 });
-  const links = new Map(article.attachments.map((a) => [a.url, a.title]));
+  const links = new Map<string, string>();
+  for (const attachment of article.attachments) {
+    const url = canonicalAttachmentUrl(attachment.url);
+    links.set(
+      url,
+      [links.get(url), attachment.title].filter(Boolean).join("\n"),
+    );
+  }
   for (const a of known)
     if (!links.has(a.url)) links.set(a.url, "赛事规则附件");
   for (const [url, title] of links) {
@@ -55,6 +71,7 @@ export async function checkNoticeAttachments(
           eligibility === "blocked"
             ? "applicant-list"
             : "manual-classification",
+          eligibility === "blocked" ? "blocked" : "needs-review",
         );
       else
         await persistAttachment(pool, {
@@ -148,7 +165,10 @@ export async function checkNoticeAttachments(
 }
 
 export class AttachmentRunner {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly parse: AttachmentParser = parseAttachmentIsolated,
+  ) {}
   private async locked<T>(
     id: string,
     expected: number | undefined,
@@ -157,6 +177,8 @@ export class AttachmentRunner {
       source_id: string;
       canonical_url: string;
       latest_version: string;
+      notice_version: string;
+      evidence_revision: number;
     }) => Promise<T>,
   ) {
     const client = await this.pool.connect();
@@ -168,7 +190,7 @@ export class AttachmentRunner {
         throw new Error("附件运行冲突");
       const row = (
         await client.query(
-          "SELECT a.*,n.source_id,n.evidence_revision FROM ingestion_attachments a JOIN ingestion_notices n ON n.id=a.notice_id WHERE a.id=$1",
+          "SELECT a.*,n.source_id,n.latest_version AS notice_version,n.evidence_revision FROM ingestion_attachments a JOIN ingestion_notices n ON n.id=a.notice_id WHERE a.id=$1",
           [id],
         )
       ).rows[0];
@@ -209,7 +231,8 @@ export class AttachmentRunner {
         this.pool,
         fetcher,
         row.notice_id,
-        parseAttachmentIsolated,
+        (bytes, mediaType) =>
+          parseAttachmentIsolated(bytes, mediaType, { signal }),
         row.canonical_url,
       );
       return { attachmentId: id, usage: fetcher.usage };
@@ -223,33 +246,66 @@ export class AttachmentRunner {
   ) {
     return this.locked(id, expected, async (row) => {
       signal?.throwIfAborted();
-      if (row.latest_version !== versionId)
-        throw new Error("仅可重解析当前附件版本，需重新获取或查看历史证据");
-      const body = await readAttachmentBytesForReparse(
+      const source = await readAttachmentVersionForReparse(
         this.pool,
         id,
         versionId,
       );
-      if (!body) throw new Error("附件版本不存在");
-      const mediaType = classifyAttachment(body);
-      if (!mediaType) throw new Error("附件类型不支持");
-      const result = await parseAttachmentIsolated(
-        body,
-        mediaType as AttachmentMediaType,
-      );
-      const notice = (
-        await this.pool.query(
-          "SELECT latest_version FROM ingestion_notices WHERE id=$1",
-          [row.notice_id],
-        )
-      ).rows[0];
-      return persistAttachment(this.pool, {
-        noticeId: row.notice_id,
-        noticeVersion: notice.latest_version,
-        url: row.canonical_url,
-        ...result,
-        body,
-        persistContent: result.status === "extracted",
+      if (!source) throw new Error("附件版本不存在");
+      const baseline = {
+        noticeVersion: row.notice_version,
+        evidenceRevision: Number(row.evidence_revision),
+        latestAttachmentVersion: row.latest_version,
+      };
+      let result: IsolatedAttachmentResult;
+      try {
+        const mediaType = classifyAttachment(source.body, source.mediaType);
+        if (!mediaType) {
+          const error = new Error("附件类型不支持");
+          Object.assign(error, { code: "unsupported-attachment-type" });
+          throw error;
+        }
+        result = await this.parse(source.body, mediaType, { signal });
+        if (result.mediaType !== mediaType) {
+          const error = new Error("解析器返回的附件类型与字节不符");
+          Object.assign(error, { code: "type-mismatch" });
+          throw error;
+        }
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        const code =
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof error.code === "string" &&
+          /^[a-z0-9-]{1,80}$/.test(error.code)
+            ? error.code
+            : "parse-failed";
+        await persistAttachmentReparseRevision(this.pool, {
+          attachmentId: id,
+          versionId,
+          baseline,
+          result: {
+            mediaType: source.mediaType,
+            extractorVersion: attachmentExtractorVersion,
+            status: "needs-review",
+            segments: [],
+            errorCode: code,
+            persistContent: false,
+          },
+          body: source.body,
+        });
+        throw error;
+      }
+      return persistAttachmentReparseRevision(this.pool, {
+        attachmentId: id,
+        versionId,
+        baseline,
+        result: {
+          ...result,
+          persistContent: result.status === "extracted",
+        },
+        body: source.body,
       });
     });
   }

@@ -791,7 +791,8 @@ export class IngestionRunner {
                 this.pool,
                 fetcher,
                 known.id,
-                this.attachmentParser,
+                (bytes, mediaType) =>
+                  this.attachmentParser(bytes, mediaType, { signal }),
               );
           } else {
             if (response.status !== 200)
@@ -847,7 +848,8 @@ export class IngestionRunner {
                   this.pool,
                   fetcher,
                   result.noticeId,
-                  this.attachmentParser,
+                  (bytes, mediaType) =>
+                    this.attachmentParser(bytes, mediaType, { signal }),
                 );
                 if (result.action === "new") counts.new++;
                 else if (result.action === "changed") counts.changed++;

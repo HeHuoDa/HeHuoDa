@@ -7,6 +7,41 @@ export type AttachmentSegment = {
   index: number;
   text: string;
 };
+export interface EvidenceReference {
+  format: "html" | "pdf" | "docx";
+  url: string;
+  noticeVersion: string;
+  attachmentVersion: string | null;
+  page?: number;
+  paragraph?: number;
+  field: string;
+  excerpt: string;
+}
+export async function readAttachmentEvidenceReferences(
+  pool: Queryable,
+  noticeId: string,
+): Promise<EvidenceReference[]> {
+  const rows = await pool.query(
+    "SELECT a.canonical_url,v.notice_version,v.id,v.media_type,v.segments FROM ingestion_attachments a JOIN ingestion_attachment_versions v ON v.id=a.latest_version WHERE a.notice_id=$1 ORDER BY a.id",
+    [noticeId],
+  );
+  return rows.rows.flatMap((row) =>
+    (row.segments as AttachmentSegment[]).slice(0, 100).map((segment) => ({
+      format:
+        row.media_type === "application/pdf"
+          ? ("pdf" as const)
+          : ("docx" as const),
+      url: row.canonical_url as string,
+      noticeVersion: row.notice_version as string,
+      attachmentVersion: row.id as string,
+      ...(segment.kind === "page"
+        ? { page: segment.index }
+        : { paragraph: segment.index }),
+      field: "attachmentText",
+      excerpt: segment.text.slice(0, 500),
+    })),
+  );
+}
 export type AttachmentStatus =
   "extracted" | "needs-review" | "blocked" | "failed" | "stale";
 export interface PersistAttachmentInput {
@@ -46,11 +81,224 @@ async function recordEvidenceChange(
   );
 }
 
-function canonicalAttachmentUrl(value: string) {
+const REDACTED_REVIEW_HASH = "privacy-redacted";
+
+function redactAttachmentSnapshots(
+  value: unknown,
+  attachmentId: string,
+  versionIds: ReadonlySet<string>,
+): { value: unknown; redacted: boolean } {
+  if (Array.isArray(value)) {
+    let redacted = false;
+    const items = value.map((item) => {
+      const result = redactAttachmentSnapshots(item, attachmentId, versionIds);
+      redacted ||= result.redacted;
+      return result.value;
+    });
+    return { value: items, redacted };
+  }
+  if (!value || typeof value !== "object") return { value, redacted: false };
+
+  const source = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  let redacted = false;
+  for (const [key, item] of Object.entries(source)) {
+    if (key === "evidenceReferences" && Array.isArray(item)) {
+      result[key] = item.map((reference) => {
+        if (
+          reference &&
+          typeof reference === "object" &&
+          "attachmentVersion" in reference &&
+          typeof reference.attachmentVersion === "string" &&
+          versionIds.has(reference.attachmentVersion)
+        ) {
+          redacted = true;
+          return { ...reference, excerpt: "" };
+        }
+        const nested = redactAttachmentSnapshots(
+          reference,
+          attachmentId,
+          versionIds,
+        );
+        redacted ||= nested.redacted;
+        return nested.value;
+      });
+      continue;
+    }
+
+    const nested = redactAttachmentSnapshots(item, attachmentId, versionIds);
+    result[key] = nested.value;
+    redacted ||= nested.redacted;
+  }
+
+  const relatedVersion =
+    typeof source.versionId === "string" && versionIds.has(source.versionId);
+  const relatedReference =
+    typeof source.attachmentVersion === "string" &&
+    versionIds.has(source.attachmentVersion);
+  if (
+    ((source.attachmentId === attachmentId &&
+      typeof source.versionId !== "string") ||
+      relatedVersion ||
+      relatedReference) &&
+    Object.prototype.hasOwnProperty.call(source, "sha256")
+  ) {
+    result.sha256 = null;
+    redacted = true;
+  }
+  return { value: result, redacted };
+}
+
+/**
+ * Remove sensitive bytes and their read-only review snapshots in the same transaction.
+ * A title prefilter blocks the whole attachment identity; parser-based blocks target the
+ * recognized version and byte-identical revisions. The latter keeps unrelated historical
+ * rule documents for a reused URL intact.
+ */
+async function redactApplicantListContent(
+  client: PoolClient,
+  noticeId: string,
+  attachmentId: string,
+  scope: { allVersions?: boolean; versionIds?: string[]; sha256?: string } = {},
+) {
+  const versions = await client.query(
+    `SELECT id FROM ingestion_attachment_versions
+      WHERE attachment_id=$1
+        AND ($2::boolean OR id=ANY($3::uuid[]) OR ($4::text IS NOT NULL AND sha256=$4))
+      FOR UPDATE`,
+    [
+      attachmentId,
+      scope.allVersions === true,
+      scope.versionIds ?? [],
+      scope.sha256 ?? null,
+    ],
+  );
+  const versionIds = versions.rows.map((row) => row.id as string);
+  const versionSet = new Set(versionIds);
+  const current = (
+    await client.query(
+      "SELECT latest_version FROM ingestion_attachments WHERE id=$1",
+      [attachmentId],
+    )
+  ).rows[0];
+  const affectsCurrent =
+    scope.allVersions === true || versionSet.has(current?.latest_version);
+  if (versionIds.length) {
+    await client.query(
+      `UPDATE ingestion_attachment_versions
+          SET sha256=NULL,body=NULL,segments='[]'::jsonb,status='blocked',error_code='applicant-list'
+        WHERE id=ANY($1::uuid[])`,
+      [versionIds],
+    );
+  }
+
+  const candidates = await client.query(
+    "SELECT id,approved_file FROM ingestion_candidates WHERE notice_id=$1 FOR UPDATE",
+    [noticeId],
+  );
+  for (const candidate of candidates.rows) {
+    const scrubbed = redactAttachmentSnapshots(
+      candidate.approved_file,
+      attachmentId,
+      versionSet,
+    );
+    if (scrubbed.redacted)
+      await client.query(
+        "UPDATE ingestion_candidates SET approved_file=$2::jsonb WHERE id=$1",
+        [candidate.id, JSON.stringify(scrubbed.value)],
+      );
+
+    const revisions = await client.query(
+      "SELECT candidate_revision,review FROM ingestion_review_revisions WHERE candidate_id=$1",
+      [candidate.id],
+    );
+    for (const row of revisions.rows) {
+      const review = redactAttachmentSnapshots(
+        row.review,
+        attachmentId,
+        versionSet,
+      );
+      if (review.redacted)
+        await client.query(
+          "UPDATE ingestion_review_revisions SET review=$3::jsonb WHERE candidate_id=$1 AND candidate_revision=$2",
+          [candidate.id, row.candidate_revision, JSON.stringify(review.value)],
+        );
+    }
+
+    const operations = await client.query(
+      "SELECT id,result FROM ingestion_operations WHERE candidate_id=$1",
+      [candidate.id],
+    );
+    for (const row of operations.rows) {
+      const result = redactAttachmentSnapshots(
+        row.result,
+        attachmentId,
+        versionSet,
+      );
+      if (result.redacted)
+        await client.query(
+          "UPDATE ingestion_operations SET input_hash=$2,result=$3::jsonb WHERE id=$1",
+          [row.id, REDACTED_REVIEW_HASH, JSON.stringify(result.value)],
+        );
+    }
+
+    const previews = await client.query(
+      "SELECT id,result FROM ingestion_review_previews WHERE candidate_id=$1 AND purpose='import'",
+      [candidate.id],
+    );
+    for (const row of previews.rows) {
+      const result = redactAttachmentSnapshots(
+        row.result,
+        attachmentId,
+        versionSet,
+      );
+      if (!result.redacted && !affectsCurrent) continue;
+      await client.query(
+        "UPDATE ingestion_review_previews SET review_hash=$2,result=$3::jsonb WHERE id=$1",
+        [row.id, REDACTED_REVIEW_HASH, JSON.stringify(result.value)],
+      );
+    }
+
+    const commands = await client.query(
+      `SELECT DISTINCT c.actor_id,c.operation_id,c.result
+         FROM admin_ingestion_commands c
+         JOIN admin_operations o ON o.command_operation_id=c.operation_id
+        WHERE o.object_type='candidate' AND o.object_id=$1
+          AND c.action IN ('candidate.review','candidate.import')`,
+      [candidate.id],
+    );
+    for (const row of commands.rows) {
+      const result = redactAttachmentSnapshots(
+        row.result,
+        attachmentId,
+        versionSet,
+      );
+      if (!result.redacted && !affectsCurrent) continue;
+      await client.query(
+        `UPDATE admin_ingestion_commands
+            SET input_hash=$3,result=$4::jsonb
+          WHERE actor_id=$1 AND operation_id=$2`,
+        [
+          row.actor_id,
+          row.operation_id,
+          REDACTED_REVIEW_HASH,
+          JSON.stringify(result.value),
+        ],
+      );
+    }
+  }
+
+  await recordEvidenceChange(client, noticeId, "privacy-redaction");
+}
+
+export function canonicalAttachmentUrl(value: string) {
   const url = new URL(value);
-  if (url.protocol !== "https:" || url.username || url.password || url.port)
-    throw new Error("附件 URL 须为无凭据的 HTTPS 默认端口地址");
+  if (url.protocol !== "https:" || url.username || url.password)
+    throw new Error("附件 URL 须为无凭据的 HTTPS 地址");
   url.hash = "";
+  for (const key of [...url.searchParams.keys()])
+    if (/^utm_(source|medium|campaign|term|content)$/i.test(key))
+      url.searchParams.delete(key);
   return url.toString();
 }
 
@@ -236,7 +484,9 @@ export async function persistAttachment(
       throw new Error("附件文本片段无效");
   if (input.persistContent === false && input.segments.length)
     throw new Error("敏感附件不得持久化提取文本");
-  const sha256 = createHash("sha256").update(input.body).digest("hex");
+  const storeContent = input.persistContent !== false;
+  const observedSha256 = createHash("sha256").update(input.body).digest("hex");
+  const sha256 = storeContent ? observedSha256 : null;
   return transaction(pool, async (client) => {
     const notice = await client.query(
       "SELECT id,latest_version,evidence_revision FROM ingestion_notices WHERE id=$1 FOR UPDATE",
@@ -248,7 +498,7 @@ export async function persistAttachment(
     const identity = await client.query(
       `INSERT INTO ingestion_attachments(id,notice_id,canonical_url,discovered_version,state)
        VALUES($1,$2,$3,$4,'pending') ON CONFLICT(notice_id,canonical_url)
-       DO UPDATE SET discovered_version=EXCLUDED.discovered_version
+       DO UPDATE SET canonical_url=ingestion_attachments.canonical_url
        RETURNING id,latest_version,state`,
       [randomUUID(), input.noticeId, url, input.noticeVersion],
     );
@@ -305,6 +555,13 @@ export async function persistAttachment(
           input.noticeId,
           "attachment-revalidated",
         );
+        if (input.status === "blocked" && input.errorCode === "applicant-list")
+          await redactApplicantListContent(
+            client,
+            input.noticeId,
+            attachment.id as string,
+            { sha256: observedSha256 },
+          );
         return {
           attachmentId: attachment.id as string,
           versionId: previous.id as string,
@@ -313,6 +570,13 @@ export async function persistAttachment(
           evidenceRevision: revision,
         };
       }
+      if (input.status === "blocked" && input.errorCode === "applicant-list")
+        await redactApplicantListContent(
+          client,
+          input.noticeId,
+          attachment.id as string,
+          { sha256: observedSha256 },
+        );
       return {
         attachmentId: attachment.id as string,
         versionId: previous.id as string,
@@ -321,18 +585,25 @@ export async function persistAttachment(
       };
     }
     const versionId = randomUUID();
-    const nextRevision = Number(previous?.revision ?? 0) + 1;
-    const storeContent = input.persistContent !== false;
+    const nextRevision = Number(
+      (
+        await client.query(
+          "SELECT COALESCE(MAX(revision),0)+1 AS revision FROM ingestion_attachment_versions WHERE attachment_id=$1",
+          [attachment.id],
+        )
+      ).rows[0].revision,
+    );
     await client.query(
       `INSERT INTO ingestion_attachment_versions
-       (id,attachment_id,previous_version,revision,sha256,fetched_at,media_type,extractor_version,status,segments,error_code,body)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+       (id,attachment_id,previous_version,revision,sha256,notice_version,fetched_at,media_type,extractor_version,status,segments,error_code,body)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         versionId,
         attachment.id,
         previous?.id ?? null,
         nextRevision,
         sha256,
+        input.noticeVersion,
         input.fetchedAt ?? new Date(),
         input.mediaType,
         input.extractorVersion,
@@ -390,6 +661,13 @@ export async function persistAttachment(
       [input.noticeId],
     );
     await recordEvidenceChange(client, input.noticeId, "attachment-version");
+    if (input.status === "blocked" && input.errorCode === "applicant-list")
+      await redactApplicantListContent(
+        client,
+        input.noticeId,
+        attachment.id as string,
+        { versionIds: [versionId], sha256: observedSha256 },
+      );
     return {
       attachmentId: attachment.id as string,
       versionId,
@@ -407,6 +685,7 @@ export async function markAttachmentNeedsReview(
   state: "needs-review" | "blocked" | "failed" = "needs-review",
 ) {
   if (!/^[a-z0-9-]{1,80}$/.test(code)) throw new Error("附件安全状态码无效");
+  const effectiveState = code === "applicant-list" ? "blocked" : state;
   return transaction(pool, async (client) => {
     const attachment = await client.query(
       "SELECT notice_id FROM ingestion_attachments WHERE id=$1",
@@ -424,12 +703,12 @@ export async function markAttachmentNeedsReview(
     );
     const updated = await client.query(
       "UPDATE ingestion_attachments SET state=$2,last_checked_at=now(),error_code=$3 WHERE id=$1",
-      [attachmentId, state, code],
+      [attachmentId, effectiveState, code],
     );
     if (updated.rowCount === 0) throw new Error("附件状态更新失败");
     const result = await client.query(
       "UPDATE ingestion_notices SET evidence_revision=evidence_revision+1,evidence_state=$2 WHERE id=$1 RETURNING evidence_revision,latest_version",
-      [noticeId, state === "blocked" ? "blocked" : "review-required"],
+      [noticeId, effectiveState === "blocked" ? "blocked" : "review-required"],
     );
     await client.query(
       "INSERT INTO ingestion_evidence_sets(notice_id,revision,source_version,attachment_versions,state) SELECT $1,$2,$3,COALESCE(jsonb_agg(jsonb_build_object('attachmentId',a.id,'versionId',a.latest_version) ORDER BY a.id),'[]'::jsonb),$4 FROM ingestion_attachments a WHERE a.notice_id=$1",
@@ -437,7 +716,7 @@ export async function markAttachmentNeedsReview(
         noticeId,
         result.rows[0].evidence_revision,
         result.rows[0].latest_version,
-        state === "blocked" ? "blocked" : "review-required",
+        effectiveState === "blocked" ? "blocked" : "review-required",
       ],
     );
     const candidate = await client.query(
@@ -445,6 +724,10 @@ export async function markAttachmentNeedsReview(
       [noticeId, code],
     );
     await recordEvidenceChange(client, noticeId, code);
+    if (code === "applicant-list")
+      await redactApplicantListContent(client, noticeId, attachmentId, {
+        allVersions: true,
+      });
     return {
       noticeId,
       evidenceRevision: result.rows[0].evidence_revision as number,
@@ -468,7 +751,7 @@ export async function listAttachments(pool: Pool, noticeId: string) {
 
 export async function listAttachmentVersions(pool: Pool, attachmentId: string) {
   const result = await pool.query(
-    `SELECT id,attachment_id,previous_version,revision,sha256,fetched_at,media_type,
+    `SELECT id,attachment_id,previous_version,revision,sha256,notice_version,fetched_at,media_type,
             extractor_version,status,segments,error_code
        FROM ingestion_attachment_versions WHERE attachment_id=$1 ORDER BY revision DESC LIMIT 100`,
     [attachmentId],
@@ -482,7 +765,7 @@ export async function getAttachmentVersion(
   versionId: string,
 ) {
   const result = await pool.query(
-    `SELECT id,attachment_id,previous_version,revision,sha256,fetched_at,media_type,
+    `SELECT id,attachment_id,previous_version,revision,sha256,notice_version,fetched_at,media_type,
             extractor_version,status,segments,error_code
        FROM ingestion_attachment_versions WHERE attachment_id=$1 AND id=$2`,
     [attachmentId, versionId],
@@ -510,6 +793,222 @@ export async function readAttachmentBytesForReparse(
   return new Uint8Array(result.rows[0].body);
 }
 
+export async function readAttachmentVersionForReparse(
+  pool: Pool,
+  attachmentId: string,
+  versionId: string,
+) {
+  const result = await pool.query(
+    `SELECT body,sha256,media_type,notice_version
+       FROM ingestion_attachment_versions
+      WHERE attachment_id=$1 AND id=$2`,
+    [attachmentId, versionId],
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  if (!row.body) throw new Error("附件字节已清理，需重新受控获取后才能解析");
+  if (
+    typeof row.sha256 !== "string" ||
+    createHash("sha256").update(row.body).digest("hex") !== row.sha256
+  )
+    throw new Error("附件字节摘要不匹配，需重新受控获取");
+  return {
+    body: new Uint8Array(row.body),
+    sha256: row.sha256 as string,
+    mediaType: row.media_type as string,
+    noticeVersion: row.notice_version as string,
+  };
+}
+
+export interface AttachmentReparseBaseline {
+  noticeVersion: string;
+  evidenceRevision: number;
+  latestAttachmentVersion: string;
+}
+
+/** Save an extraction revision without allowing an old byte version to become current. */
+export async function persistAttachmentReparseRevision(
+  pool: Pool,
+  input: {
+    attachmentId: string;
+    versionId: string;
+    baseline: AttachmentReparseBaseline;
+    result: Pick<
+      PersistAttachmentInput,
+      "mediaType" | "extractorVersion" | "status" | "segments" | "errorCode"
+    > & { persistContent?: boolean };
+    body: Uint8Array;
+  },
+) {
+  if (input.result.segments.length > 20_000)
+    throw new Error("附件文本片段超过上限");
+  for (const segment of input.result.segments)
+    if (
+      !Number.isInteger(segment.index) ||
+      segment.index < 1 ||
+      !["page", "paragraph"].includes(segment.kind) ||
+      typeof segment.text !== "string" ||
+      segment.text.length > 100_000
+    )
+      throw new Error("附件文本片段无效");
+  const storeContent = input.result.persistContent !== false;
+  if (!storeContent && input.result.segments.length)
+    throw new Error("敏感附件不得持久化提取文本");
+
+  return transaction(pool, async (client) => {
+    const identity = await client.query(
+      "SELECT notice_id FROM ingestion_attachments WHERE id=$1",
+      [input.attachmentId],
+    );
+    if (!identity.rowCount) throw new Error("附件不存在");
+    const noticeId = identity.rows[0].notice_id as string;
+    const notice = await client.query(
+      "SELECT latest_version,evidence_revision FROM ingestion_notices WHERE id=$1 FOR UPDATE",
+      [noticeId],
+    );
+    const candidate = await client.query(
+      "SELECT id FROM ingestion_candidates WHERE notice_id=$1 FOR UPDATE",
+      [noticeId],
+    );
+    const attachment = await client.query(
+      "SELECT latest_version,state FROM ingestion_attachments WHERE id=$1 FOR UPDATE",
+      [input.attachmentId],
+    );
+    if (!notice.rowCount || !attachment.rowCount)
+      throw new Error("附件来源通知不存在");
+    if (
+      notice.rows[0].latest_version !== input.baseline.noticeVersion ||
+      Number(notice.rows[0].evidence_revision) !==
+        input.baseline.evidenceRevision ||
+      attachment.rows[0].latest_version !==
+        input.baseline.latestAttachmentVersion
+    )
+      throw new Error("附件重解析基线已变化");
+
+    const source = await client.query(
+      `SELECT sha256,body,media_type,notice_version
+         FROM ingestion_attachment_versions
+        WHERE id=$1 AND attachment_id=$2 FOR UPDATE`,
+      [input.versionId, input.attachmentId],
+    );
+    if (!source.rowCount) throw new Error("附件内容版本不存在");
+    const sourceVersion = source.rows[0];
+    if (!sourceVersion.body)
+      throw new Error("附件字节已清理，需重新受控获取后才能解析");
+    const sourceHash = createHash("sha256")
+      .update(sourceVersion.body)
+      .digest("hex");
+    if (sourceVersion.sha256 !== sourceHash)
+      throw new Error("附件字节摘要不匹配，需重新受控获取");
+    if (input.body.byteLength > 5 * 1024 * 1024)
+      throw new Error("附件字节超过 5 MiB");
+    if (createHash("sha256").update(input.body).digest("hex") !== sourceHash)
+      throw new Error("待解析字节与所选附件版本不符");
+
+    const historical = input.versionId !== attachment.rows[0].latest_version;
+    const revision = Number(
+      (
+        await client.query(
+          "SELECT COALESCE(MAX(revision),0)+1 AS revision FROM ingestion_attachment_versions WHERE attachment_id=$1",
+          [input.attachmentId],
+        )
+      ).rows[0].revision,
+    );
+    const versionId = randomUUID();
+    const sha256 = storeContent ? sourceHash : null;
+    await client.query(
+      `INSERT INTO ingestion_attachment_versions
+       (id,attachment_id,previous_version,revision,sha256,notice_version,fetched_at,media_type,extractor_version,status,segments,error_code,body)
+       VALUES($1,$2,$3,$4,$5,$6,now(),$7,$8,$9,$10,$11,$12)`,
+      [
+        versionId,
+        input.attachmentId,
+        input.versionId,
+        revision,
+        sha256,
+        sourceVersion.notice_version,
+        input.result.mediaType,
+        input.result.extractorVersion,
+        input.result.status,
+        JSON.stringify(storeContent ? input.result.segments : []),
+        input.result.errorCode ??
+          (storeContent ? null : "sensitive-content-excluded"),
+        storeContent ? Buffer.from(sourceVersion.body) : null,
+      ],
+    );
+    if (
+      input.result.status === "blocked" &&
+      input.result.errorCode === "applicant-list"
+    )
+      await redactApplicantListContent(client, noticeId, input.attachmentId, {
+        versionIds: [input.versionId, versionId],
+        sha256: sourceHash,
+      });
+    if (historical)
+      return {
+        attachmentId: input.attachmentId,
+        versionId,
+        historical: true,
+        evidenceRevision: input.baseline.evidenceRevision,
+      };
+
+    const priorState = attachment.rows[0].state as AttachmentStatus;
+    const nextState =
+      priorState === "stale" && input.result.status === "extracted"
+        ? "stale"
+        : input.result.status;
+    await client.query(
+      "UPDATE ingestion_attachments SET latest_version=$2,state=$3,last_checked_at=now(),error_code=$4 WHERE id=$1",
+      [
+        input.attachmentId,
+        versionId,
+        nextState,
+        input.result.errorCode ?? null,
+      ],
+    );
+    const aggregate = await client.query(
+      "SELECT bool_and(state='extracted') AS all_extracted,bool_or(state='blocked') AS any_blocked FROM ingestion_attachments WHERE notice_id=$1",
+      [noticeId],
+    );
+    const evidenceState = aggregate.rows[0].any_blocked
+      ? "blocked"
+      : aggregate.rows[0].all_extracted
+        ? "current"
+        : "review-required";
+    const update = await client.query(
+      "UPDATE ingestion_notices SET evidence_revision=evidence_revision+1,evidence_state=$2 WHERE id=$1 RETURNING evidence_revision",
+      [noticeId, evidenceState],
+    );
+    await client.query(
+      `INSERT INTO ingestion_evidence_sets(notice_id,revision,source_version,attachment_versions,state)
+       SELECT $1,$2,$3,COALESCE(jsonb_agg(jsonb_build_object('attachmentId',a.id,'versionId',a.latest_version) ORDER BY a.id),'[]'::jsonb),$4
+         FROM ingestion_attachments a WHERE a.notice_id=$1`,
+      [
+        noticeId,
+        update.rows[0].evidence_revision,
+        input.baseline.noticeVersion,
+        evidenceState,
+      ],
+    );
+    if (candidate.rowCount)
+      await client.query(
+        "UPDATE ingestion_candidates SET revision=revision+1,status='pending',reviewer=NULL,checked_at=NULL,reason=$2,approved_file=NULL,updated_at=now() WHERE notice_id=$1",
+        [noticeId, input.result.errorCode ?? null],
+      );
+    await recordEvidenceChange(
+      client,
+      noticeId,
+      input.result.errorCode ?? "attachment-reparse",
+    );
+    return {
+      attachmentId: input.attachmentId,
+      versionId,
+      historical: false,
+      evidenceRevision: Number(update.rows[0].evidence_revision),
+    };
+  });
+}
+
 export async function reparseExistingAttachment(
   pool: Pool,
   attachmentId: string,
@@ -520,7 +1019,7 @@ export async function reparseExistingAttachment(
   >,
 ) {
   const current = await pool.query(
-    `SELECT v.body,a.canonical_url,a.latest_version,n.id AS notice_id,n.latest_version AS notice_version
+    `SELECT v.body,a.latest_version,n.latest_version AS notice_version,n.evidence_revision
        FROM ingestion_attachment_versions v
        JOIN ingestion_attachments a ON a.id=v.attachment_id
        JOIN ingestion_notices n ON n.id=a.notice_id
@@ -529,14 +1028,19 @@ export async function reparseExistingAttachment(
   );
   if (!current.rowCount) throw new Error("附件内容版本不存在");
   const row = current.rows[0];
-  if (row.latest_version !== versionId)
-    throw new Error("仅可重解析附件当前版本；请先重新获取附件");
   if (!row.body) throw new Error("附件字节已清理，需重新受控获取后才能解析");
-  return persistAttachment(pool, {
-    ...result,
-    noticeId: row.notice_id,
-    noticeVersion: row.notice_version,
-    url: row.canonical_url,
+  return persistAttachmentReparseRevision(pool, {
+    attachmentId,
+    versionId,
+    baseline: {
+      noticeVersion: row.notice_version,
+      evidenceRevision: Number(row.evidence_revision),
+      latestAttachmentVersion: row.latest_version,
+    },
+    result: {
+      ...result,
+      persistContent: result.status === "extracted",
+    },
     body: new Uint8Array(row.body),
   });
 }
