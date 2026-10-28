@@ -45,6 +45,26 @@ function fetcher(responses: (HttpResponse | Error)[], limits = defaultLimits) {
   };
 }
 describe("有边界的 HTTP 采集", () => {
+  it("字节入口保留非 UTF-8 内容并与 HTML 入口共享 robots 和请求预算", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0x00]);
+    const { fetcher: client } = fetcher(
+      [
+        response(404, ""),
+        {
+          status: 200,
+          headers: { "content-type": "application/pdf" },
+          body: bytes,
+        },
+        response(200, "比赛正文"),
+      ],
+      { ...defaultLimits, requests: 3 },
+    );
+    await expect(client.getBytes(url)).rejects.toThrow("robots");
+    await client.checkRobots();
+    expect((await client.getBytes(url)).body).toEqual(bytes);
+    expect((await client.get(url)).html).toBe("比赛正文");
+    await expect(client.getBytes(url)).rejects.toThrow("请求预算");
+  });
   it("实际请求及下载字节累计包含robots、跳转和重试响应", async () => {
     const replies = [
       response(404, "robots"),
@@ -70,6 +90,45 @@ describe("有边界的 HTTP 采集", () => {
     await expect(redirected.fetcher.get(url)).rejects.toThrow("路径");
     expect(redirected.transport).toHaveBeenCalledTimes(2);
   });
+  it("字节入口同样拒绝 robots 禁止路径和越界跳转", async () => {
+    const denied = fetcher([response(200, "User-agent: *\nDisallow: /info/")]);
+    await denied.fetcher.checkRobots();
+    await expect(
+      denied.fetcher.getBytes(`https://${source.host}/info/1/2.htm`),
+    ).rejects.toThrow("robots");
+    const redirected = fetcher([
+      response(404, ""),
+      response(302, "", { location: "https://127.0.0.1/private" }),
+    ]);
+    await redirected.fetcher.checkRobots();
+    await expect(redirected.fetcher.getBytes(url)).rejects.toThrow("白名单");
+  });
+  it("字节入口对解压输出限制体积，返回解压后的原始字节", async () => {
+    const binary = new Uint8Array([0xff, 0x00, 0x80]);
+    const valid = fetcher([
+      response(404, ""),
+      {
+        status: 200,
+        headers: { "content-encoding": "gzip" },
+        body: gzipSync(binary),
+      },
+    ]);
+    await valid.fetcher.checkRobots();
+    expect((await valid.fetcher.getBytes(url)).body).toEqual(binary);
+    const huge = fetcher(
+      [
+        response(404, ""),
+        {
+          status: 200,
+          headers: { "content-encoding": "gzip" },
+          body: gzipSync("x".repeat(2048)),
+        },
+      ],
+      { ...defaultLimits, bytes: 1024 },
+    );
+    await huge.fetcher.checkRobots();
+    await expect(huge.fetcher.getBytes(url)).rejects.toThrow("上限");
+  });
   it("解压官网 gzip 正文，同时限制解压后的响应大小", async () => {
     const compressed = (html: string): HttpResponse => ({
       status: 200,
@@ -78,7 +137,9 @@ describe("有边界的 HTTP 采集", () => {
     });
     const valid = fetcher([response(404), compressed("<p>比赛报名通知</p>")]);
     await valid.fetcher.checkRobots();
-    expect((await valid.fetcher.get(url)).html).toBe("<p>比赛报名通知</p>");
+    const result = await valid.fetcher.get(url);
+    expect(result.html).toBe("<p>比赛报名通知</p>");
+    expect(result.body).toEqual(gzipSync("<p>比赛报名通知</p>"));
     const oversized = fetcher([response(404), compressed("x".repeat(2000))], {
       ...defaultLimits,
       bytes: 1024,

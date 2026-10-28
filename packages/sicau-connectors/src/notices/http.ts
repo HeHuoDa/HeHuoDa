@@ -10,8 +10,10 @@ export interface HttpResponse {
   headers: Record<string, string>;
   body: Uint8Array;
 }
-export interface FetchResult extends HttpResponse {
+export interface ByteFetchResult extends HttpResponse {
   url: string;
+}
+export interface FetchResult extends ByteFetchResult {
   html: string;
 }
 export interface HttpLimits {
@@ -297,10 +299,10 @@ export class BoundedFetcher {
     }
     if (this.limits.signal?.aborted) throw new Error("采集已停止");
   }
-  private async response(
+  private async responseBytes(
     value: string,
     headers: Record<string, string> = {},
-  ): Promise<FetchResult> {
+  ): Promise<ByteFetchResult & { rawBody: Uint8Array }> {
     let url = safeUrl(value, this.source);
     let redirects = 0;
     let retries = 0;
@@ -405,17 +407,24 @@ export class BoundedFetcher {
       } catch (error) {
         throw new Error("压缩响应损坏或解压体积超过上限", { cause: error });
       }
-      const html =
-        res.status === 304
-          ? ""
-          : decodeHtml(decoded, res.headers["content-type"]);
-      if (
-        res.status === 200 &&
-        /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(html)
-      )
-        throw new Error("出现验证码、登录或拦截页，停止来源采集");
-      return { ...res, url: url.toString(), html };
+      return { ...res, body: decoded, rawBody: res.body, url: url.toString() };
     }
+  }
+  private async response(
+    value: string,
+    headers: Record<string, string> = {},
+  ): Promise<FetchResult> {
+    const { rawBody, ...res } = await this.responseBytes(value, headers);
+    const html =
+      res.status === 304
+        ? ""
+        : decodeHtml(res.body, res.headers["content-type"]);
+    if (
+      res.status === 200 &&
+      /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(html)
+    )
+      throw new Error("出现验证码、登录或拦截页，停止来源采集");
+    return { ...res, body: rawBody, html };
   }
   async checkRobots() {
     const result = await this.response(
@@ -443,6 +452,20 @@ export class BoundedFetcher {
     const result = await this.response(url.toString(), headers);
     // 重定向后的路径也必须被允许；response 在每次跟随后先校验路径。
     return result;
+  }
+  /** 共用本实例的请求预算；调用方仍须持有 API 的全局采集锁。 */
+  async getBytes(
+    value: string,
+    headers: Record<string, string> = {},
+  ): Promise<ByteFetchResult> {
+    if (!this.robots) throw new Error("采集前必须核对 robots.txt");
+    const result = await this.responseBytes(value, headers);
+    return {
+      status: result.status,
+      headers: result.headers,
+      body: result.body,
+      url: result.url,
+    };
   }
 }
 export function parseRobots(text: string) {
