@@ -9,11 +9,22 @@ import {
 } from "../competitions/import.js";
 import { publishedDate, type Article } from "@hehuoda/sicau-connectors/notices";
 import { commandHash, hash, transaction, type CandidateRow } from "./store.js";
+import {
+  assertEvidenceBaseline,
+  readCurrentEvidence,
+} from "./attachment-store.js";
 
 import type { ParsedCandidate } from "./types.js";
 
 export interface ReviewFile {
-  format: 1;
+  format: 1 | 2;
+  evidenceRevision?: number;
+  evidence?: {
+    attachmentId: string;
+    versionId: string | null;
+    sha256: string | null;
+    status: string | null;
+  }[];
   operationId: string;
   candidateId: string;
   sourceVersion: string;
@@ -111,7 +122,7 @@ export async function exportReview(
     );
     const saved = (
       await client.query<{ target_id: string; review: ReviewFile }>(
-        "SELECT target_id,review FROM ingestion_review_revisions WHERE candidate_id=$1 AND candidate_revision=$2 AND source_version=$3 ORDER BY created_at DESC LIMIT 1",
+        "SELECT target_id,review FROM ingestion_review_revisions WHERE candidate_id=$1 AND candidate_revision<=$2 AND source_version=$3 ORDER BY candidate_revision DESC LIMIT 1",
         [candidateId, candidate.revision, candidate.source_version],
       )
     ).rows[0];
@@ -127,6 +138,7 @@ export async function exportReview(
     const catalog = await readCatalog(client);
     const before = catalog.competitions.find((c) => c.id === id) ?? null;
     const article: Article = notice.article;
+    const evidence = await readCurrentEvidence(client, notice.id);
     const source = (
       await client.query("SELECT data FROM ingestion_sources WHERE id=$1", [
         notice.source_id,
@@ -171,7 +183,9 @@ export async function exportReview(
         ).rows[0]?.article ?? null)
       : null;
     const review: ReviewFile = {
-      format: 1,
+      format: 2,
+      evidenceRevision: Number(evidence.evidence_revision),
+      evidence: evidence.attachments,
       operationId: randomUUID(),
       candidateId,
       sourceVersion: candidate.source_version,
@@ -257,7 +271,9 @@ function validateReview(value: unknown): ReviewFile {
   if (
     keys.some((key) => !(key in value)) ||
     Object.keys(value).some(
-      (key) => !keys.includes(key) && key !== "mappingBaseline",
+      (key) =>
+        !keys.includes(key) &&
+        !["mappingBaseline", "evidenceRevision", "evidence"].includes(key),
     )
   )
     throw new Error("审核文件包含未定义字段");
@@ -285,7 +301,7 @@ function validateReview(value: unknown): ReviewFile {
   }
   const file = value as unknown as ReviewFile;
   if (
-    file.format !== 1 ||
+    ![1, 2].includes(file.format) ||
     typeof file.operationId !== "string" ||
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
       file.operationId,
@@ -302,6 +318,21 @@ function validateReview(value: unknown): ReviewFile {
     !file.targetId
   )
     throw new Error("审核文件缺少版本基线");
+  if (
+    file.format === 2 &&
+    (!Number.isInteger(file.evidenceRevision) ||
+      file.evidenceRevision! < 1 ||
+      !Array.isArray(file.evidence) ||
+      file.evidence.some(
+        (item) =>
+          !isRecord(item) ||
+          typeof item.attachmentId !== "string" ||
+          (item.versionId !== null && typeof item.versionId !== "string") ||
+          (item.sha256 !== null && typeof item.sha256 !== "string") ||
+          (item.status !== null && typeof item.status !== "string"),
+      ))
+  )
+    throw new Error("审核材料附件证据基线无效");
   if (
     batch.colleges ||
     batch.competitions?.length !== 1 ||
@@ -368,6 +399,24 @@ async function checkBaseline(client: PoolClient, file: ReviewFile) {
     throw new Error("审核文件过期：来源版本或候选修订已变化，请重新导出审核");
   if (notice.url !== file.source.url || notice.source_id !== file.source.id)
     throw new Error("审核来源与持久化证据不符");
+  if (file.format === 1) {
+    const attachments = await client.query(
+      "SELECT 1 FROM ingestion_attachments WHERE notice_id=$1 LIMIT 1",
+      [notice.id],
+    );
+    if (attachments.rowCount)
+      throw new Error(
+        "该通知已有附件证据，旧格式审核材料已失效，请重新导出 format=2",
+      );
+  } else {
+    await assertEvidenceBaseline(client, notice.id, file.evidenceRevision!);
+    const currentEvidence = await readCurrentEvidence(client, notice.id);
+    if (
+      commandHash(currentEvidence?.attachments ?? []) !==
+      commandHash(file.evidence)
+    )
+      throw new Error("审核附件证据集合已变化，请重新导出审核");
+  }
   if (file.mappingBaseline !== undefined) {
     const mapping = (
       await client.query(
@@ -732,7 +781,12 @@ export async function publishImported(
     pool,
     async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(22002)");
-      const { candidate } = await lockCandidate(client, candidateId);
+      const { candidate, notice } = await lockCandidate(client, candidateId);
+      await assertEvidenceBaseline(
+        client,
+        notice.id,
+        Number(notice.evidence_revision),
+      );
       const operationId =
         "publish:" +
         candidateId +
