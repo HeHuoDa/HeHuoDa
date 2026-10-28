@@ -388,6 +388,44 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(reopened.json().status).toBe("pending");
   });
 
+  it("已批准后来源元信息变化时重读提供新证据，不永久返回过期批准材料", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const file = correctedReview(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/candidates/${id}/review`,
+          undefined,
+          { cookie: auth.cookie },
+        )
+      ).json(),
+    );
+    expect(
+      (
+        await test.request(
+          "POST",
+          `admin/ingestion/candidates/${id}/approve`,
+          { operationId: randomUUID(), reason: "核对原来源证据", review: file },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(200);
+    await test.pool.query(
+      "UPDATE ingestion_notices SET health='unavailable' WHERE id=(SELECT notice_id FROM ingestion_candidates WHERE id=$1)",
+      [id],
+    );
+    const refreshed = await test.request(
+      "GET",
+      `admin/ingestion/candidates/${id}/review`,
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(refreshed.statusCode).toBe(200);
+    expect(refreshed.json().source.health).toBe("unavailable");
+    expect(refreshed.json().operationId).not.toBe(file.operationId);
+  });
+
   it("正式映射关系在导出后变化时拒绝旧审核材料", async () => {
     const id = await candidateId();
     const auth = await session();

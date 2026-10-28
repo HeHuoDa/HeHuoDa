@@ -269,11 +269,11 @@ export class AdminMergeSuggestionDto {
 }
 
 export class AdminReviewFileDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     pattern: "^[a-f0-9]{64}$",
     description: "正式映射快照；HTTP写入必须保留，历史CLI材料可缺省",
   })
-  mappingBaseline?: string;
+  mappingBaseline!: string;
   @ApiProperty({ enum: [1] }) format!: 1;
   @ApiProperty({ format: "uuid" }) operationId!: string;
   @ApiProperty({ format: "uuid" }) candidateId!: string;

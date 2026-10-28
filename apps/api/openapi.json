@@ -1759,6 +1759,8 @@
                 "competition.update",
                 "competition.publish",
                 "ingestion.scan",
+                "ingestion.configure",
+                "ingestion.resume",
                 "candidate.review",
                 "candidate.import"
               ]
@@ -1922,6 +1924,2728 @@
         ],
         "tags": [
           "管理员"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/sources": {
+      "get": {
+        "operationId": "AdminIngestionController_sources",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IngestionSourceDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/sources/{id}": {
+      "get": {
+        "operationId": "AdminIngestionController_source",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminIngestionController_configure",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureSourceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionSourceDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/runs": {
+      "get": {
+        "operationId": "AdminIngestionController_runs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "succeeded",
+                "partial",
+                "failed",
+                "interrupted"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionRunsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/runs/{id}": {
+      "get": {
+        "operationId": "AdminIngestionController_run",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionRunDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/scans": {
+      "post": {
+        "operationId": "AdminIngestionController_scan",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/requests/{id}": {
+      "get": {
+        "operationId": "AdminIngestionController_request",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionRequestDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/requests/{id}/retry": {
+      "post": {
+        "operationId": "AdminIngestionController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestionCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/runs/{id}/resume": {
+      "post": {
+        "operationId": "AdminIngestionController_resume",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestionCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates": {
+      "get": {
+        "operationId": "AdminReviewController_listCandidates",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "imported"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "候选分页；包含采集证据及正式映射",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCandidateListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}": {
+      "get": {
+        "operationId": "AdminReviewController_candidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCandidateDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/review": {
+      "get": {
+        "operationId": "AdminReviewController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "targetId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "审核材料；原文与证据以纯文本返回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewFileDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      },
+      "put": {
+        "operationId": "AdminReviewController_saveReview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewMaterialCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewSavedResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/approve": {
+      "post": {
+        "operationId": "AdminReviewController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewMaterialCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewApprovedResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/reject": {
+      "post": {
+        "operationId": "AdminReviewController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewStateCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewStateResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/reopen": {
+      "post": {
+        "operationId": "AdminReviewController_reopen",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewStateCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewStateResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/import-preview": {
+      "post": {
+        "operationId": "AdminReviewController_importPreview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewMaterialCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewImportPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/import": {
+      "post": {
+        "operationId": "AdminReviewController_importReview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewImportCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminImportResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/publish-preview": {
+      "post": {
+        "operationId": "AdminReviewController_publishPreview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewStateCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminReviewPublishPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/publish": {
+      "post": {
+        "operationId": "AdminReviewController_publish",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewPublishCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminImportResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/operations": {
+      "get": {
+        "operationId": "AdminReviewController_operations",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "候选操作历史，包含 CLI 与管理员审核操作",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCandidateOperationsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/notices": {
+      "get": {
+        "operationId": "AdminReviewController_notices",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "通知与当前不可变内容版本分页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNoticeListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/notices/{id}": {
+      "get": {
+        "operationId": "AdminReviewController_notice",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNoticeDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/notices/{id}/versions": {
+      "get": {
+        "operationId": "AdminReviewController_versions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNoticeVersionListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/notices/{id}/versions/{versionId}": {
+      "get": {
+        "operationId": "AdminReviewController_version",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "正文快照、安全纯文本与相对上一版本的差异",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNoticeVersionDetailDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
         ]
       }
     }
@@ -2999,6 +5723,12 @@
             "type": "string",
             "format": "uuid"
           },
+          "commandOperationId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "description": "HTTP 写请求的幂等 operationId；旧操作为空"
+          },
           "actorType": {
             "type": "string",
             "enum": [
@@ -3020,6 +5750,8 @@
               "competition.update",
               "competition.publish",
               "ingestion.scan",
+              "ingestion.configure",
+              "ingestion.resume",
               "candidate.review",
               "candidate.import"
             ]
@@ -3058,6 +5790,7 @@
         },
         "required": [
           "operationId",
+          "commandOperationId",
           "actorType",
           "actorId",
           "action",
@@ -3093,6 +5826,2563 @@
           "total",
           "page",
           "pageSize"
+        ]
+      },
+      "SourceSettingsDto": {
+        "type": "object",
+        "properties": {
+          "maxPages": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "frequencyMinutes": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1440
+          },
+          "requests": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "intervalMs": {
+            "type": "number",
+            "minimum": 2000,
+            "maximum": 60000
+          },
+          "timeoutMs": {
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 30000
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 900000
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 1024,
+            "maximum": 5242880
+          }
+        }
+      },
+      "IngestionRunOptionsDto": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "example": "2026-01-01"
+          },
+          "to": {
+            "type": "string",
+            "example": "2026-10-27"
+          },
+          "url": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "boolean"
+          },
+          "resume": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "scheduled",
+              "resume"
+            ]
+          },
+          "scheduledPhase": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "resume"
+            ]
+          }
+        },
+        "required": [
+          "sourceId",
+          "from",
+          "to"
+        ]
+      },
+      "IngestionCountsDto": {
+        "type": "object",
+        "properties": {
+          "discovered": {
+            "type": "number"
+          },
+          "new": {
+            "type": "number"
+          },
+          "changed": {
+            "type": "number"
+          },
+          "unchanged": {
+            "type": "number"
+          },
+          "ignored": {
+            "type": "number"
+          },
+          "failed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "discovered",
+          "new",
+          "changed",
+          "unchanged",
+          "ignored",
+          "failed"
+        ]
+      },
+      "IngestionRunErrorDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "skipped",
+              "budget"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "message"
+        ]
+      },
+      "IngestionPendingNoticeDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "publishedAt"
+        ]
+      },
+      "IngestionCursorDto": {
+        "type": "object",
+        "properties": {
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seen": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionPendingNoticeDto"
+            }
+          }
+        },
+        "required": [
+          "pages",
+          "seen",
+          "pending"
+        ]
+      },
+      "IngestionRunDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "partial",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "scheduled",
+              "resume"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "options": {
+            "$ref": "#/components/schemas/IngestionRunOptionsDto"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/IngestionCountsDto"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionRunErrorDto"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/IngestionCursorDto"
+          },
+          "resumedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "sourceId",
+          "status",
+          "trigger",
+          "startedAt",
+          "finishedAt",
+          "options",
+          "counts",
+          "errors",
+          "cursor",
+          "resumedBy"
+        ]
+      },
+      "IngestionSourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "listUrl": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettingsDto"
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "latestRun": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IngestionRunDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "publisher",
+          "version",
+          "host",
+          "listUrl",
+          "enabled",
+          "settings",
+          "baseline",
+          "available",
+          "latestRun"
+        ]
+      },
+      "ConfigureSourceDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SourceSettingsDto"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "baseline"
+        ]
+      },
+      "IngestionRunsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionRunDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "ScanDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "example": "2026-01-01"
+          },
+          "to": {
+            "type": "string",
+            "example": "2026-10-27"
+          },
+          "url": {
+            "type": "string",
+            "description": "固定来源的同源 HTTPS 通知地址"
+          },
+          "preview": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "sourceId"
+        ]
+      },
+      "IngestionAcceptedDto": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "status"
+        ]
+      },
+      "AdminArticleAttachmentDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ]
+      },
+      "AdminArticleDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string"
+          },
+          "paragraphs": {
+            "description": "按原文顺序排列的纯文本段落",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminArticleAttachmentDto"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "publishedAt",
+          "text",
+          "paragraphs",
+          "attachments"
+        ]
+      },
+      "AdminCandidateScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "colleges",
+              "complex",
+              "unknown"
+            ]
+          },
+          "colleges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "colleges",
+          "note"
+        ]
+      },
+      "AdminCandidateTrackDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "mode",
+          "members",
+          "rules"
+        ]
+      },
+      "AdminReviewTimeValueDto": {
+        "type": "object",
+        "properties": {
+          "precision": {
+            "type": "string",
+            "enum": [
+              "instant",
+              "date",
+              "unknown"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "precision",
+          "value"
+        ]
+      },
+      "AdminCandidateFieldsDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ]
+          },
+          "organizer": {
+            "type": "string",
+            "nullable": true
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AdminCandidateScopeDto"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateTrackDto"
+            }
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stageNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "materialsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "eventAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          }
+        },
+        "required": [
+          "name",
+          "edition",
+          "kind",
+          "organizer",
+          "hosts",
+          "scope",
+          "mode",
+          "tracks",
+          "members",
+          "rules",
+          "stageNames",
+          "startsAt",
+          "deadline",
+          "materialsAt",
+          "eventAt"
+        ]
+      },
+      "AdminCandidateEvidenceDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "paragraph": {
+            "type": "number",
+            "description": "原文段落索引；-1 表示来源元数据"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "sourceVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "excerpt",
+          "paragraph",
+          "url"
+        ]
+      },
+      "AdminParsedCandidateDto": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "$ref": "#/components/schemas/AdminCandidateFieldsDto"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateEvidenceDto"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "fields",
+          "evidence",
+          "missing",
+          "conflicts",
+          "warnings"
+        ]
+      },
+      "IngestionPreviewItemDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AdminParsedCandidateDto"
+          }
+        },
+        "required": [
+          "url",
+          "article",
+          "candidate"
+        ]
+      },
+      "IngestionExecutionResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "partial",
+              "failed",
+              "interrupted",
+              "locked",
+              "disabled"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string",
+            "nullable": true
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/IngestionCountsDto"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionRunErrorDto"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/IngestionCursorDto"
+          },
+          "previews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionPreviewItemDto"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "source"
+        ]
+      },
+      "IngestionRequestDto": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "description": "原始受理范围与预览参数；中断后显式重试沿用",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IngestionRunOptionsDto"
+              }
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "runId": {
+            "type": "string",
+            "nullable": true
+          },
+          "result": {
+            "nullable": true,
+            "description": "执行结果；status 为采集运行结果，与本对象受理状态分别表达",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IngestionExecutionResultDto"
+              }
+            ]
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "options",
+          "requestId",
+          "sourceId",
+          "status",
+          "runId",
+          "result",
+          "error",
+          "createdAt",
+          "startedAt",
+          "finishedAt"
+        ]
+      },
+      "IngestionCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "每个写操作独立的幂等标识"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "operationId",
+          "reason"
+        ]
+      },
+      "AdminCandidateListItemDto": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "finalUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "sourceVersion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "imported"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdminParsedCandidateDto"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "competitionId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "candidateId",
+          "noticeId",
+          "sourceId",
+          "url",
+          "finalUrl",
+          "sourceVersion",
+          "candidateRevision",
+          "status",
+          "data",
+          "article",
+          "fetchedAt",
+          "competitionId"
+        ]
+      },
+      "AdminCandidateListDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateListItemDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "pageSize",
+          "items"
+        ]
+      },
+      "AdminReviewSourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "finalUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "health": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "finalUrl",
+          "publisher",
+          "fetchedAt",
+          "adapterVersion",
+          "health"
+        ]
+      },
+      "AdminCandidateMappingDto": {
+        "type": "object",
+        "properties": {
+          "competitionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "competitionId"
+        ]
+      },
+      "AdminFormalScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "colleges",
+              "complex",
+              "unknown"
+            ]
+          },
+          "colleges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "colleges",
+          "note"
+        ]
+      },
+      "AdminFormalStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AdminFormalScopeDto"
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "materialsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "eventAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "timeNote": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "registration": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "organizer",
+          "hosts",
+          "scope",
+          "startsAt",
+          "deadline",
+          "materialsAt",
+          "eventAt",
+          "timeNote",
+          "conflict",
+          "registration",
+          "order",
+          "sourceIds"
+        ]
+      },
+      "AdminFormalTrackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ]
+          },
+          "members": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mode",
+          "members",
+          "rules"
+        ]
+      },
+      "AdminFormalNoticeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "publisher",
+          "url",
+          "publishedAt",
+          "checkedAt",
+          "kind"
+        ]
+      },
+      "AdminFormalCompetitionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "official",
+              "historical",
+              "demo"
+            ]
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ]
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalStageDto"
+            }
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalTrackDto"
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalNoticeDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "edition",
+          "category",
+          "organizer",
+          "origin",
+          "publication",
+          "stages",
+          "tracks",
+          "notices"
+        ]
+      },
+      "AdminCandidateDetailDto": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceVersion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "imported"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/AdminReviewSourceDto"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AdminParsedCandidateDto"
+          },
+          "mapping": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminCandidateMappingDto"
+              }
+            ]
+          },
+          "formalBefore": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminFormalCompetitionDto"
+              }
+            ]
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "formalBaseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "candidateId",
+          "noticeId",
+          "sourceId",
+          "sourceVersion",
+          "candidateRevision",
+          "status",
+          "source",
+          "article",
+          "candidate",
+          "mapping",
+          "formalBefore",
+          "baseline",
+          "formalBaseline",
+          "updatedAt"
+        ]
+      },
+      "AdminMergeSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "edition"
+        ]
+      },
+      "AdminImportCollegeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "order"
+        ]
+      },
+      "AdminImportScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "colleges",
+              "complex",
+              "unknown"
+            ]
+          },
+          "colleges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminImportStageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AdminImportScopeDto"
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "materialsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "eventAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "timeNote": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "registration": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AdminImportTrackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ]
+          },
+          "members": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AdminImportNoticeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publishedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AdminImportCompetitionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "official",
+              "historical",
+              "demo"
+            ]
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ]
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportStageDto"
+            }
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportTrackDto"
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportNoticeDto"
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AdminImportBatchDto": {
+        "type": "object",
+        "properties": {
+          "colleges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportCollegeDto"
+            }
+          },
+          "competitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportCompetitionDto"
+            }
+          }
+        }
+      },
+      "AdminReviewFileDto": {
+        "type": "object",
+        "properties": {
+          "mappingBaseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "正式映射快照；HTTP写入必须保留，历史CLI材料可缺省"
+          },
+          "format": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceVersion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AdminReviewSourceDto"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          },
+          "previousArticle": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminArticleDto"
+              }
+            ]
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AdminParsedCandidateDto"
+          },
+          "mergeSuggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminMergeSuggestionDto"
+            }
+          },
+          "formalBefore": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminFormalCompetitionDto"
+              }
+            ]
+          },
+          "batch": {
+            "$ref": "#/components/schemas/AdminImportBatchDto"
+          },
+          "checkedAt": {
+            "type": "string",
+            "nullable": true,
+            "example": "2026-10-27"
+          },
+          "resolution": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mappingBaseline",
+          "format",
+          "operationId",
+          "candidateId",
+          "sourceVersion",
+          "candidateRevision",
+          "targetId",
+          "baseline",
+          "source",
+          "article",
+          "previousArticle",
+          "candidate",
+          "mergeSuggestions",
+          "formalBefore",
+          "batch",
+          "checkedAt",
+          "resolution"
+        ]
+      },
+      "AdminReviewMaterialCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "review": {
+            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminReviewFileDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "review"
+        ]
+      },
+      "AdminReviewSavedResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending"
+            ]
+          },
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "review": {
+            "$ref": "#/components/schemas/AdminReviewFileDto"
+          }
+        },
+        "required": [
+          "status",
+          "candidateId",
+          "candidateRevision",
+          "review"
+        ]
+      },
+      "AdminImportChangeDto": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string",
+            "enum": [
+              "college",
+              "competition"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "insert",
+              "update"
+            ]
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "action"
+        ]
+      },
+      "AdminImportResultDto": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportChangeDto"
+            }
+          }
+        },
+        "required": [
+          "preview",
+          "changes"
+        ]
+      },
+      "AdminReviewApprovedResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved"
+            ]
+          },
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/AdminImportResultDto"
+          }
+        },
+        "required": [
+          "status",
+          "candidateId",
+          "preview"
+        ]
+      },
+      "AdminReviewStateCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "sourceVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "sourceVersion",
+          "candidateRevision",
+          "baseline"
+        ]
+      },
+      "AdminReviewStateResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "rejected"
+            ]
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "candidateRevision",
+          "reason"
+        ]
+      },
+      "AdminReviewImportPreviewResultDto": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportChangeDto"
+            }
+          },
+          "previewId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "preview",
+          "changes",
+          "previewId"
+        ]
+      },
+      "AdminReviewImportCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "review": {
+            "description": "服务端导出的 format=1 审核材料；只读字段须与服务器一致",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminReviewFileDto"
+              }
+            ]
+          },
+          "previewId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "对应 import-preview 的 operationId"
+          },
+          "confirmPublished": {
+            "type": "boolean",
+            "description": "修改已发布记录时显式确认同一预览"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "review",
+          "previewId"
+        ]
+      },
+      "AdminReviewPublishPreviewResultDto": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminImportChangeDto"
+            }
+          },
+          "previewId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview",
+          "changes",
+          "previewId",
+          "targetId"
+        ]
+      },
+      "AdminReviewPublishCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "sourceVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "previewId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "对应 publish-preview 的 operationId"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "确认执行当前发布预览"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "sourceVersion",
+          "candidateRevision",
+          "baseline",
+          "previewId",
+          "confirm"
+        ]
+      },
+      "AdminCandidateOperationDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "sourceVersion": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject",
+              "reopen",
+              "preview",
+              "import",
+              "publish"
+            ]
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "operationId",
+          "sourceVersion",
+          "candidateRevision",
+          "kind",
+          "reviewer",
+          "createdAt",
+          "result"
+        ]
+      },
+      "AdminCandidateOperationsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "candidateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateOperationDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "pageSize",
+          "candidateId",
+          "items"
+        ]
+      },
+      "AdminNoticeListItemDto": {
+        "type": "object",
+        "properties": {
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "finalUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "latestVersion": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "health": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "number",
+            "nullable": true
+          },
+          "article": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminArticleDto"
+              }
+            ]
+          },
+          "candidateId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "candidateStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "imported"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "noticeId",
+          "sourceId",
+          "url",
+          "finalUrl",
+          "latestVersion",
+          "health",
+          "fetchedAt",
+          "revision",
+          "article",
+          "candidateId",
+          "candidateStatus"
+        ]
+      },
+      "AdminNoticeListDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNoticeListItemDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "pageSize",
+          "items"
+        ]
+      },
+      "AdminPublicSourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "listUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "publisher",
+          "host",
+          "listUrl",
+          "version"
+        ]
+      },
+      "AdminLatestVersionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ]
+      },
+      "AdminNoticeCandidateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "imported"
+            ]
+          },
+          "competitionId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "competitionId"
+        ]
+      },
+      "AdminNoticeDetailDto": {
+        "type": "object",
+        "properties": {
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "finalUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "health": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "description": "固定来源配置的公开元数据，不含私密配置",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminPublicSourceDto"
+              }
+            ]
+          },
+          "latestVersion": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLatestVersionDto"
+              }
+            ]
+          },
+          "article": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminArticleDto"
+              }
+            ]
+          },
+          "candidate": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminNoticeCandidateDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "noticeId",
+          "sourceId",
+          "url",
+          "finalUrl",
+          "health",
+          "fetchedAt",
+          "source",
+          "latestVersion",
+          "article",
+          "candidate"
+        ]
+      },
+      "AdminNoticeVersionListItemDto": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "previousVersion": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "bodyHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          }
+        },
+        "required": [
+          "versionId",
+          "revision",
+          "previousVersion",
+          "bodyHash",
+          "adapterVersion",
+          "fetchedAt",
+          "article"
+        ]
+      },
+      "AdminNoticeVersionListDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "noticeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNoticeVersionListItemDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "pageSize",
+          "noticeId",
+          "items"
+        ]
+      },
+      "AdminArticleDifferenceDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "title",
+              "publishedAt",
+              "text",
+              "paragraphs",
+              "attachments"
+            ]
+          },
+          "previous": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AdminArticleAttachmentDto"
+                }
+              }
+            ],
+            "nullable": true
+          },
+          "current": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AdminArticleAttachmentDto"
+                }
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "field",
+          "previous",
+          "current"
+        ]
+      },
+      "AdminNoticeVersionDetailDto": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "previousVersion": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "bodyHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "article": {
+            "$ref": "#/components/schemas/AdminArticleDto"
+          },
+          "previousArticle": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminArticleDto"
+              }
+            ]
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminArticleDifferenceDto"
+            }
+          }
+        },
+        "required": [
+          "versionId",
+          "revision",
+          "previousVersion",
+          "bodyHash",
+          "adapterVersion",
+          "fetchedAt",
+          "article",
+          "previousArticle",
+          "differences"
         ]
       }
     }

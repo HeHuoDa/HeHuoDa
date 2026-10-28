@@ -216,7 +216,19 @@ export async function exportReview(
       approved.sourceVersion === candidate.source_version &&
       approved.targetId === id &&
       approved.baseline === review.baseline &&
-      approved.mappingBaseline === review.mappingBaseline
+      approved.mappingBaseline === review.mappingBaseline &&
+      (
+        [
+          "source",
+          "article",
+          "previousArticle",
+          "candidate",
+          "mergeSuggestions",
+          "formalBefore",
+        ] as const
+      ).every(
+        (field) => commandHash(approved[field]) === commandHash(review[field]),
+      )
     )
       return approved;
     return review;

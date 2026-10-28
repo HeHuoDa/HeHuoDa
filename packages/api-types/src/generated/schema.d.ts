@@ -380,6 +380,374 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ingestion/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/sources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_source"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["AdminIngestionController_configure"];
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminIngestionController_scan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminIngestionController_request"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/requests/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminIngestionController_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/runs/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminIngestionController_resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_listCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_candidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_review"];
+        put: operations["AdminReviewController_saveReview"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_reopen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/import-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_importPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_importReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/publish-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_publishPreview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/candidates/{id}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_operations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_notices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/notices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_notice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/notices/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ingestion/notices/{id}/versions/{versionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminReviewController_version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -680,11 +1048,16 @@ export interface components {
         AdminOperationDto: {
             /** Format: uuid */
             operationId: string;
+            /**
+             * Format: uuid
+             * @description HTTP 写请求的幂等 operationId；旧操作为空
+             */
+            commandOperationId: string | null;
             /** @enum {string} */
             actorType: "admin" | "maintenance" | "anonymous";
             actorId: string | null;
             /** @enum {string} */
-            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "candidate.review" | "candidate.import";
+            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "candidate.review" | "candidate.import";
             /** @enum {string} */
             objectType: "account" | "session" | "competition" | "source" | "candidate";
             objectId: string | null;
@@ -700,6 +1073,661 @@ export interface components {
             total: number;
             page: number;
             pageSize: number;
+        };
+        SourceSettingsDto: {
+            maxPages?: number;
+            frequencyMinutes?: number;
+            requests?: number;
+            intervalMs?: number;
+            timeoutMs?: number;
+            durationMs?: number;
+            bytes?: number;
+        };
+        IngestionRunOptionsDto: {
+            sourceId: string;
+            /** @example 2026-01-01 */
+            from: string;
+            /** @example 2026-10-27 */
+            to: string;
+            url?: string;
+            preview?: boolean;
+            resume?: string;
+            /** Format: uuid */
+            requestId?: string;
+            /** @enum {string} */
+            trigger?: "manual" | "scheduled" | "resume";
+            /** @enum {string} */
+            scheduledPhase?: "fresh" | "resume";
+        };
+        IngestionCountsDto: {
+            discovered: number;
+            new: number;
+            changed: number;
+            unchanged: number;
+            ignored: number;
+            failed: number;
+        };
+        IngestionRunErrorDto: {
+            url: string;
+            message: string;
+            /** @enum {string} */
+            kind?: "skipped" | "budget";
+        };
+        IngestionPendingNoticeDto: {
+            url: string;
+            title: string;
+            publishedAt: string | null;
+        };
+        IngestionCursorDto: {
+            pages: string[];
+            seen: string[];
+            pending: components["schemas"]["IngestionPendingNoticeDto"][];
+        };
+        IngestionRunDto: {
+            id: string;
+            sourceId: string;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "partial" | "failed" | "interrupted";
+            /** @enum {string} */
+            trigger: "manual" | "scheduled" | "resume";
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+            options: components["schemas"]["IngestionRunOptionsDto"];
+            counts: components["schemas"]["IngestionCountsDto"];
+            errors: components["schemas"]["IngestionRunErrorDto"][];
+            cursor: components["schemas"]["IngestionCursorDto"];
+            resumedBy: string[];
+        };
+        IngestionSourceDto: {
+            id: string;
+            publisher: string;
+            version: string;
+            host: string;
+            listUrl: string;
+            enabled: boolean;
+            settings: components["schemas"]["SourceSettingsDto"];
+            baseline: string;
+            available: boolean;
+            latestRun: components["schemas"]["IngestionRunDto"] | null;
+        };
+        ConfigureSourceDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            baseline: string;
+            enabled?: boolean;
+            settings?: components["schemas"]["SourceSettingsDto"];
+        };
+        IngestionRunsDto: {
+            items: components["schemas"]["IngestionRunDto"][];
+            total: number;
+            page: number;
+            pageSize: number;
+        };
+        ScanDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+            sourceId: string;
+            /** @example 2026-01-01 */
+            from?: string;
+            /** @example 2026-10-27 */
+            to?: string;
+            /** @description 固定来源的同源 HTTPS 通知地址 */
+            url?: string;
+            /** @default false */
+            preview: boolean;
+        };
+        IngestionAcceptedDto: {
+            /** Format: uuid */
+            requestId: string;
+            /** @enum {string} */
+            status: "accepted";
+        };
+        AdminArticleAttachmentDto: {
+            title: string;
+            /** Format: uri */
+            url: string;
+        };
+        AdminArticleDto: {
+            title: string;
+            publishedAt: string | null;
+            text: string;
+            /** @description 按原文顺序排列的纯文本段落 */
+            paragraphs: string[];
+            attachments: components["schemas"]["AdminArticleAttachmentDto"][];
+        };
+        AdminCandidateScopeDto: {
+            /** @enum {string} */
+            kind: "all" | "colleges" | "complex" | "unknown";
+            colleges: string[];
+            note: string;
+        };
+        AdminCandidateTrackDto: {
+            name: string;
+            /** @enum {string|null} */
+            mode: "individual" | "team" | "mixed" | null;
+            members: string | null;
+            rules: string | null;
+        };
+        AdminReviewTimeValueDto: {
+            /** @enum {string} */
+            precision: "instant" | "date" | "unknown";
+            value: string | null;
+        };
+        AdminCandidateFieldsDto: {
+            name: string;
+            edition: string | null;
+            /** @enum {string} */
+            kind: "registration" | "supplement" | "award" | "news";
+            organizer: string | null;
+            hosts: string[];
+            scope: components["schemas"]["AdminCandidateScopeDto"];
+            /** @enum {string|null} */
+            mode: "individual" | "team" | "mixed" | null;
+            tracks: components["schemas"]["AdminCandidateTrackDto"][];
+            members: string | null;
+            rules: string[];
+            stageNames: string[];
+            startsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            deadline: components["schemas"]["AdminReviewTimeValueDto"];
+            materialsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            eventAt: components["schemas"]["AdminReviewTimeValueDto"];
+        };
+        AdminCandidateEvidenceDto: {
+            field: string;
+            excerpt: string;
+            /** @description 原文段落索引；-1 表示来源元数据 */
+            paragraph: number;
+            /** Format: uri */
+            url: string;
+            sourceVersion?: string;
+        };
+        AdminParsedCandidateDto: {
+            fields: components["schemas"]["AdminCandidateFieldsDto"];
+            evidence: components["schemas"]["AdminCandidateEvidenceDto"][];
+            missing: string[];
+            conflicts: string[];
+            warnings: string[];
+        };
+        IngestionPreviewItemDto: {
+            url: string;
+            article: components["schemas"]["AdminArticleDto"];
+            candidate: components["schemas"]["AdminParsedCandidateDto"];
+        };
+        IngestionExecutionResultDto: {
+            /** @enum {string} */
+            status: "succeeded" | "partial" | "failed" | "interrupted" | "locked" | "disabled";
+            source: string;
+            runId?: string | null;
+            adapterVersion?: string;
+            access?: string;
+            counts?: components["schemas"]["IngestionCountsDto"];
+            errors?: components["schemas"]["IngestionRunErrorDto"][];
+            cursor?: components["schemas"]["IngestionCursorDto"];
+            previews?: components["schemas"]["IngestionPreviewItemDto"][];
+        };
+        IngestionRequestDto: {
+            /** @description 原始受理范围与预览参数；中断后显式重试沿用 */
+            options: components["schemas"]["IngestionRunOptionsDto"];
+            /** Format: uuid */
+            requestId: string;
+            sourceId: string;
+            /** @enum {string} */
+            status: "accepted" | "running" | "completed" | "failed" | "interrupted";
+            runId: string | null;
+            /** @description 执行结果；status 为采集运行结果，与本对象受理状态分别表达 */
+            result: components["schemas"]["IngestionExecutionResultDto"] | null;
+            error: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+        };
+        IngestionCommandDto: {
+            /**
+             * Format: uuid
+             * @description 每个写操作独立的幂等标识
+             */
+            operationId: string;
+            reason: string;
+        };
+        AdminCandidateListItemDto: {
+            /** Format: uuid */
+            candidateId: string;
+            /** Format: uuid */
+            noticeId: string;
+            sourceId: string;
+            /** Format: uri */
+            url: string;
+            /** Format: uri */
+            finalUrl: string;
+            /** Format: uuid */
+            sourceVersion: string;
+            candidateRevision: number;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "imported";
+            data: components["schemas"]["AdminParsedCandidateDto"];
+            article: components["schemas"]["AdminArticleDto"];
+            /** Format: date-time */
+            fetchedAt: string;
+            competitionId: string | null;
+        };
+        AdminCandidateListDto: {
+            total: number;
+            page: number;
+            pageSize: number;
+            items: components["schemas"]["AdminCandidateListItemDto"][];
+        };
+        AdminReviewSourceDto: {
+            id: string;
+            /** Format: uri */
+            url: string;
+            /** Format: uri */
+            finalUrl: string;
+            publisher: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            adapterVersion: string;
+            health: string;
+        };
+        AdminCandidateMappingDto: {
+            competitionId: string;
+        };
+        AdminFormalScopeDto: {
+            /** @enum {string} */
+            kind: "all" | "colleges" | "complex" | "unknown";
+            colleges: string[];
+            note: string;
+        };
+        AdminFormalStageDto: {
+            id: string;
+            name: string;
+            organizer: string;
+            hosts: string[];
+            scope: components["schemas"]["AdminFormalScopeDto"];
+            startsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            deadline: components["schemas"]["AdminReviewTimeValueDto"];
+            materialsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            eventAt: components["schemas"]["AdminReviewTimeValueDto"];
+            timeNote: string;
+            conflict: boolean;
+            registration: string;
+            order: number;
+            sourceIds: string[];
+        };
+        AdminFormalTrackDto: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            mode: "individual" | "team" | "mixed";
+            members: string;
+            rules: string;
+        };
+        AdminFormalNoticeDto: {
+            id: string;
+            title: string;
+            publisher: string;
+            /** Format: uri */
+            url: string;
+            publishedAt: string | null;
+            checkedAt: string | null;
+            /** @enum {string} */
+            kind: "registration" | "supplement" | "award" | "news";
+        };
+        AdminFormalCompetitionDto: {
+            id: string;
+            name: string;
+            edition: string;
+            category: string;
+            organizer: string;
+            /** @enum {string} */
+            origin: "official" | "historical" | "demo";
+            /** @enum {string} */
+            publication: "draft" | "published" | "hidden";
+            stages: components["schemas"]["AdminFormalStageDto"][];
+            tracks: components["schemas"]["AdminFormalTrackDto"][];
+            notices: components["schemas"]["AdminFormalNoticeDto"][];
+        };
+        AdminCandidateDetailDto: {
+            /** Format: uuid */
+            candidateId: string;
+            /** Format: uuid */
+            noticeId: string;
+            sourceId: string;
+            /** Format: uuid */
+            sourceVersion: string;
+            candidateRevision: number;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "imported";
+            source: components["schemas"]["AdminReviewSourceDto"];
+            article: components["schemas"]["AdminArticleDto"];
+            candidate: components["schemas"]["AdminParsedCandidateDto"];
+            mapping: components["schemas"]["AdminCandidateMappingDto"] | null;
+            formalBefore: components["schemas"]["AdminFormalCompetitionDto"] | null;
+            baseline: string;
+            formalBaseline: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AdminMergeSuggestionDto: {
+            id: string;
+            name: string;
+            edition: string;
+        };
+        AdminImportCollegeDto: {
+            id: string;
+            name: string;
+            order: number;
+        };
+        AdminImportScopeDto: {
+            /** @enum {string} */
+            kind?: "all" | "colleges" | "complex" | "unknown";
+            colleges?: string[];
+            note?: string;
+        };
+        AdminImportStageDto: {
+            id: string;
+            name?: string;
+            organizer?: string;
+            hosts?: string[];
+            scope?: components["schemas"]["AdminImportScopeDto"];
+            startsAt?: components["schemas"]["AdminReviewTimeValueDto"];
+            deadline?: components["schemas"]["AdminReviewTimeValueDto"];
+            materialsAt?: components["schemas"]["AdminReviewTimeValueDto"];
+            eventAt?: components["schemas"]["AdminReviewTimeValueDto"];
+            timeNote?: string;
+            conflict?: boolean;
+            registration?: string;
+            order?: number;
+            sourceIds?: string[];
+        };
+        AdminImportTrackDto: {
+            id: string;
+            name?: string;
+            /** @enum {string} */
+            mode?: "individual" | "team" | "mixed";
+            members?: string;
+            rules?: string;
+        };
+        AdminImportNoticeDto: {
+            id: string;
+            title?: string;
+            publisher?: string;
+            /** Format: uri */
+            url?: string;
+            publishedAt?: string | null;
+            checkedAt?: string | null;
+            /** @enum {string} */
+            kind?: "registration" | "supplement" | "award" | "news";
+        };
+        AdminImportCompetitionDto: {
+            id: string;
+            name?: string;
+            edition?: string;
+            category?: string;
+            organizer?: string;
+            /** @enum {string} */
+            origin?: "official" | "historical" | "demo";
+            /** @enum {string} */
+            publication?: "draft" | "published" | "hidden";
+            stages?: components["schemas"]["AdminImportStageDto"][];
+            tracks?: components["schemas"]["AdminImportTrackDto"][];
+            notices?: components["schemas"]["AdminImportNoticeDto"][];
+        };
+        AdminImportBatchDto: {
+            colleges?: components["schemas"]["AdminImportCollegeDto"][];
+            competitions?: components["schemas"]["AdminImportCompetitionDto"][];
+        };
+        AdminReviewFileDto: {
+            /** @description 正式映射快照；HTTP写入必须保留，历史CLI材料可缺省 */
+            mappingBaseline: string;
+            /** @enum {number} */
+            format: 1;
+            /** Format: uuid */
+            operationId: string;
+            /** Format: uuid */
+            candidateId: string;
+            /** Format: uuid */
+            sourceVersion: string;
+            candidateRevision: number;
+            targetId: string;
+            baseline: string;
+            source: components["schemas"]["AdminReviewSourceDto"];
+            article: components["schemas"]["AdminArticleDto"];
+            previousArticle: components["schemas"]["AdminArticleDto"] | null;
+            candidate: components["schemas"]["AdminParsedCandidateDto"];
+            mergeSuggestions: components["schemas"]["AdminMergeSuggestionDto"][];
+            formalBefore: components["schemas"]["AdminFormalCompetitionDto"] | null;
+            batch: components["schemas"]["AdminImportBatchDto"];
+            /** @example 2026-10-27 */
+            checkedAt: string | null;
+            resolution: string;
+        };
+        AdminReviewMaterialCommandDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            /** @description 服务端导出的 format=1 审核材料；只读字段须与服务器一致 */
+            review: components["schemas"]["AdminReviewFileDto"];
+        };
+        AdminReviewSavedResultDto: {
+            /** @enum {string} */
+            status: "pending";
+            /** Format: uuid */
+            candidateId: string;
+            candidateRevision: number;
+            review: components["schemas"]["AdminReviewFileDto"];
+        };
+        AdminImportChangeDto: {
+            /** @enum {string} */
+            entity: "college" | "competition";
+            id: string;
+            /** @enum {string} */
+            action: "insert" | "update";
+            removed?: string[];
+        };
+        AdminImportResultDto: {
+            preview: boolean;
+            changes: components["schemas"]["AdminImportChangeDto"][];
+        };
+        AdminReviewApprovedResultDto: {
+            /** @enum {string} */
+            status: "approved";
+            /** Format: uuid */
+            candidateId: string;
+            preview: components["schemas"]["AdminImportResultDto"];
+        };
+        AdminReviewStateCommandDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            sourceVersion: string;
+            candidateRevision: number;
+            baseline: string;
+        };
+        AdminReviewStateResultDto: {
+            /** @enum {string} */
+            status: "pending" | "rejected";
+            candidateRevision: number;
+            reason: string;
+        };
+        AdminReviewImportPreviewResultDto: {
+            preview: boolean;
+            changes: components["schemas"]["AdminImportChangeDto"][];
+            /** Format: uuid */
+            previewId: string;
+        };
+        AdminReviewImportCommandDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            /** @description 服务端导出的 format=1 审核材料；只读字段须与服务器一致 */
+            review: components["schemas"]["AdminReviewFileDto"];
+            /**
+             * Format: uuid
+             * @description 对应 import-preview 的 operationId
+             */
+            previewId: string;
+            /** @description 修改已发布记录时显式确认同一预览 */
+            confirmPublished?: boolean;
+        };
+        AdminReviewPublishPreviewResultDto: {
+            preview: boolean;
+            changes: components["schemas"]["AdminImportChangeDto"][];
+            /** Format: uuid */
+            previewId: string;
+            targetId: string;
+        };
+        AdminReviewPublishCommandDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            sourceVersion: string;
+            candidateRevision: number;
+            baseline: string;
+            /**
+             * Format: uuid
+             * @description 对应 publish-preview 的 operationId
+             */
+            previewId: string;
+            /** @description 确认执行当前发布预览 */
+            confirm: boolean;
+        };
+        AdminCandidateOperationDto: {
+            operationId: string;
+            /** Format: uuid */
+            sourceVersion: string;
+            candidateRevision: number;
+            /** @enum {string} */
+            kind: "approve" | "reject" | "reopen" | "preview" | "import" | "publish";
+            reviewer: string;
+            /** Format: date-time */
+            createdAt: string;
+            result: {
+                [key: string]: unknown;
+            };
+        };
+        AdminCandidateOperationsDto: {
+            total: number;
+            page: number;
+            pageSize: number;
+            /** Format: uuid */
+            candidateId: string;
+            items: components["schemas"]["AdminCandidateOperationDto"][];
+        };
+        AdminNoticeListItemDto: {
+            /** Format: uuid */
+            noticeId: string;
+            sourceId: string;
+            /** Format: uri */
+            url: string;
+            /** Format: uri */
+            finalUrl: string;
+            /** Format: uuid */
+            latestVersion: string | null;
+            health: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            revision: number | null;
+            article: components["schemas"]["AdminArticleDto"] | null;
+            /** Format: uuid */
+            candidateId: string | null;
+            /** @enum {string|null} */
+            candidateStatus: "pending" | "approved" | "rejected" | "imported" | null;
+        };
+        AdminNoticeListDto: {
+            total: number;
+            page: number;
+            pageSize: number;
+            items: components["schemas"]["AdminNoticeListItemDto"][];
+        };
+        AdminPublicSourceDto: {
+            id: string;
+            publisher: string;
+            host: string;
+            /** Format: uri */
+            listUrl: string;
+            version: string;
+        };
+        AdminLatestVersionDto: {
+            /** Format: uuid */
+            id: string;
+            revision: number;
+        };
+        AdminNoticeCandidateDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "imported";
+            competitionId: string | null;
+        };
+        AdminNoticeDetailDto: {
+            /** Format: uuid */
+            noticeId: string;
+            sourceId: string;
+            /** Format: uri */
+            url: string;
+            /** Format: uri */
+            finalUrl: string;
+            health: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            /** @description 固定来源配置的公开元数据，不含私密配置 */
+            source: components["schemas"]["AdminPublicSourceDto"];
+            latestVersion: components["schemas"]["AdminLatestVersionDto"] | null;
+            article: components["schemas"]["AdminArticleDto"] | null;
+            candidate: components["schemas"]["AdminNoticeCandidateDto"] | null;
+        };
+        AdminNoticeVersionListItemDto: {
+            /** Format: uuid */
+            versionId: string;
+            revision: number;
+            /** Format: uuid */
+            previousVersion: string | null;
+            bodyHash: string;
+            adapterVersion: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            article: components["schemas"]["AdminArticleDto"];
+        };
+        AdminNoticeVersionListDto: {
+            total: number;
+            page: number;
+            pageSize: number;
+            /** Format: uuid */
+            noticeId: string;
+            items: components["schemas"]["AdminNoticeVersionListItemDto"][];
+        };
+        AdminArticleDifferenceDto: {
+            /** @enum {string} */
+            field: "title" | "publishedAt" | "text" | "paragraphs" | "attachments";
+            previous: (string | string[] | components["schemas"]["AdminArticleAttachmentDto"][]) | null;
+            current: (string | string[] | components["schemas"]["AdminArticleAttachmentDto"][]) | null;
+        };
+        AdminNoticeVersionDetailDto: {
+            /** Format: uuid */
+            versionId: string;
+            revision: number;
+            /** Format: uuid */
+            previousVersion: string | null;
+            bodyHash: string;
+            adapterVersion: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            article: components["schemas"]["AdminArticleDto"];
+            previousArticle: components["schemas"]["AdminArticleDto"] | null;
+            differences: components["schemas"]["AdminArticleDifferenceDto"][];
         };
     };
     responses: never;
@@ -1962,7 +2990,7 @@ export interface operations {
                 pageSize?: components["schemas"]["Object"];
                 actorType?: "admin" | "maintenance" | "anonymous";
                 actorId?: string;
-                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "candidate.review" | "candidate.import";
+                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "candidate.review" | "candidate.import";
                 objectType?: "account" | "session" | "competition" | "source" | "candidate";
                 from?: string;
                 to?: string;
@@ -2051,6 +3079,1687 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionSourceDto"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionSourceDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_configure: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigureSourceDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionSourceDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_runs: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                sourceId?: string;
+                status?: "running" | "succeeded" | "partial" | "failed" | "interrupted";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRunsDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRunDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_scan: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScanDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionAcceptedDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRequestDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_retry: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestionCommandDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionAcceptedDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminIngestionController_resume: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestionCommandDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionAcceptedDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_listCandidates: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                sourceId?: string;
+                status?: "pending" | "approved" | "rejected" | "imported";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 候选分页；包含采集证据及正式映射 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCandidateListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_candidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCandidateDetailDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_review: {
+        parameters: {
+            query?: {
+                targetId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 审核材料；原文与证据以纯文本返回 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewFileDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_saveReview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewMaterialCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewSavedResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_approve: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewMaterialCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewApprovedResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_reject: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewStateCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewStateResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_reopen: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewStateCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewStateResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_importPreview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewMaterialCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewImportPreviewResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_importReview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewImportCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminImportResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_publishPreview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewStateCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReviewPublishPreviewResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_publish: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReviewPublishCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminImportResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_operations: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 候选操作历史，包含 CLI 与管理员审核操作 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCandidateOperationsDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_notices: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                sourceId?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 通知与当前不可变内容版本分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNoticeListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_notice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNoticeDetailDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_versions: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNoticeVersionListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 正文快照、安全纯文本与相对上一版本的差异 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNoticeVersionDetailDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

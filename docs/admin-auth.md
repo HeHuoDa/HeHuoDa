@@ -44,7 +44,7 @@ Cookie 名为 `hh_admin_session`，32字节随机秘密以 base64url 表达，�
 
 开发跨源请求须带 `credentials: include`，先读取 CSRF 再写。允许的管理 Origin 获得精确 CORS Origin 和 Credentials，预检只允许声明的写方法及 Content-Type/X-CSRF-Token/Accept 请求头；其他来源不获凭据授权。登录只检查 Origin，不要求已有 CSRF。生产依然需要 HTTPS 终止代理和正确转发配置。
 
-工作台草稿／已发布项分别统计正式比赛的 `publication=draft/published`，空库返回真实0；pending/sources 尚无管理查询提供者，返回 `available=false,count=null`。不从旧 CLI 数据推定管理模块已经接入；后续 #38/#39/#40/#41 可补其统计提供者。
+工作台草稿／已发布项分别统计正式比赛的 `publication=draft/published`，空库返回真实0；#39/#40 接入后，pending 统计全部候选中 `status=pending` 的数量，sources 统计固定已实现来源（含停用来源）。各项注明 scope 与 asOf，见[管理采集与审核接口](admin-ingestion.md)。
 
 ## 后续业务的事务审计入口
 
