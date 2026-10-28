@@ -73,6 +73,15 @@ export function safeUrl(value: string, source: Source): URL {
     url.port
   )
     throw new Error("请求 URL 不在来源 HTTPS 白名单");
+  if (
+    url.pathname !== "/robots.txt" &&
+    !source.channels.some(
+      (channel) =>
+        new RegExp(channel.listPath).test(url.pathname) ||
+        new RegExp(channel.noticePath).test(url.pathname),
+    )
+  )
+    throw new Error("请求路径不在来源注册栏目白名单");
   url.hash = "";
   return url;
 }
