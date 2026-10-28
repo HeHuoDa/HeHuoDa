@@ -2,6 +2,7 @@ import {
   pgTable,
   text,
   integer,
+  bigint,
   jsonb,
   timestamp,
   date,
@@ -18,6 +19,7 @@ import type {
   TrackRecord,
   NoticeRecord,
 } from "../competitions/competition.model.js";
+import type { Channel } from "@hehuoda/sicau-connectors/notices";
 export const colleges = pgTable("colleges", {
   id: text().primaryKey(),
   name: text().notNull(),
@@ -116,22 +118,136 @@ export const ingestionSources = pgTable("ingestion_sources", {
   settings: jsonb().notNull(),
   lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
 });
-export const ingestionRuns = pgTable("ingestion_runs", {
+export const ingestionChannels = pgTable(
+  "ingestion_channels",
+  {
+    sourceId: text("source_id").notNull(),
+    id: text().notNull(),
+    data: jsonb().$type<Channel>().notNull(),
+    enabled: boolean().notNull().default(false),
+    settings: jsonb().$type<Record<string, number>>().notNull().default({}),
+    verificationStatus: text("verification_status")
+      .$type<"pending" | "verified" | "rejected">()
+      .notNull()
+      .default("pending"),
+    verification: jsonb().notNull().default({}),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verifiedBy: text("verified_by"),
+    activatedOn: date("activated_on"),
+    lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
+    lastSuccessfulCheck: timestamp("last_successful_check", {
+      withTimezone: true,
+    }),
+    failureCount: integer("failure_count").notNull().default(0),
+    backoffUntil: timestamp("backoff_until", { withTimezone: true }),
+    rotationSeq: bigint("rotation_seq", { mode: "bigint" })
+      .notNull()
+      .default(0n),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sourceId, t.id] }),
+    foreignKey({
+      columns: [t.sourceId],
+      foreignColumns: [ingestionSources.id],
+    }),
+  ],
+);
+export const ingestionRounds = pgTable("ingestion_rounds", {
   id: text().primaryKey(),
-  sourceId: text("source_id")
-    .notNull()
-    .references(() => ingestionSources.id),
-  trigger: text().notNull(),
-  startedAt: timestamp("started_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  nextDueAt: timestamp("next_due_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
-  status: text().notNull(),
-  options: jsonb().notNull(),
-  cursor: jsonb().notNull(),
-  counts: jsonb().notNull(),
-  errors: jsonb().notNull(),
+  status: text().$type<"running" | "partial" | "succeeded">().notNull(),
+  freshCheckStatus: jsonb("fresh_check_status").notNull().default({}),
+  rotationCursor: text("rotation_cursor"),
+  budgetUsage: jsonb("budget_usage").notNull().default({}),
 });
+export const ingestionScanTasks = pgTable(
+  "ingestion_scan_tasks",
+  {
+    id: text().primaryKey(),
+    sourceId: text("source_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    roundId: text("round_id").references(() => ingestionRounds.id),
+    rebuildOf: text("rebuild_of"),
+    phase: text().$type<"fresh" | "backfill" | "revisit" | "retry">().notNull(),
+    fromDate: date("from_date").notNull(),
+    toDate: date("to_date").notNull(),
+    configHash: text("config_hash").notNull(),
+    cursor: jsonb().$type<Record<string, unknown>>().notNull().default({
+      pages: [],
+      pending: [],
+      seen: [],
+    }),
+    status: text()
+      .$type<
+        | "pending"
+        | "running"
+        | "partial"
+        | "succeeded"
+        | "failed"
+        | "superseded"
+      >()
+      .notNull(),
+    leafRunId: text("leaf_run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.sourceId, t.channelId],
+      foreignColumns: [ingestionChannels.sourceId, ingestionChannels.id],
+    }),
+    foreignKey({ columns: [t.rebuildOf], foreignColumns: [t.id] }),
+    unique().on(t.id, t.sourceId, t.channelId),
+    unique().on(t.rebuildOf),
+  ],
+);
+export const ingestionRuns = pgTable(
+  "ingestion_runs",
+  {
+    id: text().primaryKey(),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => ingestionSources.id),
+    channelId: text("channel_id").notNull().default("default"),
+    phase: text().$type<"fresh" | "backfill" | "revisit" | "retry">(),
+    configHash: text("config_hash"),
+    taskId: text("task_id"),
+    roundId: text("round_id").references(() => ingestionRounds.id),
+    budgetUsage: jsonb("budget_usage").notNull().default({}),
+    trigger: text().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    status: text().notNull(),
+    options: jsonb().notNull(),
+    cursor: jsonb().notNull(),
+    counts: jsonb().notNull(),
+    errors: jsonb().notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.sourceId, t.channelId],
+      foreignColumns: [ingestionChannels.sourceId, ingestionChannels.id],
+    }),
+    foreignKey({
+      columns: [t.taskId, t.sourceId, t.channelId],
+      foreignColumns: [
+        ingestionScanTasks.id,
+        ingestionScanTasks.sourceId,
+        ingestionScanTasks.channelId,
+      ],
+    }),
+    unique().on(t.id, t.sourceId, t.channelId),
+  ],
+);
 export const ingestionNotices = pgTable(
   "ingestion_notices",
   {
@@ -147,7 +263,36 @@ export const ingestionNotices = pgTable(
     lastModified: text("last_modified"),
     health: text().notNull(),
   },
-  (t) => [unique().on(t.sourceId, t.url)],
+  (t) => [unique().on(t.sourceId, t.url), unique().on(t.id, t.sourceId)],
+);
+export const ingestionNoticeChannels = pgTable(
+  "ingestion_notice_channels",
+  {
+    noticeId: text("notice_id").notNull(),
+    sourceId: text("source_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    firstDiscoveredAt: timestamp("first_discovered_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    lastDiscoveredAt: timestamp("last_discovered_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.noticeId, t.sourceId, t.channelId] }),
+    foreignKey({
+      columns: [t.noticeId, t.sourceId],
+      foreignColumns: [ingestionNotices.id, ingestionNotices.sourceId],
+    }),
+    foreignKey({
+      columns: [t.sourceId, t.channelId],
+      foreignColumns: [ingestionChannels.sourceId, ingestionChannels.id],
+    }),
+  ],
 );
 export const ingestionVersions = pgTable(
   "ingestion_versions",
