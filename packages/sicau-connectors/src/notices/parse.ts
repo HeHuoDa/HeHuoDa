@@ -44,6 +44,7 @@ export function parseCandidate(
   article: Article,
   url: string,
   directory: Directory,
+  notificationKind?: CandidateFields["kind"],
 ): ParsedCandidate {
   const evidence: Evidence[] = [
     { field: "name", excerpt: article.title, paragraph: -1, url },
@@ -63,15 +64,15 @@ export function parseCandidate(
     conflicts.push(
       "年份冲突：" + years.join("、") + "；须区分届次、赛段和引用年份",
     );
-  const kind: CandidateFields["kind"] = /获奖|结果公示|名单公示|表彰/.test(
-    article.title,
-  )
-    ? "award"
-    : /补充|延期|更正|调整/.test(article.title)
-      ? "supplement"
-      : /报名|参赛|竞赛.*通知|比赛.*通知/.test(article.title)
-        ? "registration"
-        : "news";
+  const kind: CandidateFields["kind"] =
+    notificationKind ??
+    (/获奖|结果公示|名单公示|表彰/.test(article.title)
+      ? "award"
+      : /补充|延期|更正|调整/.test(article.title)
+        ? "supplement"
+        : /报名|参赛|竞赛.*通知|比赛.*通知/.test(article.title)
+          ? "registration"
+          : "news");
   evidence.push({ field: "kind", excerpt: article.title, paragraph: -1, url });
   const fields: CandidateFields = {
     name: article.title,
@@ -130,7 +131,8 @@ export function parseCandidate(
         if (fields.organizer && fields.organizer !== organizer.trim()) {
           conflicts.push("主办单位有多个表述，待核对");
           fields.organizer = null;
-        } else fields.organizer = organizer.trim();
+        } else if (!conflicts.includes("主办单位有多个表述，待核对"))
+          fields.organizer = organizer.trim();
         add("organizer", paragraph, index);
       }
     }
