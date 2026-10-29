@@ -8,6 +8,13 @@ import { EvidenceReferenceDto } from "../ingestion/attachment-response.dto.js";
 export class AdminCandidateMappingDto {
   @ApiProperty() competitionId!: string;
 }
+export class AdminClassificationResultDto {
+  @ApiProperty() candidateId!: string;
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  classification!: string;
+  @ApiProperty({ enum: ["pending"] }) status!: string;
+  @ApiProperty() candidateRevision!: number;
+}
 
 export class AdminPublicSourceDto {
   @ApiProperty() id!: string;
@@ -45,9 +52,17 @@ export class AdminArticleDto {
 }
 
 export class AdminCandidateEvidenceDto {
+  @ApiPropertyOptional({ enum: ["html", "pdf", "docx"] }) format?: string;
+  @ApiPropertyOptional() noticeVersion?: string;
+  @ApiPropertyOptional({ type: String, nullable: true }) attachmentVersion?:
+    string | null;
+  @ApiPropertyOptional({ minimum: 1 }) page?: number;
   @ApiProperty() field!: string;
   @ApiProperty() excerpt!: string;
-  @ApiProperty({ description: "原文段落索引；-1 表示来源元数据" })
+  @ApiProperty({
+    description:
+      "HTML段落从0起；DOCX段落从1起；PDF以page定位，paragraph=-1；标题/元数据=-1",
+  })
   paragraph!: number;
   @ApiProperty({ format: "uri" }) url!: string;
   @ApiPropertyOptional() sourceVersion?: string;
@@ -99,7 +114,35 @@ export class AdminCandidateFieldsDto {
   eventAt!: AdminReviewTimeValueDto;
 }
 
+export class AdminRuleClassificationDto {
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  classification!: string;
+  @ApiProperty({ enum: ["registration", "supplement", "award", "news"] })
+  notificationKind!: string;
+  @ApiProperty() ruleVersion!: string;
+  @ApiProperty({ type: [String] }) reasons!: string[];
+  @ApiProperty({ type: [String] }) exclusions!: string[];
+  @ApiProperty() needsReview!: boolean;
+  @ApiProperty() priority!: number;
+}
+export class AdminFieldChoiceDto {
+  @ApiProperty({
+    nullable: true,
+    oneOf: [{ type: "string" }, { type: "object", additionalProperties: true }],
+  })
+  value!: unknown;
+  @ApiProperty({ type: [AdminCandidateEvidenceDto] })
+  evidence!: AdminCandidateEvidenceDto[];
+}
+export class AdminFieldConflictDto {
+  @ApiProperty() field!: string;
+  @ApiProperty({ type: [AdminFieldChoiceDto] }) values!: AdminFieldChoiceDto[];
+}
 export class AdminParsedCandidateDto {
+  @ApiPropertyOptional({ type: AdminRuleClassificationDto })
+  classification?: AdminRuleClassificationDto;
+  @ApiPropertyOptional({ type: [AdminFieldConflictDto] })
+  fieldConflicts?: AdminFieldConflictDto[];
   @ApiProperty({ type: AdminCandidateFieldsDto })
   fields!: AdminCandidateFieldsDto;
   @ApiProperty({ type: [AdminCandidateEvidenceDto] })
@@ -303,6 +346,11 @@ export class AdminReviewFileDto {
 }
 
 export class AdminCandidateListItemDto {
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  classification!: string;
+  @ApiProperty() ruleVersion!: string;
+  @ApiProperty() needsReview!: boolean;
+  @ApiProperty() priority!: number;
   @ApiProperty({ format: "uuid" }) candidateId!: string;
   @ApiProperty({ format: "uuid" }) noticeId!: string;
   @ApiProperty() sourceId!: string;
@@ -326,11 +374,53 @@ export class AdminPageDto {
 }
 
 export class AdminCandidateListDto extends AdminPageDto {
+  @ApiProperty({
+    type: "object",
+    additionalProperties: { type: "integer" },
+    description: "当前筛选条件下各分类数量",
+  })
+  counts!: Record<string, number>;
   @ApiProperty({ type: [AdminCandidateListItemDto] })
   items!: AdminCandidateListItemDto[];
 }
 
+export class AdminExtractionRevisionDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() sourceVersion!: string;
+  @ApiProperty() evidenceRevision!: number;
+  @ApiProperty() ruleVersion!: string;
+  @ApiProperty({ type: AdminParsedCandidateDto })
+  data!: AdminParsedCandidateDto;
+  @ApiProperty({ format: "date-time" }) createdAt!: string;
+}
+export class AdminClassificationHistoryDto {
+  @ApiProperty() candidateRevision!: number;
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  previousClassification!: string;
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  classification!: string;
+  @ApiProperty() reason!: string;
+  @ApiProperty({ format: "date-time" }) checkedAt!: string;
+  @ApiProperty() evidenceRevision!: number;
+  @ApiProperty() baseline!: string;
+  @ApiProperty() actorId!: string;
+}
 export class AdminCandidateDetailDto {
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  classification!: string;
+  @ApiProperty() ruleVersion!: string;
+  @ApiProperty() needsReview!: boolean;
+  @ApiProperty() priority!: number;
+  @ApiProperty({
+    type: [AdminExtractionRevisionDto],
+    description: "最近50个不可变规则修订",
+  })
+  extractionRevisions!: AdminExtractionRevisionDto[];
+  @ApiProperty({
+    type: [AdminClassificationHistoryDto],
+    description: "最近50个人工分类历史",
+  })
+  classificationHistory!: AdminClassificationHistoryDto[];
   @ApiProperty({ format: "uuid" }) candidateId!: string;
   @ApiProperty({ format: "uuid" }) noticeId!: string;
   @ApiProperty() sourceId!: string;

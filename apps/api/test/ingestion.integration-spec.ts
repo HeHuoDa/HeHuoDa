@@ -13,7 +13,11 @@ import {
   parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 
-import { informationArticle, informationList } from "./notice-fixtures.js";
+import {
+  informationArticle,
+  informationList,
+  noticeBody,
+} from "./notice-fixtures.js";
 
 import {
   persistArticle,
@@ -303,15 +307,33 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       ).rows[0].status,
     ).toBe("interrupted");
   });
-  it("普通通知和报名者名单不进入候选，未保存正文或原始响应", async () => {
+  it("普通通知仅留最小分类记录，报名者名单不保存正文或原始响应", async () => {
     const ordinary = informationList
       .replace("2026年测试竞赛报名通知", "普通学术新闻")
       .replace('<a href="tz/3.htm">下页</a>', "");
     expect(
-      await runner([http(404), http(200, ordinary)]).scan({
+      await runner([
+        http(404),
+        http(200, ordinary),
+        http(
+          200,
+          informationArticle
+            .replaceAll("2026年测试竞赛报名通知", "普通学术新闻")
+            .replace(
+              noticeBody,
+              "<p>本周办公时间安排，请各单位按通知办理相关手续。</p>",
+            ),
+        ),
+      ]).scan({
         sourceId: source.id,
       }),
-    ).toMatchObject({ status: "succeeded", counts: { ignored: 1 } });
+    ).toMatchObject({ status: "succeeded", counts: { new: 1 } });
+    expect((await candidate()).classification).toBe("non_competition");
+    const minimal = (
+      await db.pool.query("SELECT article,raw_response FROM ingestion_versions")
+    ).rows[0];
+    expect(minimal.article.text).toBe("");
+    expect(minimal.raw_response.length).toBe(0);
     const sensitive = informationArticle.replace(
       "2026年测试竞赛报名通知",
       "程序设计竞赛报名人员名单",
@@ -325,7 +347,7 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     expect(
       (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
         .count,
-    ).toBe("0");
+    ).toBe("1");
   });
   it("已有草稿保持草稿，已发布更新经过显式预览和确认前保持原公开数据", async () => {
     await importBatch(db.pool, {

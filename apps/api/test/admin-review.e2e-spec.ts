@@ -87,6 +87,136 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     };
   }
 
+  it("分类独立于审核状态，权限、幂等、旧基线、筛选与数量均有契约", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const get = async () =>
+      (
+        await test.request("GET", path, undefined, { cookie: auth.cookie })
+      ).json();
+    const original = await get();
+    const command = {
+      operationId: randomUUID(),
+      baseline: original.baseline,
+      reason: "核对原文后判为非赛事",
+      classification: "non_competition",
+    };
+    expect(
+      (await test.request("POST", path + "/classification", command))
+        .statusCode,
+    ).toBe(403);
+    const changed = await test.request(
+      "POST",
+      path + "/classification",
+      command,
+      auth.headers,
+    );
+    expect(changed.statusCode).toBe(200);
+    expect(await get()).toMatchObject({
+      classification: "non_competition",
+      status: "pending",
+      candidateRevision: original.candidateRevision + 1,
+    });
+    const nonCompetitionReview = correctedReview(
+      (
+        await test.request("GET", path + "/review", undefined, {
+          cookie: auth.cookie,
+        })
+      ).json(),
+    );
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/approve",
+          {
+            operationId: randomUUID(),
+            reason: "非赛事需先修改分类",
+            review: nonCompetitionReview,
+          },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          command,
+          auth.headers,
+        )
+      ).json(),
+    ).toEqual(changed.json());
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          { ...command, classification: "suspected" },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          { ...command, operationId: randomUUID() },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    const filtered = await test.request(
+      "GET",
+      "admin/ingestion/candidates?classification=non_competition&needsReview=false&kind=registration",
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json()).toMatchObject({
+      total: 1,
+      counts: { non_competition: 1 },
+    });
+    expect(filtered.json().items[0]).toMatchObject({
+      candidateId: id,
+      priority: 3,
+      ruleVersion: "competition-rules-1",
+    });
+    expect(
+      (
+        await test.request(
+          "GET",
+          "admin/ingestion/candidates?needsReview=garbage",
+          undefined,
+          { cookie: auth.cookie },
+        )
+      ).statusCode,
+    ).toBe(400);
+    const current = await get();
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          {
+            ...command,
+            operationId: randomUUID(),
+            baseline: current.baseline,
+            classification: "suspected",
+          },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(200);
+    expect(await get()).toMatchObject({
+      classification: "suspected",
+      status: "pending",
+    });
+  });
+
   it("保存审核修订、批准、预览、导入和发布按同一材料逐步完成", async () => {
     const id = await candidateId();
     const auth = await session();

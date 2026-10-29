@@ -26,6 +26,7 @@ import { ApiErrorDto } from "../common/dto/api-error.dto.js";
 import type { AdminRequest } from "./admin.guard.js";
 import {
   AdminCandidateListQueryDto,
+  AdminClassificationCommandDto,
   AdminCandidateOperationsQueryDto,
   AdminNoticeListQueryDto,
   AdminReviewPageQueryDto,
@@ -38,6 +39,7 @@ import {
 import { AdminReviewService } from "./admin-review.service.js";
 import {
   AdminCandidateDetailDto,
+  AdminClassificationResultDto,
   AdminCandidateListDto,
   AdminCandidateOperationsDto,
   AdminImportResultDto,
@@ -77,6 +79,21 @@ export class AdminReviewController {
   @ApiNotFoundResponse({ type: ApiErrorDto })
   candidate(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.service.candidateDetail(id);
+  }
+
+  @Post("candidates/:id/classification")
+  @HttpCode(200)
+  @ApiOkResponse({ type: AdminClassificationResultDto })
+  @ApiNotFoundResponse({ type: ApiErrorDto })
+  @ApiConflictResponse({ type: ApiErrorDto })
+  @ApiHeader({ name: "Origin", required: true })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  classify(
+    @Req() request: AdminRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() command: AdminClassificationCommandDto,
+  ) {
+    return this.service.classify(request.admin!, id, command);
   }
 
   @Get("candidates/:id/review")

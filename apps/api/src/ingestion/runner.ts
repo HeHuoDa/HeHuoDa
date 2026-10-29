@@ -749,7 +749,6 @@ export class IngestionRunner {
             ((item.publishedAt &&
               (item.publishedAt < options.from ||
                 item.publishedAt > options.to)) ||
-              !isCompetitionNotice(item.title) ||
               containsApplicantList(item.title))
           ) {
             counts.ignored++;
@@ -813,15 +812,14 @@ export class IngestionRunner {
                 message:
                   "正文未提供可解析的完整发布日期；保留未知，不计算小时级发现延迟",
               });
-            if (containsApplicantList(article.title))
+            if (containsApplicantList(article.title + "\n" + article.text))
               throw new Error("通知涉及报名者名单，停止采集并保留正式数据");
             if (
-              (!known && !isCompetitionNotice(article.title)) ||
-              (!options.url &&
-                options.phase !== "retry" &&
-                article.publishedAt &&
-                (article.publishedAt < options.from ||
-                  article.publishedAt > options.to))
+              !options.url &&
+              options.phase !== "retry" &&
+              article.publishedAt &&
+              (article.publishedAt < options.from ||
+                article.publishedAt > options.to)
             )
               counts.ignored++;
             else {

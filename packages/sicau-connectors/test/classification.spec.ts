@@ -9,6 +9,45 @@ import {
 } from "./classification-corpus.js";
 
 describe("赛事分类独立于审核状态", () => {
+  it("资格标题和下一段分属不同证据时分别定位，不伪造跨来源摘录", () => {
+    const parsed = parseEvidenceCandidate(
+      {
+        title: "补充通知",
+        publishedAt: null,
+        text: "参赛对象：",
+        paragraphs: ["参赛对象："],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+      [
+        {
+          format: "docx",
+          url: "https://example.edu/a",
+          noticeVersion: "v1",
+          attachmentVersion: "a1",
+          segments: [
+            {
+              kind: "paragraph",
+              index: 1,
+              text: "全校学生可参加数学竞赛报名。",
+            },
+          ],
+        },
+      ],
+    );
+    expect(parsed.evidence.filter((e) => e.field === "scope")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ format: "html", excerpt: "参赛对象：" }),
+        expect.objectContaining({
+          format: "docx",
+          excerpt: "全校学生可参加数学竞赛报名。",
+          paragraph: 1,
+        }),
+      ]),
+    );
+  });
   for (const [category, titles] of Object.entries(positiveGroups))
     it.each(titles)(`${category} 构造正例 %s`, (title) => {
       const article = {

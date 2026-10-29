@@ -7,6 +7,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { randomUUID } from "node:crypto";
 import type { Article } from "@hehuoda/sicau-connectors/notices";
 import { readCatalog } from "../competitions/catalog.js";
 import { ImportValidationError } from "../competitions/import.js";
@@ -25,6 +26,7 @@ import { DatabaseService } from "../database/database.service.js";
 import type { AdminContext } from "./admin.service.js";
 import type {
   AdminCandidateListQueryDto,
+  AdminClassificationCommandDto,
   AdminCandidateOperationsQueryDto,
   AdminNoticeListQueryDto,
   AdminReviewPageQueryDto,
@@ -114,6 +116,34 @@ export class AdminReviewService {
         values.push(query.status);
         clauses.push(`c.status=$${values.length}`);
       }
+      for (const [value, expression] of [
+        [query.classification, "c.classification"],
+        [query.kind, "c.data->'fields'->>'kind'"],
+        [query.needsReview, "c.needs_review::text"],
+      ]) {
+        if (value !== undefined) {
+          values.push(value);
+          clauses.push(`${expression}=$${values.length}`);
+        }
+      }
+      if (query.collegeId) {
+        values.push(query.collegeId);
+        clauses.push(
+          `EXISTS(SELECT 1 FROM ingestion_sources s WHERE s.id=n.source_id AND s.data->>'collegeId'=$${values.length})`,
+        );
+      }
+      if (query.channelId) {
+        values.push(query.channelId);
+        clauses.push(
+          `EXISTS(SELECT 1 FROM ingestion_notice_channels nc WHERE nc.notice_id=n.id AND nc.channel_id=$${values.length})`,
+        );
+      }
+      if (query.attachmentStatus) {
+        values.push(query.attachmentStatus);
+        clauses.push(
+          `EXISTS(SELECT 1 FROM ingestion_attachments a WHERE a.notice_id=n.id AND a.state=$${values.length})`,
+        );
+      }
       if (query.from) {
         values.push(query.from);
         clauses.push(`v.fetched_at >= $${values.length}::timestamptz`);
@@ -123,20 +153,35 @@ export class AdminReviewService {
         clauses.push(`v.fetched_at <= $${values.length}::timestamptz`);
       }
       const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
-      const count = await client.query<{ total: string }>(
-        `SELECT count(*) AS total FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version${where}`,
+      const count = await client.query<{
+        total: string;
+        definite: number;
+        suspected: number;
+        non_competition: number;
+      }>(
+        `SELECT count(*) AS total,count(*) FILTER(WHERE c.classification='definite')::int AS definite,count(*) FILTER(WHERE c.classification='suspected')::int AS suspected,count(*) FILTER(WHERE c.classification='non_competition')::int AS non_competition FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version${where}`,
         values,
       );
       const rows = await client.query(
-        `SELECT c.id AS "candidateId",c.notice_id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",c.source_version AS "sourceVersion",c.revision AS "candidateRevision",c.status,c.data,v.article,v.fetched_at AS "fetchedAt",m.competition_id AS "competitionId" FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id${where} ORDER BY v.fetched_at DESC,c.id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        `SELECT c.id AS "candidateId",c.notice_id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",c.source_version AS "sourceVersion",c.revision AS "candidateRevision",c.status,c.data,c.classification,c.rule_version AS "ruleVersion",c.needs_review AS "needsReview",c.priority,v.article,v.fetched_at AS "fetchedAt",m.competition_id AS "competitionId" FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id${where} ORDER BY c.priority,v.fetched_at DESC,c.id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
         [...values, query.pageSize, (query.page - 1) * query.pageSize],
       );
-      return pageResult(
-        rows.rows.map((row) => ({ ...row, article: safeArticle(row.article) })),
-        count.rows[0]!.total,
-        query.page,
-        query.pageSize,
-      );
+      return {
+        ...pageResult(
+          rows.rows.map((row) => ({
+            ...row,
+            article: safeArticle(row.article),
+          })),
+          count.rows[0]!.total,
+          query.page,
+          query.pageSize,
+        ),
+        counts: {
+          definite: count.rows[0]!.definite,
+          suspected: count.rows[0]!.suspected,
+          non_competition: count.rows[0]!.non_competition,
+        },
+      };
     });
   }
 
@@ -154,6 +199,22 @@ export class AdminReviewService {
         sourceVersion: row.sourceVersion,
         candidateRevision: row.candidateRevision,
         status: row.status,
+        classification: row.classification,
+        ruleVersion: row.ruleVersion,
+        needsReview: row.needsReview,
+        priority: row.priority,
+        extractionRevisions: (
+          await client.query(
+            'SELECT id,source_version AS "sourceVersion",evidence_revision AS "evidenceRevision",rule_version AS "ruleVersion",data,created_at AS "createdAt" FROM ingestion_extraction_revisions WHERE candidate_id=$1 ORDER BY created_at DESC,id LIMIT 50',
+            [candidateId],
+          )
+        ).rows,
+        classificationHistory: (
+          await client.query(
+            'SELECT candidate_revision AS "candidateRevision",previous_classification AS "previousClassification",classification,reason,checked_at AS "checkedAt",evidence_revision AS "evidenceRevision",baseline,actor_id AS "actorId" FROM ingestion_classification_revisions WHERE candidate_id=$1 ORDER BY checked_at DESC,id LIMIT 50',
+            [candidateId],
+          )
+        ).rows,
         source: {
           id: row.sourceId,
           url: row.url,
@@ -176,6 +237,68 @@ export class AdminReviewService {
         updatedAt: row.updatedAt.toISOString(),
       };
     });
+  }
+
+  async classify(
+    context: AdminContext,
+    candidateId: string,
+    command: AdminClassificationCommandDto,
+  ) {
+    return this.execute(
+      context,
+      candidateId,
+      command,
+      "candidate.review",
+      { kind: "classification", ...command },
+      async (client) => {
+        const row = await this.candidateRow(client, candidateId);
+        if (
+          this.stateBaseline(row) !== command.baseline ||
+          row.latestVersion !== row.sourceVersion
+        )
+          throw new ConflictException();
+        // Reject/reopen semantics stay independent; imported candidates cannot revoke formal data.
+        if (row.status === "imported" || row.status === "rejected")
+          throw new ConflictException(
+            "须按审核状态规则重开，已导入候选不能改为非赛事撤销正式数据",
+          );
+        await client.query(
+          `INSERT INTO ingestion_classification_revisions(id,candidate_id,candidate_revision,previous_classification,classification,reason,evidence_revision,baseline,actor_id)
+        SELECT $1,c.id,c.revision+1,c.classification,$3,$4,n.evidence_revision,$5,$6 FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id WHERE c.id=$2`,
+          [
+            randomUUID(),
+            candidateId,
+            command.classification,
+            command.reason,
+            command.baseline,
+            context.id,
+          ],
+        );
+        await client.query(
+          `UPDATE ingestion_candidates SET classification=$2,classification_override=$2,needs_review=$3,priority=$4,
+        revision=revision+1,status='pending',reviewer=NULL,checked_at=NULL,reason=$5,approved_file=NULL,updated_at=now() WHERE id=$1`,
+          [
+            candidateId,
+            command.classification,
+            command.classification !== "non_competition",
+            command.classification === "non_competition"
+              ? 3
+              : command.classification === "suspected"
+                ? 2
+                : /registration|supplement/.test(row.data.fields.kind)
+                  ? 0
+                  : 1,
+            command.reason,
+          ],
+        );
+        return {
+          candidateId,
+          classification: command.classification,
+          status: "pending",
+          candidateRevision: row.candidateRevision + 1,
+        };
+      },
+    );
   }
 
   async listNotices(query: AdminNoticeListQueryDto) {
@@ -715,7 +838,7 @@ export class AdminReviewService {
 
   private async candidateRow(client: PoolClient, candidateId: string) {
     const result = await client.query(
-      `SELECT c.id AS "candidateId",c.notice_id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",n.latest_version AS "latestVersion",n.health,n.fetched_at AS "noticeFetchedAt",c.source_version AS "sourceVersion",c.revision AS "candidateRevision",c.status,c.data,c.updated_at AS "updatedAt",v.article,v.adapter_version AS "adapterVersion",v.fetched_at AS "fetchedAt",s.data AS source,m.competition_id AS "competitionId" FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version JOIN ingestion_sources s ON s.id=n.source_id LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id WHERE c.id=$1`,
+      `SELECT c.id AS "candidateId",c.notice_id AS "noticeId",n.source_id AS "sourceId",n.url,n.final_url AS "finalUrl",n.latest_version AS "latestVersion",n.health,n.fetched_at AS "noticeFetchedAt",c.source_version AS "sourceVersion",c.revision AS "candidateRevision",c.status,c.data,c.classification,c.rule_version AS "ruleVersion",c.needs_review AS "needsReview",c.priority,c.updated_at AS "updatedAt",v.article,v.adapter_version AS "adapterVersion",v.fetched_at AS "fetchedAt",s.data AS source,m.competition_id AS "competitionId" FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id JOIN ingestion_versions v ON v.id=c.source_version JOIN ingestion_sources s ON s.id=n.source_id LEFT JOIN ingestion_mappings m ON m.candidate_id=c.id WHERE c.id=$1`,
       [candidateId],
     );
     if (!result.rows[0]) throw new NotFoundException();

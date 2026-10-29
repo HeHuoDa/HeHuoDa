@@ -88,7 +88,44 @@ export function parseEvidenceCandidate(
       ...(location.page !== undefined ? { page: location.page } : {}),
     };
   };
-  result.evidence = result.evidence.map(locate);
+  result.evidence = result.evidence.flatMap((entry) => {
+    const location = locations[entry.paragraph],
+      next = locations[entry.paragraph + 1];
+    if (
+      location &&
+      next &&
+      entry.excerpt === location.text + "\n" + next.text
+    ) {
+      if (location.attachmentVersion !== next.attachmentVersion) {
+        result.fields.scope = {
+          kind: "unknown",
+          colleges: [],
+          note: "跨来源资格标题不能自动关联",
+        };
+        result.conflicts.push("资格标题与内容分属不同来源，须人工核对");
+      }
+      return [
+        locate({ ...entry, excerpt: location.text }),
+        locate({
+          ...entry,
+          paragraph: entry.paragraph + 1,
+          excerpt: next.text,
+        }),
+      ];
+    }
+    return [locate(entry)];
+  });
+  locations.forEach((location, index) => {
+    if (/报名|参赛|补充|延期|更正|调整|变更|获奖|公示|回顾/.test(location.text))
+      result.evidence.push(
+        locate({
+          field: "kind",
+          excerpt: location.text,
+          paragraph: index,
+          url,
+        }),
+      );
+  });
   result.classification = classification;
   result.fieldConflicts = [];
   // Evaluate clauses separately to retain alternative values even when the aggregate is unknown.
