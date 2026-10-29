@@ -67,7 +67,15 @@ describe("采集管理增量迁移", () => {
             [stored.candidateId],
           )
         ).rows[0],
-      ).toEqual(before);
+      ).toEqual({
+        ...before,
+        classification: "suspected",
+        rule_version: "legacy",
+        extraction_key: null,
+        classification_override: null,
+        needs_review: true,
+        priority: 2,
+      });
       expect(
         (
           await db.pool.query(

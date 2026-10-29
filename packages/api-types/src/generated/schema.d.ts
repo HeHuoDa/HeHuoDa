@@ -588,6 +588,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ingestion/candidates/{id}/classification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminReviewController_classify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ingestion/candidates/{id}/review": {
         parameters: {
             query?: never;
@@ -1499,6 +1515,41 @@ export interface components {
             paragraphs: string[];
             attachments: components["schemas"]["AdminArticleAttachmentDto"][];
         };
+        AdminRuleClassificationDto: {
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            /** @enum {string} */
+            notificationKind: "registration" | "supplement" | "award" | "news";
+            ruleVersion: string;
+            reasons: string[];
+            exclusions: string[];
+            needsReview: boolean;
+            priority: number;
+        };
+        AdminCandidateEvidenceDto: {
+            /** @enum {string} */
+            format?: "html" | "pdf" | "docx";
+            noticeVersion?: string;
+            attachmentVersion?: string | null;
+            page?: number;
+            field: string;
+            excerpt: string;
+            /** @description HTML段落从0起；DOCX段落从1起；PDF以page定位，paragraph=-1；标题/元数据=-1 */
+            paragraph: number;
+            /** Format: uri */
+            url: string;
+            sourceVersion?: string;
+        };
+        AdminFieldChoiceDto: {
+            value: (string | {
+                [key: string]: unknown;
+            }) | null;
+            evidence: components["schemas"]["AdminCandidateEvidenceDto"][];
+        };
+        AdminFieldConflictDto: {
+            field: string;
+            values: components["schemas"]["AdminFieldChoiceDto"][];
+        };
         AdminCandidateScopeDto: {
             /** @enum {string} */
             kind: "all" | "colleges" | "complex" | "unknown";
@@ -1536,16 +1587,11 @@ export interface components {
             materialsAt: components["schemas"]["AdminReviewTimeValueDto"];
             eventAt: components["schemas"]["AdminReviewTimeValueDto"];
         };
-        AdminCandidateEvidenceDto: {
-            field: string;
-            excerpt: string;
-            /** @description 原文段落索引；-1 表示来源元数据 */
-            paragraph: number;
-            /** Format: uri */
-            url: string;
-            sourceVersion?: string;
-        };
         AdminParsedCandidateDto: {
+            /** @description 历史材料已按名单隐私规则擦除，不能复用 */
+            privacyRedacted?: boolean;
+            classification?: components["schemas"]["AdminRuleClassificationDto"];
+            fieldConflicts?: components["schemas"]["AdminFieldConflictDto"][];
             fields: components["schemas"]["AdminCandidateFieldsDto"];
             evidence: components["schemas"]["AdminCandidateEvidenceDto"][];
             missing: string[];
@@ -1623,6 +1669,11 @@ export interface components {
             reason: string;
         };
         AdminCandidateListItemDto: {
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            ruleVersion: string;
+            needsReview: boolean;
+            priority: number;
             /** Format: uuid */
             candidateId: string;
             /** Format: uuid */
@@ -1647,7 +1698,33 @@ export interface components {
             total: number;
             page: number;
             pageSize: number;
+            /** @description 当前筛选条件下各分类数量 */
+            counts: {
+                [key: string]: number;
+            };
             items: components["schemas"]["AdminCandidateListItemDto"][];
+        };
+        AdminExtractionRevisionDto: {
+            id: string;
+            sourceVersion: string;
+            evidenceRevision: number;
+            ruleVersion: string;
+            data: components["schemas"]["AdminParsedCandidateDto"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminClassificationHistoryDto: {
+            candidateRevision: number;
+            /** @enum {string} */
+            previousClassification: "definite" | "suspected" | "non_competition";
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            reason: string;
+            /** Format: date-time */
+            checkedAt: string;
+            evidenceRevision: number;
+            baseline: string;
+            actorId: string;
         };
         AdminReviewSourceDto: {
             id: string;
@@ -1720,6 +1797,15 @@ export interface components {
             notices: components["schemas"]["AdminFormalNoticeDto"][];
         };
         AdminCandidateDetailDto: {
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            ruleVersion: string;
+            needsReview: boolean;
+            priority: number;
+            /** @description 最近50个不可变规则修订 */
+            extractionRevisions: components["schemas"]["AdminExtractionRevisionDto"][];
+            /** @description 最近50个人工分类历史 */
+            classificationHistory: components["schemas"]["AdminClassificationHistoryDto"][];
             /** Format: uuid */
             candidateId: string;
             /** Format: uuid */
@@ -1749,6 +1835,22 @@ export interface components {
             requiresReview: boolean;
             /** Format: date-time */
             updatedAt: string;
+        };
+        AdminClassificationCommandDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            baseline: string;
+        };
+        AdminClassificationResultDto: {
+            candidateId: string;
+            /** @enum {string} */
+            classification: "definite" | "suspected" | "non_competition";
+            /** @enum {string} */
+            status: "pending";
+            candidateRevision: number;
         };
         EvidenceReferenceDto: {
             /** @enum {string} */
@@ -4314,6 +4416,12 @@ export interface operations {
             query?: {
                 page?: components["schemas"]["Object"];
                 pageSize?: components["schemas"]["Object"];
+                classification?: "definite" | "suspected" | "non_competition";
+                kind?: "registration" | "supplement" | "award" | "news";
+                needsReview?: "true" | "false";
+                attachmentStatus?: "pending" | "extracted" | "needs-review" | "blocked" | "failed" | "stale";
+                collegeId?: string;
+                channelId?: string;
                 sourceId?: string;
                 status?: "pending" | "approved" | "rejected" | "imported";
                 from?: string;
@@ -4412,6 +4520,82 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminReviewController_classify: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminClassificationCommandDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminClassificationResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

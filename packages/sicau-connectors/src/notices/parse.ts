@@ -44,6 +44,7 @@ export function parseCandidate(
   article: Article,
   url: string,
   directory: Directory,
+  notificationKind?: CandidateFields["kind"],
 ): ParsedCandidate {
   const evidence: Evidence[] = [
     { field: "name", excerpt: article.title, paragraph: -1, url },
@@ -63,15 +64,15 @@ export function parseCandidate(
     conflicts.push(
       "年份冲突：" + years.join("、") + "；须区分届次、赛段和引用年份",
     );
-  const kind: CandidateFields["kind"] = /获奖|结果公示|名单公示|表彰/.test(
-    article.title,
-  )
-    ? "award"
-    : /补充|延期|更正|调整/.test(article.title)
-      ? "supplement"
-      : /报名|参赛|竞赛.*通知|比赛.*通知/.test(article.title)
-        ? "registration"
-        : "news";
+  const kind: CandidateFields["kind"] =
+    notificationKind ??
+    (/获奖|结果公示|名单公示|表彰/.test(article.title)
+      ? "award"
+      : /补充|延期|更正|调整/.test(article.title)
+        ? "supplement"
+        : /报名|参赛|竞赛.*通知|比赛.*通知/.test(article.title)
+          ? "registration"
+          : "news");
   evidence.push({ field: "kind", excerpt: article.title, paragraph: -1, url });
   const fields: CandidateFields = {
     name: article.title,
@@ -123,14 +124,20 @@ export function parseCandidate(
     )
       warnings.push("承办单位尚未匹配学院目录，待核对");
     if (/主办(?:单位)?[：:]|由[^。；]*主办/.test(paragraph)) {
-      const organizer =
+      const organizerText =
         /主办(?:单位)?[：:]\s*([^。；]+)/.exec(paragraph)?.[1] ??
         /由([^。；]+?)主办/.exec(paragraph)?.[1];
+      const organizer = organizerText
+        ?.split(
+          /[，,]\s*(?=(?:承办|协办|发布|参赛|报名|比赛时间|竞赛时间)(?:单位|学院|对象|范围|资格)?[：:])/,
+        )[0]
+        .trim();
       if (organizer) {
         if (fields.organizer && fields.organizer !== organizer.trim()) {
           conflicts.push("主办单位有多个表述，待核对");
           fields.organizer = null;
-        } else fields.organizer = organizer.trim();
+        } else if (!conflicts.includes("主办单位有多个表述，待核对"))
+          fields.organizer = organizer;
         add("organizer", paragraph, index);
       }
     }
@@ -144,19 +151,23 @@ export function parseCandidate(
         .filter((c) => scopeText.includes(c.name))
         .map((c) => c.id);
       const unknownCollege = hasUnknownCollege(scopeText);
-      const scope = unknownCollege
-        ? { kind: "complex" as const, colleges: [], note: scopeText }
-        : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
-              scopeText,
-            ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
-          ? { kind: "all" as const, colleges: [], note: scopeText }
-          : collegeIds.length && !/除|不含/.test(scopeText)
-            ? {
-                kind: "colleges" as const,
-                colleges: collegeIds,
-                note: scopeText,
-              }
-            : { kind: "complex" as const, colleges: [], note: scopeText };
+      const excludedEligibility = /除|不|非|禁止|排除/.test(
+        scopeText.replace(/不限|不受[^。；，,]{0,20}限制/g, ""),
+      );
+      const scope =
+        unknownCollege || excludedEligibility
+          ? { kind: "complex" as const, colleges: [], note: scopeText }
+          : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
+                scopeText,
+              ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
+            ? { kind: "all" as const, colleges: [], note: scopeText }
+            : collegeIds.length
+              ? {
+                  kind: "colleges" as const,
+                  colleges: collegeIds,
+                  note: scopeText,
+                }
+              : { kind: "complex" as const, colleges: [], note: scopeText };
       if (
         fields.scope.kind !== "unknown" &&
         JSON.stringify(fields.scope) !== JSON.stringify(scope)
@@ -177,10 +188,14 @@ export function parseCandidate(
         warnings.push("资格条款含未知学院名称");
       add("scope", scopeText, index);
     }
-    const individual = /个人赛|个人参赛|以个人/.test(paragraph),
+    const modeText = paragraph.replace(
+      /(?:禁止|不得|不能|不可|不予|不允许|不接受|不准|不|非)(?:以)?(?:个人参赛|个人赛|个人|团队参赛|团队赛|团队|组队)/g,
+      "",
+    );
+    const individual = /个人赛|个人参赛|以个人/.test(modeText),
       team =
         /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|(?:须|需|可以|应)组队/.test(
-          paragraph.replace(/不组队|禁止组队|不以团队/g, ""),
+          modeText,
         );
     if (individual || team) {
       const mode =

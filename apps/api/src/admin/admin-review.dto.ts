@@ -35,6 +35,43 @@ export class AdminReviewPageQueryDto {
 }
 
 export class AdminCandidateListQueryDto extends AdminReviewPageQueryDto {
+  @ApiPropertyOptional({ enum: ["definite", "suspected", "non_competition"] })
+  @IsOptional()
+  @IsIn(["definite", "suspected", "non_competition"])
+  classification?: string;
+  @ApiPropertyOptional({
+    enum: ["registration", "supplement", "award", "news"],
+  })
+  @IsOptional()
+  @IsIn(["registration", "supplement", "award", "news"])
+  kind?: string;
+  @ApiPropertyOptional({ enum: ["true", "false"] })
+  @IsOptional()
+  @IsIn(["true", "false"])
+  needsReview?: string;
+  @ApiPropertyOptional({
+    enum: [
+      "pending",
+      "extracted",
+      "needs-review",
+      "blocked",
+      "failed",
+      "stale",
+    ],
+  })
+  @IsOptional()
+  @IsIn(["pending", "extracted", "needs-review", "blocked", "failed", "stale"])
+  attachmentStatus?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  collegeId?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  channelId?: string;
   @ApiPropertyOptional({ maxLength: 80 })
   @IsOptional()
   @IsString()
@@ -121,6 +158,15 @@ export class AdminReviewStateCommandDto extends AdminReviewCommandDto {
   @Min(1)
   candidateRevision!: number;
 
+  @ApiProperty({ pattern: "^[a-f0-9]{64}$" })
+  @Matches(/^[a-f0-9]{64}$/)
+  baseline!: string;
+}
+
+export class AdminClassificationCommandDto extends AdminReviewCommandDto {
+  @ApiProperty({ enum: ["definite", "suspected", "non_competition"] })
+  @IsIn(["definite", "suspected", "non_competition"])
+  classification!: "definite" | "suspected" | "non_competition";
   @ApiProperty({ pattern: "^[a-f0-9]{64}$" })
   @Matches(/^[a-f0-9]{64}$/)
   baseline!: string;

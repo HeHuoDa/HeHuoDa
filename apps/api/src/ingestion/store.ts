@@ -7,10 +7,14 @@ import {
   type Source,
   BoundedFetcher,
   defaultLimits,
+  classifyNotice,
+  containsApplicantList,
+  parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 import type { ParsedCandidate } from "./types.js";
 import { digestInput } from "./types.js";
 import { initializeChannels } from "./channel-store.js";
+import { refreshExtraction } from "./extraction-store.js";
 import {
   registerAttachments,
   invalidateNoticeAttachments,
@@ -62,6 +66,7 @@ export async function initializeSources(pool: Pool) {
   await initializeChannels(pool);
 }
 export interface CandidateRow {
+  classification?: string;
   id: string;
   notice_id: string;
   source_version: string;
@@ -147,6 +152,18 @@ export async function persistArticle(
   parsed: ParsedCandidate,
   channelId?: string,
 ) {
+  const classification = classifyNotice(
+    article.title,
+    article.paragraphs,
+    article.attachments.map((a) => a.title),
+  );
+  if (containsApplicantList([article.title, article.text].join("\n")))
+    throw new Error("通知涉及报名者名单，禁止保存正文与个人资料");
+  if (classification.classification === "non_competition") {
+    article = { ...article, text: "", paragraphs: [], attachments: [] };
+    response = { ...response, body: new Uint8Array(), html: "", headers: {} };
+    parsed = parseCandidate(article, url, []);
+  }
   return transaction(pool, async (client) => {
     const bodyHash = hash(article);
     const found = await client.query(
@@ -174,8 +191,10 @@ export async function persistArticle(
     if (
       previous?.body_hash === bodyHash &&
       previous?.adapter_version === source.version
-    )
+    ) {
+      await refreshExtraction(client, noticeId);
       return { action: "unchanged", noticeId, candidateId: null };
+    }
     const versionId = randomUUID();
     for (const entry of parsed.evidence) entry.sourceVersion = versionId;
     parsed.evidence.push(
@@ -217,6 +236,7 @@ export async function persistArticle(
       "INSERT INTO ingestion_candidates(id,notice_id,source_version,status,data) VALUES($1,$2,$3,'pending',$4) ON CONFLICT(notice_id) DO UPDATE SET source_version=EXCLUDED.source_version,revision=ingestion_candidates.revision+1,status='pending',data=EXCLUDED.data,reviewer=NULL,checked_at=NULL,reason=NULL,approved_file=NULL,updated_at=now() RETURNING id",
       [randomUUID(), noticeId, versionId, parsed],
     );
+    await refreshExtraction(client, noticeId, undefined, true);
     const storageReady = (
       await client.query(
         "SELECT to_regclass('ingestion_attachments') IS NOT NULL AS ready",

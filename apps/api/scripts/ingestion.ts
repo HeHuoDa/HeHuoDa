@@ -16,7 +16,9 @@ import {
   initializeSources,
   configureSource,
   recoverInterruptedRuns,
+  transaction,
 } from "../src/ingestion/store.js";
+import { refreshExtraction } from "../src/ingestion/extraction-store.js";
 
 const args = process.argv.slice(2),
   command = args.shift();
@@ -95,6 +97,7 @@ try {
     sources: [],
     runs: [],
     candidates: [],
+    reextract: ["candidate"],
     operations: [],
     configure: [
       "source",
@@ -133,6 +136,23 @@ try {
     JSON.parse(await readFile(need("file"), "utf8")) as unknown;
   let result: unknown;
   switch (command) {
+    case "reextract": {
+      const row = (
+        await pool.query(
+          "SELECT notice_id FROM ingestion_candidates WHERE id=$1",
+          [need("candidate")],
+        )
+      ).rows[0];
+      if (!row) throw new Error("候选不存在");
+      await transaction(pool, (client) =>
+        refreshExtraction(client, row.notice_id),
+      );
+      result = {
+        candidateId: values.candidate,
+        status: "refreshed-from-snapshots",
+      };
+      break;
+    }
     case "scan": {
       const phase = (value: string | undefined): ScanPhase | undefined => {
         if (

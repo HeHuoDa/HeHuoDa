@@ -189,10 +189,11 @@ export async function exportReview(
       format: 2,
       evidenceReferences: [
         ...candidate.data.evidence.map((entry) => ({
-          format: "html" as const,
+          format: entry.format ?? ("html" as const),
           url: entry.url,
-          noticeVersion: candidate.source_version,
-          attachmentVersion: null,
+          noticeVersion: entry.noticeVersion ?? candidate.source_version,
+          attachmentVersion: entry.attachmentVersion ?? null,
+          ...(entry.page !== undefined ? { page: entry.page } : {}),
           paragraph: entry.paragraph,
           field: entry.field,
           excerpt: entry.excerpt,
@@ -442,10 +443,11 @@ async function checkBaseline(client: PoolClient, file: ReviewFile) {
       ...candidate.data.evidence.map(
         (entry) =>
           ({
-            format: "html",
+            format: entry.format ?? "html",
             url: entry.url,
-            noticeVersion: candidate.source_version,
-            attachmentVersion: null,
+            noticeVersion: entry.noticeVersion ?? candidate.source_version,
+            attachmentVersion: entry.attachmentVersion ?? null,
+            ...(entry.page !== undefined ? { page: entry.page } : {}),
             paragraph: entry.paragraph,
             field: entry.field,
             excerpt: entry.excerpt,
@@ -644,7 +646,9 @@ export async function approveReview(
       operationId = file.operationId + ":approve";
     const done = await completed(client, operationId, inputHash);
     if (done) return done;
-    await checkBaseline(client, file);
+    const candidate = await checkBaseline(client, file);
+    if (candidate.classification === "non_competition")
+      throw new Error("非赛事候选须先修改分类，当前状态不能批准");
     // 使用同一导入校验及数据库约束，保存点回滚预览写入。
     await client.query("SAVEPOINT review_preview");
     const preview = await applyImportBatch(client, file.batch, {

@@ -316,6 +316,12 @@ export const ingestionVersions = pgTable(
   (t) => [unique().on(t.noticeId, t.revision)],
 );
 export const ingestionCandidates = pgTable("ingestion_candidates", {
+  classification: text().notNull().default("suspected"),
+  ruleVersion: text("rule_version").notNull().default("legacy"),
+  extractionKey: text("extraction_key"),
+  classificationOverride: text("classification_override"),
+  needsReview: boolean("needs_review").notNull().default(true),
+  priority: integer().notNull().default(2),
   id: text().primaryKey(),
   noticeId: text("notice_id")
     .notNull()
@@ -352,6 +358,49 @@ export const ingestionAttachments = pgTable(
     errorCode: text("error_code"),
   },
   (t) => [unique().on(t.noticeId, t.canonicalUrl)],
+);
+
+export const ingestionExtractionRevisions = pgTable(
+  "ingestion_extraction_revisions",
+  {
+    id: uuid().primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => ingestionCandidates.id),
+    sourceVersion: text("source_version")
+      .notNull()
+      .references(() => ingestionVersions.id),
+    evidenceRevision: integer("evidence_revision").notNull(),
+    ruleVersion: text("rule_version").notNull(),
+    extractionKey: text("extraction_key").notNull(),
+    data: jsonb().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.candidateId, t.extractionKey)],
+);
+
+export const ingestionClassificationRevisions = pgTable(
+  "ingestion_classification_revisions",
+  {
+    id: uuid().primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => ingestionCandidates.id),
+    candidateRevision: integer("candidate_revision").notNull(),
+    previousClassification: text("previous_classification").notNull(),
+    classification: text().notNull(),
+    reason: text().notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    evidenceRevision: integer("evidence_revision").notNull(),
+    baseline: text().notNull(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => adminAccounts.id),
+  },
 );
 export const ingestionNetworkWindows = pgTable("ingestion_network_windows", {
   dueAt: timestamp("due_at", { withTimezone: true }).primaryKey(),

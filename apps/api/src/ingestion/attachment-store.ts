@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "./store.js";
+import { refreshExtraction } from "./extraction-store.js";
 
 export type AttachmentSegment = {
   kind: "page" | "paragraph";
@@ -79,6 +80,7 @@ async function recordEvidenceChange(
     "INSERT INTO ingestion_attachment_events(id,notice_id,source_version,evidence_revision,reason) SELECT $1,id,latest_version,evidence_revision,$3 FROM ingestion_notices WHERE id=$2",
     [randomUUID(), noticeId, reason],
   );
+  await refreshExtraction(client, noticeId, undefined, true);
 }
 
 const REDACTED_REVIEW_HASH = "privacy-redacted";
@@ -100,6 +102,45 @@ function redactAttachmentSnapshots(
   if (!value || typeof value !== "object") return { value, redacted: false };
 
   const source = value as Record<string, unknown>;
+  if (
+    source.fields &&
+    Array.isArray(source.evidence) &&
+    source.evidence.some(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        typeof entry.attachmentVersion === "string" &&
+        versionIds.has(entry.attachmentVersion),
+    )
+  ) {
+    return {
+      value: {
+        ...source,
+        privacyRedacted: true,
+        fields: {
+          name: "",
+          edition: null,
+          kind: "news",
+          organizer: null,
+          hosts: [],
+          scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+          mode: null,
+          tracks: [],
+          members: null,
+          rules: [],
+          stageNames: [],
+          startsAt: { precision: "unknown", value: null },
+          deadline: { precision: "unknown", value: null },
+          materialsAt: { precision: "unknown", value: null },
+          eventAt: { precision: "unknown", value: null },
+        },
+        evidence: [],
+        fieldConflicts: [],
+        warnings: ["名单隐私擦除：自动字段与定位摘录已移除"],
+      },
+      redacted: true,
+    };
+  }
   const result: Record<string, unknown> = {};
   let redacted = false;
   for (const [key, item] of Object.entries(source)) {
@@ -133,6 +174,17 @@ function redactAttachmentSnapshots(
 
   const relatedVersion =
     typeof source.versionId === "string" && versionIds.has(source.versionId);
+  if (
+    result.candidate &&
+    typeof result.candidate === "object" &&
+    "privacyRedacted" in result.candidate &&
+    result.candidate.privacyRedacted === true
+  ) {
+    // Editable batches may contain copied automatic values; a redacted receipt cannot be replayed.
+    result.batch = { competitions: [] };
+    result.privacyRedacted = true;
+    redacted = true;
+  }
   const relatedReference =
     typeof source.attachmentVersion === "string" &&
     versionIds.has(source.attachmentVersion);
@@ -197,6 +249,30 @@ async function redactApplicantListContent(
     [noticeId],
   );
   for (const candidate of candidates.rows) {
+    if (
+      (
+        await client.query(
+          "SELECT to_regclass('ingestion_extraction_revisions') IS NOT NULL AS ready",
+        )
+      ).rows[0].ready
+    ) {
+      const extractions = await client.query(
+        "SELECT id,data FROM ingestion_extraction_revisions WHERE candidate_id=$1",
+        [candidate.id],
+      );
+      for (const extraction of extractions.rows) {
+        const scrubbed = redactAttachmentSnapshots(
+          extraction.data,
+          attachmentId,
+          versionSet,
+        );
+        if (scrubbed.redacted)
+          await client.query(
+            "UPDATE ingestion_extraction_revisions SET data=$2 WHERE id=$1",
+            [extraction.id, scrubbed.value],
+          );
+      }
+    }
     const scrubbed = redactAttachmentSnapshots(
       candidate.approved_file,
       attachmentId,

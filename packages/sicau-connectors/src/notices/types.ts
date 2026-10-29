@@ -30,6 +30,10 @@ export interface Evidence {
   paragraph: number;
   url: string;
   sourceVersion?: string;
+  format?: "html" | "pdf" | "docx";
+  noticeVersion?: string;
+  attachmentVersion?: string | null;
+  page?: number;
 }
 export interface CandidateFields {
   name: string;
@@ -58,6 +62,12 @@ export interface CandidateFields {
   eventAt: TimeValue;
 }
 export interface ParsedCandidate {
+  privacyRedacted?: boolean;
+  classification?: import("./classification.js").NoticeClassification;
+  fieldConflicts?: {
+    field: string;
+    values: { value: unknown; evidence: Evidence[] }[];
+  }[];
   fields: CandidateFields;
   evidence: Evidence[];
   missing: string[];

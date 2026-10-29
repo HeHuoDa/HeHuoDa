@@ -13,7 +13,11 @@ import {
   parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 
-import { informationArticle, informationList } from "./notice-fixtures.js";
+import {
+  informationArticle,
+  informationList,
+  noticeBody,
+} from "./notice-fixtures.js";
 
 import {
   persistArticle,
@@ -125,6 +129,28 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       await restarted.end();
     }
     expect((await formal()).competitions).toHaveLength(0);
+  });
+  it("HTML304仍用已有快照升级规则，旧迁移候选的批准基线失效", async () => {
+    const file = await approved();
+    await db.pool.query(
+      "UPDATE ingestion_candidates SET rule_version='legacy',extraction_key=NULL WHERE id=$1",
+      [file.candidateId],
+    );
+    expect(
+      await runner([http(404), http(304)]).scan({ sourceId: source.id, url }),
+    ).toMatchObject({ status: "succeeded", counts: { unchanged: 1 } });
+    expect(await candidate()).toMatchObject({
+      rule_version: "competition-rules-1",
+      status: "pending",
+      revision: file.candidateRevision + 1,
+    });
+    await expect(
+      approveReview(
+        db.pool,
+        { ...file, operationId: "17600000-0000-4000-8000-000000000001" },
+        "maintainer",
+      ),
+    ).rejects.toThrow(/过期|变化/);
   });
   it("拒绝不被重复采集重开，显式重开或新版本才恢复待审核", async () => {
     const stored = await persist();
@@ -303,15 +329,33 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       ).rows[0].status,
     ).toBe("interrupted");
   });
-  it("普通通知和报名者名单不进入候选，未保存正文或原始响应", async () => {
+  it("普通通知仅留最小分类记录，报名者名单不保存正文或原始响应", async () => {
     const ordinary = informationList
       .replace("2026年测试竞赛报名通知", "普通学术新闻")
       .replace('<a href="tz/3.htm">下页</a>', "");
     expect(
-      await runner([http(404), http(200, ordinary)]).scan({
+      await runner([
+        http(404),
+        http(200, ordinary),
+        http(
+          200,
+          informationArticle
+            .replaceAll("2026年测试竞赛报名通知", "普通学术新闻")
+            .replace(
+              noticeBody,
+              "<p>本周办公时间安排，请各单位按通知办理相关手续。</p>",
+            ),
+        ),
+      ]).scan({
         sourceId: source.id,
       }),
-    ).toMatchObject({ status: "succeeded", counts: { ignored: 1 } });
+    ).toMatchObject({ status: "succeeded", counts: { new: 1 } });
+    expect((await candidate()).classification).toBe("non_competition");
+    const minimal = (
+      await db.pool.query("SELECT article,raw_response FROM ingestion_versions")
+    ).rows[0];
+    expect(minimal.article.text).toBe("");
+    expect(minimal.raw_response.length).toBe(0);
     const sensitive = informationArticle.replace(
       "2026年测试竞赛报名通知",
       "程序设计竞赛报名人员名单",
@@ -325,7 +369,7 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     expect(
       (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
         .count,
-    ).toBe("0");
+    ).toBe("1");
   });
   it("已有草稿保持草稿，已发布更新经过显式预览和确认前保持原公开数据", async () => {
     await importBatch(db.pool, {

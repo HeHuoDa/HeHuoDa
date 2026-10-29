@@ -3200,6 +3200,77 @@
             }
           },
           {
+            "name": "classification",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "definite",
+                "suspected",
+                "non_competition"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "registration",
+                "supplement",
+                "award",
+                "news"
+              ]
+            }
+          },
+          {
+            "name": "needsReview",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "attachmentStatus",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "extracted",
+                "needs-review",
+                "blocked",
+                "failed",
+                "stale"
+              ]
+            }
+          },
+          {
+            "name": "collegeId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sourceId",
             "required": false,
             "in": "query",
@@ -3358,6 +3429,127 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员采集审核"
+        ]
+      }
+    },
+    "/api/v1/admin/ingestion/candidates/{id}/classification": {
+      "post": {
+        "operationId": "AdminReviewController_classify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminClassificationCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminClassificationResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -7594,6 +7786,150 @@
           "attachments"
         ]
       },
+      "AdminRuleClassificationDto": {
+        "type": "object",
+        "properties": {
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "notificationKind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ]
+          },
+          "ruleVersion": {
+            "type": "string"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "classification",
+          "notificationKind",
+          "ruleVersion",
+          "reasons",
+          "exclusions",
+          "needsReview",
+          "priority"
+        ]
+      },
+      "AdminCandidateEvidenceDto": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "html",
+              "pdf",
+              "docx"
+            ]
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "attachmentVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "field": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "paragraph": {
+            "type": "number",
+            "description": "HTML段落从0起；DOCX段落从1起；PDF以page定位，paragraph=-1；标题/元数据=-1"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "sourceVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "excerpt",
+          "paragraph",
+          "url"
+        ]
+      },
+      "AdminFieldChoiceDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": true
+              }
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateEvidenceDto"
+            }
+          }
+        },
+        "required": [
+          "value",
+          "evidence"
+        ]
+      },
+      "AdminFieldConflictDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFieldChoiceDto"
+            }
+          }
+        },
+        "required": [
+          "field",
+          "values"
+        ]
+      },
       "AdminCandidateScopeDto": {
         "type": "object",
         "properties": {
@@ -7768,37 +8104,22 @@
           "eventAt"
         ]
       },
-      "AdminCandidateEvidenceDto": {
-        "type": "object",
-        "properties": {
-          "field": {
-            "type": "string"
-          },
-          "excerpt": {
-            "type": "string"
-          },
-          "paragraph": {
-            "type": "number",
-            "description": "原文段落索引；-1 表示来源元数据"
-          },
-          "url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "sourceVersion": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "field",
-          "excerpt",
-          "paragraph",
-          "url"
-        ]
-      },
       "AdminParsedCandidateDto": {
         "type": "object",
         "properties": {
+          "privacyRedacted": {
+            "type": "boolean",
+            "description": "历史材料已按名单隐私规则擦除，不能复用"
+          },
+          "classification": {
+            "$ref": "#/components/schemas/AdminRuleClassificationDto"
+          },
+          "fieldConflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFieldConflictDto"
+            }
+          },
           "fields": {
             "$ref": "#/components/schemas/AdminCandidateFieldsDto"
           },
@@ -8071,6 +8392,23 @@
       "AdminCandidateListItemDto": {
         "type": "object",
         "properties": {
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "ruleVersion": {
+            "type": "string"
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number"
+          },
           "candidateId": {
             "type": "string",
             "format": "uuid"
@@ -8123,6 +8461,10 @@
           }
         },
         "required": [
+          "classification",
+          "ruleVersion",
+          "needsReview",
+          "priority",
           "candidateId",
           "noticeId",
           "sourceId",
@@ -8152,6 +8494,13 @@
             "minimum": 1,
             "maximum": 50
           },
+          "counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "当前筛选条件下各分类数量"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -8163,7 +8512,90 @@
           "total",
           "page",
           "pageSize",
+          "counts",
           "items"
+        ]
+      },
+      "AdminExtractionRevisionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sourceVersion": {
+            "type": "string"
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "ruleVersion": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdminParsedCandidateDto"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "sourceVersion",
+          "evidenceRevision",
+          "ruleVersion",
+          "data",
+          "createdAt"
+        ]
+      },
+      "AdminClassificationHistoryDto": {
+        "type": "object",
+        "properties": {
+          "candidateRevision": {
+            "type": "number"
+          },
+          "previousClassification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidenceRevision": {
+            "type": "number"
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidateRevision",
+          "previousClassification",
+          "classification",
+          "reason",
+          "checkedAt",
+          "evidenceRevision",
+          "baseline",
+          "actorId"
         ]
       },
       "AdminReviewSourceDto": {
@@ -8457,6 +8889,37 @@
       "AdminCandidateDetailDto": {
         "type": "object",
         "properties": {
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "ruleVersion": {
+            "type": "string"
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "extractionRevisions": {
+            "description": "最近50个不可变规则修订",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminExtractionRevisionDto"
+            }
+          },
+          "classificationHistory": {
+            "description": "最近50个人工分类历史",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminClassificationHistoryDto"
+            }
+          },
           "candidateId": {
             "type": "string",
             "format": "uuid"
@@ -8555,6 +9018,12 @@
           }
         },
         "required": [
+          "classification",
+          "ruleVersion",
+          "needsReview",
+          "priority",
+          "extractionRevisions",
+          "classificationHistory",
           "candidateId",
           "noticeId",
           "sourceId",
@@ -8574,6 +9043,69 @@
           "attachmentVersions",
           "requiresReview",
           "updatedAt"
+        ]
+      },
+      "AdminClassificationCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "classification",
+          "baseline"
+        ]
+      },
+      "AdminClassificationResultDto": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "definite",
+              "suspected",
+              "non_competition"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending"
+            ]
+          },
+          "candidateRevision": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "candidateId",
+          "classification",
+          "status",
+          "candidateRevision"
         ]
       },
       "EvidenceReferenceDto": {

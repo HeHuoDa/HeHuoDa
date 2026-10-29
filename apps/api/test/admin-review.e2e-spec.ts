@@ -13,6 +13,7 @@ import {
   type FetchResult,
 } from "@hehuoda/sicau-connectors/notices";
 import { initializeSources, persistArticle } from "../src/ingestion/store.js";
+import { persistAttachment } from "../src/ingestion/attachment-store.js";
 
 describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
   let test: AuthTestApp;
@@ -86,6 +87,222 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
       },
     };
   }
+
+  it("队列按报名、其他明确、疑似、非赛事排序，学院/栏目/附件筛选可组合", async () => {
+    const auth = await session();
+    const ids: string[] = [];
+    for (const [index, title] of [
+      "数学竞赛报名通知",
+      "数学竞赛新闻回顾",
+      "作品征集",
+      "图书馆开放通知",
+    ].entries()) {
+      const targetUrl = `https://${source.host}/info/1043/${index + 200}.htm`;
+      const article = {
+        title,
+        publishedAt: null,
+        text: "请核对本次通知的具体安排和规则。",
+        paragraphs: ["请核对本次通知的具体安排和规则。"],
+        attachments: [],
+      };
+      const saved = await persistArticle(
+        test.pool,
+        source,
+        targetUrl,
+        {
+          url: targetUrl,
+          body: new Uint8Array(),
+          html: "",
+          status: 200,
+          headers: {},
+        },
+        article,
+        parseCandidate(article, targetUrl, directory!),
+        source.defaultChannelId,
+      );
+      ids.push(saved.candidateId!);
+    }
+    const list = async (query = "") =>
+      test.request("GET", "admin/ingestion/candidates" + query, undefined, {
+        cookie: auth.cookie,
+      });
+    expect(
+      (await list())
+        .json()
+        .items.map((item: { candidateId: string }) => item.candidateId),
+    ).toEqual(ids);
+    expect((await list()).json().counts).toEqual({
+      definite: 2,
+      suspected: 1,
+      non_competition: 1,
+    });
+    expect(
+      (
+        await list(
+          `?collegeId=${source.collegeId}&channelId=${source.defaultChannelId}&status=pending`,
+        )
+      ).json().total,
+    ).toBe(4);
+    expect((await list("?collegeId=missing")).json().total).toBe(0);
+    const original = (
+      await test.request(
+        "GET",
+        `admin/ingestion/candidates/${ids[0]}`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json();
+    await persistAttachment(test.pool, {
+      noticeId: original.noticeId,
+      noticeVersion: original.sourceVersion,
+      url: `https://${source.host}/r.pdf`,
+      mediaType: "application/pdf",
+      extractorVersion: "test",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "报名截止：2026年11月1日。" }],
+      body: Buffer.from("rules"),
+    });
+    expect(
+      (
+        await list(
+          "?attachmentStatus=extracted&classification=definite&needsReview=true",
+        )
+      )
+        .json()
+        .items.map((item: { candidateId: string }) => item.candidateId),
+    ).toEqual([ids[0]]);
+    expect((await list("?pageSize=51")).statusCode).toBe(400);
+  });
+
+  it("分类独立于审核状态，权限、幂等、旧基线、筛选与数量均有契约", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const get = async () =>
+      (
+        await test.request("GET", path, undefined, { cookie: auth.cookie })
+      ).json();
+    const original = await get();
+    const command = {
+      operationId: randomUUID(),
+      baseline: original.baseline,
+      reason: "核对原文后判为非赛事",
+      classification: "non_competition",
+    };
+    expect(
+      (await test.request("POST", path + "/classification", command))
+        .statusCode,
+    ).toBe(403);
+    const changed = await test.request(
+      "POST",
+      path + "/classification",
+      command,
+      auth.headers,
+    );
+    expect(changed.statusCode).toBe(200);
+    expect(await get()).toMatchObject({
+      classification: "non_competition",
+      status: "pending",
+      candidateRevision: original.candidateRevision + 1,
+    });
+    const nonCompetitionReview = correctedReview(
+      (
+        await test.request("GET", path + "/review", undefined, {
+          cookie: auth.cookie,
+        })
+      ).json(),
+    );
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/approve",
+          {
+            operationId: randomUUID(),
+            reason: "非赛事需先修改分类",
+            review: nonCompetitionReview,
+          },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          command,
+          auth.headers,
+        )
+      ).json(),
+    ).toEqual(changed.json());
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          { ...command, classification: "suspected" },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          { ...command, operationId: randomUUID() },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    const filtered = await test.request(
+      "GET",
+      "admin/ingestion/candidates?classification=non_competition&needsReview=false&kind=registration",
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json()).toMatchObject({
+      total: 1,
+      counts: { non_competition: 1 },
+    });
+    expect(filtered.json().items[0]).toMatchObject({
+      candidateId: id,
+      priority: 3,
+      ruleVersion: "competition-rules-1",
+    });
+    expect(
+      (
+        await test.request(
+          "GET",
+          "admin/ingestion/candidates?needsReview=garbage",
+          undefined,
+          { cookie: auth.cookie },
+        )
+      ).statusCode,
+    ).toBe(400);
+    const current = await get();
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/classification",
+          {
+            ...command,
+            operationId: randomUUID(),
+            baseline: current.baseline,
+            classification: "suspected",
+          },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(200);
+    expect(await get()).toMatchObject({
+      classification: "suspected",
+      status: "pending",
+    });
+  });
 
   it("保存审核修订、批准、预览、导入和发布按同一材料逐步完成", async () => {
     const id = await candidateId();
