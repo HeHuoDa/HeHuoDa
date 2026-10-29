@@ -9,6 +9,71 @@ import {
 } from "./classification-corpus.js";
 
 describe("赛事分类独立于审核状态", () => {
+  it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
+    const text = "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月1日。";
+    const result = parseEvidenceCandidate(
+      {
+        title: "2026年数学竞赛报名通知",
+        publishedAt: null,
+        text,
+        paragraphs: [text],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+    );
+    expect(result.fields.deadline.precision).toBe("unknown");
+    expect(result.evidence.filter((e) => e.field === "deadline")).toHaveLength(
+      2,
+    );
+  });
+  it("只有附件标题表明赛事变更也保留疑似或明确，不清掉规则附件", () => {
+    expect(
+      classifyNotice(
+        "补充说明",
+        ["具体事宜详见附件。"],
+        ["数学竞赛延期通知.pdf"],
+      ),
+    ).toMatchObject({
+      classification: "definite",
+      notificationKind: "supplement",
+    });
+    expect(
+      classifyNotice("事项说明", ["具体事宜详见附件。"], ["附件1.pdf"]),
+    ).toMatchObject({ classification: "suspected" });
+  });
+  it("同句逗号分隔的两个赛段截止保留候选值及定位", () => {
+    const parsed = parseEvidenceCandidate(
+      {
+        title: "2026年数学竞赛报名通知",
+        publishedAt: null,
+        text: "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月8日。",
+        paragraphs: [
+          "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月8日。",
+        ],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+    );
+    expect(parsed.fields.deadline).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(
+      parsed.fieldConflicts
+        ?.find((c) => c.field === "deadline")
+        ?.values.map((c) => c.value),
+    ).toEqual([
+      { precision: "date", value: "2026-11-01" },
+      { precision: "date", value: "2026-11-08" },
+    ]);
+    expect(parsed.evidence.filter((e) => e.field === "deadline")).toHaveLength(
+      2,
+    );
+  });
   it("资格标题和下一段分属不同证据时分别定位，不伪造跨来源摘录", () => {
     const parsed = parseEvidenceCandidate(
       {

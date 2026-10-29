@@ -152,7 +152,11 @@ export async function persistArticle(
   parsed: ParsedCandidate,
   channelId?: string,
 ) {
-  const classification = classifyNotice(article.title, article.paragraphs);
+  const classification = classifyNotice(
+    article.title,
+    article.paragraphs,
+    article.attachments.map((a) => a.title),
+  );
   if (containsApplicantList([article.title, article.text].join("\n")))
     throw new Error("通知涉及报名者名单，禁止保存正文与个人资料");
   if (classification.classification === "non_competition") {
@@ -232,7 +236,7 @@ export async function persistArticle(
       "INSERT INTO ingestion_candidates(id,notice_id,source_version,status,data) VALUES($1,$2,$3,'pending',$4) ON CONFLICT(notice_id) DO UPDATE SET source_version=EXCLUDED.source_version,revision=ingestion_candidates.revision+1,status='pending',data=EXCLUDED.data,reviewer=NULL,checked_at=NULL,reason=NULL,approved_file=NULL,updated_at=now() RETURNING id",
       [randomUUID(), noticeId, versionId, parsed],
     );
-    await refreshExtraction(client, noticeId);
+    await refreshExtraction(client, noticeId, undefined, true);
     const storageReady = (
       await client.query(
         "SELECT to_regclass('ingestion_attachments') IS NOT NULL AS ready",

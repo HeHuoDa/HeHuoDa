@@ -80,7 +80,7 @@ async function recordEvidenceChange(
     "INSERT INTO ingestion_attachment_events(id,notice_id,source_version,evidence_revision,reason) SELECT $1,id,latest_version,evidence_revision,$3 FROM ingestion_notices WHERE id=$2",
     [randomUUID(), noticeId, reason],
   );
-  await refreshExtraction(client, noticeId, undefined, false);
+  await refreshExtraction(client, noticeId, undefined, true);
 }
 
 const REDACTED_REVIEW_HASH = "privacy-redacted";
@@ -116,7 +116,24 @@ function redactAttachmentSnapshots(
     return {
       value: {
         ...source,
-        fields: {},
+        privacyRedacted: true,
+        fields: {
+          name: "",
+          edition: null,
+          kind: "news",
+          organizer: null,
+          hosts: [],
+          scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+          mode: null,
+          tracks: [],
+          members: null,
+          rules: [],
+          stageNames: [],
+          startsAt: { precision: "unknown", value: null },
+          deadline: { precision: "unknown", value: null },
+          materialsAt: { precision: "unknown", value: null },
+          eventAt: { precision: "unknown", value: null },
+        },
         evidence: [],
         fieldConflicts: [],
         warnings: ["名单隐私擦除：自动字段与定位摘录已移除"],
@@ -157,6 +174,17 @@ function redactAttachmentSnapshots(
 
   const relatedVersion =
     typeof source.versionId === "string" && versionIds.has(source.versionId);
+  if (
+    result.candidate &&
+    typeof result.candidate === "object" &&
+    "privacyRedacted" in result.candidate &&
+    result.candidate.privacyRedacted === true
+  ) {
+    // Editable batches may contain copied automatic values; a redacted receipt cannot be replayed.
+    result.batch = { competitions: [] };
+    result.privacyRedacted = true;
+    redacted = true;
+  }
   const relatedReference =
     typeof source.attachmentVersion === "string" &&
     versionIds.has(source.attachmentVersion);

@@ -25,6 +25,7 @@ import { channelFingerprint, readChannel } from "./channel-store.js";
 import { checkNoticeAttachments } from "./attachment-runner.js";
 import { parseAttachmentIsolated } from "./attachment-parser.js";
 import { reserveAttachmentNetworkRequest } from "./attachment-budget.js";
+import { refreshExtraction } from "./extraction-store.js";
 
 export type ScanPhase = "fresh" | "backfill" | "revisit" | "retry";
 
@@ -775,6 +776,10 @@ export class IngestionRunner {
             throw new Error("通知重定向路径不在栏目白名单");
           if (response.status === 304 && known?.latest_version) {
             counts.unchanged++;
+            if (!input.preview)
+              await transaction(this.pool, (client) =>
+                refreshExtraction(client, known.id),
+              );
             if (!input.preview)
               await this.pool.query(
                 "UPDATE ingestion_notices SET fetched_at=now(),health='available' WHERE id=$1",

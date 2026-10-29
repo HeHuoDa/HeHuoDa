@@ -12,15 +12,30 @@ export interface NoticeClassification {
   priority: number;
 }
 
+export function classificationPriority(
+  classification: Classification,
+  kind: NoticeClassification["notificationKind"],
+) {
+  return classification === "non_competition"
+    ? 3
+    : classification === "suspected"
+      ? 2
+      : kind === "registration" || kind === "supplement"
+        ? 0
+        : 1;
+}
+
 /** Pure rules over safe text; list exclusion always precedes competition matches. */
 export function classifyNotice(
   title: string,
   paragraphs: string[],
+  attachmentTitles: string[] = [],
 ): NoticeClassification {
-  const text = [title, ...paragraphs].join("\n");
+  const text = [title, ...paragraphs, ...attachmentTitles].join("\n");
   const exclusions: string[] = [];
   const reasons: string[] = [];
-  const list = containsApplicantList(text);
+  // An excluded attachment blocks that attachment, not an otherwise safe parent notice.
+  const list = containsApplicantList([title, ...paragraphs].join("\n"));
   const competition =
     /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛/.test(text);
   const ambiguous = /征文|作品征集|活动赛|创新创业|职业规划|艺术节|体育节/.test(
@@ -45,14 +60,18 @@ export function classifyNotice(
   const classification: Classification = list
     ? "non_competition"
     : excluded
-      ? competition || ambiguous
+      ? competition || ambiguous || attachmentTitles.length > 0
         ? "suspected"
         : "non_competition"
       : competition
         ? "definite"
-        : ambiguous || /补充通知|延期通知|规则变更/.test(title)
+        : ambiguous ||
+            attachmentTitles.length > 0 ||
+            /补充通知|延期通知|规则变更/.test(title)
           ? "suspected"
           : "non_competition";
+  if (attachmentTitles.length)
+    reasons.push("附件待核对，不按缺少正文关键字排除");
   if (!reasons.length && !exclusions.length)
     exclusions.push("未发现赛事依据，仅保留最小分类记录");
   return {
@@ -62,13 +81,6 @@ export function classifyNotice(
     reasons,
     exclusions,
     needsReview: classification !== "non_competition",
-    priority:
-      classification === "non_competition"
-        ? 3
-        : classification === "suspected"
-          ? 2
-          : /registration|supplement/.test(notificationKind)
-            ? 0
-            : 1,
+    priority: classificationPriority(classification, notificationKind),
   };
 }

@@ -55,6 +55,7 @@ export function parseEvidenceCandidate(
   const classification = classifyNotice(
     article.title,
     locations.map((l) => l.text),
+    article.attachments.map((a) => a.title),
   );
   const combined = {
     ...article,
@@ -127,6 +128,16 @@ export function parseEvidenceCandidate(
       );
   });
   result.classification = classification;
+  for (const attachment of article.attachments)
+    if (/竞赛|比赛|报名|延期|规则|补充/.test(attachment.title))
+      result.evidence.push(
+        locate({
+          field: "kind",
+          excerpt: attachment.title,
+          paragraph: -1,
+          url,
+        }),
+      );
   result.fieldConflicts = [];
   // Evaluate clauses separately to retain alternative values even when the aggregate is unknown.
   const alternatives = new Map<
@@ -134,7 +145,7 @@ export function parseEvidenceCandidate(
     Map<string, { value: unknown; evidence: Evidence[] }>
   >();
   locations.forEach((location, index) => {
-    for (const clause of location.text.split(/[。；;\n]/).filter(Boolean)) {
+    for (const clause of location.text.split(/[。；;\n，,]/).filter(Boolean)) {
       const local = parseCandidate(
         { ...article, text: clause, paragraphs: [clause], attachments: [] },
         url,
@@ -178,7 +189,15 @@ export function parseEvidenceCandidate(
       }
     }
   });
-  for (const [field, choices] of alternatives)
+  for (const [field, choices] of alternatives) {
+    const evidence = [...choices.values()].flatMap((choice) => choice.evidence);
+    for (const entry of evidence)
+      if (
+        !result.evidence.some(
+          (existing) => JSON.stringify(existing) === JSON.stringify(entry),
+        )
+      )
+        result.evidence.push(entry);
     if (choices.size > 1) {
       result.fieldConflicts.push({ field, values: [...choices.values()] });
       result.conflicts.push(`${field} 多来源或条款冲突，须保留原文人工核对`);
@@ -194,6 +213,7 @@ export function parseEvidenceCandidate(
         };
       else Object.assign(result.fields, { [field]: null });
     }
+  }
   const publicationYear = article.publishedAt?.slice(0, 4);
   if (
     publicationYear &&

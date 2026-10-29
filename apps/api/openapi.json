@@ -8107,6 +8107,10 @@
       "AdminParsedCandidateDto": {
         "type": "object",
         "properties": {
+          "privacyRedacted": {
+            "type": "boolean",
+            "description": "历史材料已按名单隐私规则擦除，不能复用"
+          },
           "classification": {
             "$ref": "#/components/schemas/AdminRuleClassificationDto"
           },

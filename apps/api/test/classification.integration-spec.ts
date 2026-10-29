@@ -28,6 +28,73 @@ describe("分类提取修订使用已有快照", () => {
   afterAll(async () => {
     await db?.close();
   });
+  it("附件是唯一赛事线索时仍登记附件并沿同一候选链提取", async () => {
+    const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
+    process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
+    try {
+      const url = `https://${sources[0].host}/info/1043/178.htm`;
+      const attachmentUrl = `https://${sources[0].host}/system/_content/download.jsp?owner=176`;
+      const article: Article = {
+        title: "补充说明",
+        publishedAt: null,
+        text: "详细办理事项及相关要求请查阅本通知附件。",
+        paragraphs: ["详细办理事项及相关要求请查阅本通知附件。"],
+        attachments: [{ title: "数学竞赛延期通知.pdf", url: attachmentUrl }],
+      };
+      const saved = await persistArticle(
+        db.pool,
+        sources[0],
+        url,
+        { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+        article,
+        parseCandidate(article, url, directory!),
+      );
+      const snapshot = (
+        await db.pool.query(
+          "SELECT article FROM ingestion_versions WHERE notice_id=$1",
+          [saved.noticeId],
+        )
+      ).rows[0].article;
+      expect(snapshot.attachments).toHaveLength(1);
+      expect(
+        (
+          await db.pool.query(
+            "SELECT classification FROM ingestion_candidates WHERE id=$1",
+            [saved.candidateId],
+          )
+        ).rows[0].classification,
+      ).toBe("definite");
+      await persistAttachment(db.pool, {
+        noticeId: saved.noticeId,
+        noticeVersion: (await exportReview(db.pool, saved.candidateId!))
+          .sourceVersion,
+        url: attachmentUrl,
+        mediaType: "application/pdf",
+        extractorVersion: "test",
+        status: "extracted",
+        segments: [
+          {
+            kind: "page",
+            index: 1,
+            text: "数学竞赛报名延期，报名截止：2026年11月8日。",
+          },
+        ],
+        body: Buffer.from("rules178"),
+      });
+      const review = await exportReview(db.pool, saved.candidateId!);
+      expect(review.candidate.fields).toMatchObject({
+        kind: "supplement",
+        deadline: { precision: "date", value: "2026-11-08" },
+      });
+      expect(review.evidenceReferences).toContainEqual(
+        expect.objectContaining({ format: "pdf", page: 1, field: "deadline" }),
+      );
+    } finally {
+      if (previous === undefined)
+        delete process.env.INGESTION_ATTACHMENTS_ENABLED;
+      else process.env.INGESTION_ATTACHMENTS_ENABLED = previous;
+    }
+  });
   it("同一规则重跑幂等，换规则保留旧提取和人工材料", async () => {
     const url = `https://${sources[0].host}/info/1043/176.htm`;
     const article: Article = {
@@ -153,6 +220,9 @@ describe("分类提取修订使用已有快照", () => {
     await expect(
       approveReview(db.pool, oldReview, "maintainer"),
     ).rejects.toThrow(/过期|变化/);
+    const checked = correctedReview(fresh);
+    checked.batch.competitions![0].organizer = "隐私待擦除测试文本";
+    await approveReview(db.pool, checked, "maintainer");
     await markAttachmentNeedsReview(
       db.pool,
       attachment.attachmentId,
@@ -166,5 +236,12 @@ describe("分类提取修订使用已有快照", () => {
       )
     ).rows;
     expect(JSON.stringify(history)).not.toContain("隐私待擦除测试文本");
+    const operations = (
+      await db.pool.query(
+        "SELECT result FROM ingestion_operations WHERE candidate_id=$1",
+        [saved.candidateId],
+      )
+    ).rows;
+    expect(JSON.stringify(operations)).not.toContain("隐私待擦除测试文本");
   });
 });

@@ -8,7 +8,10 @@ import {
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
-import type { Article } from "@hehuoda/sicau-connectors/notices";
+import {
+  classificationPriority,
+  type Article,
+} from "@hehuoda/sicau-connectors/notices";
 import { readCatalog } from "../competitions/catalog.js";
 import { ImportValidationError } from "../competitions/import.js";
 import {
@@ -281,13 +284,10 @@ export class AdminReviewService {
             candidateId,
             command.classification,
             command.classification !== "non_competition",
-            command.classification === "non_competition"
-              ? 3
-              : command.classification === "suspected"
-                ? 2
-                : /registration|supplement/.test(row.data.fields.kind)
-                  ? 0
-                  : 1,
+            classificationPriority(
+              command.classification,
+              row.data.fields.kind,
+            ),
             command.reason,
           ],
         );

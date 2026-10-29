@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   noticeRuleVersion,
+  classificationPriority,
+  type Classification,
   parseEvidenceCandidate,
   type Article,
   type RuleEvidenceInput,
@@ -13,7 +15,7 @@ export async function refreshExtraction(
   client: PoolClient,
   noticeId: string,
   ruleVersion = noticeRuleVersion,
-  invalidateApproval = true,
+  revisionAlreadyChanged = false,
 ) {
   if (
     !(
@@ -68,7 +70,6 @@ export async function refreshExtraction(
     })) as RuleEvidenceInput[],
   );
   data.classification!.ruleVersion = ruleVersion;
-  const initial = candidate.extraction_key == null;
   const prior = (
     await client.query(
       "SELECT source_version,evidence_revision,rule_version FROM ingestion_extraction_revisions WHERE candidate_id=$1 AND extraction_key=$2",
@@ -81,12 +82,10 @@ export async function refreshExtraction(
     Number(prior?.evidence_revision) === Number(notice.evidence_revision);
   const override = sameEvidence ? candidate.classification_override : null;
   const classification = override ?? data.classification!.classification;
-  const priority =
-    classification === "non_competition"
-      ? 3
-      : classification === "suspected"
-        ? 2
-        : data.classification!.priority;
+  const priority = classificationPriority(
+    classification as Classification,
+    data.fields.kind,
+  );
   await client.query(
     `INSERT INTO ingestion_extraction_revisions(id,candidate_id,source_version,evidence_revision,rule_version,extraction_key,data)
     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(candidate_id,extraction_key) DO NOTHING`,
@@ -114,11 +113,7 @@ export async function refreshExtraction(
       override,
       classification !== "non_competition",
       priority,
-      !invalidateApproval ||
-      initial ||
-      prior?.source_version !== notice.latest_version
-        ? 0
-        : 1,
+      revisionAlreadyChanged ? 0 : 1,
     ],
   );
   return data;

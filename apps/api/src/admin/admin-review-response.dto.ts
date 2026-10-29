@@ -139,6 +139,10 @@ export class AdminFieldConflictDto {
   @ApiProperty({ type: [AdminFieldChoiceDto] }) values!: AdminFieldChoiceDto[];
 }
 export class AdminParsedCandidateDto {
+  @ApiPropertyOptional({
+    description: "历史材料已按名单隐私规则擦除，不能复用",
+  })
+  privacyRedacted?: boolean;
   @ApiPropertyOptional({ type: AdminRuleClassificationDto })
   classification?: AdminRuleClassificationDto;
   @ApiPropertyOptional({ type: [AdminFieldConflictDto] })

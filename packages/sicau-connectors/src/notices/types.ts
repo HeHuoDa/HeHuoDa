@@ -62,6 +62,7 @@ export interface CandidateFields {
   eventAt: TimeValue;
 }
 export interface ParsedCandidate {
+  privacyRedacted?: boolean;
   classification?: import("./classification.js").NoticeClassification;
   fieldConflicts?: {
     field: string;

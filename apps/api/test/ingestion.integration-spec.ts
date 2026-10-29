@@ -130,6 +130,28 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     }
     expect((await formal()).competitions).toHaveLength(0);
   });
+  it("HTML304仍用已有快照升级规则，旧迁移候选的批准基线失效", async () => {
+    const file = await approved();
+    await db.pool.query(
+      "UPDATE ingestion_candidates SET rule_version='legacy',extraction_key=NULL WHERE id=$1",
+      [file.candidateId],
+    );
+    expect(
+      await runner([http(404), http(304)]).scan({ sourceId: source.id, url }),
+    ).toMatchObject({ status: "succeeded", counts: { unchanged: 1 } });
+    expect(await candidate()).toMatchObject({
+      rule_version: "competition-rules-1",
+      status: "pending",
+      revision: file.candidateRevision + 1,
+    });
+    await expect(
+      approveReview(
+        db.pool,
+        { ...file, operationId: "17600000-0000-4000-8000-000000000001" },
+        "maintainer",
+      ),
+    ).rejects.toThrow(/过期|变化/);
+  });
   it("拒绝不被重复采集重开，显式重开或新版本才恢复待审核", async () => {
     const stored = await persist();
     await setReviewState(

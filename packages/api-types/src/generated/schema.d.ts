@@ -1588,6 +1588,8 @@ export interface components {
             eventAt: components["schemas"]["AdminReviewTimeValueDto"];
         };
         AdminParsedCandidateDto: {
+            /** @description 历史材料已按名单隐私规则擦除，不能复用 */
+            privacyRedacted?: boolean;
             classification?: components["schemas"]["AdminRuleClassificationDto"];
             fieldConflicts?: components["schemas"]["AdminFieldConflictDto"][];
             fields: components["schemas"]["AdminCandidateFieldsDto"];
