@@ -44,15 +44,27 @@ export function classifyNotice(
   const excluded =
     /体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅/.test(title) &&
     !/竞赛|比赛|大赛/.test(title);
-  const notificationKind = /获奖|结果公示|名单公示|表彰|获奖新闻/.test(title)
-    ? "award"
-    : /新闻|回顾|圆满|荣获|喜报/.test(title)
-      ? "news"
-      : /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(text)
-        ? "supplement"
-        : /报名|参赛|竞赛.*通知|比赛.*通知/.test(text)
-          ? "registration"
-          : "news";
+  const explicitRegistration = /报名/.test(title);
+  const bodyAward =
+    !explicitRegistration &&
+    /(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示|现将[^。；\n]{0,100}(?:结果|名单)公示/.test(
+      text,
+    );
+  const bodyNews =
+    !explicitRegistration &&
+    /(?:竞赛|比赛)[^。；\n]{0,40}(?:圆满结束|成功举办|落下帷幕)|(?:竞赛|比赛)新闻回顾/.test(
+      text,
+    );
+  const notificationKind =
+    /获奖|结果公示|名单公示|表彰|获奖新闻/.test(title) || bodyAward
+      ? "award"
+      : /新闻|回顾|圆满|荣获|喜报/.test(title) || bodyNews
+        ? "news"
+        : /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(text)
+          ? "supplement"
+          : /报名|参赛|竞赛.*通知|比赛.*通知/.test(text)
+            ? "registration"
+            : "news";
   if (list) exclusions.push("applicant-list");
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
   if (competition) reasons.push("原文含赛事标识");

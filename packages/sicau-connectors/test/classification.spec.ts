@@ -9,6 +9,237 @@ import {
 } from "./classification-corpus.js";
 
 describe("赛事分类独立于审核状态", () => {
+  it("延期说明后紧接的新绝对截止仍可提取，旧日期在前不能抵消相对变更", () => {
+    const parse = (paragraphs: string[]) =>
+      parseEvidenceCandidate(
+        {
+          title: "2026年数学竞赛补充通知",
+          publishedAt: null,
+          text: paragraphs.join("\n"),
+          paragraphs,
+          attachments: [],
+        },
+        "https://example.edu/n",
+        [],
+        "v1",
+      );
+    expect(
+      parse(["数学竞赛报名延期，报名截止：2026年11月8日。"]).fields.deadline
+        .value,
+    ).toBe("2026-11-08");
+    expect(
+      parse(["报名截止：2026年11月1日。", "现延期至一周后。"]).fields.deadline
+        .value,
+    ).toBeNull();
+  });
+  it.each(["不可参加", "不予报名", "不接受报名"])(
+    "资格否定 %s 保留复杂原文，不列为允许学院",
+    (denied) => {
+      const text = `参赛对象：仅信息工程学院学生可参加，生命科学学院${denied}。`;
+      const result = parseEvidenceCandidate(
+        {
+          title: "2026年数学竞赛报名通知",
+          publishedAt: null,
+          text,
+          paragraphs: [text],
+          attachments: [],
+        },
+        "https://example.edu/n",
+        [
+          { id: "information-engineering", name: "信息工程学院" },
+          { id: "life-science", name: "生命科学学院" },
+        ],
+        "v1",
+      );
+      expect(result.fields.scope).toMatchObject({
+        kind: "complex",
+        colleges: [],
+        note: text,
+      });
+    },
+  );
+  it.each(["一周后", "下月初", "五个工作日后"])(
+    "延期至 %s 没有新绝对日期时不保留旧截止",
+    (relative) => {
+      const paragraphs = [
+        "原报名截止：2026年11月1日。",
+        `现延期至${relative}。`,
+      ];
+      const result = parseEvidenceCandidate(
+        {
+          title: "2026年数学竞赛补充通知",
+          publishedAt: null,
+          text: paragraphs.join("\n"),
+          paragraphs,
+          attachments: [],
+        },
+        "https://example.edu/n",
+        [],
+        "v1",
+      );
+      expect(result.fields.deadline).toEqual({
+        precision: "unknown",
+        value: null,
+      });
+      expect(
+        result.fieldConflicts?.find((c) => c.field === "deadline")?.values,
+      ).toHaveLength(2);
+    },
+  );
+  it("联合主办单位中的逗号不丢失，也不把不同来源的甲乙与甲当成同值", () => {
+    const text = "主办单位：甲，乙。";
+    const result = parseEvidenceCandidate(
+      {
+        title: "2026年竞赛报名通知",
+        publishedAt: null,
+        text,
+        paragraphs: [text],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+      [
+        {
+          format: "pdf",
+          url: "https://example.edu/a",
+          noticeVersion: "v1",
+          attachmentVersion: "a1",
+          segments: [{ kind: "page", index: 1, text: "主办单位：甲。" }],
+        },
+      ],
+    );
+    expect(result.fields.organizer).toBeNull();
+    expect(
+      result.fieldConflicts
+        ?.find((c) => c.field === "organizer")
+        ?.values.map((c) => c.value),
+    ).toEqual(["甲，乙", "甲"]);
+  });
+  it("资格排除、主办承办和否定模式不得自动解释成相反含义", () => {
+    const text =
+      "主办单位：教务处，承办单位：信息工程学院。参赛对象：仅信息工程学院学生可参加，生命科学学院不得参加。参赛规则：禁止个人参赛，须以团队参加。";
+    const result = parseEvidenceCandidate(
+      {
+        title: "2026年竞赛报名通知",
+        publishedAt: null,
+        text,
+        paragraphs: text.split("。").filter(Boolean),
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [
+        { id: "information-engineering", name: "信息工程学院" },
+        { id: "life-science", name: "生命科学学院" },
+      ],
+      "v1",
+    );
+    expect(result.fields.organizer).toBe("教务处");
+    expect(result.fields.scope.kind).toBe("complex");
+    expect(result.fields.scope.colleges).toEqual([]);
+    expect(result.fields.mode).toBe("team");
+    expect(result.fieldConflicts?.some((c) => c.field === "mode")).toBe(false);
+  });
+  it("旧绝对截止后出现未锚定相对延期，不沿用旧截止", () => {
+    const paragraphs = ["原报名截止：2026年11月1日。", "现延期至下周一。"];
+    const result = parseEvidenceCandidate(
+      {
+        title: "2026年数学竞赛补充通知",
+        publishedAt: "2026-10-01",
+        text: paragraphs.join("\n"),
+        paragraphs,
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+    );
+    expect(result.fields.deadline).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(
+      result.fieldConflicts
+        ?.find((c) => c.field === "deadline")
+        ?.values.map((c) => c.value),
+    ).toEqual(
+      expect.arrayContaining([
+        { precision: "date", value: "2026-11-01" },
+        { precision: "unknown", value: null },
+      ]),
+    );
+    expect(
+      result.evidence
+        .filter((e) => e.field === "deadline")
+        .some((e) => e.excerpt.includes("下周一")),
+    ).toBe(true);
+  });
+  it("顿号连接的多赛段时间仍保留两侧候选证据", () => {
+    const text = "院赛报名截止：2026年11月1日、校赛报名截止：2026年11月8日。";
+    const result = parseEvidenceCandidate(
+      {
+        title: "2026年数学竞赛报名通知",
+        publishedAt: null,
+        text,
+        paragraphs: [text],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+    );
+    expect(result.fields.deadline.value).toBeNull();
+    expect(
+      result.fieldConflicts?.find((c) => c.field === "deadline")?.values,
+    ).toHaveLength(2);
+    expect(result.evidence.filter((e) => e.field === "deadline")).toHaveLength(
+      2,
+    );
+  });
+  it("通用标题的kind证据必须包含真正支持通知种类的正文", () => {
+    const text = "2026年数学竞赛通知已发布。";
+    const result = parseEvidenceCandidate(
+      {
+        title: "相关事项",
+        publishedAt: null,
+        text,
+        paragraphs: [text],
+        attachments: [],
+      },
+      "https://example.edu/n",
+      [],
+      "v1",
+    );
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({ field: "kind", paragraph: 0, excerpt: text }),
+    );
+  });
+  it("普通标题的结果公示或新闻不能因引用旧报名日期被当成报名", () => {
+    for (const title of ["通知", "2026年数学竞赛通知", "参赛事项"])
+      for (const [body, kind] of [
+        ["现将数学竞赛获奖结果公示。报名截止曾为2026年10月1日。", "award"],
+        ["数学竞赛圆满结束，现回顾比赛。报名截止曾为2026年10月1日。", "news"],
+      ]) {
+        const result = parseEvidenceCandidate(
+          {
+            title,
+            publishedAt: null,
+            text: body,
+            paragraphs: [body],
+            attachments: [],
+          },
+          "https://example.edu/n",
+          [],
+          "v1",
+        );
+        expect(result.fields.kind).toBe(kind);
+        expect(result.fields.deadline).toEqual({
+          precision: "unknown",
+          value: null,
+        });
+        expect(result.classification?.priority).toBe(1);
+      }
+  });
   it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
     const text = "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月1日。";
     const result = parseEvidenceCandidate(

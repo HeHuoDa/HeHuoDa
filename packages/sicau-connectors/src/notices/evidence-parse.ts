@@ -1,4 +1,4 @@
-import { parseCandidate } from "./parse.js";
+import { parseCandidate, extractDates } from "./parse.js";
 import { classifyNotice } from "./classification.js";
 import type {
   Article,
@@ -117,7 +117,11 @@ export function parseEvidenceCandidate(
     return [locate(entry)];
   });
   locations.forEach((location, index) => {
-    if (/报名|参赛|补充|延期|更正|调整|变更|获奖|公示|回顾/.test(location.text))
+    if (
+      /报名|参赛|补充|延期|更正|调整|变更|获奖|公示|回顾|圆满|竞赛.*通知|比赛.*通知/.test(
+        location.text,
+      )
+    )
       result.evidence.push(
         locate({
           field: "kind",
@@ -145,59 +149,164 @@ export function parseEvidenceCandidate(
     Map<string, { value: unknown; evidence: Evidence[] }>
   >();
   locations.forEach((location, index) => {
-    for (const clause of location.text.split(/[。；;\n，,]/).filter(Boolean)) {
-      const local = parseCandidate(
-        { ...article, text: clause, paragraphs: [clause], attachments: [] },
-        url,
-        directory,
-        classification.notificationKind,
-      );
-      for (const evidence of local.evidence.filter((e) => e.paragraph >= 0)) {
-        const field = evidence.field;
+    // Time clauses may use list punctuation; organizations and qualifications retain it.
+    for (const temporal of [false, true])
+      for (const clause of location.text
+        .split(temporal ? /[。；;\n，,、]/ : /[。；;\n]/)
+        .filter(Boolean)) {
+        const local = parseCandidate(
+          { ...article, text: clause, paragraphs: [clause], attachments: [] },
+          url,
+          directory,
+          classification.notificationKind,
+        );
+        for (const evidence of local.evidence.filter((e) => e.paragraph >= 0)) {
+          const field = evidence.field;
+          if (
+            !(field in local.fields) ||
+            ["tracks", "stageNames", "rules", "hosts"].includes(field)
+          )
+            continue;
+          if (
+            ["startsAt", "deadline", "materialsAt", "eventAt"].includes(
+              field,
+            ) !== temporal
+          )
+            continue;
+          const value = local.fields[field as keyof CandidateFields];
+          if (
+            value == null ||
+            (typeof value === "object" &&
+              "precision" in value &&
+              value.value == null) ||
+            (typeof value === "object" &&
+              "kind" in value &&
+              value.kind === "unknown")
+          )
+            continue;
+          // Scope notes preserve wording, but equivalent eligibility values aggregate evidence.
+          const key =
+            field === "scope"
+              ? JSON.stringify({
+                  kind: local.fields.scope.kind,
+                  colleges: local.fields.scope.colleges,
+                  ...(local.fields.scope.kind === "complex"
+                    ? { note: local.fields.scope.note }
+                    : {}),
+                })
+              : JSON.stringify(value);
+          const choices = alternatives.get(field) ?? new Map();
+          const choice = choices.get(key) ?? { value, evidence: [] };
+          choice.evidence.push(locate({ ...evidence, paragraph: index }));
+          choices.set(key, choice);
+          alternatives.set(field, choices);
+        }
+      }
+  });
+  const yearAnchor = /20\d{2}(?=年|届)/.exec(article.title)?.[0] ?? null;
+  const absolutePositions = new Map<string, number>();
+  const sourceFieldKey = (
+    location: (typeof locations)[number],
+    field: string,
+  ) =>
+    JSON.stringify([
+      location.url,
+      location.noticeVersion,
+      location.attachmentVersion,
+      field,
+    ]);
+  let offset = 0;
+  const locationOffsets = locations.map((location) => {
+    const start = offset;
+    offset += location.text.length + 1;
+    return start;
+  });
+  const timeLabels = [
+    ["startsAt", /(?:报名|注册).*(?:开始|启动)/],
+    ["deadline", /(?:报名|注册).*(?:截止|截至)/],
+    ["materialsAt", /(?:材料|作品|论文).*(?:提交|报送|截止)/],
+    ["eventAt", /比赛时间|竞赛时间|比赛于|竞赛于/],
+  ] as const;
+  locations.forEach((location, index) => {
+    for (const match of location.text.matchAll(/[^。；;\n，,、]+/g)) {
+      if (
+        /原|曾|此前|先前/.test(match[0]) ||
+        !extractDates(match[0], yearAnchor).length
+      )
+        continue;
+      for (const [field, label] of timeLabels)
+        if (label.test(match[0]))
+          absolutePositions.set(
+            sourceFieldKey(location, field),
+            locationOffsets[index] + match.index,
+          );
+    }
+  });
+  locations.forEach((location, index) => {
+    for (const match of location.text.matchAll(/[^。；;\n，,、]+/g)) {
+      const clause = match[0];
+      const change = /延期|延长|改为|调整|更正/.exec(clause);
+      if (!change) continue;
+      const changedText = clause.slice(change.index);
+      const changesTime =
+        /延期|延长/.test(change[0]) ||
+        /截止|时间|日期|期限/.test(clause) ||
+        /本周|下周|月底|另行通知|即日起|次日|明天|明日|后天|本月|下月/.test(
+          changedText,
+        );
+      if (!changesTime || extractDates(changedText, yearAnchor).length)
+        continue;
+      const fields = /材料|作品|论文/.test(clause)
+        ? (["materialsAt"] as const)
+        : /报名|注册/.test(clause)
+          ? (["deadline"] as const)
+          : /比赛|竞赛/.test(clause)
+            ? (["eventAt"] as const)
+            : (["startsAt", "deadline", "materialsAt", "eventAt"] as const);
+      for (const field of fields) {
+        const absolutePosition = absolutePositions.get(
+          sourceFieldKey(location, field),
+        );
         if (
-          !(field in local.fields) ||
-          ["tracks", "stageNames", "rules", "hosts"].includes(field)
+          absolutePosition !== undefined &&
+          absolutePosition > locationOffsets[index] + match.index + change.index
         )
           continue;
-        const value = local.fields[field as keyof CandidateFields];
-        if (
-          value == null ||
-          (typeof value === "object" &&
-            "precision" in value &&
-            value.value == null) ||
-          (typeof value === "object" &&
-            "kind" in value &&
-            value.kind === "unknown")
-        )
-          continue;
-        // Scope notes preserve wording, but equivalent eligibility values aggregate evidence.
-        const key =
-          field === "scope"
-            ? JSON.stringify({
-                kind: local.fields.scope.kind,
-                colleges: local.fields.scope.colleges,
-                ...(local.fields.scope.kind === "complex"
-                  ? { note: local.fields.scope.note }
-                  : {}),
-              })
-            : JSON.stringify(value);
         const choices = alternatives.get(field) ?? new Map();
-        const choice = choices.get(key) ?? { value, evidence: [] };
-        choice.evidence.push(locate({ ...evidence, paragraph: index }));
-        choices.set(key, choice);
+        const value = { precision: "unknown" as const, value: null };
+        const evidence = locate({
+          field,
+          excerpt: clause,
+          paragraph: index,
+          url,
+        });
+        const unknown = choices.get("relative-change") ?? {
+          value,
+          evidence: [],
+        };
+        unknown.evidence.push(evidence);
+        choices.set("relative-change", unknown);
         alternatives.set(field, choices);
+        result.fields[field] = value;
+        result.conflicts.push(
+          `${field} 相对或待定变更无可靠锚点，不能沿用旧时间`,
+        );
+        if (!result.missing.includes(field)) result.missing.push(field);
       }
     }
   });
+  const evidenceKeys = new Set(
+    result.evidence.map((entry) => JSON.stringify(entry)),
+  );
   for (const [field, choices] of alternatives) {
     const evidence = [...choices.values()].flatMap((choice) => choice.evidence);
-    for (const entry of evidence)
-      if (
-        !result.evidence.some(
-          (existing) => JSON.stringify(existing) === JSON.stringify(entry),
-        )
-      )
+    for (const entry of evidence) {
+      const key = JSON.stringify(entry);
+      if (!evidenceKeys.has(key)) {
         result.evidence.push(entry);
+        evidenceKeys.add(key);
+      }
+    }
     if (choices.size > 1) {
       result.fieldConflicts.push({ field, values: [...choices.values()] });
       result.conflicts.push(`${field} 多来源或条款冲突，须保留原文人工核对`);
