@@ -34,7 +34,7 @@
 
 ### Domain docs
 
-项目采用单一上下文：根目录 `CONTEXT.md` 与 `docs/adr/`。参见 `docs/agents/domain.md`。
+项目采用单一上下文：根目录 `GLOSSARY.md` 与 `docs/adr/`。参见 `docs/agents/domain.md`。
 
 ### 用户端 H5 手机端优先
 

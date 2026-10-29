@@ -237,7 +237,7 @@ HeHuoDa/
 ├── .github/                          # Issue / PR 模板与 CI、自动合并工作流
 ├── third-party-notices/              # 第三方资源许可证
 ├── AGENTS.md                         # 仓库 Agent 指引
-├── CONTEXT.md                        # 业务领域词汇与上下文
+├── GLOSSARY.md                       # 业务领域词汇与上下文
 ├── compose.yaml                      # 开发与测试 PostgreSQL 服务
 ├── eslint.config.mjs                 # 工作区 ESLint 配置
 ├── package.json                      # 根脚本、Node / pnpm 约束与公共开发依赖
