@@ -163,6 +163,11 @@ it("手动扫描受理只显示已受理，不显示扫描完成且不重复执�
               message: "排队受理",
             };
           },
+          request: async () => ({
+            state: "completed",
+            requestId: "req-1",
+            message: "预览未写入",
+          }),
         },
       },
     },
@@ -183,6 +188,16 @@ it("手动扫描受理只显示已受理，不显示扫描完成且不重复执�
   await flushPromises();
   expect(wrapper.text()).toContain("仅已受理，尚未确认扫描完成");
   expect(calls).toBe(1);
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "查询请求状态")!
+    .trigger("click");
+  await flushPromises();
+  expect(
+    wrapper
+      .findAll("button")
+      .some((b) => b.text() === "准备新操作（重置输入）"),
+  ).toBe(true);
   wrapper.unmount();
   document.body.innerHTML = "";
 });

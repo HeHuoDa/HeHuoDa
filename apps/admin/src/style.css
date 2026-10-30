@@ -1,4 +1,9 @@
 @import "tailwindcss" source("./");
+.notice-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
 :root {
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #243d32;

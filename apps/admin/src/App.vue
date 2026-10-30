@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { adminHttp } from "./runtime";
+import { ConsoleError } from "./console/resource";
 const auth = adminHttp.state;
 const logoutError = ref("");
+watch(
+  () => auth.session,
+  () => {
+    logoutError.value = "";
+  },
+);
 async function logout() {
   try {
     await adminHttp.logout();
-  } catch {
-    logoutError.value = "退出请求未确认，请重试退出以撤销服务端会话。";
+  } catch (error) {
+    logoutError.value =
+      error instanceof ConsoleError && error.status === 409
+        ? error.message
+        : "退出请求未确认，请重试退出以撤销服务端会话。";
   }
 }
 import {
@@ -97,14 +107,26 @@ const menu = [
         <div class="topbar-actions">
           <template v-if="auth.session"
             ><span>{{ auth.session.displayName }}</span
-            ><ElButton @click="logout">退出登录</ElButton></template
+            ><ElButton
+              :disabled="auth.writing > 0 || auth.loggingOut"
+              @click="logout"
+              >退出登录</ElButton
+            ></template
           >
           <RouterLink v-else to="/login" class="account-link"
             ><span class="avatar">禾</span><span>管理员入口</span></RouterLink
           >
         </div>
       </header>
-      <div v-if="route.query.preview === '1'" class="preview-banner">
+      <div
+        v-if="
+          route.query.preview === '1' &&
+          /^\/(ingestion|competitions|users|recruitments|reports)/.test(
+            route.path,
+          )
+        "
+        class="preview-banner"
+      >
         <span
           ><strong>页面预览</strong>
           隔离只读示例，不代表线上数据，不执行真实写入。</span

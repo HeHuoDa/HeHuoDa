@@ -21,6 +21,8 @@ export function createAdminHttp() {
     session: null as Schema["AdminSessionDto"] | null,
     ready: false,
     generation: 0,
+    writing: 0,
+    loggingOut: false,
   });
   const pending = new Set<AbortController>();
   let csrf = "";
@@ -29,6 +31,7 @@ export function createAdminHttp() {
     state.generation++;
     state.session = null;
     csrf = "";
+    sessionStorage.removeItem("hh-admin-ingestion");
     for (const controller of pending) controller.abort();
     pending.clear();
   }
@@ -39,8 +42,16 @@ export function createAdminHttp() {
     const generation = state.generation;
     const controller = new AbortController();
     pending.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const writing =
+      !!options.method &&
+      options.method !== "GET" &&
+      !path.startsWith("/auth/");
+    if (writing) state.writing++;
     try {
       const method = options.method ?? "GET";
+      if (state.loggingOut && method !== "GET" && path !== "/auth/logout")
+        throw new ConsoleError(409, "退出处理中，不能开始新的写操作。");
       if (
         method !== "GET" &&
         !["/auth/login", "/auth/logout"].includes(path) &&
@@ -83,6 +94,8 @@ export function createAdminHttp() {
         throw new DOMException("会话已改变", "AbortError");
       return value as T;
     } finally {
+      clearTimeout(timeout);
+      if (writing) state.writing--;
       pending.delete(controller);
     }
   }
@@ -101,18 +114,44 @@ export function createAdminHttp() {
     }
   }
   async function login(username: string, password: string) {
+    if (state.loggingOut)
+      throw new ConsoleError(409, "退出处理中，请稍后登录。");
     clear();
     await request<Schema["AdminSessionDto"]>("/auth/login", {
       method: "POST",
       body: { username, password } satisfies Schema["AdminLoginDto"],
     });
     await restore();
+    if (!state.session)
+      throw new ConsoleError(401, "未能恢复有效会话，请重新登录。");
   }
   async function logout() {
+    if (state.loggingOut) throw new ConsoleError(409, "退出处理中。");
     try {
+      const value = JSON.parse(
+        sessionStorage.getItem("hh-admin-ingestion") ?? "null",
+      );
+      if (
+        !value ||
+        value.actor !== state.session?.id ||
+        typeof value.body?.operationId !== "string"
+      )
+        sessionStorage.removeItem("hh-admin-ingestion");
+    } catch {
+      sessionStorage.removeItem("hh-admin-ingestion");
+    }
+    if (state.writing || sessionStorage.getItem("hh-admin-ingestion"))
+      throw new ConsoleError(
+        409,
+        "仍有提交中或未确认受理的操作，请先核验再退出。",
+      );
+    state.loggingOut = true;
+    try {
+      if (!csrf) await restore();
       await request("/auth/logout", { method: "POST" });
     } finally {
       clear();
+      state.loggingOut = false;
       state.ready = true;
       onUnauthorized();
     }

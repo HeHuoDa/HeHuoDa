@@ -55,6 +55,9 @@ async function submit() {
         :aria-busy="submitting"
         @submit.prevent="submit"
       >
+        <p v-if="route?.query.error === 'session-unavailable'" role="alert">
+          会话服务暂时不可用，请稍后重试登录。
+        </p>
         <label for="admin-account">管理员账号</label
         ><ElInput
           id="admin-account"

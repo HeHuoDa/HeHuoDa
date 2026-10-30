@@ -30,6 +30,10 @@ async function load() {
   versions.value = [];
   error.value = "";
   loading.value = true;
+  if (route.query.preview === "1") {
+    loading.value = false;
+    return;
+  }
   try {
     if (route.params.id) {
       const base =
@@ -77,6 +81,13 @@ watch(
 );
 </script>
 <template>
+  <ElAlert
+    v-if="route.query.preview === '1'"
+    title="通知追溯不提供固定样例；当前未查询真实通知。"
+    :closable="false"
+  /><RouterLink v-if="route.query.preview === '1'" :to="{ path: route.path }"
+    >退出示例并查询真实通知</RouterLink
+  >
   <div class="page-heading">
     <div>
       <h1>通知版本追溯</h1>

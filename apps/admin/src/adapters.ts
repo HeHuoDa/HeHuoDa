@@ -57,6 +57,7 @@ function mapRun(run: Schema["IngestionRunDto"]): IngestionRun {
     },
     trigger: run.trigger,
     settings: {},
+    budgetUsage: run.budgetUsage,
     counts: run.counts,
     errors: run.errors,
     cursor: {
@@ -82,10 +83,101 @@ function mapRequest(value: Schema["IngestionRequestDto"]): AcceptedRequest {
             ? "扫描预览：未写入采集业务数据。"
             : "受理状态不代表运行成功。",
     result: value.result,
+    error: value.error,
+    errorCode: value.errorCode,
   };
 }
-export function createControlService(http: Transport): IngestionControlService {
+export function createControlService(
+  http: Transport,
+  actor = () => "",
+): IngestionControlService {
+  type PendingCommand = {
+    actor: string;
+    path: string;
+    body: { operationId: string; reason: string };
+  };
+  let pending: PendingCommand | null = null;
+  function readPending() {
+    if (!actor()) return pending;
+    try {
+      const value = JSON.parse(
+        sessionStorage.getItem("hh-admin-ingestion") ?? "null",
+      ) as PendingCommand | null;
+      if (
+        value?.actor === actor() &&
+        /^\/ingestion\/(scans|runs\/[0-9a-f-]{36}\/resume)$/.test(value.path) &&
+        /^[0-9a-f-]{36}$/i.test(value.body.operationId)
+      )
+        return value;
+    } catch {
+      /* 无效的本地恢复资料不作为请求输入 */
+    }
+    sessionStorage.removeItem("hh-admin-ingestion");
+    return null;
+  }
+  function remember(value: PendingCommand | null) {
+    pending = value;
+    if (actor()) {
+      if (value)
+        sessionStorage.setItem("hh-admin-ingestion", JSON.stringify(value));
+      else sessionStorage.removeItem("hh-admin-ingestion");
+    }
+  }
+  async function submit(path: string, body: PendingCommand["body"]) {
+    remember({ actor: actor(), path, body });
+    try {
+      const value = await http.request<Schema["IngestionAcceptedDto"]>(path, {
+        method: "POST",
+        body,
+      });
+      remember(null);
+      return {
+        state: value.status,
+        requestId: value.requestId,
+        message: "仅已受理，尚未完成。",
+      };
+    } catch (error) {
+      if (
+        error instanceof ConsoleError &&
+        error.status < 500 &&
+        error.status !== 403
+      )
+        remember(null);
+      throw error;
+    }
+  }
+  async function recover(operationId: string) {
+    const value = await http.request<Schema["IngestionRequestDto"]>(
+      `${ingestion}/requests/by-operation/${encodeURIComponent(operationId)}`,
+    );
+    remember(null);
+    return mapRequest(value);
+  }
   return {
+    pendingOperation() {
+      return readPending()?.body.operationId ?? null;
+    },
+    async recoverPending() {
+      const command = readPending();
+      if (!command) throw new ConsoleError(404, "无待核验操作");
+      if (command.actor) {
+        const session =
+          await http.request<Schema["AdminSessionDto"]>("/auth/session");
+        if (session.id !== command.actor)
+          throw new ConsoleError(
+            409,
+            "管理员身份已切换，请先重新登录核对原操作。",
+          );
+      }
+      try {
+        return await recover(command.body.operationId);
+      } catch (error) {
+        if (!(error instanceof ConsoleError && error.status === 404))
+          throw error;
+        // 先查询未受理，再显式重试完全相同的命令；幂等标识不变。
+        return submit(command.path, command.body);
+      }
+    },
     async sources() {
       const rows = await http.request<Schema["IngestionSourceDto"][]>(
         `${ingestion}/sources`,
@@ -127,32 +219,13 @@ export function createControlService(http: Transport): IngestionControlService {
     },
     async scan(input) {
       const { url, ...body } = input;
-      const value = await http.request<Schema["IngestionAcceptedDto"]>(
-        `${ingestion}/scans`,
-        {
-          method: "POST",
-          body: {
-            ...body,
-            ...(url ? { url } : {}),
-          } satisfies Schema["ScanDto"],
-        },
-      );
-      return {
-        state: value.status,
-        requestId: value.requestId,
-        message: "仅已受理，尚未完成。",
-      };
+      return submit(`${ingestion}/scans`, {
+        ...body,
+        ...(url ? { url } : {}),
+      } satisfies Schema["ScanDto"]);
     },
     async resume(id, body) {
-      const value = await http.request<Schema["IngestionAcceptedDto"]>(
-        idPath("runs", id) + "/resume",
-        { method: "POST", body },
-      );
-      return {
-        state: value.status,
-        requestId: value.requestId,
-        message: "仅已受理原范围续跑。",
-      };
+      return submit(idPath("runs", id) + "/resume", body);
     },
     async request(id) {
       return mapRequest(
@@ -161,6 +234,7 @@ export function createControlService(http: Transport): IngestionControlService {
         ),
       );
     },
+    recover,
   };
 }
 function reviewInput(file: Schema["AdminReviewFileDto"]): ReviewInput {
@@ -184,6 +258,7 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
+          secondary: row.sourceId,
         })),
       };
     },
@@ -234,7 +309,11 @@ export function createReviewService(http: Transport): ReviewService {
                 baseline: material.baseline,
               },
       });
-      return { contentKey: JSON.stringify(material), token: result.previewId };
+      return {
+        contentKey: JSON.stringify(material),
+        token: result.previewId,
+        changes: result.changes,
+      };
     },
     async change(action, material, reason, operationId, receipt, options) {
       const base = idPath("candidates", material.candidateId);

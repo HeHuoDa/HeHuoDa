@@ -86,6 +86,7 @@ const busy = ref(false),
   action = ref<"configure" | "scan" | "resume">("scan"),
   accepted = ref<AcceptedRequest | null>(null),
   requestBusy = ref(false);
+const unresolved = ref("");
 let epoch = 0,
   requestEpoch = 0,
   operationId = "";
@@ -124,6 +125,7 @@ function link(path: string) {
 }
 async function load() {
   stopObserving();
+  unresolved.value = service.value.pendingOperation?.() ?? "";
   const current = ++epoch;
   ++requestEpoch;
   busy.value = false;
@@ -206,6 +208,10 @@ async function chooseSource(id: string) {
   error.value = "";
 }
 async function open(kind: typeof action.value) {
+  if (unresolved.value) {
+    error.value = "上次受理结果未知，请先查询并恢复原操作。";
+    return;
+  }
   if (busy.value || stale.value) return;
   error.value = "";
   if (kind === "configure" && config.value) {
@@ -232,6 +238,7 @@ async function open(kind: typeof action.value) {
   dialog.value = true;
 }
 async function execute(reason: string) {
+  if (unresolved.value) throw new Error("请先恢复原操作");
   if (busy.value || stale.value) throw new Error("请重新加载");
   const current = epoch;
   busy.value = true;
@@ -283,6 +290,7 @@ async function execute(reason: string) {
       }
     }
   } catch (cause) {
+    unresolved.value = service.value.pendingOperation?.() ?? "";
     if (current === epoch && cause instanceof IngestionControlError) {
       error.value = cause.message;
       if (cause.reason !== "failed") stale.value = true;
@@ -318,6 +326,29 @@ async function queryRequest() {
     if (current === requestEpoch) requestBusy.value = false;
   }
 }
+async function recoverUncertain() {
+  if (busy.value || !service.value.recoverPending) return;
+  const current = epoch;
+  busy.value = true;
+  error.value = "";
+  try {
+    const value = await service.value.recoverPending();
+    if (current !== epoch) return;
+    unresolved.value = "";
+    accepted.value = value;
+    dialog.value = false;
+    scanInitial.value = JSON.stringify(scan.value);
+    busy.value = false;
+    await router.replace({
+      path: route.path,
+      query: { ...route.query, request: value.requestId },
+    });
+  } catch (cause) {
+    if (current === epoch) error.value = errorMessage(cause);
+  } finally {
+    if (current === epoch) busy.value = false;
+  }
+}
 function changeQuery(value: PageQuery) {
   router.push({
     path: "/ingestion/runs",
@@ -332,6 +363,17 @@ function setFilter(value: string) {
   router.push({
     path: "/ingestion/runs",
     query: { ...route.query, source: value || undefined, page: "1" },
+  });
+}
+async function prepareNew() {
+  stopObserving();
+  scan.value = initialScan();
+  scanInitial.value = JSON.stringify(scan.value);
+  if (config.value) initial.value = JSON.stringify(config.value);
+  accepted.value = null;
+  await router.replace({
+    path: route.path,
+    query: { ...route.query, request: undefined },
   });
 }
 onBeforeRouteLeave(leave);
@@ -379,6 +421,17 @@ watch(() => route.fullPath, load, { immediate: true });
       独立页面示例 · 配置、运行、计数与错误均为演示，不代表实际抓取结果。
     </p>
     <p v-if="error" role="alert" class="form-error">{{ error }}</p>
+    <section v-if="unresolved" class="panel console-pad" role="alert">
+      <h2>上次受理结果未知</h2>
+      <p>
+        先查询操作
+        {{ unresolved }}
+        的受理状态；未找到时仅重试同一标识、同一输入，不创建新操作。
+      </p>
+      <ElButton :disabled="busy" @click="recoverUncertain"
+        >查询并恢复原操作</ElButton
+      >
+    </section>
     <p v-if="stale" role="alert">
       本轮确认已锁定，请记录输入并重新查询。<ElButton @click="load"
         >重新查询状态</ElButton
@@ -387,6 +440,9 @@ watch(() => route.fullPath, load, { immediate: true });
     <section v-if="accepted" class="panel console-pad" aria-live="polite">
       <h2>{{ statusText }}</h2>
       <p>请求 {{ accepted.requestId }} · {{ accepted.message }}</p>
+      <p v-if="accepted.error || accepted.errorCode" role="alert">
+        {{ accepted.errorCode }} {{ accepted.error }}
+      </p>
       <p>受理与采集运行状态分开；预览请求不表示已保存采集业务记录。</p>
       <details v-if="accepted.result">
         <summary>运行／预览结果（未写入与正式运行分别核对）</summary>
@@ -400,6 +456,11 @@ watch(() => route.fullPath, load, { immediate: true });
         v-if="accepted.runId"
         :to="link('/ingestion/runs/' + accepted.runId)"
         >查看关联运行</RouterLink
+      >
+      <ElButton
+        v-if="['completed', 'failed', 'interrupted'].includes(accepted.state)"
+        @click="prepareNew"
+        >准备新操作（重置输入）</ElButton
       >
     </section>
     <template v-if="isSources">
@@ -599,6 +660,9 @@ watch(() => route.fullPath, load, { immediate: true });
           仅表示本次范围处理，不代表全站完整遍历；部分完成须检查预算原因、待处理和续跑链。
         </p>
         <h3>预算与计数</h3>
+        <pre v-if="state.detail.budgetUsage" class="notice-text">{{
+          JSON.stringify(state.detail.budgetUsage, null, 2)
+        }}</pre>
         <div class="diff-scroll" tabindex="0" aria-label="预算和计数">
           <table class="review-diff">
             <tbody>

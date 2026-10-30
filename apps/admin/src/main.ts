@@ -38,7 +38,10 @@ router.beforeEach(async (to) => {
 });
 createApp(App)
   .provide(adminServicesKey, createAdminServices(adminHttp))
-  .provide(ingestionControlKey, createControlService(adminHttp))
+  .provide(
+    ingestionControlKey,
+    createControlService(adminHttp, () => adminHttp.state.session?.id ?? ""),
+  )
   .provide(reviewKey, createReviewService(adminHttp))
   .use(router)
   .use(ElementPlus, { locale: zhCn })

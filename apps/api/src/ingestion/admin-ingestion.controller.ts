@@ -125,6 +125,18 @@ export class AdminIngestionController {
   request(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.service.requestDetail(id);
   }
+  @Get("requests/by-operation/:operationId")
+  @ApiOkResponse({
+    type: IngestionRequestDto,
+    description:
+      "按当前管理员的写操作标识恢复既有受理结果；未找到返回404，不重新执行扫描",
+  })
+  requestByOperation(
+    @Req() request: AdminRequest,
+    @Param("operationId", new ParseUUIDPipe()) operationId: string,
+  ) {
+    return this.service.requestByOperation(request.admin!, operationId);
+  }
   @Post("requests/:id/retry")
   @HttpCode(202)
   @ApiAcceptedResponse({ type: IngestionAcceptedDto })

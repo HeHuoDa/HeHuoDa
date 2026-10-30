@@ -169,6 +169,64 @@ describe("管理员采集运行 API", () => {
       authHeaders(),
     );
 
+  it("响应丢失后可按当前管理员的操作标识只读查询受理，不重发扫描", async () => {
+    installTransport(async () => ({
+      status: 404,
+      headers: {},
+      body: new Uint8Array(),
+    }));
+    const operationId = randomUUID();
+    const accepted = await submitScan({ operationId, preview: true });
+    expect(accepted.statusCode).toBe(202);
+    const result = await test.request(
+      "GET",
+      `admin/ingestion/requests/by-operation/${operationId}`,
+      undefined,
+      { cookie },
+    );
+    expect(result.statusCode).toBe(200);
+    expect(result.json().requestId).toBe(accepted.json().requestId);
+    await test.pool.query(
+      "INSERT INTO admin_accounts(username,display_name,password_salt,password_hash) SELECT 'other-admin','另一管理员',password_salt,password_hash FROM admin_accounts WHERE id=$1",
+      [actorId],
+    );
+    const otherLogin = await test.request(
+      "POST",
+      "admin/auth/login",
+      { username: "other-admin", password: "test-password" },
+      { origin },
+    );
+    const otherCookie = String(otherLogin.headers["set-cookie"]).split(";")[0]!;
+    expect(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/requests/by-operation/${operationId}`,
+          undefined,
+          { cookie: otherCookie },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/requests/by-operation/${randomUUID()}`,
+          undefined,
+          { cookie },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/requests/by-operation/${operationId}`,
+        )
+      ).statusCode,
+    ).toBe(401);
+  });
+
   const waitForRequest = async (requestId: string) => {
     for (let attempt = 0; attempt < 200; attempt++) {
       const response = await test.request(

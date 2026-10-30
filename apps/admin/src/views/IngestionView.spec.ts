@@ -60,7 +60,7 @@ async function setup(
   return { wrapper, router };
 }
 describe("候选审核公开交互", () => {
-  it("切换对象后旧审核迟到409不会锁住新材料", async () => {
+  it("写入中阻止离页，失败核对后可进入其他对象", async () => {
     let rejectOld!: (reason: Error) => void;
     const { wrapper, router } = await setup("example-candidate-2", {
       ...exampleReview,
@@ -78,7 +78,10 @@ describe("候选审核公开交互", () => {
     await wrapper.get("form.editor-form").trigger("submit");
     await router.push("/ingestion/candidates/example-candidate-6");
     await flushPromises();
+    expect(router.currentRoute.value.path).toContain("example-candidate-2");
     rejectOld(new ConsoleError(409, "old stale"));
+    await flushPromises();
+    await router.push("/ingestion/candidates/example-candidate-6");
     await flushPromises();
     expect(wrapper.text()).not.toContain("本轮确认已失效");
     expect(

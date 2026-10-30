@@ -107,7 +107,7 @@ export interface ReviewRecord {
 export type ReviewSummary = Pick<
   ReviewRecord,
   "id" | "title" | "status" | "date"
->;
+> & { secondary?: string };
 export type ImportPatch = Partial<
   Omit<CompetitionPatch, "stages" | "tracks" | "notices">
 > & {
@@ -125,6 +125,7 @@ export type ReviewInput = Omit<ReviewMaterial, "batch"> & {
 export interface PreviewReceipt {
   contentKey: string;
   token: string;
+  changes?: import("../http").Schema["AdminImportChangeDto"][];
 }
 export interface ReviewService {
   list(

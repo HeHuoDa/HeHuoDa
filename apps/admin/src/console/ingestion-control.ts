@@ -111,6 +111,7 @@ export const availabilityLabels = {
   failed: "最近请求失败，可核对后重试",
 };
 export interface IngestionRun {
+  budgetUsage?: Record<string, unknown> | null;
   id: string;
   title: string;
   status: RunStatus;
@@ -138,6 +139,8 @@ export interface AcceptedRequest {
   runId?: string;
   message: string;
   result?: unknown;
+  error?: string | null;
+  errorCode?: string | null;
 }
 export interface IngestionControlService {
   sources(): Promise<SourceConfig[]>;
@@ -161,6 +164,9 @@ export interface IngestionControlService {
     input: { reason: string; operationId: string },
   ): Promise<AcceptedRequest>;
   request(id: string): Promise<AcceptedRequest>;
+  recover?(operationId: string): Promise<AcceptedRequest>;
+  pendingOperation?(): string | null;
+  recoverPending?(): Promise<AcceptedRequest>;
 }
 export const ingestionControlKey: InjectionKey<IngestionControlService> =
   Symbol("ingestion-control");
