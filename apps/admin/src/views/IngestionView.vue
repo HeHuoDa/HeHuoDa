@@ -29,6 +29,7 @@ import {
   type ReviewRecord,
   type PreviewReceipt,
   type ReviewInput,
+  type ReviewSummary,
 } from "../console/review";
 import { toReviewDraft, serializeReviewDraft } from "../console/review-draft";
 import { exampleReview } from "../console/review-examples";
@@ -46,6 +47,7 @@ import ReviewFields from "../components/ReviewFields.vue";
 import ReviewEvidence from "../components/ReviewEvidence.vue";
 import ReviewDiff from "../components/ReviewDiff.vue";
 import PublicCatalog from "../components/PublicCatalog.vue";
+import { adminHttp } from "../runtime";
 const route = useRoute(),
   router = useRouter();
 const kind = computed(() => route.meta.ingestion as "candidates" | "notices");
@@ -54,11 +56,11 @@ const title = computed(() =>
 );
 const example = computed(() => route.query.preview === "1");
 const injected = inject(reviewKey, null);
-const service = computed(
-  () => injected ?? (example.value ? exampleReview : unavailableReview),
+const service = computed(() =>
+  example.value ? exampleReview : (injected ?? unavailableReview),
 );
 const query = computed(() => readQuery(route.query, reviewStates));
-const controller = createResourceController<ReviewRecord>(),
+const controller = createResourceController<ReviewSummary, ReviewRecord>(),
   state = controller.state;
 const draft = ref<ReviewMaterial | null>(null),
   initialKey = ref(""),
@@ -116,6 +118,7 @@ watch(contentKey, () => {
 let previewEpoch = 0;
 let loadEpoch = 0;
 async function mayLeave() {
+  if (!adminHttp.state.session && adminHttp.state.ready) return true;
   if (!dirty.value) return true;
   try {
     await ElMessageBox.confirm(
@@ -306,6 +309,7 @@ async function execute(reason: string) {
     throw new ServiceUnavailable(
       "服务未开放，未执行；布局预览不具备服务端授权或基线核验。",
     );
+  pending.value = true;
   try {
     await service.value.change(
       action.value,
@@ -317,8 +321,14 @@ async function execute(reason: string) {
         confirmPublished:
           action.value === "import" &&
           confirmedMaterial.formalBefore?.publication === "published",
+        stateBaseline: state.detail?.stateBaseline,
       },
     );
+    if (executingEpoch === loadEpoch) {
+      dialog.value = false;
+      initialKey.value = JSON.stringify(draft.value);
+      await load();
+    }
   } catch (cause) {
     if (executingEpoch === loadEpoch) {
       preview.value = null;
@@ -330,6 +340,8 @@ async function execute(reason: string) {
       }
     }
     throw cause;
+  } finally {
+    if (executingEpoch === loadEpoch) pending.value = false;
   }
 }
 async function reload() {
@@ -356,7 +368,7 @@ async function reload() {
     :title="
       example
         ? '独立审核页面示例：不代表真实通知或审核授权，管理写服务未开放。'
-        : '管理查询服务未开放；学院与公开比赛查询使用真实公开 API。'
+        : '审核基于当前原文与候选修订；批准、导入和发布分别确认。'
     "
     type="info"
     :closable="false"
@@ -373,6 +385,7 @@ async function reload() {
     ><span>原文以纯文本显示，附件只提供安全链接。</span>
   </div>
   <ResourceList
+    :searchable="example"
     v-if="!route.params.id"
     :items="state.items"
     :total="state.total"

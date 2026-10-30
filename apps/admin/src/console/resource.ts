@@ -32,11 +32,11 @@ export function errorMessage(error: unknown) {
     return "记录不存在或当前不可访问，请返回列表重新查询。";
   return "请求失败，未确认执行结果，请重新加载核验；请勿重复提交。";
 }
-export function createResourceController<T>() {
+export function createResourceController<T, D = T>() {
   const state = shallowReactive({
     items: [] as T[],
     total: 0,
-    detail: null as T | null,
+    detail: null as D | null,
     status: "idle" as LoadStatus,
     detailStatus: "idle" as LoadStatus,
     error: "",
@@ -70,7 +70,7 @@ export function createResourceController<T>() {
         Object.assign(state, { status: "error", error: errorMessage(error) });
     }
   }
-  async function select(query: () => Promise<T>) {
+  async function select(query: () => Promise<D>) {
     const epoch = ++detailEpoch;
     Object.assign(state, {
       detail: null,

@@ -118,7 +118,7 @@ export interface IngestionRun {
   sourceId: string;
   range: { from: string; to: string; url: string };
   trigger: "manual" | "scheduled" | "resume";
-  settings: SourceSettings;
+  settings: Partial<SourceSettings>;
   counts: {
     discovered: number;
     new: number;
@@ -133,10 +133,11 @@ export interface IngestionRun {
   nextRunId: string | null;
 }
 export interface AcceptedRequest {
-  state: "accepted" | "running" | "completed" | "failed";
+  state: "accepted" | "running" | "completed" | "failed" | "interrupted";
   requestId: string;
   runId?: string;
   message: string;
+  result?: unknown;
 }
 export interface IngestionControlService {
   sources(): Promise<SourceConfig[]>;

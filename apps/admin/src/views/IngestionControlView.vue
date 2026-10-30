@@ -41,13 +41,16 @@ import {
 import { readQuery } from "../console/query";
 import ReasonDialog from "../components/ReasonDialog.vue";
 import ResourceList from "../components/ResourceList.vue";
+import { adminHttp } from "../runtime";
+import { observeRequest } from "../observe-request";
+let stopObserving = () => {};
 const route = useRoute(),
   router = useRouter();
 const isSources = computed(() => route.path === "/ingestion/sources"),
   example = computed(() => route.query.preview === "1");
 const injected = inject(ingestionControlKey, null),
-  service = computed(
-    () => injected ?? (example.value ? exampleControl : unavailableControl),
+  service = computed(() =>
+    example.value ? exampleControl : (injected ?? unavailableControl),
   );
 const query = computed(() => readQuery(route.query, runStates));
 const sourceFilter = computed(() =>
@@ -112,6 +115,7 @@ const statusText = computed(() =>
         running: "请求执行中，请查询运行记录",
         completed: "请求处理已结束，请核对运行/预览结果",
         failed: "请求失败，请核对错误后重新提交",
+        interrupted: "请求已中断，请核对原运行与续跑范围",
       }[accepted.value.state]
     : "",
 );
@@ -119,6 +123,7 @@ function link(path: string) {
   return { path, query: example.value ? { preview: "1" } : {} };
 }
 async function load() {
+  stopObserving();
   const current = ++epoch;
   ++requestEpoch;
   busy.value = false;
@@ -157,8 +162,23 @@ async function load() {
     await controller.load(() =>
       service.value.runs(query.value, sourceFilter.value),
     );
+  if (
+    current === epoch &&
+    typeof route.query.request === "string" &&
+    /^[0-9a-f-]{36}$/i.test(route.query.request) &&
+    !example.value
+  ) {
+    accepted.value = {
+      requestId: route.query.request,
+      state: "accepted",
+      message: "正在恢复原受理请求。",
+    };
+    await queryRequest();
+    if (current === epoch) stopObserving = observeRequest(queryRequest);
+  }
 }
 async function leave() {
+  if (!adminHttp.state.session && adminHttp.state.ready) return true;
   if (busy.value) return false;
   if (!dirty.value) return true;
   try {
@@ -254,6 +274,12 @@ async function execute(reason: string) {
         accepted.value = result;
         scanInitial.value = JSON.stringify(scan.value);
         dialog.value = false;
+        busy.value = false;
+        if (/^[0-9a-f-]{36}$/i.test(result.requestId))
+          await router.replace({
+            path: route.path,
+            query: { ...route.query, request: result.requestId },
+          });
       }
     }
   } catch (cause) {
@@ -276,7 +302,7 @@ async function execute(reason: string) {
   }
 }
 async function queryRequest() {
-  if (!accepted.value || requestBusy.value) return;
+  if (!accepted.value || requestBusy.value) return accepted.value?.state;
   const current = ++requestEpoch,
     id = accepted.value.requestId;
   requestBusy.value = true;
@@ -285,6 +311,7 @@ async function queryRequest() {
     const value = await service.value.request(id);
     if (current === requestEpoch && accepted.value?.requestId === id)
       accepted.value = value;
+    return current === requestEpoch ? value.state : undefined;
   } catch (cause) {
     if (current === requestEpoch) error.value = errorMessage(cause);
   } finally {
@@ -317,6 +344,7 @@ function beforeUnload(e: BeforeUnloadEvent) {
 }
 window.addEventListener("beforeunload", beforeUnload);
 onBeforeUnmount(() => {
+  stopObserving();
   ++epoch;
   ++requestEpoch;
   window.removeEventListener("beforeunload", beforeUnload);
@@ -360,6 +388,12 @@ watch(() => route.fullPath, load, { immediate: true });
       <h2>{{ statusText }}</h2>
       <p>请求 {{ accepted.requestId }} · {{ accepted.message }}</p>
       <p>受理与采集运行状态分开；预览请求不表示已保存采集业务记录。</p>
+      <details v-if="accepted.result">
+        <summary>运行／预览结果（未写入与正式运行分别核对）</summary>
+        <pre class="notice-text">{{
+          JSON.stringify(accepted.result, null, 2)
+        }}</pre>
+      </details>
       <ElButton :loading="requestBusy" @click="queryRequest"
         >查询请求状态</ElButton
       ><RouterLink
@@ -521,6 +555,7 @@ watch(() => route.fullPath, load, { immediate: true });
         >
       </section>
       <ResourceList
+        :searchable="example"
         :items="
           state.items.map((r) => ({
             ...r,
@@ -569,7 +604,11 @@ watch(() => route.fullPath, load, { immediate: true });
             <tbody>
               <tr v-for="field in settingFields" :key="field.key">
                 <th>{{ field.label }}</th>
-                <td>{{ state.detail.settings[field.key] }}</td>
+                <td>
+                  {{
+                    state.detail.settings[field.key] ?? "该运行未提供预算快照"
+                  }}
+                </td>
               </tr>
               <tr v-for="(count, key) in state.detail.counts" :key="key">
                 <th>{{ key }}</th>

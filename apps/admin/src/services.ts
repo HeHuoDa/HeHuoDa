@@ -6,6 +6,7 @@ export interface OverviewSummary {
   drafts: number | null;
   published: number | null;
   sources: number | null;
+  modules?: import("./http").Schema["DashboardModuleDto"][];
 }
 export class ServiceUnavailable extends Error {}
 export interface AdminServices {

@@ -57,6 +57,10 @@ onMounted(load);
       <p v-if="status === 'ready' && summary?.pending === 0" role="status">
         暂无待审核通知
       </p>
+      <p v-for="item in summary?.modules" :key="item.module">
+        {{ item.module }} · {{ item.available ? item.scope : "不可用" }} ·
+        {{ item.asOf }}
+      </p>
       <p v-if="status !== 'ready'">
         当前无法查询真实统计，可查看单独标注的布局示例。
       </p>

@@ -14,6 +14,7 @@ const props = defineProps<{
   error: string;
   query: PageQuery;
   states: Record<string, string>;
+  searchable?: boolean;
 }>();
 const emit = defineEmits<{
   query: [value: PageQuery];
@@ -38,7 +39,7 @@ function apply() {
 <template>
   <section class="panel">
     <form class="console-filters" @submit.prevent="apply">
-      <label
+      <label v-if="searchable !== false"
         >搜索<ElInput
           v-model="filter.q"
           aria-label="搜索标题或昵称"

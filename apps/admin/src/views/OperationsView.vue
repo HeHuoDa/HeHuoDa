@@ -1,110 +1,134 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { Search, History } from "@lucide/vue";
-const showExamples = ref(false);
-// 固定布局样例，无管理员身份、无真实审计含义，也不写入业务数据。
-const examples = Array.from({ length: 12 }, (_, index) => ({
-  id: index + 1,
-  time: `2026-10-19 10:${String(index).padStart(2, "0")}:00`,
-  action: index % 2 ? "核对通知" : "保存草稿",
-  target: `示例比赛 ${String(index + 1).padStart(2, "0")}`,
-  detail: "仅供筛选与分页预览，不代表已执行的业务操作",
-}));
-const search = ref("");
-const type = ref("");
-const page = ref(1);
-const actions = computed(() => [...new Set(examples.map((row) => row.action))]);
-const filtered = computed(() =>
-  examples.filter(
-    (row) =>
-      (!type.value || row.action === type.value) &&
-      (!search.value.trim() ||
-        [row.target, row.detail].join(" ").includes(search.value.trim())),
-  ),
-);
-const rows = computed(() =>
-  filtered.value.slice((page.value - 1) * 8, page.value * 8),
-);
-watch([search, type], () => {
-  page.value = 1;
+import { onBeforeUnmount, ref, watch } from "vue";
+import { adminHttp } from "../runtime";
+import type { Schema } from "../http";
+import { errorMessage } from "../console/resource";
+const rows = ref<Schema["AdminOperationDto"][]>([]),
+  total = ref(0),
+  page = ref(1);
+const detail = ref<Schema["AdminOperationDto"] | null>(null),
+  action = ref("");
+const loading = ref(false),
+  error = ref("");
+let epoch = 0,
+  detailEpoch = 0;
+onBeforeUnmount(() => {
+  epoch++;
+  detailEpoch++;
 });
+async function load() {
+  const current = ++epoch;
+  detailEpoch++;
+  detail.value = null;
+  rows.value = [];
+  error.value = "";
+  loading.value = true;
+  try {
+    const params = new URLSearchParams({
+      page: String(page.value),
+      pageSize: "20",
+    });
+    if (action.value) params.set("action", action.value);
+    const result = await adminHttp.request<Schema["AdminOperationsDto"]>(
+      "/operations?" + params,
+    );
+    if (current === epoch) {
+      rows.value = result.items;
+      total.value = result.total;
+    }
+  } catch (cause) {
+    if (current === epoch) error.value = errorMessage(cause);
+  } finally {
+    if (current === epoch) loading.value = false;
+  }
+}
+async function select(id: string) {
+  const current = ++detailEpoch;
+  detail.value = null;
+  try {
+    const result = await adminHttp.request<Schema["AdminOperationDto"]>(
+      "/operations/" + encodeURIComponent(id),
+    );
+    if (current === detailEpoch) detail.value = result;
+  } catch (cause) {
+    if (current === detailEpoch) error.value = errorMessage(cause);
+  }
+}
+watch([page, action], load, { immediate: true });
 </script>
 <template>
   <div class="page-heading">
     <div>
       <h1>操作记录</h1>
-      <p>管理员操作审计待服务接入；可单独查看固定布局样例。</p>
+      <p>查询服务端管理审计；成功与失败分别记录。</p>
     </div>
-    <span class="heading-note">时间展示采用北京时间</span>
   </div>
-  <ElAlert
-    title="操作记录服务未开放，无法查询真实管理员审计。"
-    type="info"
-    :closable="false"
-  />
-  <div class="example-toggle">
-    <ElButton
-      :aria-expanded="showExamples"
-      aria-controls="operation-examples"
-      @click="showExamples = !showExamples"
-      >{{ showExamples ? "收起示例记录" : "查看示例记录" }}</ElButton
-    ><span>示例不代表实际发生的操作</span>
-  </div>
-  <section v-if="showExamples" id="operation-examples" class="panel">
-    <div class="filter-bar">
-      <ElInput
-        v-model="search"
-        class="search-input"
-        aria-label="搜索操作对象或理由"
-        placeholder="搜索操作对象或理由"
-        clearable
-        ><template #prefix><Search :size="17" /></template></ElInput
-      ><ElSelect
-        v-model="type"
-        class="college-select"
-        aria-label="筛选操作类型"
-        placeholder="全部操作类型"
-        clearable
-        ><ElOption
-          v-for="action in actions"
-          :key="action"
-          :value="action" /></ElSelect
-      ><span class="filter-total">{{ filtered.length }} 条示例记录</span>
-    </div>
-    <ElTable :data="rows" row-key="id"
+  <section class="panel console-pad">
+    <label
+      >操作类型<select
+        v-model="action"
+        aria-label="操作类型"
+        @change="page = 1"
+      >
+        <option value="">全部操作</option>
+        <option
+          v-for="item in [
+            'auth.login',
+            'auth.logout',
+            'ingestion.scan',
+            'ingestion.configure',
+            'ingestion.resume',
+            'candidate.review',
+            'candidate.import',
+            'competition.publish',
+          ]"
+          :key="item"
+          :value="item"
+        >
+          {{ item }}
+        </option>
+      </select></label
+    >
+    <ElButton :disabled="loading" @click="load">刷新记录</ElButton>
+    <p v-if="loading" role="status">正在查询审计…</p>
+    <p v-if="error" role="alert">{{ error }}</p>
+    <ElTable :data="rows" row-key="operationId"
       ><ElTableColumn
-        prop="time"
-        label="时间（北京时间）"
+        prop="createdAt"
+        label="时间"
+        min-width="220"
+      /><ElTableColumn
+        prop="action"
+        label="操作"
         min-width="180"
-      /><ElTableColumn label="操作类型" min-width="120"
-        ><template #default="{ row }"
-          ><span class="status-tag draft">{{ row.action }}</span></template
-        ></ElTableColumn
-      ><ElTableColumn
-        prop="target"
-        label="操作对象"
+      /><ElTableColumn
+        prop="objectId"
+        label="对象"
         min-width="260"
       /><ElTableColumn
-        prop="detail"
-        label="处理说明"
-        min-width="240"
-      /><ElTableColumn label="数据性质" min-width="100"
-        ><template #default>本地演示</template></ElTableColumn
-      ><template #empty
-        ><div class="empty-block">
-          <History :size="30" /><strong>没有匹配的操作记录</strong>
-          <p>请调整搜索文字或操作类型。</p>
-        </div></template
+        prop="reason"
+        label="理由"
+        min-width="220"
+      /><ElTableColumn prop="result" label="结果" /><ElTableColumn label="详情"
+        ><template #default="{ row }"
+          ><ElButton @click="select(row.operationId)">查看</ElButton></template
+        ></ElTableColumn
       ></ElTable
     >
-    <div class="table-footer">
-      <span>真实管理员操作审计待后端接入</span
-      ><ElPagination
-        v-model:current-page="page"
-        :total="filtered.length"
-        :page-size="8"
-        layout="prev, pager, next"
-      />
-    </div>
+    <ElPagination
+      v-model:current-page="page"
+      :total="total"
+      :page-size="20"
+      layout="prev, pager, next"
+    />
+  </section>
+  <section v-if="detail" class="panel console-pad">
+    <h2>操作详情</h2>
+    <dl>
+      <template v-for="(value, key) in detail" :key="key"
+        ><dt>{{ key }}</dt>
+        <dd>{{ value ?? "—" }}</dd></template
+      >
+    </dl>
   </section>
 </template>

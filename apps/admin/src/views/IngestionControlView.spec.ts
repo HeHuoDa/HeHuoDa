@@ -19,7 +19,7 @@ it.each([
     history: createMemoryHistory(),
     routes: [{ path: "/ingestion/runs/:id", component: IngestionControlView }],
   });
-  await router.push("/ingestion/runs/example-run-1?preview=1");
+  await router.push("/ingestion/runs/example-run-1");
   const wrapper = mount(IngestionControlView, {
     global: {
       plugins: [router, ElementPlus],
@@ -60,7 +60,7 @@ it("配置409保留未保存数值并锁定；示例续跑只提交原运行ID�
       { path: "/ingestion/runs/:id", component: IngestionControlView },
     ],
   });
-  await router.push("/ingestion/sources?preview=1");
+  await router.push("/ingestion/sources");
   const wrapper = mount(
     { template: "<RouterView />" },
     {
@@ -110,7 +110,7 @@ it("配置409保留未保存数值并锁定；示例续跑只提交原运行ID�
   ).toBe("20");
   wrapper.unmount();
   document.body.innerHTML = "";
-  await router.push("/ingestion/runs/example-run-1?preview=1");
+  await router.push("/ingestion/runs/example-run-1");
   const next = mount(IngestionControlView, {
     global: {
       plugins: [router, ElementPlus],
@@ -148,7 +148,7 @@ it("手动扫描受理只显示已受理，不显示扫描完成且不重复执�
     history: createMemoryHistory(),
     routes: [{ path: "/ingestion/sources", component: IngestionControlView }],
   });
-  await router.push("/ingestion/sources?preview=1");
+  await router.push("/ingestion/sources");
   const wrapper = mount(IngestionControlView, {
     global: {
       plugins: [router, ElementPlus],
