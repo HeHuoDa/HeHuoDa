@@ -1,5 +1,26 @@
 <script setup lang="ts">
 import { useRoute } from "vue-router";
+import { ref, watch } from "vue";
+import { adminHttp } from "./runtime";
+import { ConsoleError } from "./console/resource";
+const auth = adminHttp.state;
+const logoutError = ref("");
+watch(
+  () => auth.session,
+  () => {
+    logoutError.value = "";
+  },
+);
+async function logout() {
+  try {
+    await adminHttp.logout();
+  } catch (error) {
+    logoutError.value =
+      error instanceof ConsoleError && error.status === 409
+        ? error.message
+        : "退出请求未确认，请重试退出以撤销服务端会话。";
+  }
+}
 import {
   LayoutDashboard,
   Trophy,
@@ -71,7 +92,7 @@ const menu = [
         /></a>
         <div class="workspace-note">
           <ShieldCheck :size="18" /><span
-            >管理端前端预览<small>真实管理服务待接入</small></span
+            >管理工作台<small>采集、审核与发布分别确认</small></span
           >
         </div>
       </div>
@@ -84,22 +105,41 @@ const menu = [
           }}</strong>
         </div>
         <div class="topbar-actions">
-          <span class="preview-pill"><i />页面预览，未认证</span
-          ><RouterLink to="/login" class="account-link"
+          <template v-if="auth.session"
+            ><span>{{ auth.session.displayName }}</span
+            ><ElButton
+              :disabled="auth.writing > 0 || auth.loggingOut"
+              @click="logout"
+              >退出登录</ElButton
+            ></template
+          >
+          <RouterLink v-else to="/login" class="account-link"
             ><span class="avatar">禾</span><span>管理员入口</span></RouterLink
           >
         </div>
       </header>
-      <div class="preview-banner">
+      <div
+        v-if="
+          route.query.preview === '1' &&
+          /^\/(ingestion|competitions|users|recruitments|reports)/.test(
+            route.path,
+          )
+        "
+        class="preview-banner"
+      >
         <span
           ><strong>页面预览</strong>
-          管理服务未开放；布局及操作记录示例均单独标注，不代表线上数据。</span
+          隔离只读示例，不代表线上数据，不执行真实写入。</span
         >
       </div>
-      <main id="main-content" class="page-container"><RouterView /></main>
+      <p v-if="logoutError" role="alert">
+        {{ logoutError }}<ElButton @click="logout">重试退出</ElButton>
+      </p>
+      <main id="main-content" class="page-container">
+        <RouterView :key="auth.generation" />
+      </main>
       <footer class="page-footer">
-        <span>禾伙搭 · 让合适的人，一起把事情做好。</span
-        ><span>前端演示版</span>
+        <span>禾伙搭 · 让合适的人，一起把事情做好。</span><span>管理端</span>
       </footer>
     </div>
   </div>

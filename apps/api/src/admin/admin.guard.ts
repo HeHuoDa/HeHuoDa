@@ -44,6 +44,7 @@ export class AdminGuard implements CanActivate {
       throw new UnauthorizedException();
     }
     request.admin = admin;
+    context.switchToHttp().getResponse().header("X-Admin-Id", admin.id);
     if (write) this.service.checkCsrf(admin, request.headers["x-csrf-token"]);
     return true;
   }

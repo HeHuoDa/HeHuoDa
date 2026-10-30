@@ -1,13 +1,17 @@
-# 管理端采集控制页面（#43）
+# 管理端采集控制与真实接线（#43／#173）
 
-运行 `pnpm dev:admin`，访问 `/ingestion/sources`、`/ingestion/runs`、`/ingestion/runs/:id`。旧 `/sources`、`/runs` 重定向到对应页面。默认管理适配未开放，查询显示错误及重试；显式 `preview=1` 才读取独立页面样例，不把样例或“已受理”当作实际完成。
+运行 `pnpm dev:admin`，访问 `/ingestion/sources`、`/ingestion/runs`、`/ingestion/runs/:id`；旧 `/sources`、`/runs` 保留跳转。先恢复管理员会话，未登录跳转登录。`adapters.ts` 消费生成 OpenAPI 并映射 `console/ingestion-control.ts` 页面模型；显式 `preview=1` 仅使用隔离只读样例，不能调用真实保存、扫描或续跑。
 
-`apps/admin/src/console/ingestion-control.ts` 是页面模型。#39／#40 的[后端契约](admin-ingestion.md)与生成类型已提供，页面真实接线由 #173／#46 承接；后端实现不会自动启用页面适配。当前默认及示例的保存、扫描、续跑均抛出“服务未开放”，不修改固定样例、不创建采集记录、不执行 CLI 或浏览器抓取。
+来源仍仅信息工程学院、生命科学学院。可修改启停及允许的数值预算，不编辑主机、适配器或任意栏目。默认最大页数10、最小间隔60分钟、请求80、请求间隔2000ms、超时15000ms、总时长600000ms、响应2097152字节；界面显示服务器已保存配置，未保存输入不改变扫描预算。日期窗口1–366天，可选通知必须为该来源 HTTPS 同源且无凭据。前端验证不代替服务端 SSRF、DNS、robots、重定向和 TLS 校验。服务端调度入口仍为北京时间09:00／18:00；是否启用由服务端配置决定。
 
-固定来源仅信息工程学院和生命科学学院，各一个现行 listUrl；不提供任意来源、URL 适配器或 cron 编辑。调度保持北京时间 09:00、18:00，frequency 仅为最小调度间隔。默认配置与边界依据 `@hehuoda/sicau-connectors/notices` 的 defaultLimits 和服务端 `store.ts` 的 configureSource：maxPages 10、frequencyMinutes 60、requests 80、intervalMs 2000、timeoutMs 15000、durationMs 600000、bytes 2097152。各字段限制、1–366 天范围及选定来源的 HTTPS 同源单通知 URL 在提交前校验；前端校验不代替服务端 DNS、重定向、robots、TLS 与 SSRF 防护。停用将在下一请求前停止，不提供杀进程。
+202 只表示已受理。受理 accepted/running/completed/failed/interrupted 与运行 running/succeeded/partial/failed/interrupted 分开展示；请求错误、安全错误代码、执行结果和关联运行均可核对。运行详情显示原范围、计数、错误、实际 budgetUsage、游标及续跑链；旧运行未保存的配置快照明确标为未提供，不使用当前默认值伪装历史预算。
 
-来源启停、可执行状态、受理请求和采集运行四者分开。受理模型的 accepted/running/completed/failed 与运行 running/succeeded/partial/failed/interrupted 分开显示；手动查询受理状态并跳转关联运行，不通过等待时间推断完成。部分完成展示原范围、预算、计数、错误、游标摘要及续跑链，明确不代表全站遍历。续跑仅提交原运行 ID、理由和 operationId，不允许改写旧范围；执行中或已有后续运行不能重复续跑。
+已知 requestId 写入页面查询参数，刷新只恢复查询，不重发扫描。按2／4／8／15秒退避观察，单次最多两分钟，终态、查询失败、离页或退出停止自动观察，保留手动刷新。终态后通过“准备新操作（重置输入）”显式开始下一次操作。续跑只发送原 runId、reason、operationId，不允许修改旧范围；已有后继或仍执行时不可重复续跑。
 
-写适配的 IngestionControlError 只提供有限页面原因：disabled、running、locked、failed。未来适配器依据核实后的服务错误映射，不能把未经筛选的服务消息直接展示。前三种要求重新查询当前状态；普通 409 锁定本轮确认并保留输入，403、失败与不可用均不冒充成功。提交中禁止重复操作及离页，未保存配置/范围离页须确认。查询代次隔离旧来源、运行详情、列表及请求状态响应；已受理后不重复提交同一扫描/续跑，须查询结果后重新准备新请求。
+受理状态为 failed／interrupted 且尚未创建运行时，页面提供“恢复原受理范围”，按原 requestId 调用 POST `/api/v1/admin/ingestion/requests/:id/retry`，只传 reason 与 operationId，不重新提交来源、日期、通知 URL 或预算，避免把中断请求变成新的扫描范围。运行已有后继或游标无剩余页与待处理项时，`canResume` 为假，续跑入口不出现，恢复改走上述受理入口。
 
-该功能只交付管理端桌面 Web；浏览器检查目标为 1024px、1440px，验证加载/空/错、长文本、筛选分页、键盘焦点及表格/弹层滚动。格式、lint、typecheck、build 与源码测试按根脚本执行，实际结果记录 PR；临时脚本、截图、结果留本地。管理端 Element Plus、DOM、History 与服务端 Node 采集、锁和调度不迁入普通 uni-app H5/微信小程序。本次没有公开响应或学生端变更，微信开发者工具验收不适用，浏览器示例不代表真实服务或生产验收。
+受理响应丢失时，不生成新的操作标识。当前管理员的未确认扫描／续跑命令暂存在 sessionStorage，包含业务输入和原 operationId，不含密码、Cookie、CSRF；未确认操作或写入进行中会阻止主动退出，退出请求等待期间也不能开始新写入；确认退出、401 或切换登录后清理。重载后“查询并恢复原操作”先 GET `/api/v1/admin/ingestion/requests/by-operation/:operationId`；找回后仅查询既有 requestId，404时才显式重试相同输入和相同标识，由服务端幂等防止重复执行。恢复前重新核实服务器会话身份；身份不符时不重放，CSRF变化导致403时保留线索以便人工核对。该只读查询按当前管理员隔离，不返回其他管理员的命令，不新增表或迁移。
+
+保存配置须提供当前 baseline。409 保留输入并锁定本轮确认，重新读取后再操作；403、网络失败和服务不可用均不冒充成功。提交中阻止重复及离页，修改范围／配置离页须确认；请求代次隔离旧来源、运行和受理状态响应。浏览器不抓取官网或调用 CLI。
+
+本模块仅管理端桌面 Web，目标视口1024／1440px。HTTP／隔离数据库、离线组件、浏览器模拟、官网实站及生产分别验收，截图和临时脚本仅留本地。不修改学生端 H5／微信小程序，不把 Node 采集器或 Element Plus 迁入客户端；微信开发者工具验收不适用。

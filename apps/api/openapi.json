@@ -2944,6 +2944,91 @@
         ]
       }
     },
+    "/api/v1/admin/ingestion/requests/by-operation/{operationId}": {
+      "get": {
+        "operationId": "AdminIngestionController_requestByOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "按当前管理员的写操作标识恢复既有受理结果；未找到返回404，不重新执行扫描",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionRequestDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理采集"
+        ]
+      }
+    },
     "/api/v1/admin/ingestion/requests/{id}/retry": {
       "post": {
         "operationId": "AdminIngestionController_retry",
@@ -6606,12 +6691,18 @@
       "AdminCsrfDto": {
         "type": "object",
         "properties": {
+          "adminId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "与该CSRF凭证同次认证的管理员身份，用于前端防止跨标签会话混用"
+          },
           "csrfToken": {
             "type": "string",
             "description": "会话绑定凭证；写请求通过 X-CSRF-Token 提交"
           }
         },
         "required": [
+          "adminId",
           "csrfToken"
         ]
       },

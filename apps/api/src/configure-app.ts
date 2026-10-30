@@ -30,6 +30,7 @@ export function configureApp(app: INestApplication): OpenAPIObject {
     if (origin && allowedOrigins.includes(origin)) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
+      reply.header("Access-Control-Expose-Headers", "X-Admin-Id");
     }
     if (request.method !== "OPTIONS") return;
     const method = request.headers["access-control-request-method"];

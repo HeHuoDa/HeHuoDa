@@ -6,6 +6,7 @@ import {
   onMounted,
   onUnmounted,
   ref,
+  shallowRef,
   watch,
   toRaw,
 } from "vue";
@@ -29,9 +30,10 @@ import {
   type ReviewRecord,
   type PreviewReceipt,
   type ReviewInput,
+  type ReviewSummary,
+  type ReviewService,
 } from "../console/review";
 import { toReviewDraft, serializeReviewDraft } from "../console/review-draft";
-import { exampleReview } from "../console/review-examples";
 import {
   createResourceController,
   errorMessage,
@@ -46,6 +48,7 @@ import ReviewFields from "../components/ReviewFields.vue";
 import ReviewEvidence from "../components/ReviewEvidence.vue";
 import ReviewDiff from "../components/ReviewDiff.vue";
 import PublicCatalog from "../components/PublicCatalog.vue";
+import { adminHttp } from "../runtime";
 const route = useRoute(),
   router = useRouter();
 const kind = computed(() => route.meta.ingestion as "candidates" | "notices");
@@ -54,11 +57,14 @@ const title = computed(() =>
 );
 const example = computed(() => route.query.preview === "1");
 const injected = inject(reviewKey, null);
-const service = computed(
-  () => injected ?? (example.value ? exampleReview : unavailableReview),
+const exampleService = shallowRef<ReviewService | null>(null);
+const service = computed(() =>
+  example.value
+    ? (exampleService.value ?? unavailableReview)
+    : (injected ?? unavailableReview),
 );
 const query = computed(() => readQuery(route.query, reviewStates));
-const controller = createResourceController<ReviewRecord>(),
+const controller = createResourceController<ReviewSummary, ReviewRecord>(),
   state = controller.state;
 const draft = ref<ReviewMaterial | null>(null),
   initialKey = ref(""),
@@ -77,6 +83,7 @@ const readOnly = computed(
 );
 const error = ref(""),
   pending = ref(false),
+  writing = ref(false),
   dialog = ref(false),
   action = ref<ReviewAction>("save"),
   operationId = ref("");
@@ -116,6 +123,8 @@ watch(contentKey, () => {
 let previewEpoch = 0;
 let loadEpoch = 0;
 async function mayLeave() {
+  if (!adminHttp.state.session && adminHttp.state.ready) return true;
+  if (writing.value) return false;
   if (!dirty.value) return true;
   try {
     await ElMessageBox.confirm(
@@ -135,7 +144,7 @@ async function mayLeave() {
 onBeforeRouteLeave(mayLeave);
 onBeforeRouteUpdate(mayLeave);
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value) {
+  if (dirty.value || writing.value) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -159,6 +168,12 @@ async function load() {
   dialog.value = false;
   stale.value = false;
   pending.value = false;
+  writing.value = false;
+  if (example.value && !exampleService.value) {
+    const examples = await import("../console/review-examples");
+    if (currentLoad !== loadEpoch) return;
+    exampleService.value = examples.exampleReview;
+  }
   const id = route.params.id;
   if (id) {
     await controller.select(() =>
@@ -306,6 +321,8 @@ async function execute(reason: string) {
     throw new ServiceUnavailable(
       "服务未开放，未执行；布局预览不具备服务端授权或基线核验。",
     );
+  pending.value = true;
+  writing.value = true;
   try {
     await service.value.change(
       action.value,
@@ -317,8 +334,14 @@ async function execute(reason: string) {
         confirmPublished:
           action.value === "import" &&
           confirmedMaterial.formalBefore?.publication === "published",
+        stateBaseline: state.detail?.stateBaseline,
       },
     );
+    if (executingEpoch === loadEpoch) {
+      dialog.value = false;
+      initialKey.value = JSON.stringify(draft.value);
+      await load();
+    }
   } catch (cause) {
     if (executingEpoch === loadEpoch) {
       preview.value = null;
@@ -330,6 +353,11 @@ async function execute(reason: string) {
       }
     }
     throw cause;
+  } finally {
+    if (executingEpoch === loadEpoch) {
+      pending.value = false;
+      writing.value = false;
+    }
   }
 }
 async function reload() {
@@ -356,7 +384,7 @@ async function reload() {
     :title="
       example
         ? '独立审核页面示例：不代表真实通知或审核授权，管理写服务未开放。'
-        : '管理查询服务未开放；学院与公开比赛查询使用真实公开 API。'
+        : '审核基于当前原文与候选修订；批准、导入和发布分别确认。'
     "
     type="info"
     :closable="false"
@@ -374,6 +402,7 @@ async function reload() {
   </div>
   <ResourceList
     v-if="!route.params.id"
+    :searchable="example"
     :items="state.items"
     :total="state.total"
     :status="state.status"
@@ -526,11 +555,17 @@ async function reload() {
           >
         </div>
         <div v-if="preview">
-          <h3>{{ preview.kind === "import" ? "导入" : "独立发布" }}布局预览</h3>
+          <h3>
+            {{ preview.kind === "import" ? "导入" : "独立发布"
+            }}{{ example ? "布局预览" : "预览" }}
+          </h3>
           <p v-if="pending" role="status">正在请求服务端预览…</p>
           <p v-if="preview.error" role="alert" class="form-error">
             {{ preview.error }}
           </p>
+          <pre v-if="preview.receipt?.changes" class="notice-text">{{
+            JSON.stringify(preview.receipt.changes, null, 2)
+          }}</pre>
           <p v-if="!previewFresh" role="alert">
             内容已更改，原预览失效，请重新生成。
           </p>
@@ -543,7 +578,11 @@ async function reload() {
               v-model="acknowledged"
               type="checkbox"
               :disabled="!previewFresh || pending || stale"
-            />我已审阅同一内容的布局预览（不等于服务端授权）</label
+            />{{
+              example
+                ? "我已审阅同一内容的布局预览（不等于服务端授权）"
+                : "我已核对本次目标、内容及预览差异，确认执行"
+            }}</label
           ><ElButton
             :disabled="!previewFresh || !acknowledged || pending || stale"
             @click="confirm(preview.kind)"

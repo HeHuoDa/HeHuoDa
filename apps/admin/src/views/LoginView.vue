@@ -6,6 +6,10 @@ import {
   ServiceUnavailable,
 } from "../services";
 import { ShieldCheck, ArrowLeft } from "@lucide/vue";
+import { useRoute, useRouter } from "vue-router";
+import { safeReturn } from "../http";
+const router = useRouter(),
+  route = useRoute();
 const account = ref("");
 const password = ref("");
 const passwordVisible = ref(false);
@@ -22,7 +26,7 @@ async function submit() {
   error.value = "";
   try {
     await services.login(account.value.trim(), password.value);
-    error.value = "认证接线尚未完成，请返回页面预览。";
+    await router?.replace(safeReturn(route?.query.returnTo));
   } catch (cause) {
     error.value =
       cause instanceof ServiceUnavailable
@@ -42,7 +46,7 @@ async function submit() {
       <h1>管理员登录</h1>
       <p>管理禾伙搭的比赛与内容。</p>
       <ElAlert
-        title="当前为页面预览，管理员认证服务待接入。"
+        title="仅受控管理员账号可以登录；学生登录不能访问管理数据。"
         type="info"
         :closable="false"
       />
@@ -51,6 +55,9 @@ async function submit() {
         :aria-busy="submitting"
         @submit.prevent="submit"
       >
+        <p v-if="route?.query.error === 'session-unavailable'" role="alert">
+          会话服务暂时不可用，请稍后重试登录。
+        </p>
         <label for="admin-account">管理员账号</label
         ><ElInput
           id="admin-account"

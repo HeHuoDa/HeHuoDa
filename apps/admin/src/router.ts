@@ -5,7 +5,10 @@ export const router = createRouter({
     ...(["candidates", "notices"] as const).flatMap((kind) => [
       {
         path: `/ingestion/${kind}`,
-        component: () => import("./views/IngestionView.vue"),
+        component:
+          kind === "notices"
+            ? () => import("./views/NoticeView.vue")
+            : () => import("./views/IngestionView.vue"),
         meta: {
           title: kind === "candidates" ? "候选审核" : "通知版本追溯",
           ingestion: kind,
@@ -13,7 +16,10 @@ export const router = createRouter({
       },
       {
         path: `/ingestion/${kind}/:id`,
-        component: () => import("./views/IngestionView.vue"),
+        component:
+          kind === "notices"
+            ? () => import("./views/NoticeView.vue")
+            : () => import("./views/IngestionView.vue"),
         meta: {
           title: kind === "candidates" ? "候选审核详情" : "通知版本详情",
           ingestion: kind,

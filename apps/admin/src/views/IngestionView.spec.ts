@@ -41,7 +41,7 @@ async function setup(
       },
     ],
   });
-  await router.push(`/ingestion/candidates/${id}?preview=1`);
+  await router.push(`/ingestion/candidates/${id}`);
   await router.isReady();
   const wrapper = mount(
     { template: "<RouterView />" },
@@ -60,7 +60,7 @@ async function setup(
   return { wrapper, router };
 }
 describe("候选审核公开交互", () => {
-  it("切换对象后旧审核迟到409不会锁住新材料", async () => {
+  it("写入中阻止离页，失败核对后可进入其他对象", async () => {
     let rejectOld!: (reason: Error) => void;
     const { wrapper, router } = await setup("example-candidate-2", {
       ...exampleReview,
@@ -76,9 +76,12 @@ describe("候选审核公开交互", () => {
     await flushPromises();
     await wrapper.get("#action-reason").setValue("核查理由");
     await wrapper.get("form.editor-form").trigger("submit");
-    await router.push("/ingestion/candidates/example-candidate-6?preview=1");
+    await router.push("/ingestion/candidates/example-candidate-6");
     await flushPromises();
+    expect(router.currentRoute.value.path).toContain("example-candidate-2");
     rejectOld(new ConsoleError(409, "old stale"));
+    await flushPromises();
+    await router.push("/ingestion/candidates/example-candidate-6");
     await flushPromises();
     expect(wrapper.text()).not.toContain("本轮确认已失效");
     expect(
@@ -102,7 +105,7 @@ describe("候选审核公开交互", () => {
       .findAll("button")
       .find((b) => b.text() === "生成导入预览")!
       .trigger("click");
-    await router.push("/ingestion/candidates/example-candidate-6?preview=1");
+    await router.push("/ingestion/candidates/example-candidate-6");
     await flushPromises();
     rejectOld(new ConsoleError(409, "old stale"));
     await flushPromises();
@@ -128,7 +131,7 @@ describe("候选审核公开交互", () => {
     });
     expect(wrapper.text()).toContain("正在加载核对材料");
     await router.push(
-      "/ingestion/candidates/example-candidate-2?preview=1&version=example-v1",
+      "/ingestion/candidates/example-candidate-2?version=example-v1",
     );
     await flushPromises();
     resolveOld(await exampleReview.detail("candidates", "example-candidate-2"));

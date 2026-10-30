@@ -44,7 +44,15 @@ describe("管理接口认证 HTTP 契约", () => {
       cookie,
     });
     expect(session.statusCode).toBe(200);
+    expect(session.headers["x-admin-id"]).toBe(session.json().id);
     expect(session.json().displayName).toBe("测试管理员");
+    const csrf = await test.request("GET", "admin/auth/csrf", undefined, {
+      cookie,
+    });
+    expect(csrf.json()).toMatchObject({
+      adminId: session.json().id,
+      csrfToken: expect.any(String),
+    });
   });
 
   const login = (cookie?: string) =>

@@ -1,31 +1,47 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import ElementPlus from "element-plus";
 import OperationsView from "./OperationsView.vue";
-describe("操作记录预览", () => {
-  it("服务未开放不伪造审计，显式打开示例后可分页并筛选", async () => {
-    const wrapper = mount(OperationsView, {
-      global: { plugins: [ElementPlus] },
+import { adminHttp } from "../runtime";
+afterEach(() => vi.restoreAllMocks());
+it("审计失败不展示样例，重试成功后展示服务端记录与详情", async () => {
+  const request = vi
+    .spyOn(adminHttp, "request")
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({
+      total: 1,
+      items: [
+        {
+          operationId: "audit",
+          createdAt: "2026-10-30",
+          action: "candidate.review",
+          objectId: "candidate",
+          reason: "真实核对",
+          result: "success",
+        },
+      ],
+    })
+    .mockResolvedValueOnce({
+      operationId: "audit",
+      commandOperationId: "command",
+      reason: "真实核对",
     });
-    await flushPromises();
-    expect(wrapper.text()).toContain("操作记录服务未开放");
-    expect(wrapper.find("table").exists()).toBe(false);
-    await wrapper.get("button").trigger("click");
-    await flushPromises();
-    expect(wrapper.text()).toContain("12 条示例记录");
-    expect(wrapper.text()).toContain("示例比赛 01");
-    expect(wrapper.text()).not.toContain("示例比赛 09");
-    await wrapper.get(".btn-next").trigger("click");
-    expect(wrapper.text()).toContain("示例比赛 09");
-    await wrapper
-      .get('input[placeholder="搜索操作对象或理由"]')
-      .setValue("示例比赛 01");
-    expect(wrapper.text()).toContain("1 条示例记录");
-    expect(wrapper.text()).toContain("示例比赛 01");
-    await wrapper
-      .get('input[placeholder="搜索操作对象或理由"]')
-      .setValue("不存在的记录");
-    expect(wrapper.text()).toContain("没有匹配的操作记录");
-    wrapper.unmount();
-  });
+  const wrapper = mount(OperationsView, { global: { plugins: [ElementPlus] } });
+  await flushPromises();
+  expect(wrapper.text()).toContain("请求失败");
+  expect(wrapper.text()).not.toContain("示例比赛");
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "刷新记录")!
+    .trigger("click");
+  await flushPromises();
+  expect(wrapper.text()).toContain("真实核对");
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "查看")!
+    .trigger("click");
+  await flushPromises();
+  expect(request).toHaveBeenLastCalledWith("/operations/audit");
+  expect(wrapper.text()).toContain("command");
+  wrapper.unmount();
 });

@@ -31,7 +31,11 @@ export interface CompetitionPatch {
 }
 // 对齐 review.ts ReviewFile 的页面材料形状；不把它冒充尚不存在的 #40 HTTP DTO。
 export interface ReviewMaterial {
-  format: 1;
+  format: 1 | 2;
+  mappingBaseline?: string;
+  evidenceRevision?: number;
+  evidence?: unknown[];
+  evidenceReferences?: unknown[];
   operationId: string;
   candidateId: string;
   sourceVersion: string;
@@ -98,7 +102,12 @@ export interface ReviewRecord {
   latestVersion: string;
   material: ReviewInput;
   requiresReapproval?: boolean;
+  stateBaseline?: string;
 }
+export type ReviewSummary = Pick<
+  ReviewRecord,
+  "id" | "title" | "status" | "date"
+> & { secondary?: string };
 export type ImportPatch = Partial<
   Omit<CompetitionPatch, "stages" | "tracks" | "notices">
 > & {
@@ -116,12 +125,13 @@ export type ReviewInput = Omit<ReviewMaterial, "batch"> & {
 export interface PreviewReceipt {
   contentKey: string;
   token: string;
+  changes?: import("../http").Schema["AdminImportChangeDto"][];
 }
 export interface ReviewService {
   list(
     kind: "candidates" | "notices",
     query: PageQuery,
-  ): Promise<PageResult<ReviewRecord>>;
+  ): Promise<PageResult<ReviewSummary>>;
   detail(
     kind: "candidates" | "notices",
     id: string,
@@ -138,7 +148,7 @@ export interface ReviewService {
     reason: string,
     operationId: string,
     receipt?: PreviewReceipt,
-    options?: { confirmPublished: boolean },
+    options?: { confirmPublished: boolean; stateBaseline?: string },
   ): Promise<void>;
 }
 export const reviewKey: InjectionKey<ReviewService> = Symbol("review");

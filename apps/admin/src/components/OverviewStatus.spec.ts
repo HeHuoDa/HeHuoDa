@@ -33,6 +33,47 @@ describe("工作台服务状态", () => {
     expect(wrapper.text()).toContain("已发布比赛0");
     wrapper.unmount();
   });
+  it("逐模块显示范围与统计时间，北京时间不显示原始 ISO 串", async () => {
+    const wrapper = mount(OverviewStatus, {
+      global: {
+        plugins: [ElementPlus],
+        provide: {
+          [adminServicesKey as symbol]: {
+            ...unavailableServices,
+            getOverview: async () => ({
+              pending: 0,
+              drafts: null,
+              published: 2,
+              sources: 2,
+              modules: [
+                {
+                  module: "published",
+                  available: true,
+                  count: 2,
+                  scope: "全部正式比赛：已发布",
+                  asOf: "2026-10-30T05:17:40.676Z",
+                },
+                {
+                  module: "sources",
+                  available: false,
+                  count: null,
+                  scope: "已停用",
+                  asOf: "2026-10-30T05:17:40.676Z",
+                },
+              ],
+            }),
+          },
+        },
+      },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain("已发布比赛");
+    expect(wrapper.text()).toContain("范围：全部正式比赛：已发布");
+    expect(wrapper.text()).toContain("统计截至：2026/10/30 13:17（北京时间）");
+    expect(wrapper.text()).toContain("范围：不可用");
+    expect(wrapper.text()).not.toContain("2026-10-30T05:17:40.676Z");
+    wrapper.unmount();
+  });
   it("服务未开放与请求失败分别提示，失败后可以重试", async () => {
     const unavailable = mount(OverviewStatus, {
       global: { plugins: [ElementPlus] },

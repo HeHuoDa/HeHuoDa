@@ -61,7 +61,10 @@ async function submit() {
     @update:model-value="close"
   >
     <p class="field-help">
-      当前为页面预览。确认后仅尝试服务适配，服务未开放时不会执行操作。举报结论不自动限制账号或隐藏招募。
+      请核对操作对象并填写理由。确认后提交当前操作；独立示例不执行真实写入。<span
+        v-if="needsConclusion"
+        >举报结论不自动限制账号或隐藏招募。</span
+      >
     </p>
     <form class="editor-form" :aria-busy="pending" @submit.prevent="submit">
       <template v-if="needsConclusion"

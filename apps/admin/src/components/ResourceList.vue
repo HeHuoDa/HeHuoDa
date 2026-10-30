@@ -14,12 +14,24 @@ const props = defineProps<{
   error: string;
   query: PageQuery;
   states: Record<string, string>;
+  searchable?: boolean;
 }>();
 const emit = defineEmits<{
   query: [value: PageQuery];
   open: [id: string];
   retry: [];
 }>();
+function displayDate(value: string) {
+  if (!value.includes("T") || !Number.isFinite(Date.parse(value))) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 const filter = reactive({ ...props.query });
 const validation = reactive({ error: "" });
 watch(
@@ -38,7 +50,7 @@ function apply() {
 <template>
   <section class="panel">
     <form class="console-filters" @submit.prevent="apply">
-      <label
+      <label v-if="searchable !== false"
         >搜索<ElInput
           v-model="filter.q"
           aria-label="搜索标题或昵称"
@@ -97,10 +109,11 @@ function apply() {
           ></ElTableColumn
         ><ElTableColumn label="独立业务状态 / 来源" min-width="190"
           ><template #default="{ row }">{{
-            row.secondary || "独立页面示例"
+            row.secondary || "—"
           }}</template></ElTableColumn
         ><ElTableColumn
           prop="date"
+          :formatter="(row: { date: string }) => displayDate(row.date)"
           label="日期（北京时间）"
           min-width="160"
         /><template #empty

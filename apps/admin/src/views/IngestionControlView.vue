@@ -5,6 +5,7 @@ import {
   nextTick,
   onBeforeUnmount,
   ref,
+  shallowRef,
   toRaw,
   watch,
 } from "vue";
@@ -21,7 +22,6 @@ import {
   settingFields,
   validateSettings,
   validateScan,
-  exampleControl,
   unavailableControl,
   runStates,
   availabilityLabels,
@@ -31,6 +31,7 @@ import {
   type IngestionRun,
   type ScanInput,
   type AcceptedRequest,
+  type IngestionControlService,
 } from "../console/ingestion-control";
 import {
   createResourceController,
@@ -41,13 +42,19 @@ import {
 import { readQuery } from "../console/query";
 import ReasonDialog from "../components/ReasonDialog.vue";
 import ResourceList from "../components/ResourceList.vue";
+import { adminHttp } from "../runtime";
+import { observeRequest } from "../observe-request";
+let stopObserving = () => {};
 const route = useRoute(),
   router = useRouter();
 const isSources = computed(() => route.path === "/ingestion/sources"),
   example = computed(() => route.query.preview === "1");
+const exampleService = shallowRef<IngestionControlService | null>(null);
 const injected = inject(ingestionControlKey, null),
-  service = computed(
-    () => injected ?? (example.value ? exampleControl : unavailableControl),
+  service = computed(() =>
+    example.value
+      ? (exampleService.value ?? unavailableControl)
+      : (injected ?? unavailableControl),
   );
 const query = computed(() => readQuery(route.query, runStates));
 const sourceFilter = computed(() =>
@@ -80,9 +87,10 @@ const busy = ref(false),
   stale = ref(false),
   error = ref(""),
   dialog = ref(false),
-  action = ref<"configure" | "scan" | "resume">("scan"),
+  action = ref<"configure" | "scan" | "resume" | "retry">("scan"),
   accepted = ref<AcceptedRequest | null>(null),
   requestBusy = ref(false);
+const unresolved = ref("");
 let epoch = 0,
   requestEpoch = 0,
   operationId = "";
@@ -92,6 +100,7 @@ const actionLabel = computed(
       configure: "保存来源配置",
       scan: scan.value.preview ? "请求扫描预览" : "请求手动扫描",
       resume: "续跑原范围",
+      retry: "恢复原受理范围",
     })[action.value],
 );
 const currentSource = computed(() =>
@@ -112,6 +121,7 @@ const statusText = computed(() =>
         running: "请求执行中，请查询运行记录",
         completed: "请求处理已结束，请核对运行/预览结果",
         failed: "请求失败，请核对错误后重新提交",
+        interrupted: "请求已中断，请核对原运行与续跑范围",
       }[accepted.value.state]
     : "",
 );
@@ -119,6 +129,8 @@ function link(path: string) {
   return { path, query: example.value ? { preview: "1" } : {} };
 }
 async function load() {
+  stopObserving();
+  unresolved.value = service.value.pendingOperation?.() ?? "";
   const current = ++epoch;
   ++requestEpoch;
   busy.value = false;
@@ -131,6 +143,11 @@ async function load() {
   initial.value = "";
   scan.value = initialScan();
   scanInitial.value = JSON.stringify(scan.value);
+  if (example.value && !exampleService.value) {
+    const examples = await import("../console/ingestion-control-examples");
+    if (current !== epoch) return;
+    exampleService.value = examples.exampleControl;
+  }
   if (isSources.value) {
     sourceStatus.value = "loading";
     sourceError.value = "";
@@ -157,8 +174,24 @@ async function load() {
     await controller.load(() =>
       service.value.runs(query.value, sourceFilter.value),
     );
+  if (
+    current === epoch &&
+    typeof route.query.request === "string" &&
+    /^[0-9a-f-]{36}$/i.test(route.query.request) &&
+    !example.value
+  ) {
+    accepted.value = {
+      requestId: route.query.request,
+      state: "accepted",
+      message: "正在恢复原受理请求。",
+    };
+    const status = await queryRequest();
+    if (current === epoch && (status === "accepted" || status === "running"))
+      stopObserving = observeRequest(queryRequest);
+  }
 }
 async function leave() {
+  if (!adminHttp.state.session && adminHttp.state.ready) return true;
   if (busy.value) return false;
   if (!dirty.value) return true;
   try {
@@ -186,6 +219,10 @@ async function chooseSource(id: string) {
   error.value = "";
 }
 async function open(kind: typeof action.value) {
+  if (unresolved.value) {
+    error.value = "上次受理结果未知，请先查询并恢复原操作。";
+    return;
+  }
   if (busy.value || stale.value) return;
   error.value = "";
   if (kind === "configure" && config.value) {
@@ -207,11 +244,19 @@ async function open(kind: typeof action.value) {
     }
   }
   if (kind === "resume" && (!state.detail || !canResume(state.detail))) return;
+  if (
+    kind === "retry" &&
+    (!accepted.value ||
+      accepted.value.runId ||
+      !["failed", "interrupted"].includes(accepted.value.state))
+  )
+    return;
   action.value = kind;
   operationId = crypto.randomUUID();
   dialog.value = true;
 }
 async function execute(reason: string) {
+  if (unresolved.value) throw new Error("请先恢复原操作");
   if (busy.value || stale.value) throw new Error("请重新加载");
   const current = epoch;
   busy.value = true;
@@ -242,6 +287,17 @@ async function execute(reason: string) {
           reason,
           operationId,
         });
+      } else if (action.value === "retry") {
+        if (
+          !accepted.value ||
+          accepted.value.runId ||
+          !["failed", "interrupted"].includes(accepted.value.state)
+        )
+          throw new Error("当前受理不可恢复");
+        result = await service.value.retry(accepted.value.requestId, {
+          reason,
+          operationId,
+        });
       } else {
         if (!state.detail || !canResume(state.detail))
           throw new Error("当前运行不可续跑");
@@ -254,9 +310,16 @@ async function execute(reason: string) {
         accepted.value = result;
         scanInitial.value = JSON.stringify(scan.value);
         dialog.value = false;
+        busy.value = false;
+        if (/^[0-9a-f-]{36}$/i.test(result.requestId))
+          await router.replace({
+            path: route.path,
+            query: { ...route.query, request: result.requestId },
+          });
       }
     }
   } catch (cause) {
+    unresolved.value = service.value.pendingOperation?.() ?? "";
     if (current === epoch && cause instanceof IngestionControlError) {
       error.value = cause.message;
       if (cause.reason !== "failed") stale.value = true;
@@ -268,7 +331,7 @@ async function execute(reason: string) {
     ) {
       stale.value = true;
       error.value =
-        "配置基线过期或运行被锁占用，输入已保留；请重新查询状态后再确认，不能覆盖。";
+        "采集状态发生冲突，输入已保留；请重新查询来源与运行，核对停用、执行中、锁占用或基线变化后再确认。";
     }
     throw cause;
   } finally {
@@ -276,19 +339,45 @@ async function execute(reason: string) {
   }
 }
 async function queryRequest() {
-  if (!accepted.value || requestBusy.value) return;
+  if (!accepted.value || requestBusy.value) return accepted.value?.state;
   const current = ++requestEpoch,
     id = accepted.value.requestId;
   requestBusy.value = true;
   error.value = "";
   try {
     const value = await service.value.request(id);
-    if (current === requestEpoch && accepted.value?.requestId === id)
+    if (current === requestEpoch && accepted.value?.requestId === id) {
       accepted.value = value;
+      if (!["accepted", "running"].includes(value.state)) stopObserving();
+    }
+    return current === requestEpoch ? value.state : undefined;
   } catch (cause) {
     if (current === requestEpoch) error.value = errorMessage(cause);
   } finally {
     if (current === requestEpoch) requestBusy.value = false;
+  }
+}
+async function recoverUncertain() {
+  if (busy.value || !service.value.recoverPending) return;
+  const current = epoch;
+  busy.value = true;
+  error.value = "";
+  try {
+    const value = await service.value.recoverPending();
+    if (current !== epoch) return;
+    unresolved.value = "";
+    accepted.value = value;
+    dialog.value = false;
+    scanInitial.value = JSON.stringify(scan.value);
+    busy.value = false;
+    await router.replace({
+      path: route.path,
+      query: { ...route.query, request: value.requestId },
+    });
+  } catch (cause) {
+    if (current === epoch) error.value = errorMessage(cause);
+  } finally {
+    if (current === epoch) busy.value = false;
   }
 }
 function changeQuery(value: PageQuery) {
@@ -307,6 +396,17 @@ function setFilter(value: string) {
     query: { ...route.query, source: value || undefined, page: "1" },
   });
 }
+async function prepareNew() {
+  stopObserving();
+  scan.value = initialScan();
+  scanInitial.value = JSON.stringify(scan.value);
+  if (config.value) initial.value = JSON.stringify(config.value);
+  accepted.value = null;
+  await router.replace({
+    path: route.path,
+    query: { ...route.query, request: undefined },
+  });
+}
 onBeforeRouteLeave(leave);
 onBeforeRouteUpdate(leave);
 function beforeUnload(e: BeforeUnloadEvent) {
@@ -317,6 +417,7 @@ function beforeUnload(e: BeforeUnloadEvent) {
 }
 window.addEventListener("beforeunload", beforeUnload);
 onBeforeUnmount(() => {
+  stopObserving();
   ++epoch;
   ++requestEpoch;
   window.removeEventListener("beforeunload", beforeUnload);
@@ -351,6 +452,17 @@ watch(() => route.fullPath, load, { immediate: true });
       独立页面示例 · 配置、运行、计数与错误均为演示，不代表实际抓取结果。
     </p>
     <p v-if="error" role="alert" class="form-error">{{ error }}</p>
+    <section v-if="unresolved" class="panel console-pad" role="alert">
+      <h2>上次受理结果未知</h2>
+      <p>
+        先查询操作
+        {{ unresolved }}
+        的受理状态；未找到时仅重试同一标识、同一输入，不创建新操作。
+      </p>
+      <ElButton :disabled="busy" @click="recoverUncertain"
+        >查询并恢复原操作</ElButton
+      >
+    </section>
     <p v-if="stale" role="alert">
       本轮确认已锁定，请记录输入并重新查询。<ElButton @click="load"
         >重新查询状态</ElButton
@@ -359,13 +471,35 @@ watch(() => route.fullPath, load, { immediate: true });
     <section v-if="accepted" class="panel console-pad" aria-live="polite">
       <h2>{{ statusText }}</h2>
       <p>请求 {{ accepted.requestId }} · {{ accepted.message }}</p>
+      <p v-if="accepted.error || accepted.errorCode" role="alert">
+        {{ accepted.errorCode }} {{ accepted.error }}
+      </p>
+      <ElButton
+        v-if="
+          !accepted.runId && ['failed', 'interrupted'].includes(accepted.state)
+        "
+        :disabled="busy || stale || example"
+        @click="open('retry')"
+        >恢复原受理范围</ElButton
+      >
       <p>受理与采集运行状态分开；预览请求不表示已保存采集业务记录。</p>
+      <details v-if="accepted.result">
+        <summary>运行／预览结果（未写入与正式运行分别核对）</summary>
+        <pre class="notice-text">{{
+          JSON.stringify(accepted.result, null, 2)
+        }}</pre>
+      </details>
       <ElButton :loading="requestBusy" @click="queryRequest"
         >查询请求状态</ElButton
       ><RouterLink
         v-if="accepted.runId"
         :to="link('/ingestion/runs/' + accepted.runId)"
         >查看关联运行</RouterLink
+      >
+      <ElButton
+        v-if="['completed', 'failed', 'interrupted'].includes(accepted.state)"
+        @click="prepareNew"
+        >准备新操作（重置输入）</ElButton
       >
     </section>
     <template v-if="isSources">
@@ -521,6 +655,7 @@ watch(() => route.fullPath, load, { immediate: true });
         >
       </section>
       <ResourceList
+        :searchable="example"
         :items="
           state.items.map((r) => ({
             ...r,
@@ -564,12 +699,19 @@ watch(() => route.fullPath, load, { immediate: true });
           仅表示本次范围处理，不代表全站完整遍历；部分完成须检查预算原因、待处理和续跑链。
         </p>
         <h3>预算与计数</h3>
+        <pre v-if="state.detail.budgetUsage" class="notice-text">{{
+          JSON.stringify(state.detail.budgetUsage, null, 2)
+        }}</pre>
         <div class="diff-scroll" tabindex="0" aria-label="预算和计数">
           <table class="review-diff">
             <tbody>
               <tr v-for="field in settingFields" :key="field.key">
                 <th>{{ field.label }}</th>
-                <td>{{ state.detail.settings[field.key] }}</td>
+                <td>
+                  {{
+                    state.detail.settings[field.key] ?? "该运行未提供预算快照"
+                  }}
+                </td>
               </tr>
               <tr v-for="(count, key) in state.detail.counts" :key="key">
                 <th>{{ key }}</th>

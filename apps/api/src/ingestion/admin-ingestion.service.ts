@@ -1104,6 +1104,16 @@ export class AdminIngestionService
     row.budgetUsage = row.result?.budgetUsage ?? run?.budgetUsage ?? null;
     return row;
   }
+  async requestByOperation(context: AdminContext, operationId: string) {
+    const row = (
+      await this.database.pool.query<{ requestId: string }>(
+        "SELECT result->>'requestId' AS \"requestId\" FROM admin_ingestion_commands WHERE actor_id=$1 AND operation_id=$2 AND action IN ('ingestion.scan','ingestion.resume')",
+        [context.id, operationId],
+      )
+    ).rows[0];
+    if (!row?.requestId) throw new NotFoundException();
+    return this.requestDetail(row.requestId);
+  }
   async beforeApplicationShutdown() {
     this.stop.abort();
     await this.ready;
