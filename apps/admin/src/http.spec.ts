@@ -2,13 +2,56 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createAdminHttp } from "./http";
 
 afterEach(() => vi.unstubAllGlobals());
+it("响应来自另一个管理员时清理旧身份，不接收该响应的数据", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ id: "admin-a", displayName: "A", expiresAt: "2099" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ adminId: "admin-a", csrfToken: "csrf-a" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          { modules: [] },
+          { headers: { "X-Admin-Id": "admin-b" } },
+        ),
+      ),
+  );
+  const http = createAdminHttp();
+  await http.restore();
+  await expect(http.request("/dashboard")).rejects.toMatchObject({
+    status: 401,
+  });
+  expect(http.state.session).toBeNull();
+});
+it("跨标签切换账号后不把另一管理员的CSRF与旧会话配对", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ id: "admin-a", displayName: "A", expiresAt: "2099" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ adminId: "admin-b", csrfToken: "csrf-b" }),
+      ),
+  );
+  const http = createAdminHttp();
+  await expect(http.restore()).rejects.toMatchObject({ status: 409 });
+  expect(http.state.session).toBeNull();
+});
 it("未确认受理存在时阻止退出，保留恢复资料", async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(
       Response.json({ id: "admin-a", displayName: "A", expiresAt: "2099" }),
     )
-    .mockResolvedValueOnce(Response.json({ csrfToken: "csrf" }));
+    .mockResolvedValueOnce(
+      Response.json({ adminId: "admin-a", csrfToken: "csrf" }),
+    );
   vi.stubGlobal("fetch", fetcher);
   const http = createAdminHttp();
   await http.restore();
@@ -30,7 +73,9 @@ it("退出请求等待期间不允许开始新的业务写入", async () => {
       .mockResolvedValueOnce(
         Response.json({ id: "admin-a", displayName: "A", expiresAt: "2099" }),
       )
-      .mockResolvedValueOnce(Response.json({ csrfToken: "csrf" }))
+      .mockResolvedValueOnce(
+        Response.json({ adminId: "admin-a", csrfToken: "csrf" }),
+      )
       .mockImplementationOnce(
         () =>
           new Promise<Response>((r) => {
@@ -56,10 +101,14 @@ it("退出网络失败后，重试会恢复CSRF再撤销服务端会话", async 
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json(session))
-    .mockResolvedValueOnce(Response.json({ csrfToken: "csrf-a" }))
+    .mockResolvedValueOnce(
+      Response.json({ adminId: "admin-a", csrfToken: "csrf-a" }),
+    )
     .mockRejectedValueOnce(new Error("network"))
     .mockResolvedValueOnce(Response.json(session))
-    .mockResolvedValueOnce(Response.json({ csrfToken: "csrf-a" }))
+    .mockResolvedValueOnce(
+      Response.json({ adminId: "admin-a", csrfToken: "csrf-a" }),
+    )
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
   vi.stubGlobal("fetch", fetcher);
   const http = createAdminHttp();
@@ -81,7 +130,9 @@ it("先恢复 Cookie 会话，写请求使用该会话 CSRF，凭证不持久化
         expiresAt: "2099-01-01",
       }),
     )
-    .mockResolvedValueOnce(Response.json({ csrfToken: "session-csrf" }))
+    .mockResolvedValueOnce(
+      Response.json({ adminId: "admin-a", csrfToken: "session-csrf" }),
+    )
     .mockResolvedValueOnce(Response.json({ ok: true }));
   vi.stubGlobal("fetch", fetcher);
   const http = createAdminHttp();

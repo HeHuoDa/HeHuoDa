@@ -1188,6 +1188,11 @@ export interface components {
             expiresAt: string;
         };
         AdminCsrfDto: {
+            /**
+             * Format: uuid
+             * @description 与该CSRF凭证同次认证的管理员身份，用于前端防止跨标签会话混用
+             */
+            adminId: string;
             /** @description 会话绑定凭证；写请求通过 X-CSRF-Token 提交 */
             csrfToken: string;
         };

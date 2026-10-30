@@ -105,7 +105,9 @@ export function createControlService(
       ) as PendingCommand | null;
       if (
         value?.actor === actor() &&
-        /^\/ingestion\/(scans|runs\/[0-9a-f-]{36}\/resume)$/.test(value.path) &&
+        /^\/ingestion\/(scans|runs\/[0-9a-f-]{36}\/resume|requests\/[0-9a-f-]{36}\/retry)$/.test(
+          value.path,
+        ) &&
         /^[0-9a-f-]{36}$/i.test(value.body.operationId)
       )
         return value;
@@ -226,6 +228,9 @@ export function createControlService(
     },
     async resume(id, body) {
       return submit(idPath("runs", id) + "/resume", body);
+    },
+    async retry(id, body) {
+      return submit(idPath("requests", id) + "/retry", body);
     },
     async request(id) {
       return mapRequest(

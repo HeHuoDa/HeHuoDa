@@ -6,6 +6,7 @@ import {
   onMounted,
   onUnmounted,
   ref,
+  shallowRef,
   watch,
   toRaw,
 } from "vue";
@@ -30,9 +31,9 @@ import {
   type PreviewReceipt,
   type ReviewInput,
   type ReviewSummary,
+  type ReviewService,
 } from "../console/review";
 import { toReviewDraft, serializeReviewDraft } from "../console/review-draft";
-import { exampleReview } from "../console/review-examples";
 import {
   createResourceController,
   errorMessage,
@@ -56,8 +57,11 @@ const title = computed(() =>
 );
 const example = computed(() => route.query.preview === "1");
 const injected = inject(reviewKey, null);
+const exampleService = shallowRef<ReviewService | null>(null);
 const service = computed(() =>
-  example.value ? exampleReview : (injected ?? unavailableReview),
+  example.value
+    ? (exampleService.value ?? unavailableReview)
+    : (injected ?? unavailableReview),
 );
 const query = computed(() => readQuery(route.query, reviewStates));
 const controller = createResourceController<ReviewSummary, ReviewRecord>(),
@@ -165,6 +169,11 @@ async function load() {
   stale.value = false;
   pending.value = false;
   writing.value = false;
+  if (example.value && !exampleService.value) {
+    const examples = await import("../console/review-examples");
+    if (currentLoad !== loadEpoch) return;
+    exampleService.value = examples.exampleReview;
+  }
   const id = route.params.id;
   if (id) {
     await controller.select(() =>

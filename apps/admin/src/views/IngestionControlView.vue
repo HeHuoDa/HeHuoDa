@@ -5,6 +5,7 @@ import {
   nextTick,
   onBeforeUnmount,
   ref,
+  shallowRef,
   toRaw,
   watch,
 } from "vue";
@@ -21,7 +22,6 @@ import {
   settingFields,
   validateSettings,
   validateScan,
-  exampleControl,
   unavailableControl,
   runStates,
   availabilityLabels,
@@ -31,6 +31,7 @@ import {
   type IngestionRun,
   type ScanInput,
   type AcceptedRequest,
+  type IngestionControlService,
 } from "../console/ingestion-control";
 import {
   createResourceController,
@@ -48,9 +49,12 @@ const route = useRoute(),
   router = useRouter();
 const isSources = computed(() => route.path === "/ingestion/sources"),
   example = computed(() => route.query.preview === "1");
+const exampleService = shallowRef<IngestionControlService | null>(null);
 const injected = inject(ingestionControlKey, null),
   service = computed(() =>
-    example.value ? exampleControl : (injected ?? unavailableControl),
+    example.value
+      ? (exampleService.value ?? unavailableControl)
+      : (injected ?? unavailableControl),
   );
 const query = computed(() => readQuery(route.query, runStates));
 const sourceFilter = computed(() =>
@@ -83,7 +87,7 @@ const busy = ref(false),
   stale = ref(false),
   error = ref(""),
   dialog = ref(false),
-  action = ref<"configure" | "scan" | "resume">("scan"),
+  action = ref<"configure" | "scan" | "resume" | "retry">("scan"),
   accepted = ref<AcceptedRequest | null>(null),
   requestBusy = ref(false);
 const unresolved = ref("");
@@ -96,6 +100,7 @@ const actionLabel = computed(
       configure: "保存来源配置",
       scan: scan.value.preview ? "请求扫描预览" : "请求手动扫描",
       resume: "续跑原范围",
+      retry: "恢复原受理范围",
     })[action.value],
 );
 const currentSource = computed(() =>
@@ -138,6 +143,11 @@ async function load() {
   initial.value = "";
   scan.value = initialScan();
   scanInitial.value = JSON.stringify(scan.value);
+  if (example.value && !exampleService.value) {
+    const examples = await import("../console/ingestion-control-examples");
+    if (current !== epoch) return;
+    exampleService.value = examples.exampleControl;
+  }
   if (isSources.value) {
     sourceStatus.value = "loading";
     sourceError.value = "";
@@ -175,8 +185,9 @@ async function load() {
       state: "accepted",
       message: "正在恢复原受理请求。",
     };
-    await queryRequest();
-    if (current === epoch) stopObserving = observeRequest(queryRequest);
+    const status = await queryRequest();
+    if (current === epoch && (status === "accepted" || status === "running"))
+      stopObserving = observeRequest(queryRequest);
   }
 }
 async function leave() {
@@ -233,6 +244,13 @@ async function open(kind: typeof action.value) {
     }
   }
   if (kind === "resume" && (!state.detail || !canResume(state.detail))) return;
+  if (
+    kind === "retry" &&
+    (!accepted.value ||
+      accepted.value.runId ||
+      !["failed", "interrupted"].includes(accepted.value.state))
+  )
+    return;
   action.value = kind;
   operationId = crypto.randomUUID();
   dialog.value = true;
@@ -269,6 +287,17 @@ async function execute(reason: string) {
           reason,
           operationId,
         });
+      } else if (action.value === "retry") {
+        if (
+          !accepted.value ||
+          accepted.value.runId ||
+          !["failed", "interrupted"].includes(accepted.value.state)
+        )
+          throw new Error("当前受理不可恢复");
+        result = await service.value.retry(accepted.value.requestId, {
+          reason,
+          operationId,
+        });
       } else {
         if (!state.detail || !canResume(state.detail))
           throw new Error("当前运行不可续跑");
@@ -302,7 +331,7 @@ async function execute(reason: string) {
     ) {
       stale.value = true;
       error.value =
-        "配置基线过期或运行被锁占用，输入已保留；请重新查询状态后再确认，不能覆盖。";
+        "采集状态发生冲突，输入已保留；请重新查询来源与运行，核对停用、执行中、锁占用或基线变化后再确认。";
     }
     throw cause;
   } finally {
@@ -317,8 +346,10 @@ async function queryRequest() {
   error.value = "";
   try {
     const value = await service.value.request(id);
-    if (current === requestEpoch && accepted.value?.requestId === id)
+    if (current === requestEpoch && accepted.value?.requestId === id) {
       accepted.value = value;
+      if (!["accepted", "running"].includes(value.state)) stopObserving();
+    }
     return current === requestEpoch ? value.state : undefined;
   } catch (cause) {
     if (current === requestEpoch) error.value = errorMessage(cause);
@@ -443,6 +474,14 @@ watch(() => route.fullPath, load, { immediate: true });
       <p v-if="accepted.error || accepted.errorCode" role="alert">
         {{ accepted.errorCode }} {{ accepted.error }}
       </p>
+      <ElButton
+        v-if="
+          !accepted.runId && ['failed', 'interrupted'].includes(accepted.state)
+        "
+        :disabled="busy || stale || example"
+        @click="open('retry')"
+        >恢复原受理范围</ElButton
+      >
       <p>受理与采集运行状态分开；预览请求不表示已保存采集业务记录。</p>
       <details v-if="accepted.result">
         <summary>运行／预览结果（未写入与正式运行分别核对）</summary>

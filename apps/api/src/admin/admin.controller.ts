@@ -88,7 +88,10 @@ export class AdminController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): AdminCsrfDto {
     reply.header("Cache-Control", "no-store");
-    return { csrfToken: csrfToken(sessionToken(request.headers.cookie)!) };
+    return {
+      adminId: request.admin!.id,
+      csrfToken: csrfToken(sessionToken(request.headers.cookie)!),
+    };
   }
   @Post("auth/logout")
   @ApiSecurity({})

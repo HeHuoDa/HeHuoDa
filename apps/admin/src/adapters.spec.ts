@@ -2,6 +2,23 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createControlService, createReviewService } from "./adapters";
 import { reviewExamples } from "./console/review-examples";
 import { ConsoleError } from "./console/resource";
+it("未创建运行的中断受理按原请求ID恢复，不传新的扫描参数", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValue({ requestId: "new-request", status: "accepted" });
+  const service = createControlService({ request });
+  await service.retry("original-request", {
+    operationId: "retry-op",
+    reason: "核对原受理范围",
+  });
+  expect(request).toHaveBeenCalledWith(
+    "/ingestion/requests/original-request/retry",
+    {
+      method: "POST",
+      body: { operationId: "retry-op", reason: "核对原受理范围" },
+    },
+  );
+});
 afterEach(() => sessionStorage.removeItem("hh-admin-ingestion"));
 it("身份核实后Cookie变化导致403时仍保留原操作恢复线索", async () => {
   const request = vi

@@ -16,7 +16,7 @@ export function safeReturn(value: unknown) {
     ? url.pathname + url.search + url.hash
     : "/";
 }
-export function createAdminHttp() {
+export function createAdminHttp(onIdentityChange = () => {}) {
   const state = shallowReactive({
     session: null as Schema["AdminSessionDto"] | null,
     ready: false,
@@ -34,6 +34,11 @@ export function createAdminHttp() {
     sessionStorage.removeItem("hh-admin-ingestion");
     for (const controller of pending) controller.abort();
     pending.clear();
+  }
+  function invalidate() {
+    clear();
+    state.ready = true;
+    onUnauthorized();
   }
   async function request<T>(
     path: string,
@@ -76,6 +81,16 @@ export function createAdminHttp() {
       });
       if (generation !== state.generation)
         throw new DOMException("会话已改变", "AbortError");
+      const responseAdmin = response.headers.get("X-Admin-Id");
+      if (
+        state.session &&
+        responseAdmin &&
+        responseAdmin !== state.session.id &&
+        path !== "/auth/login"
+      ) {
+        invalidate();
+        throw new ConsoleError(401, "管理员身份已切换，请重新登录。");
+      }
       if (!response.ok) {
         if (response.status === 401 && path !== "/auth/login") {
           clear();
@@ -105,6 +120,10 @@ export function createAdminHttp() {
       const session = await request<Schema["AdminSessionDto"]>("/auth/session");
       const token = await request<Schema["AdminCsrfDto"]>("/auth/csrf");
       if (generation !== state.generation) return;
+      if (token.adminId !== session.id) {
+        clear();
+        throw new ConsoleError(409, "管理员身份已切换，请重新登录。");
+      }
       csrf = token.csrfToken;
       state.session = session;
       state.ready = true;
@@ -116,6 +135,7 @@ export function createAdminHttp() {
   async function login(username: string, password: string) {
     if (state.loggingOut)
       throw new ConsoleError(409, "退出处理中，请稍后登录。");
+    onIdentityChange();
     clear();
     await request<Schema["AdminSessionDto"]>("/auth/login", {
       method: "POST",
@@ -146,6 +166,7 @@ export function createAdminHttp() {
         "仍有提交中或未确认受理的操作，请先核验再退出。",
       );
     state.loggingOut = true;
+    onIdentityChange();
     try {
       if (!csrf) await restore();
       await request("/auth/logout", { method: "POST" });
@@ -163,6 +184,7 @@ export function createAdminHttp() {
     login,
     logout,
     clear,
+    invalidate,
     onUnauthorized(callback: () => void) {
       onUnauthorized = callback;
     },

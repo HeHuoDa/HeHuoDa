@@ -315,7 +315,34 @@ describe("管理员审核并发、发布保护与导入回滚 HTTP 验收", () =
     ).toBe(1);
   });
 
-  it("同基线并发修订只接受一个，之后的新修订会撤销旧批准", async () => {
+  it("两个管理员同基线并发修订只接受一个，之后的新修订会撤销旧批准", async () => {
+    await test.pool.query(
+      "INSERT INTO admin_accounts(username,display_name,password_salt,password_hash) SELECT 'second-review-admin','第二管理员',password_salt,password_hash FROM admin_accounts LIMIT 1",
+    );
+    const secondLogin = await test.request(
+      "POST",
+      "admin/auth/login",
+      { username: "second-review-admin", password: "test-password" },
+      { origin: "http://localhost:5173" },
+    );
+    const secondCookie = String(secondLogin.headers["set-cookie"]).split(
+      ";",
+    )[0]!;
+    const secondCsrf = (
+      await test.request("GET", "admin/auth/csrf", undefined, {
+        cookie: secondCookie,
+      })
+    ).json();
+    expect(secondCsrf.adminId).not.toBe(
+      (
+        await test.request("GET", "admin/auth/session", undefined, { cookie })
+      ).json().id,
+    );
+    const secondHeaders = {
+      cookie: secondCookie,
+      origin: "http://localhost:5173",
+      "x-csrf-token": secondCsrf.csrfToken,
+    };
     const candidateId = await createCandidate();
     const [firstSnapshot, secondSnapshot] = await Promise.all([
       exportReview(candidateId),
@@ -342,7 +369,7 @@ describe("管理员审核并发、发布保护与导入回滚 HTTP 验收", () =
           reason: "并发提交修订乙",
           review: second,
         },
-        headers,
+        secondHeaders,
       ),
     ]);
     expect(responses.map((response) => response.statusCode).sort()).toEqual([
