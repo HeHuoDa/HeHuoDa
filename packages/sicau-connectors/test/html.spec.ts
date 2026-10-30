@@ -218,6 +218,17 @@ describe("来源适配器的离线页面", () => {
       extractArticle(html, sources[1].listUrl, sources[1]).attachments,
     ).toHaveLength(2);
   });
+  it("生命科学学院兼容实站无数字后缀的正文容器", () => {
+    const article = extractArticle(
+      lifeArticle.replace('id="vsb_content_4"', 'id="vsb_content"'),
+      "https://smkx.sicau.edu.cn/info/1061/29421.htm",
+      sources[1],
+    );
+    expect(article.title).toBe("2026年测试竞赛报名通知");
+    expect(article.publishedAt).toBe("2026-10-08");
+    expect(article.text).toContain("参赛对象：全校学生");
+    expect(article.attachments).toHaveLength(1);
+  });
   it("两站处理相对通知链接、分页及不同日期精度，不根据月份猜年份", () => {
     expect(
       extractList(informationList, sources[0].listUrl, sources[0]),

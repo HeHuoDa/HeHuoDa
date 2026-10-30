@@ -102,7 +102,8 @@ export const sources: Source[] = [
           pagination: ".p_pages",
           nextText: "^(下页|下一页|下一頁|Next|>)$",
           title: ".pageArticleTitle",
-          content: "#vsb_content_4 .v_news_content",
+          content:
+            "#vsb_content .v_news_content, #vsb_content_4 .v_news_content",
           meta: ".articleAuthor",
           attachments: ".pageArticle,.gp-article",
         },
