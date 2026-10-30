@@ -83,6 +83,25 @@ p {
   margin: 12px 0 0;
   font-size: 23px;
 }
+.module-scope {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #65736a;
+}
+.module-scope li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.module-scope strong {
+  color: #2f3a33;
+  font-weight: 600;
+}
 .example-toggle {
   display: flex;
   gap: 16px;

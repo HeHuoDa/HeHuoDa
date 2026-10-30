@@ -15,6 +15,23 @@ const metrics = computed(() => [
   { label: "已发布比赛", value: summary.value?.published },
   { label: "采集来源", value: summary.value?.sources },
 ]);
+const moduleLabels: Record<string, string> = {
+  pending: "待审核通知",
+  drafts: "待完善草稿",
+  published: "已发布比赛",
+  sources: "采集来源",
+};
+function displayTime(value: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 async function load() {
   status.value = "loading";
   summary.value = null;
@@ -57,10 +74,13 @@ onMounted(load);
       <p v-if="status === 'ready' && summary?.pending === 0" role="status">
         暂无待审核通知
       </p>
-      <p v-for="item in summary?.modules" :key="item.module">
-        {{ item.module }} · {{ item.available ? item.scope : "不可用" }} ·
-        {{ item.asOf }}
-      </p>
+      <ul v-if="summary?.modules?.length" class="module-scope">
+        <li v-for="item in summary.modules" :key="item.module">
+          <strong>{{ moduleLabels[item.module] ?? item.module }}</strong>
+          <span>范围：{{ item.available ? item.scope : "不可用" }}</span>
+          <span>统计截至：{{ displayTime(item.asOf) }}（北京时间）</span>
+        </li>
+      </ul>
       <p v-if="status !== 'ready'">
         当前无法查询真实统计，可查看单独标注的布局示例。
       </p>
