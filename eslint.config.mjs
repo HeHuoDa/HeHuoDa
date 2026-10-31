@@ -12,6 +12,8 @@ export default tseslint.config(
       "**/coverage/**",
       "**/src/generated/**",
       "apps/uni/unpackage/**",
+      // 本地一次性脚本，与 .gitignore 保持一致
+      "**/.tmp-*",
     ],
   },
   js.configs.recommended,
