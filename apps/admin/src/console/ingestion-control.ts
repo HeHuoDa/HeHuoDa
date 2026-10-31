@@ -160,6 +160,11 @@ export interface AcceptedRequest {
   errorCode?: string | null;
 }
 export interface IngestionControlService {
+  attachment(
+    id: string,
+    operation: "recheck" | "reparse",
+    body: Schema["AttachmentCommandDto"] & { versionId?: string },
+  ): Promise<AcceptedRequest>;
   sources(): Promise<SourceConfig[]>;
   configure(
     id: string,
@@ -211,6 +216,7 @@ const unavailable = async (): Promise<never> => {
   );
 };
 export const unavailableControl: IngestionControlService = {
+  attachment: unavailable,
   sources: unavailable,
   configure: unavailable,
   runs: unavailable,

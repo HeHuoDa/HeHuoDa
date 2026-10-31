@@ -97,9 +97,12 @@ function mapRequest(value: Schema["IngestionRequestDto"]): AcceptedRequest {
 export function createControlService(
   http: Transport,
   actor = () => "",
+  scope: "all" | "scans" | "attachments" = "all",
+  owner = () => "",
 ): IngestionControlService {
   type PendingCommand = {
     actor: string;
+    owner?: string;
     path: string;
     body: { operationId: string; reason: string };
   };
@@ -112,7 +115,7 @@ export function createControlService(
       ) as PendingCommand | null;
       if (
         value?.actor === actor() &&
-        /^\/ingestion\/(scans|runs\/[0-9a-f-]{36}\/resume|requests\/[0-9a-f-]{36}\/retry)$/.test(
+        /^\/ingestion\/(scans|runs\/[0-9a-f-]{36}\/resume|requests\/[0-9a-f-]{36}\/retry|attachments\/[0-9a-f-]{36}\/(?:recheck|reparse))$/.test(
           value.path,
         ) &&
         /^[0-9a-f-]{36}$/i.test(value.body.operationId)
@@ -132,8 +135,22 @@ export function createControlService(
       else sessionStorage.removeItem("hh-admin-ingestion");
     }
   }
+  function scopedPending() {
+    const value = readPending();
+    if (value && owner() && value.owner !== owner()) return null;
+    if (!value || scope === "all") return value;
+    const attachment = value.path.startsWith("/ingestion/attachments/");
+    return (scope === "attachments") === attachment ? value : null;
+  }
   async function submit(path: string, body: PendingCommand["body"]) {
-    remember({ actor: actor(), path, body });
+    const existing = readPending();
+    if (
+      existing &&
+      (existing.path !== path ||
+        JSON.stringify(existing.body) !== JSON.stringify(body))
+    )
+      throw new ConsoleError(409, "请先在原模块核验未确认受理的操作");
+    remember({ actor: actor(), owner: owner(), path, body });
     try {
       const value = await http.request<Schema["IngestionAcceptedDto"]>(path, {
         method: "POST",
@@ -163,11 +180,16 @@ export function createControlService(
     return mapRequest(value);
   }
   return {
+    async attachment(id, operation, body) {
+      if (operation === "reparse" && !body.versionId)
+        throw new ConsoleError(400, "请选择附件内容版本");
+      return submit(idPath("attachments", id) + "/" + operation, body);
+    },
     pendingOperation() {
-      return readPending()?.body.operationId ?? null;
+      return scopedPending()?.body.operationId ?? null;
     },
     async recoverPending() {
-      const command = readPending();
+      const command = scopedPending();
       if (!command) throw new ConsoleError(404, "无待核验操作");
       if (command.actor) {
         const session =

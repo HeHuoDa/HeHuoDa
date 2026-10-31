@@ -1,9 +1,23 @@
 import type { InjectionKey } from "vue";
 import type { AdminHttp, Schema } from "./http";
+import { createControlService } from "./adapters";
 
 const path = (kind: string, id: string) =>
   `/ingestion/${kind}/${encodeURIComponent(id)}`;
-export function createOperationsService(http: Pick<AdminHttp, "request">) {
+export function createOperationsService(
+  http: Pick<AdminHttp, "request">,
+  actor = () => "",
+  owner = () => "",
+) {
+  const control = createControlService(http, actor, "attachments", owner);
+  async function submitAttachment(
+    id: string,
+    operation: "recheck" | "reparse",
+    body: Schema["AttachmentCommandDto"] & { versionId?: string },
+  ) {
+    const result = await control.attachment(id, operation, body);
+    return { requestId: result.requestId, status: "accepted" };
+  }
   const channel = (source: string, id: string) =>
     path("sources", source) + "/channels/" + encodeURIComponent(id);
   return {
@@ -37,21 +51,13 @@ export function createOperationsService(http: Pick<AdminHttp, "request">) {
           `/versions/${encodeURIComponent(version)}?page=${page}&pageSize=10`,
       ),
     recheck: (id: string, body: Schema["AttachmentCommandDto"]) =>
-      http.request<Schema["IngestionAcceptedDto"]>(
-        path("attachments", id) + "/recheck",
-        { method: "POST", body },
-      ),
+      submitAttachment(id, "recheck", body),
     reparse: (id: string, body: Schema["AttachmentReparseCommandDto"]) =>
-      http.request<Schema["IngestionAcceptedDto"]>(
-        path("attachments", id) + "/reparse",
-        { method: "POST", body },
-      ),
+      submitAttachment(id, "reparse", body),
     request: (id: string) =>
       http.request<Schema["IngestionRequestDto"]>(path("requests", id)),
-    recover: (id: string) =>
-      http.request<Schema["IngestionRequestDto"]>(
-        "/ingestion/requests/by-operation/" + encodeURIComponent(id),
-      ),
+    pendingOperation: () => control.pendingOperation?.() ?? null,
+    recoverPending: () => control.recoverPending!(),
   };
 }
 export type OperationsService = ReturnType<typeof createOperationsService>;

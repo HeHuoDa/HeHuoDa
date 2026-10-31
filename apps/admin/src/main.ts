@@ -40,7 +40,11 @@ createApp(App)
   .provide(adminServicesKey, createAdminServices(adminHttp))
   .provide(
     ingestionControlKey,
-    createControlService(adminHttp, () => adminHttp.state.session?.id ?? ""),
+    createControlService(
+      adminHttp,
+      () => adminHttp.state.session?.id ?? "",
+      "scans",
+    ),
   )
   .provide(reviewKey, createReviewService(adminHttp))
   .use(router)

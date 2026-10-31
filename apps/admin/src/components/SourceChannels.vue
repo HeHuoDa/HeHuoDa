@@ -19,6 +19,7 @@ const service =
 const directory = ref<Schema["CollegeVerificationCandidateDto"][]>([]);
 const sources = ref<Schema["IngestionSourceDto"][]>([]);
 const loading = ref(false),
+  loaded = ref(false),
   error = ref(""),
   busy = ref(false),
   stale = ref(false),
@@ -35,6 +36,28 @@ const channels = computed(() =>
 );
 const current = computed(() =>
   channels.value.find((c) => c.key === selection.value),
+);
+// 与 admin-ingestion.service.ts sourceDetail 的 coverage 聚合形状对应。
+type PhaseCoverage = {
+  total: number;
+  ranges: {
+    status: string;
+    from: string;
+    to: string;
+    pendingNotices: number;
+    pendingPages: number;
+    scope: string;
+  }[];
+};
+const phases = {
+  fresh: "新通知首页检查",
+  backfill: "固定范围历史遍历",
+  revisit: "已知通知复查",
+  retry: "失败地址重试",
+};
+const coverage = computed(
+  () =>
+    (current.value?.channel.coverage ?? {}) as Record<string, PhaseCoverage>,
 );
 const settings = ref({ ...defaultSettings }),
   enabled = ref(false),
@@ -88,6 +111,7 @@ function reset() {
   dialog.value = false;
 }
 async function select(event: Event) {
+  if (busy.value || stale.value || loading.value) return;
   const key = (event.target as HTMLSelectElement).value;
   if (await leave()) {
     selection.value = key;
@@ -97,6 +121,7 @@ async function select(event: Event) {
 async function load() {
   const turn = ++epoch;
   loading.value = true;
+  loaded.value = false;
   error.value = "";
   stale.value = true;
   try {
@@ -107,6 +132,7 @@ async function load() {
     if (turn !== epoch) return;
     directory.value = list;
     sources.value = registered;
+    loaded.value = true;
     if (!channels.value.some((c) => c.key === selection.value))
       selection.value = channels.value[0]?.key ?? "";
     reset();
@@ -221,7 +247,7 @@ void load();
       "
       >重新查询栏目</ElButton
     >
-    <template v-if="!loading && sources.length">
+    <template v-if="!loading && loaded">
       <p>
         目录 {{ directory.length }} 院 · 已注册
         {{ new Set(sources.map((s) => s.collegeId)).size }} 院 · 有已核验栏目
@@ -245,6 +271,9 @@ void load();
       <p>
         自动覆盖总数暂不可用；请逐栏目核对覆盖范围、最近成功检查与积压。目录研究日期不等于人工核验日期。
       </p>
+      <p v-if="!sources.length">
+        没有已注册来源，目录仅供核验线索查看，不能扫描。
+      </p>
       <details>
         <summary>查看学院目录（只读线索）</summary>
         <ul>
@@ -264,7 +293,7 @@ void load();
         >运营栏目<select
           aria-label="运营栏目"
           :value="selection"
-          :disabled="busy"
+          :disabled="busy || stale || loading"
           @change="select"
         >
           <option v-for="row in channels" :key="row.key" :value="row.key">
@@ -289,6 +318,40 @@ void load();
           {{ current.channel.lastSuccessfulCheck ?? "未提供" }} · 积压
           {{ current.channel.pendingCount }} · 退避
           {{ current.channel.backoffUntil ?? "无" }}
+        </p>
+        <div class="diff-scroll" tabindex="0" aria-label="各阶段覆盖与积压">
+          <table class="review-diff">
+            <thead>
+              <tr>
+                <th>阶段</th>
+                <th>范围／状态</th>
+                <th>剩余通知／列表页</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(label, phase) in phases" :key="phase"
+                ><tr v-if="!coverage[phase]?.ranges?.length">
+                  <th>{{ label }}</th>
+                  <td colspan="2">暂无此阶段记录，不表示已覆盖</td>
+                </tr>
+                <tr
+                  v-for="(range, index) in coverage[phase]?.ranges ?? []"
+                  :key="phase + index"
+                >
+                  <th>{{ label }}</th>
+                  <td>
+                    {{ range.from }} 至 {{ range.to }} · {{ range.status }} ·
+                    {{ range.scope }}
+                  </td>
+                  <td>{{ range.pendingNotices }} / {{ range.pendingPages }}</td>
+                </tr></template
+              >
+            </tbody>
+          </table>
+        </div>
+        <p>
+          fresh
+          完成只表示首页检查；历史范围完成也不表示学院全站覆盖。轮次结束、扫描完成和按时结束分别核对。
         </p>
         <details>
           <summary>覆盖、阶段、轮次、预算与核验记录</summary>
@@ -353,10 +416,12 @@ void load();
         </fieldset>
       </template>
     </template>
-    <p v-else-if="!loading && !error">
-      没有已注册栏目，不能扫描；空目录不表示没有赛事。
-    </p>
-    <ReasonDialog v-model="dialog" title="栏目操作确认" :execute="execute" />
+    <ReasonDialog
+      v-model="dialog"
+      title="栏目操作确认"
+      :blocked="stale"
+      :execute="execute"
+    />
   </section>
 </template>
 <style scoped>

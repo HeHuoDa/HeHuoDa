@@ -59,10 +59,7 @@ async function load() {
       versionTotal.value = history.total;
       version.value = snapshot;
       await nextTick();
-      if (route.query.paragraph)
-        document
-          .getElementById("notice-paragraph-" + route.query.paragraph)
-          ?.scrollIntoView?.({ block: "center" });
+      scrollToParagraph();
     } else {
       const result = await adminHttp.request<Schema["AdminNoticeListDto"]>(
         `/ingestion/notices?page=${page.value}&pageSize=20`,
@@ -77,6 +74,22 @@ async function load() {
     if (current === epoch) loading.value = false;
   }
 }
+function scrollToParagraph() {
+  const value = route.query.paragraph;
+  if (typeof value !== "string") return;
+  document
+    .getElementById(
+      Number(value) < 0 ? "notice-metadata" : "notice-paragraph-" + value,
+    )
+    ?.scrollIntoView?.({ block: "center" });
+}
+watch(
+  () => route.query.paragraph,
+  async () => {
+    await nextTick();
+    scrollToParagraph();
+  },
+);
 watch(
   () => [
     route.path,
@@ -145,7 +158,9 @@ watch(
     />
   </section>
   <section v-if="detail" class="panel console-pad">
-    <h2>{{ article?.title ?? "正文不可用" }}</h2>
+    <h2 id="notice-metadata" tabindex="-1">
+      {{ article?.title ?? "正文不可用" }}
+    </h2>
     <p>
       {{ detail.source.publisher }} · 来源状态 {{ detail.health }} · 证据状态
       {{ detail.evidenceState }}
@@ -161,7 +176,10 @@ watch(
         {{ channel.lastDiscoveredAt }}
       </li>
     </ul>
-    <p v-if="!detail.channels.length">此历史通知尚无栏目关联记录。</p>
+    <p v-if="!detail.channels">
+      当前 API 未提供栏目关联，不能据此判断没有关联。
+    </p>
+    <p v-else-if="!detail.channels.length">此历史通知尚无栏目关联记录。</p>
     <a
       v-if="safeSourceUrl(detail.finalUrl)"
       :href="safeSourceUrl(detail.finalUrl)!"

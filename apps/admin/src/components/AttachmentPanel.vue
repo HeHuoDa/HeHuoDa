@@ -17,7 +17,12 @@ const props = defineProps<{ noticeId: string }>();
 const route = useRoute(),
   router = useRouter();
 const service =
-  inject(operationsKey, null) ?? createOperationsService(adminHttp);
+  inject(operationsKey, null) ??
+  createOperationsService(
+    adminHttp,
+    () => adminHttp.state.session?.id ?? "",
+    () => props.noticeId,
+  );
 const data = ref<Schema["NoticeAttachmentsDto"] | null>(null),
   history = ref<Schema["AttachmentVersionsDto"] | null>(null);
 const text = ref<Schema["AttachmentTextDto"] | null>(null),
@@ -25,7 +30,7 @@ const text = ref<Schema["AttachmentTextDto"] | null>(null),
 const loading = ref(false),
   busy = ref(false),
   stale = ref(false),
-  uncertain = ref(false),
+  uncertain = ref(!!service.pendingOperation()),
   error = ref(""),
   dialog = ref(false);
 const request = ref<Schema["IngestionRequestDto"] | null>(null);
@@ -62,11 +67,18 @@ const statuses: Record<string, string> = {
   stale: "证据已过期",
   truncated: "超限／截断",
 };
+const requestPending = computed(
+  () =>
+    typeof route.query.attachmentRequest === "string" &&
+    (!request.value || ["accepted", "running"].includes(request.value.status)),
+);
 let epoch = 0,
   requestEpoch = 0,
   stop = () => {};
 function navigate(values: Record<string, string | undefined>) {
   if (busy.value || uncertain.value) return;
+  if ("attachment" in values || "attachmentUrl" in values)
+    values.attachmentRequest = undefined;
   void router.replace({
     path: route.path,
     query: { ...route.query, ...values },
@@ -74,7 +86,9 @@ function navigate(values: Record<string, string | undefined>) {
 }
 async function load() {
   const turn = ++epoch;
+  uncertain.value = !!service.pendingOperation();
   loading.value = true;
+  data.value = null;
   error.value = "";
   text.value = null;
   comparison.value = null;
@@ -123,6 +137,7 @@ function open(kind: "recheck" | "reparse") {
     busy.value ||
     uncertain.value ||
     stale.value ||
+    requestPending.value ||
     loading.value ||
     !data.value ||
     (kind === "reparse" && !text.value)
@@ -146,10 +161,18 @@ async function queryRequest() {
       ? route.query.attachmentRequest
       : request.value?.requestId;
   if (!id) return;
+  if (loading.value) return "accepted";
   const turn = ++requestEpoch;
   try {
     const result = await service.request(id);
     if (turn !== requestEpoch) return;
+    if (
+      result.attachmentId &&
+      !data.value?.items.some(
+        (item) => item.attachmentId === result.attachmentId,
+      )
+    )
+      throw new ConsoleError(409, "受理对象与当前通知不匹配");
     request.value = result;
     if (!["accepted", "running"].includes(result.status)) {
       stop();
@@ -191,7 +214,7 @@ async function execute(reason: string) {
           command.kind === "reparse"
             ? "版本或证据基线已变化；旧字节可能已清理，请先重新获取，再加载核对。"
             : "附件证据基线已变化，请重新加载后核对。";
-      } else if (!(cause instanceof ConsoleError && cause.status < 500)) {
+      } else if (service.pendingOperation()) {
         uncertain.value = true;
         error.value =
           "受理结果未知，请按原操作标识查询，不能重复创建操作：" +
@@ -204,11 +227,11 @@ async function execute(reason: string) {
   }
 }
 async function recover() {
-  if (!command || busy.value) return;
+  if (busy.value || !service.pendingOperation()) return;
   const turn = epoch;
   busy.value = true;
   try {
-    const value = await service.recover(command.body.operationId);
+    const value = await service.recoverPending();
     if (turn !== epoch) return;
     uncertain.value = false;
     busy.value = false;
@@ -218,11 +241,12 @@ async function recover() {
       query: { ...route.query, attachmentRequest: value.requestId },
     });
   } catch (cause) {
-    if (turn === epoch)
-      error.value =
-        cause instanceof ConsoleError && cause.status === 404
-          ? "当前未找到受理；请保留原操作标识，由操作审计核对后恢复，勿重复提交。"
-          : errorMessage(cause);
+    if (turn === epoch) {
+      uncertain.value = !!service.pendingOperation();
+      if (cause instanceof ConsoleError && cause.status === 409)
+        stale.value = true;
+      error.value = errorMessage(cause);
+    }
   } finally {
     if (turn === epoch) busy.value = false;
   }
@@ -253,7 +277,12 @@ watch(
   { immediate: true },
 );
 watch(
-  () => route.query.attachmentRequest,
+  () => [
+    props.noticeId,
+    route.query.attachment,
+    route.query.attachmentUrl,
+    route.query.attachmentRequest,
+  ],
   async () => {
     stop();
     ++requestEpoch;
@@ -263,6 +292,15 @@ watch(
       stop = observeRequest(queryRequest);
   },
   { immediate: true },
+);
+watch(
+  () => route.query.segment,
+  async () => {
+    await nextTick();
+    document
+      .getElementById("attachment-segment-" + String(route.query.segment))
+      ?.scrollIntoView?.({ block: "center" });
+  },
 );
 onBeforeUnmount(() => {
   epoch++;
@@ -286,9 +324,10 @@ onBeforeUnmount(() => {
     <ElButton v-if="uncertain" :disabled="busy" @click="recover"
       >按原操作标识查询受理</ElButton
     >
-    <p v-if="request" role="status">
-      附件请求 {{ request.requestId }} ·
-      {{ request.status }}（受理完成仍须核对提取状态） {{ request.errorCode
+    <p v-if="route.query.attachmentRequest" role="status">
+      附件请求 {{ route.query.attachmentRequest }} ·
+      {{ request?.status ?? "待查询" }}（受理完成仍须核对提取状态）
+      {{ request?.errorCode
       }}<ElButton @click="queryRequest">查询附件请求</ElButton>
     </p>
     <p v-if="data && !data.items.length && !loading">此通知没有登记附件。</p>
@@ -446,23 +485,12 @@ onBeforeUnmount(() => {
       </template>
       <div class="console-actions">
         <ElButton
-          :disabled="
-            busy ||
-            stale ||
-            uncertain ||
-            loading ||
-            (!!request && ['accepted', 'running'].includes(request.status))
-          "
+          :disabled="busy || stale || uncertain || loading || requestPending"
           @click="open('recheck')"
           >重新获取附件</ElButton
         ><ElButton
           :disabled="
-            busy ||
-            stale ||
-            uncertain ||
-            loading ||
-            !text ||
-            (!!request && ['accepted', 'running'].includes(request.status))
+            busy || stale || uncertain || loading || !text || requestPending
           "
           @click="open('reparse')"
           >重新解析此版本</ElButton
@@ -480,5 +508,13 @@ onBeforeUnmount(() => {
 <style scoped>
 select {
   max-width: 100%;
+}
+.document-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .document-columns {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

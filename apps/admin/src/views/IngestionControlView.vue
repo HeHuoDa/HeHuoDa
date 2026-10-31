@@ -76,6 +76,8 @@ function initialScan(): ScanInput {
     .slice(0, 10);
   return {
     sourceId: sources.value[0]?.id ?? "",
+    channelId: sources.value[0]?.channels?.[0]?.id,
+    phase: "fresh",
     from,
     to,
     url: "",
@@ -116,14 +118,13 @@ const scanBlocked = computed(
   () =>
     !currentSource.value ||
     !currentSource.value.enabled ||
-    (!!(scan.value.phase || scan.value.channelId) &&
-      !(currentSource.value.channels ?? []).some(
-        (c) =>
-          c.id ===
-            (scan.value.channelId ?? currentSource.value?.channels?.[0]?.id) &&
-          c.enabled &&
-          c.verificationStatus === "verified",
-      )) ||
+    !scan.value.phase ||
+    !(currentSource.value.channels ?? []).some(
+      (c) =>
+        c.id === scan.value.channelId &&
+        c.enabled &&
+        c.verificationStatus === "verified",
+    ) ||
     ["running", "locked", "disabled"].includes(
       currentSource.value.availability,
     ),
@@ -151,7 +152,14 @@ const statusText = computed(() =>
     : "",
 );
 function link(path: string) {
-  return { path, query: example.value ? { preview: "1" } : {} };
+  return {
+    path,
+    query: {
+      ...query.value,
+      source: sourceFilter.value || undefined,
+      preview: example.value ? "1" : undefined,
+    },
+  };
 }
 async function load() {
   stopObserving();
@@ -183,6 +191,7 @@ async function load() {
         sources.value = result;
         sourceStatus.value = "ready";
         scan.value.sourceId = result[0]?.id ?? "";
+        scan.value.channelId = result[0]?.channels?.[0]?.id;
         scanInitial.value = JSON.stringify(scan.value);
         if (result[0] && isSources.value) {
           config.value = structuredClone(result[0]);
@@ -654,7 +663,7 @@ watch(() => route.fullPath, load, { immediate: true });
               </select></label
             ><label
               >扫描栏目<select v-model="scan.channelId" aria-label="扫描栏目">
-                <option :value="undefined">默认栏目</option>
+                <option :value="undefined" disabled>请选择已核验栏目</option>
                 <option
                   v-for="channel in currentSource?.channels"
                   :key="channel.id"
@@ -665,7 +674,6 @@ watch(() => route.fullPath, load, { immediate: true });
               </select></label
             ><label
               >扫描阶段<select v-model="scan.phase" aria-label="扫描阶段">
-                <option :value="undefined">兼容扫描</option>
                 <option value="fresh">新通知 fresh</option>
                 <option value="backfill">首次近一年 backfill</option>
                 <option value="revisit">已知通知 revisit</option>

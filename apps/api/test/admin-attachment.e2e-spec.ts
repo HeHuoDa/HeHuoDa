@@ -179,4 +179,47 @@ describe("附件管理 HTTP 权限、分页与受理", () => {
       client.release();
     }
   });
+  it("附件202响应丢失后按同一操作标识重放，返回同一个受理请求", async () => {
+    const current = (
+      await test.pool.query(
+        "SELECT latest_version FROM ingestion_notices WHERE id=$1",
+        [noticeId],
+      )
+    ).rows[0];
+    const saved = await persistAttachment(test.pool, {
+      noticeId,
+      noticeVersion: current.latest_version,
+      url: `https://${sources[0]!.host}/system/_content/download.jsp?id=177`,
+      mediaType: "application/pdf",
+      extractorVersion: "test/replay",
+      status: "extracted",
+      segments: [{ kind: "page", index: 1, text: "受控重放样本" }],
+      body: Buffer.from("%PDF-replay"),
+    });
+    const command = {
+      operationId: randomUUID(),
+      reason: "按原命令恢复受理",
+      baseline: saved.evidenceRevision,
+      versionId: saved.versionId,
+    };
+    const path = `admin/ingestion/attachments/${saved.attachmentId}/reparse`;
+    const headers = { cookie, origin, "x-csrf-token": csrf };
+    const first = await test.request("POST", path, command, headers);
+    const replay = await test.request("POST", path, command, headers);
+    expect(first.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(202);
+    expect(replay.json()).toEqual(first.json());
+    const request = await test.request(
+      "GET",
+      `admin/ingestion/requests/${replay.json().requestId}`,
+      undefined,
+      { cookie },
+    );
+    expect(request.statusCode).toBe(200);
+    expect(request.json()).toMatchObject({
+      attachmentId: saved.attachmentId,
+      versionId: saved.versionId,
+      operation: "reparse",
+    });
+  });
 });
