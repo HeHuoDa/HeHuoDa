@@ -77,10 +77,15 @@ describe("候选审核公开交互", () => {
       .findAll("button")
       .find((b) => b.text() === "批准候选 · 确认预览")!;
     expect(approve.attributes("disabled")).toBeDefined();
-    await wrapper
+    const picker = wrapper.get('select[aria-label="人工分类"]');
+    expect((picker.element as HTMLSelectElement).value).toBe("non_competition");
+    const submit = wrapper
       .findAll("button")
-      .find((b) => b.text() === "确认修改分类")!
-      .trigger("click");
+      .find((b) => b.text() === "确认修改分类")!;
+    expect(submit.attributes("disabled")).toBeDefined();
+    await picker.setValue("suspected");
+    expect(submit.attributes("disabled")).toBeUndefined();
+    await submit.trigger("click");
     await flushPromises();
     await wrapper.get("#action-reason").setValue("按原文恢复疑似");
     await wrapper.get("form.editor-form").trigger("submit");

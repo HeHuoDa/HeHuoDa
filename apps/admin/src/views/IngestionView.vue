@@ -246,6 +246,8 @@ async function load() {
       initialKey.value = JSON.stringify(draft.value);
       target.value = draft.value.targetId;
       targetMode.value = draft.value.formalBefore ? "existing" : "new";
+      // 人工分类默认停在服务端当前结论，避免把未改动的下拉当作新分类提交。
+      classification.value = state.detail.classification ?? "suspected";
     }
   } else
     await controller.load(() => service.value.list(kind.value, query.value));
@@ -665,6 +667,7 @@ async function executeClassification(reason: string) {
               pending ||
               stale ||
               state.detail.status === 'imported' ||
+              classification === state.detail.classification ||
               !service.classify
             "
             @click="openClassification"
