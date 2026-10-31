@@ -15,6 +15,10 @@ import {
   lifeList,
   informationArticle,
   lifeArticle,
+  scienceList,
+  scienceArticle,
+  artsMediaList,
+  artsMediaArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -331,5 +335,101 @@ describe("来源适配器的离线页面", () => {
     expect(() =>
       decodeHtml(Uint8Array.from([0xff]), "text/html; charset=utf-8"),
     ).toThrow("编码");
+  });
+  it("四院试点新增来源默认停用，沿用已核验来源的附件主机口径", () => {
+    const [science, artsMedia] = [sources[2], sources[3]];
+    expect(science).toMatchObject({
+      id: "science",
+      collegeId: "science",
+      host: "lixueyuan.sicau.edu.cn",
+    });
+    expect(artsMedia).toMatchObject({
+      id: "arts-media",
+      collegeId: "arts-media",
+      host: "yscm.sicau.edu.cn",
+    });
+    for (const source of [science, artsMedia]) {
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.attachmentPaths).toEqual([
+        "^/system/_content/download\\.jsp$",
+      ]);
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+    }
+  });
+  it("理学院列表区分置顶旧通知与当届通知，正文和附件按配置解析", () => {
+    expect(extractList(scienceList, sources[2].listUrl, sources[2])).toEqual({
+      items: [
+        {
+          url: "https://lixueyuan.sicau.edu.cn/info/1071/100.htm",
+          title: "【置顶】2025年旧竞赛报名通知",
+          publishedAt: "2025-03-06",
+        },
+        {
+          url: "https://lixueyuan.sicau.edu.cn/info/1071/101.htm",
+          title: "2026年测试竞赛报名通知",
+          publishedAt: "2026-09-22",
+        },
+      ],
+      next: "https://lixueyuan.sicau.edu.cn/xwjtz/tzgg/6.htm",
+    });
+    const article = extractArticle(
+      scienceArticle,
+      "https://lixueyuan.sicau.edu.cn/info/1071/101.htm",
+      sources[2],
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-09-22",
+    });
+    expect(article.text).toContain("报名截止：2026年10月20日24:00");
+    expect(article.attachments).toHaveLength(1);
+  });
+  it("艺术与传媒学院列表标题取 title 属性，正文容器外的附件仍记录", () => {
+    expect(extractList(artsMediaList, sources[3].listUrl, sources[3])).toEqual({
+      items: [
+        {
+          url: "https://yscm.sicau.edu.cn/info/1053/99.htm",
+          title: "【置顶】旧交流项目招生简章",
+          publishedAt: "2023-05-06",
+        },
+        {
+          url: "https://yscm.sicau.edu.cn/info/1053/100.htm",
+          title: "2026年测试竞赛报名通知",
+          publishedAt: "2026-10-26",
+        },
+      ],
+      next: "https://yscm.sicau.edu.cn/qt/tzgg/xsl/25.htm",
+    });
+    const article = extractArticle(
+      artsMediaArticle,
+      "https://yscm.sicau.edu.cn/info/1053/100.htm",
+      sources[3],
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-10-26",
+    });
+    expect(article.attachments.map((item) => item.title)).toEqual([
+      "附件：规则.docx",
+      "附件：报名表.xlsx",
+    ]);
+  });
+  it("新增来源的分页仍拒绝越界路径与自循环", () => {
+    for (const next of ["/admin/login", sources[2].listUrl])
+      expect(() =>
+        extractList(
+          scienceList.replace("tzgg/6.htm", next),
+          sources[2].listUrl,
+          sources[2],
+        ),
+      ).toThrow(/分页|路径/);
+    expect(() =>
+      extractList(
+        artsMediaList.replace("xsl/25.htm", "/qt/tzgg/xsl.htm"),
+        sources[3].listUrl,
+        sources[3],
+      ),
+    ).toThrow(/分页|路径/);
   });
 });
