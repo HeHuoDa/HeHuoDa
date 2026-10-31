@@ -9,6 +9,7 @@ import {
 import { queryPage } from "./resource";
 export const sourceExamples: SourceConfig[] = fixedSources.map((s, i) => ({
   id: s.id,
+  listUrl: s.listUrl,
   title: s.publisher,
   status: i ? "disabled" : "enabled",
   date: "2026-10-20",

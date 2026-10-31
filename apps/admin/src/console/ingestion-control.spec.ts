@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   defaultSettings,
   validateSettings,
-  validateScan,
+  validateScan as checkScan,
+  fixedSources,
 } from "./ingestion-control";
+const validateScan = (input: Parameters<typeof checkScan>[0]) =>
+  checkScan(input, fixedSources);
 describe("采集控制表单契约", () => {
   it("固定来源、日期及预算边界与服务端一致，单通知仅允许所选来源HTTPS同源", () => {
     expect(validateSettings(defaultSettings)).toBeNull();

@@ -20,6 +20,33 @@ it("未创建运行的中断受理按原请求ID恢复，不传新的扫描参�
   );
 });
 afterEach(() => sessionStorage.removeItem("hh-admin-ingestion"));
+it("候选查询分开传递规则分类与审核状态，并保留栏目与附件筛选", async () => {
+  const request = vi.fn().mockResolvedValue({ items: [], total: 0 });
+  await createReviewService({ request }).list("candidates", {
+    q: "",
+    page: 1,
+    pageSize: 10,
+    from: "",
+    to: "",
+    status: "pending",
+    classification: "suspected",
+    kind: "registration",
+    needsReview: "true",
+    collegeId: "life-science",
+    channelId: "default",
+    attachmentStatus: "blocked",
+  });
+  const url = new URL(request.mock.calls[0]![0], "https://example.edu");
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    status: "pending",
+    classification: "suspected",
+    kind: "registration",
+    needsReview: "true",
+    collegeId: "life-science",
+    channelId: "default",
+    attachmentStatus: "blocked",
+  });
+});
 it("身份核实后Cookie变化导致403时仍保留原操作恢复线索", async () => {
   const request = vi
     .fn()

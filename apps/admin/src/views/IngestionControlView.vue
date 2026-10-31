@@ -18,7 +18,6 @@ import {
 import { ElMessageBox } from "element-plus";
 import {
   ingestionControlKey,
-  fixedSources,
   settingFields,
   validateSettings,
   validateScan,
@@ -40,6 +39,7 @@ import {
   type PageQuery,
 } from "../console/resource";
 import { readQuery } from "../console/query";
+import SourceChannels from "../components/SourceChannels.vue";
 import ReasonDialog from "../components/ReasonDialog.vue";
 import ResourceList from "../components/ResourceList.vue";
 import { adminHttp } from "../runtime";
@@ -58,7 +58,7 @@ const injected = inject(ingestionControlKey, null),
   );
 const query = computed(() => readQuery(route.query, runStates));
 const sourceFilter = computed(() =>
-  fixedSources.some((s) => s.id === route.query.source)
+  sources.value.some((s) => s.id === route.query.source)
     ? String(route.query.source)
     : "",
 );
@@ -71,10 +71,16 @@ const controller = createResourceController<IngestionRun>(),
   state = controller.state;
 function initialScan(): ScanInput {
   const to = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
-  const from = new Date(Date.parse(to) - 89 * 86400000)
+  const from = new Date(Date.parse(to) - 365 * 86400000)
     .toISOString()
     .slice(0, 10);
-  return { sourceId: fixedSources[0].id, from, to, url: "", preview: true };
+  return {
+    sourceId: sources.value[0]?.id ?? "",
+    from,
+    to,
+    url: "",
+    preview: true,
+  };
 }
 const scan = ref<ScanInput>(initialScan()),
   scanInitial = ref(JSON.stringify(scan.value));
@@ -108,12 +114,31 @@ const currentSource = computed(() =>
 );
 const scanBlocked = computed(
   () =>
-    !!currentSource.value &&
-    (!currentSource.value.enabled ||
-      ["running", "locked", "disabled"].includes(
-        currentSource.value.availability,
-      )),
+    !currentSource.value ||
+    !currentSource.value.enabled ||
+    (!!(scan.value.phase || scan.value.channelId) &&
+      !(currentSource.value.channels ?? []).some(
+        (c) =>
+          c.id ===
+            (scan.value.channelId ?? currentSource.value?.channels?.[0]?.id) &&
+          c.enabled &&
+          c.verificationStatus === "verified",
+      )) ||
+    ["running", "locked", "disabled"].includes(
+      currentSource.value.availability,
+    ),
 );
+const backfillRange = computed(() => {
+  const channel =
+    currentSource.value?.channels?.find((c) => c.id === scan.value.channelId) ??
+    currentSource.value?.channels?.[0];
+  const to = channel?.activatedOn;
+  return to
+    ? new Date(Date.parse(to) - 365 * 86400000).toISOString().slice(0, 10) +
+        " 至 " +
+        to
+    : "服务端按栏目启用日期固定前365天，请受理后核对原始范围";
+});
 const statusText = computed(() =>
   accepted.value
     ? {
@@ -148,7 +173,7 @@ async function load() {
     if (current !== epoch) return;
     exampleService.value = examples.exampleControl;
   }
-  if (isSources.value) {
+  {
     sourceStatus.value = "loading";
     sourceError.value = "";
     sources.value = [];
@@ -157,7 +182,9 @@ async function load() {
       if (current === epoch) {
         sources.value = result;
         sourceStatus.value = "ready";
-        if (result[0]) {
+        scan.value.sourceId = result[0]?.id ?? "";
+        scanInitial.value = JSON.stringify(scan.value);
+        if (result[0] && isSources.value) {
           config.value = structuredClone(result[0]);
           initial.value = JSON.stringify(config.value);
         }
@@ -168,9 +195,10 @@ async function load() {
         sourceError.value = errorMessage(cause);
       }
     }
-  } else if (route.params.id)
+  }
+  if (!isSources.value && route.params.id)
     await controller.select(() => service.value.run(String(route.params.id)));
-  else
+  else if (!isSources.value)
     await controller.load(() =>
       service.value.runs(query.value, sourceFilter.value),
     );
@@ -234,7 +262,11 @@ async function open(kind: typeof action.value) {
     }
   }
   if (kind === "scan") {
-    error.value = validateScan(scan.value) ?? "";
+    error.value =
+      validateScan(
+        scan.value,
+        sources.value.map((s) => ({ id: s.id, listUrl: s.listUrl ?? "" })),
+      ) ?? "";
     if (scanBlocked.value)
       error.value = "来源停用、执行中或被锁占用，请重新查询来源状态。";
     if (error.value) {
@@ -279,7 +311,10 @@ async function execute(reason: string) {
     } else {
       let result: AcceptedRequest;
       if (action.value === "scan") {
-        const issue = validateScan(scan.value);
+        const issue = validateScan(
+          scan.value,
+          sources.value.map((s) => ({ id: s.id, listUrl: s.listUrl ?? "" })),
+        );
         if (issue || scanBlocked.value)
           throw new Error(issue ?? "来源不可执行");
         result = await service.value.scan({
@@ -471,6 +506,20 @@ watch(() => route.fullPath, load, { immediate: true });
     <section v-if="accepted" class="panel console-pad" aria-live="polite">
       <h2>{{ statusText }}</h2>
       <p>请求 {{ accepted.requestId }} · {{ accepted.message }}</p>
+      <p>
+        栏目 {{ accepted.channelId ?? "未提供" }} · 阶段
+        {{ accepted.phase ?? "兼容扫描" }}
+      </p>
+      <details v-if="accepted.taskProgress || accepted.budgetUsage">
+        <summary>任务阶段与实际预算</summary>
+        <pre class="notice-text">{{
+          JSON.stringify(
+            { progress: accepted.taskProgress, budget: accepted.budgetUsage },
+            null,
+            2,
+          )
+        }}</pre>
+      </details>
       <p v-if="accepted.error || accepted.errorCode" role="alert">
         {{ accepted.errorCode }} {{ accepted.error }}
       </p>
@@ -503,8 +552,9 @@ watch(() => route.fullPath, load, { immediate: true });
       >
     </section>
     <template v-if="isSources">
+      <SourceChannels v-if="!example" @changed="load" />
       <section class="panel console-pad">
-        <h2>已实现的固定来源</h2>
+        <h2>服务端注册来源</h2>
         <p class="field-help">
           每天北京时间 09:00、18:00 调度。frequency 仅表示最小调度间隔，不编辑
           cron。来源停用将在下一次请求前停止，不杀进程。
@@ -516,12 +566,8 @@ watch(() => route.fullPath, load, { immediate: true });
         <p v-if="sourceStatus === 'ready' && !sources.length">
           来源列表为空，请核对服务配置。
         </p>
-        <div
-          v-for="source in fixedSources"
-          :key="source.id"
-          class="stage-editor"
-        >
-          <h3>{{ source.publisher }}</h3>
+        <div v-for="source in sources" :key="source.id" class="stage-editor">
+          <h3>{{ source.title }}</h3>
           <p class="field-help">{{ source.id }} · {{ source.listUrl }}</p>
           <template
             v-for="row in sources.filter((s) => s.id === source.id)"
@@ -531,7 +577,7 @@ watch(() => route.fullPath, load, { immediate: true });
               {{ availabilityLabels[row.availability] }}
             </p>
             <ElButton :disabled="busy" @click="chooseSource(row.id)"
-              >配置{{ source.publisher }}</ElButton
+              >配置{{ source.title }}</ElButton
             ><RouterLink
               v-if="row.lastRunId"
               :to="link('/ingestion/runs/' + row.lastRunId)"
@@ -593,14 +639,37 @@ watch(() => route.fullPath, load, { immediate: true });
           <legend>本次范围（北京时间日期）</legend>
           <div class="review-fields">
             <label
-              >扫描来源<select v-model="scan.sourceId">
+              >扫描来源<select
+                v-model="scan.sourceId"
+                aria-label="扫描来源"
+                @change="scan.channelId = undefined"
+              >
                 <option
-                  v-for="source in fixedSources"
+                  v-for="source in sources"
                   :key="source.id"
                   :value="source.id"
                 >
-                  {{ source.publisher }}
+                  {{ source.title }}
                 </option>
+              </select></label
+            ><label
+              >扫描栏目<select v-model="scan.channelId" aria-label="扫描栏目">
+                <option :value="undefined">默认栏目</option>
+                <option
+                  v-for="channel in currentSource?.channels"
+                  :key="channel.id"
+                  :value="channel.id"
+                >
+                  {{ channel.id }} · {{ channel.verificationStatus }}
+                </option>
+              </select></label
+            ><label
+              >扫描阶段<select v-model="scan.phase" aria-label="扫描阶段">
+                <option :value="undefined">兼容扫描</option>
+                <option value="fresh">新通知 fresh</option>
+                <option value="backfill">首次近一年 backfill</option>
+                <option value="revisit">已知通知 revisit</option>
+                <option value="retry">失败地址 retry</option>
               </select></label
             ><label
               >单通知 URL（可选）<input
@@ -608,8 +677,17 @@ watch(() => route.fullPath, load, { immediate: true });
                 aria-label="单通知 URL"
                 placeholder="仅所选来源 HTTPS 同源"
             /></label>
-            <label>开始日期<input v-model="scan.from" type="date" /></label
-            ><label>结束日期<input v-model="scan.to" type="date" /></label>
+            <label
+              >开始日期<input
+                v-model="scan.from"
+                :disabled="scan.phase === 'backfill'"
+                type="date" /></label
+            ><label
+              >结束日期<input
+                v-model="scan.to"
+                :disabled="scan.phase === 'backfill'"
+                type="date"
+            /></label>
           </div>
           <label class="preview-ack"
             ><input
@@ -618,6 +696,9 @@ watch(() => route.fullPath, load, { immediate: true });
             />只请求扫描预览，不写采集业务数据</label
           >
         </fieldset>
+        <p v-if="scan.phase === 'backfill'" class="field-help">
+          首次近一年固定范围：{{ backfillRange }}；续跑沿用原任务范围。
+        </p>
         <p v-if="currentSource" class="field-help">
           {{
             availabilityLabels[currentSource.availability]
@@ -645,11 +726,11 @@ watch(() => route.fullPath, load, { immediate: true });
           >
             <option value="">全部来源</option>
             <option
-              v-for="source in fixedSources"
+              v-for="source in sources"
               :key="source.id"
               :value="source.id"
             >
-              {{ source.publisher }}
+              {{ source.title }}
             </option>
           </select></label
         >
@@ -659,7 +740,7 @@ watch(() => route.fullPath, load, { immediate: true });
         :items="
           state.items.map((r) => ({
             ...r,
-            secondary: fixedSources.find((s) => s.id === r.sourceId)?.publisher,
+            secondary: sources.find((s) => s.id === r.sourceId)?.title,
           }))
         "
         :total="state.total"
@@ -689,6 +770,11 @@ watch(() => route.fullPath, load, { immediate: true });
               state.detail.trigger
             ]
           }}
+        </p>
+        <p>
+          栏目 {{ state.detail.channelId ?? "旧运行未提供" }} · 阶段
+          {{ state.detail.phase ?? "兼容扫描" }} · 任务
+          {{ state.detail.taskId ?? "未提供" }}
         </p>
         <h3>原始范围（续跑不可修改）</h3>
         <p>

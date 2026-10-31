@@ -50,6 +50,9 @@ function mapRun(run: Schema["IngestionRunDto"]): IngestionRun {
     status: run.status,
     date: run.startedAt,
     sourceId: run.sourceId,
+    channelId: run.channelId,
+    phase: run.phase,
+    taskId: run.taskId,
     range: {
       from: run.options.from ?? "",
       to: run.options.to ?? "",
@@ -72,6 +75,10 @@ function mapRun(run: Schema["IngestionRunDto"]): IngestionRun {
 function mapRequest(value: Schema["IngestionRequestDto"]): AcceptedRequest {
   return {
     requestId: value.requestId,
+    channelId: value.channelId,
+    phase: value.phase,
+    taskProgress: value.taskProgress,
+    budgetUsage: value.budgetUsage,
     state: value.status,
     ...(value.runId ? { runId: value.runId } : {}),
     message:
@@ -186,6 +193,9 @@ export function createControlService(
       );
       return rows.map((row) => ({
         id: row.id,
+        listUrl: row.listUrl,
+        collegeId: row.collegeId,
+        channels: row.channelStates,
         title: row.publisher,
         status: row.enabled ? "enabled" : "disabled",
         date: row.latestRun?.startedAt ?? "",
@@ -220,9 +230,10 @@ export function createControlService(
       );
     },
     async scan(input) {
-      const { url, ...body } = input;
+      const { url, from, to, ...body } = input;
       return submit(`${ingestion}/scans`, {
         ...body,
+        ...(input.phase === "backfill" ? {} : { from, to }),
         ...(url ? { url } : {}),
       } satisfies Schema["ScanDto"]);
     },
@@ -253,8 +264,18 @@ export function createReviewService(http: Transport): ReviewService {
     async list(kind, query) {
       if (kind !== "candidates")
         throw new ConsoleError(400, "请使用通知追溯入口");
+      const params = pageParams(query);
+      for (const key of [
+        "classification",
+        "kind",
+        "needsReview",
+        "collegeId",
+        "channelId",
+        "attachmentStatus",
+      ] as const)
+        if (query[key]) params.set(key, query[key]);
       const result = await http.request<Schema["AdminCandidateListDto"]>(
-        `${ingestion}/candidates?${pageParams(query)}`,
+        `${ingestion}/candidates?${params}`,
       );
       return {
         total: result.total,
@@ -263,7 +284,7 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          secondary: row.sourceId,
+          secondary: `${row.sourceId} · ${row.classification} · ${row.data.fields.kind} · ${row.needsReview ? "需复核" : "已核对"}`,
         })),
       };
     },
@@ -285,6 +306,11 @@ export function createReviewService(http: Transport): ReviewService {
         throw new ConsoleError(409, "历史正文只读，请从通知追溯入口查看。");
       return {
         id,
+        noticeId: detail.noticeId,
+        classification: detail.classification,
+        ruleVersion: detail.ruleVersion,
+        classificationHistory: detail.classificationHistory,
+        extractionRevisions: detail.extractionRevisions,
         title: file.article.title,
         status: detail.status,
         date: detail.updatedAt,
@@ -319,6 +345,12 @@ export function createReviewService(http: Transport): ReviewService {
         token: result.previewId,
         changes: result.changes,
       };
+    },
+    async classify(id, body) {
+      await http.request(idPath("candidates", id) + "/classification", {
+        method: "POST",
+        body,
+      });
     },
     async change(action, material, reason, operationId, receipt, options) {
       const base = idPath("candidates", material.candidateId);

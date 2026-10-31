@@ -9,6 +9,41 @@ import {
 } from "../console/ingestion-control";
 import { ConsoleError } from "../console/resource";
 import { exampleControl } from "../console/ingestion-control-examples";
+it("扫描选项使用服务端注册来源，不保留固定两院限制", async () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/ingestion/sources", component: IngestionControlView }],
+  });
+  await router.push("/ingestion/sources");
+  const original = (await exampleControl.sources())[0]!;
+  const wrapper = mount(IngestionControlView, {
+    global: {
+      plugins: [router, ElementPlus],
+      provide: {
+        [ingestionControlKey as symbol]: {
+          ...exampleControl,
+          sources: async () => [
+            {
+              ...original,
+              id: "registered-new",
+              title: "新登记学院",
+              listUrl: "https://new.example.edu/list",
+              channels: [],
+            },
+          ],
+        },
+      },
+    },
+  });
+  await flushPromises();
+  expect(wrapper.get('select[aria-label="扫描来源"]').text()).toContain(
+    "新登记学院",
+  );
+  expect(wrapper.get('select[aria-label="扫描来源"]').text()).not.toContain(
+    "信息工程学院",
+  );
+  wrapper.unmount();
+});
 it("无运行的中断请求可恢复原受理范围，终态恢复不继续自动轮询", async () => {
   vi.useFakeTimers();
   const router = createRouter({
