@@ -58,10 +58,11 @@ export async function transaction<T>(
   }
 }
 export async function initializeSources(pool: Pool) {
+  // 新来源默认停用；只有迁移前已存在的来源沿用旧的默认启用语义，已有行不被重置。
   for (const source of sources)
     await pool.query(
-      "INSERT INTO ingestion_sources(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
-      [source.id, source],
+      "INSERT INTO ingestion_sources(id,data,enabled) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
+      [source.id, source, !!source.legacyDefaultEnabled],
     );
   await initializeChannels(pool);
 }
