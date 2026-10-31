@@ -1,5 +1,8 @@
 .worktrees/
 .codex/
+# WorkBuddy 本地工作区数据与 ACL 恢复报告不参与仓库格式检查
+.workbuddy-ai/
+.acl-recovery/
 .pnpm-store/
 node_modules/
 dist/
