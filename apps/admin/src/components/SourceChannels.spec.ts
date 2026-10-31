@@ -162,3 +162,36 @@ it("没有注册来源时仍展示学院目录，而不是把目录当成可执�
   expect(wrapper.findAll("option")).toHaveLength(0);
   wrapper.unmount();
 });
+it("会话失效后不再读取目录与栏目，退出时不打无意义请求", async () => {
+  const request = vi.fn().mockResolvedValue([]);
+  const { adminHttp } = await import("../runtime");
+  const session = adminHttp.state.session;
+  const ready = adminHttp.state.ready;
+  adminHttp.state.session = null;
+  adminHttp.state.ready = true;
+  try {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/source", component: SourceChannels }],
+    });
+    await router.push("/source");
+    const wrapper = mount(
+      { template: "<RouterView />" },
+      {
+        global: {
+          plugins: [router, ElementPlus],
+          provide: {
+            [operationsKey as symbol]: createOperationsService({ request }),
+          },
+        },
+        attachTo: document.body,
+      },
+    );
+    await flushPromises();
+    expect(request).not.toHaveBeenCalled();
+    wrapper.unmount();
+  } finally {
+    adminHttp.state.session = session;
+    adminHttp.state.ready = ready;
+  }
+});

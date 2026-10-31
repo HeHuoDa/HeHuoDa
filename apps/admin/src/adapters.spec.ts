@@ -21,8 +21,22 @@ it("未创建运行的中断受理按原请求ID恢复，不传新的扫描参�
 });
 afterEach(() => sessionStorage.removeItem("hh-admin-ingestion"));
 it("候选查询分开传递规则分类与审核状态，并保留栏目与附件筛选", async () => {
-  const request = vi.fn().mockResolvedValue({ items: [], total: 0 });
-  await createReviewService({ request }).list("candidates", {
+  const request = vi.fn().mockResolvedValue({
+    items: [
+      {
+        candidateId: "candidate-1",
+        status: "pending",
+        fetchedAt: "2026-10-30T06:14:00Z",
+        sourceId: "life-sciences",
+        classification: "definite",
+        needsReview: true,
+        article: { title: "校内选拔通知" },
+        data: { fields: { kind: "registration" } },
+      },
+    ],
+    total: 1,
+  });
+  const result = await createReviewService({ request }).list("candidates", {
     q: "",
     page: 1,
     pageSize: 10,
@@ -46,6 +60,10 @@ it("候选查询分开传递规则分类与审核状态，并保留栏目与附�
     channelId: "default",
     attachmentStatus: "blocked",
   });
+  // 列表摘要与筛选器使用同一套中文标签，不暴露规则枚举值。
+  expect(result.items[0]!.secondary).toBe(
+    "life-sciences · 明确赛事 · 报名通知 · 需复核",
+  );
 });
 it("身份核实后Cookie变化导致403时仍保留原操作恢复线索", async () => {
   const request = vi

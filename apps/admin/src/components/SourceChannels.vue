@@ -119,6 +119,8 @@ async function select(event: Event) {
   } else (event.target as HTMLSelectElement).value = selection.value;
 }
 async function load() {
+  // 退出或会话失效后不再发起目录与栏目读取。
+  if (adminHttp.state.ready && !adminHttp.state.session) return;
   const turn = ++epoch;
   loading.value = true;
   loaded.value = false;
