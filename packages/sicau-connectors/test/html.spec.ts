@@ -240,6 +240,13 @@ describe("来源适配器的离线页面", () => {
     expect(isCompetitionNotice("程序设计竞赛报名通知")).toBe(true);
     expect(containsApplicantList("程序设计竞赛报名人员名单")).toBe(true);
     expect(containsApplicantList("竞赛参赛名单")).toBe(true);
+    expect(containsApplicantList("报名信息汇总表")).toBe(true);
+    // 「准确、完整填写报名信息」是报名说明，不是报名者名单。
+    expect(
+      containsApplicantList(
+        "请在大赛平台准确、完整填写报名信息，并上传参赛材料",
+      ),
+    ).toBe(false);
   });
   it("正文外的官方附件列表仍记录链接，不读取附件内容", () => {
     const html =

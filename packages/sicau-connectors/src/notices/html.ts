@@ -62,7 +62,8 @@ function checkPage(html: string) {
 export const isCompetitionNotice = (title: string) =>
   /竞赛|比赛|大赛|挑战杯|创新创业|互联网\s*\+/.test(title);
 export const containsApplicantList = (title: string) =>
-  /报名(?:者|人员|学生)?(?:信息|名单|汇总)|参赛(?:者|人员|学生)?名单/.test(
+  // 「填写报名信息」这类普通表述不算名单；只有名单、汇总或信息表才按个人资料拦截。
+  /报名(?:者|人员|学生)?(?:名单|汇总)|报名(?:者|人员|学生)?信息(?:表|汇总)|参赛(?:者|人员|学生)?名单/.test(
     title,
   );
 export function extractList(
