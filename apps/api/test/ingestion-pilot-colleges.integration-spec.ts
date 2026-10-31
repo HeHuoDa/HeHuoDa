@@ -26,6 +26,19 @@ const artsPage = (rows: string) =>
   `<div id="newlist"><ul>${rows}</ul></div><div class="pb_sys_common"><span class="p_t">共310条</span><span class="p_pages"><span class="p_next_d p_fun_d">下页</span></span></div>`;
 const artsArticle = (title: string) =>
   `<div id="mainContent"><div id="newscontent"><div id="newsconttitle"><h1>${title}</h1><p>2026-10-26 10:00:00 来源: </p></div><div id="newcontent"><div id="vsb_content"><div class="v_news_content">${body(title)}</div></div></div></div><div id="articeBottom"></div><ul style="list-style-type:none;"><li>附件【<a href="/system/_content/download.jsp?urltype=news.DownloadAttachUrl&owner=2">附件：报名表.xlsx</a>】</li></ul></div>`;
+// 农学院列表把日期拆成「日」和「年-月」两块，用于验证 listDatePattern 驱动范围过滤。
+const agriculture = sources.find((source) => source.id === "agriculture")!;
+const agricultureRow = (
+  id: number,
+  title: string,
+  day: string,
+  yearMonth: string,
+) =>
+  `<li class="cleafix" id="line_u8_${id}"><a href="../info/1269/${id}.htm" title="${title}"><div class="list-data fl"><p class="day">${day}</p><p class="year">${yearMonth}</p></div><div class="list-box fr"><div class="list-boxfl"><h2>${title}</h2></div></div></a></li>`;
+const agriculturePage = (rows: string) =>
+  `<ul class="list cleafix">${rows}</ul><div class="pb_sys_common"><span class="p_pages"><span class="p_next_d p_fun_d">下页</span></span></div>`;
+const agricultureArticle = (title: string, date: string) =>
+  `<form name="_newscontent_fromname"><div class="con_nav"><h2>${title}</h2><div class="ly">时间:${date}</div><div id="vsb_content_7" class="hznr"><div class="v_news_content">${body(title)}</div></div></div></form>`;
 
 describe("四院试点新来源的隔离库扫描", () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -43,11 +56,11 @@ describe("四院试点新来源的隔离库扫描", () => {
     await initializeSources(db.pool);
     await db.pool.query(
       "UPDATE ingestion_sources SET enabled=true WHERE id = ANY($1)",
-      [[science.id, artsMedia.id]],
+      [[science.id, artsMedia.id, agriculture.id]],
     );
     await db.pool.query(
       "UPDATE ingestion_channels SET enabled=true,verification_status='verified',activated_on='2026-10-31' WHERE source_id = ANY($1)",
-      [[science.id, artsMedia.id]],
+      [[science.id, artsMedia.id, agriculture.id]],
     );
   });
   function scanner(pages: Record<string, string>, requests: string[]) {
@@ -171,5 +184,47 @@ describe("四院试点新来源的隔离库扫描", () => {
       )
     ).rows[0];
     expect(row).toEqual({ title, published: "2026-10-26" });
+  });
+  it("农学院按「日 + 年-月」过滤范围，超期通知在 backfill 才入库", async () => {
+    const recent = "2026年近期竞赛报名通知";
+    const older = "2026年早期竞赛报名通知";
+    const pages = {
+      [agriculture.listUrl]: agriculturePage(
+        agricultureRow(100, recent, "22", "2026-10") +
+          agricultureRow(101, older, "22", "2026-03"),
+      ),
+      "https://nxy.sicau.edu.cn/info/1269/100.htm": agricultureArticle(
+        recent,
+        "2026-10-22",
+      ),
+      "https://nxy.sicau.edu.cn/info/1269/101.htm": agricultureArticle(
+        older,
+        "2026-03-22",
+      ),
+    };
+    const runner = scanner(pages, []);
+    expect(
+      await runner.scan({ sourceId: agriculture.id, phase: "fresh" }),
+    ).toMatchObject({ status: "succeeded" });
+    const afterFresh = await db.pool.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM ingestion_notices WHERE source_id=$1",
+      [agriculture.id],
+    );
+    expect(afterFresh.rows[0].count).toBe(1);
+    expect(
+      await runner.scan({ sourceId: agriculture.id, phase: "backfill" }),
+    ).toMatchObject({ status: "succeeded" });
+    const dates = await db.pool.query<{ published: string }>(
+      `SELECT v.article->>'publishedAt' AS published
+         FROM ingestion_notices n
+         JOIN ingestion_versions v ON v.id = n.latest_version
+        WHERE n.source_id = $1
+        ORDER BY published`,
+      [agriculture.id],
+    );
+    expect(dates.rows.map((row) => row.published)).toEqual([
+      "2026-03-22",
+      "2026-10-22",
+    ]);
   });
 });
