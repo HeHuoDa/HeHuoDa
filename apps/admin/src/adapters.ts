@@ -8,6 +8,7 @@ import {
   type AcceptedRequest,
 } from "./console/ingestion-control";
 import type { ReviewService, ReviewInput } from "./console/review";
+import { classificationLabels, kindLabels } from "./console/review";
 import { ConsoleError, type PageQuery } from "./console/resource";
 type Transport = Pick<AdminHttp, "request">;
 const ingestion = "/ingestion";
@@ -306,7 +307,7 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          secondary: `${row.sourceId} · ${row.classification} · ${row.data.fields.kind} · ${row.needsReview ? "需复核" : "已核对"}`,
+          secondary: `${row.sourceId} · ${classificationLabels[row.classification]} · ${kindLabels[row.data.fields.kind]} · ${row.needsReview ? "需复核" : "已核对"}`,
         })),
       };
     },

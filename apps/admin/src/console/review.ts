@@ -174,6 +174,19 @@ export const reviewStates: Record<CandidateStatus, string> = {
   rejected: "已拒绝",
   imported: "已导入，发布另行确认",
 };
+export type RuleClassification = "definite" | "suspected" | "non_competition";
+export type NoticeKind = "registration" | "supplement" | "award" | "news";
+export const classificationLabels: Record<RuleClassification, string> = {
+  definite: "明确赛事",
+  suspected: "疑似赛事",
+  non_competition: "非赛事",
+};
+export const kindLabels: Record<NoticeKind, string> = {
+  registration: "报名通知",
+  supplement: "变更补充",
+  award: "获奖公示",
+  news: "新闻回顾",
+};
 export const unavailableReview: ReviewService = {
   async list() {
     throw new ServiceUnavailable(

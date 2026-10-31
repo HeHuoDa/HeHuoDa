@@ -32,6 +32,8 @@ import {
   type ReviewInput,
   type ReviewSummary,
   type ReviewService,
+  classificationLabels,
+  kindLabels,
 } from "../console/review";
 import { toReviewDraft, serializeReviewDraft } from "../console/review-draft";
 import {
@@ -63,17 +65,6 @@ const service = computed(() =>
     ? (exampleService.value ?? unavailableReview)
     : (injected ?? unavailableReview),
 );
-const classifications = {
-  definite: "明确赛事",
-  suspected: "疑似赛事",
-  non_competition: "非赛事",
-};
-const kinds = {
-  registration: "报名通知",
-  supplement: "变更补充",
-  award: "获奖公示",
-  news: "新闻回顾",
-};
 const attachmentStates = {
   pending: "待获取",
   extracted: "已提取",
@@ -85,12 +76,12 @@ const attachmentStates = {
 const query = computed(() => ({
   ...readQuery(route.query, reviewStates),
   classification: Object.hasOwn(
-    classifications,
+    classificationLabels,
     String(route.query.classification),
   )
     ? String(route.query.classification)
     : "",
-  kind: Object.hasOwn(kinds, String(route.query.kind))
+  kind: Object.hasOwn(kindLabels, String(route.query.kind))
     ? String(route.query.kind)
     : "",
   needsReview: ["true", "false"].includes(String(route.query.needsReview))
@@ -532,7 +523,7 @@ async function executeClassification(reason: string) {
         >
           <option value="">全部分类</option>
           <option
-            v-for="(label, key) in classifications"
+            v-for="(label, key) in classificationLabels"
             :key="key"
             :value="key"
           >
@@ -547,7 +538,7 @@ async function executeClassification(reason: string) {
           @change="filter('kind', $event)"
         >
           <option value="">全部类型</option>
-          <option v-for="(label, key) in kinds" :key="key" :value="key">
+          <option v-for="(label, key) in kindLabels" :key="key" :value="key">
             {{ label }}
           </option>
         </select></label
@@ -631,7 +622,8 @@ async function executeClassification(reason: string) {
         <h2 class="detail-heading">{{ state.detail.title }}</h2>
         <template v-if="state.detail.classification">
           <p>
-            赛事分类：{{ classifications[state.detail.classification] }} · 规则
+            赛事分类：{{ classificationLabels[state.detail.classification] }} ·
+            规则
             {{ state.detail.ruleVersion }}
           </p>
           <details>
@@ -654,7 +646,7 @@ async function executeClassification(reason: string) {
               :disabled="pending || stale || classifyDialog"
             >
               <option
-                v-for="(label, key) in classifications"
+                v-for="(label, key) in classificationLabels"
                 :key="key"
                 :value="key"
               >

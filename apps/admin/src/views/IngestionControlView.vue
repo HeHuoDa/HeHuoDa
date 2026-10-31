@@ -163,6 +163,8 @@ function link(path: string) {
 }
 async function load() {
   stopObserving();
+  // 退出或会话失效后不再发起读取，避免跳转登录前打出无意义 401。
+  if (adminHttp.state.ready && !adminHttp.state.session) return;
   unresolved.value = service.value.pendingOperation?.() ?? "";
   const current = ++epoch;
   ++requestEpoch;
