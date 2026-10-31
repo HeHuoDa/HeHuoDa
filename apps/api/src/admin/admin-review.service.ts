@@ -352,7 +352,21 @@ export class AdminReviewService {
       const row = result.rows[0];
       if (!row) throw new NotFoundException();
       const attachmentState = await this.attachmentState(client, noticeId);
+      const channels = await client.query<{
+        sourceId: string;
+        channelId: string;
+        firstDiscoveredAt: Date;
+        lastDiscoveredAt: Date;
+      }>(
+        `SELECT source_id AS "sourceId",channel_id AS "channelId",first_discovered_at AS "firstDiscoveredAt",last_discovered_at AS "lastDiscoveredAt" FROM ingestion_notice_channels WHERE notice_id=$1 ORDER BY source_id,channel_id`,
+        [noticeId],
+      );
       return {
+        channels: channels.rows.map((channel) => ({
+          ...channel,
+          firstDiscoveredAt: channel.firstDiscoveredAt.toISOString(),
+          lastDiscoveredAt: channel.lastDiscoveredAt.toISOString(),
+        })),
         noticeId: row.noticeId,
         sourceId: row.sourceId,
         url: row.url,

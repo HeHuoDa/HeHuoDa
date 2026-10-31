@@ -60,6 +60,47 @@ async function setup(
   return { wrapper, router };
 }
 describe("候选审核公开交互", () => {
+  it("非赛事不能批准或导入；恢复疑似409使旧预览和确认全部失效", async () => {
+    const classify = vi
+      .fn()
+      .mockRejectedValue(new ConsoleError(409, "evidence changed"));
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async (...args) => ({
+        ...(await exampleReview.detail(...args)),
+        classification: "non_competition",
+        stateBaseline: "state-baseline",
+      }),
+      classify,
+    });
+    const approve = wrapper
+      .findAll("button")
+      .find((b) => b.text() === "批准候选 · 确认预览")!;
+    expect(approve.attributes("disabled")).toBeDefined();
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "确认修改分类")!
+      .trigger("click");
+    await flushPromises();
+    await wrapper.get("#action-reason").setValue("按原文恢复疑似");
+    await wrapper.get("form.editor-form").trigger("submit");
+    await flushPromises();
+    expect(classify).toHaveBeenCalledWith(
+      "example-candidate-2",
+      expect.objectContaining({
+        classification: "suspected",
+        baseline: "state-baseline",
+      }),
+    );
+    expect(wrapper.text()).toContain("本轮确认已失效");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((b) => b.text() === "生成导入预览")!
+        .attributes("disabled"),
+    ).toBeDefined();
+    wrapper.unmount();
+  });
   it("写入中阻止离页，失败核对后可进入其他对象", async () => {
     let rejectOld!: (reason: Error) => void;
     const { wrapper, router } = await setup("example-candidate-2", {

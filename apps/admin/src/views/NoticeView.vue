@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import AttachmentPanel from "../components/AttachmentPanel.vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { adminHttp } from "../runtime";
 import type { Schema } from "../http";
@@ -57,6 +58,11 @@ async function load() {
       versions.value = history.items;
       versionTotal.value = history.total;
       version.value = snapshot;
+      await nextTick();
+      if (route.query.paragraph)
+        document
+          .getElementById("notice-paragraph-" + route.query.paragraph)
+          ?.scrollIntoView?.({ block: "center" });
     } else {
       const result = await adminHttp.request<Schema["AdminNoticeListDto"]>(
         `/ingestion/notices?page=${page.value}&pageSize=20`,
@@ -72,9 +78,17 @@ async function load() {
   }
 }
 watch(
-  () => route.fullPath,
+  () => [
+    route.path,
+    route.query.version,
+    route.query.page,
+    route.query.versionPage,
+    route.query.preview,
+  ],
   () => {
-    versionPage.value = 1;
+    versionPage.value =
+      Number(route.query.versionPage) > 0 ? Number(route.query.versionPage) : 1;
+    page.value = Number(route.query.page) > 0 ? Number(route.query.page) : 1;
     void load();
   },
   { immediate: true },
@@ -122,7 +136,12 @@ watch(
       :total="total"
       :page-size="20"
       layout="prev, pager, next"
-      @current-change="load"
+      @current-change="
+        router.replace({
+          path: route.path,
+          query: { ...route.query, page: String(page) },
+        })
+      "
     />
   </section>
   <section v-if="detail" class="panel console-pad">
@@ -131,6 +150,18 @@ watch(
       {{ detail.source.publisher }} · 来源状态 {{ detail.health }} · 证据状态
       {{ detail.evidenceState }}
     </p>
+    <h3>发现栏目关联（同一通知与候选链）</h3>
+    <ul>
+      <li
+        v-for="channel in detail.channels"
+        :key="channel.sourceId + '/' + channel.channelId"
+      >
+        {{ channel.sourceId }} / {{ channel.channelId }} · 首次发现
+        {{ channel.firstDiscoveredAt }} · 最近发现
+        {{ channel.lastDiscoveredAt }}
+      </li>
+    </ul>
+    <p v-if="!detail.channels.length">此历史通知尚无栏目关联记录。</p>
     <a
       v-if="safeSourceUrl(detail.finalUrl)"
       :href="safeSourceUrl(detail.finalUrl)!"
@@ -150,7 +181,10 @@ watch(
         @change="
           router.replace({
             path: route.path,
-            query: { version: ($event.target as HTMLSelectElement).value },
+            query: {
+              ...route.query,
+              version: ($event.target as HTMLSelectElement).value,
+            },
           })
         "
       >
@@ -178,7 +212,18 @@ watch(
           : "历史正文，只读"
       }}
     </p>
-    <pre class="notice-text">{{ article?.text }}</pre>
+    <article
+      v-for="(paragraph, index) in article?.paragraphs"
+      :id="'notice-paragraph-' + index"
+      :key="index"
+      tabindex="-1"
+    >
+      <h4>HTML 第 {{ index + 1 }} 段</h4>
+      <pre class="notice-text">{{ paragraph }}</pre>
+    </article>
+    <pre v-if="!article?.paragraphs?.length" class="notice-text">{{
+      article?.text
+    }}</pre>
     <ul>
       <li v-for="attachment in article?.attachments" :key="attachment.url">
         <a
@@ -197,4 +242,9 @@ watch(
       }}</pre>
     </details>
   </section>
+  <AttachmentPanel
+    v-if="detail && route.query.preview !== '1'"
+    :key="detail.noticeId"
+    :notice-id="detail.noticeId"
+  />
 </template>

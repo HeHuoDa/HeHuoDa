@@ -10122,6 +10122,31 @@
           "items"
         ]
       },
+      "AdminNoticeChannelDto": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "firstDiscoveredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastDiscoveredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "sourceId",
+          "channelId",
+          "firstDiscoveredAt",
+          "lastDiscoveredAt"
+        ]
+      },
       "AdminPublicSourceDto": {
         "type": "object",
         "properties": {
@@ -10197,6 +10222,13 @@
       "AdminNoticeDetailDto": {
         "type": "object",
         "properties": {
+          "channels": {
+            "description": "实际发现该通知的栏目关联；不复制通知或候选链",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNoticeChannelDto"
+            }
+          },
           "noticeId": {
             "type": "string",
             "format": "uuid"
@@ -10285,6 +10317,7 @@
           }
         },
         "required": [
+          "channels",
           "noticeId",
           "sourceId",
           "url",
