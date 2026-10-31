@@ -39,6 +39,11 @@ test("构建入口独立完成已注册来源的公开正文抓取与候选解�
     "grassland-science": `<div class="articles_header"><div class="articles_title">2026年测试竞赛报名通知</div><div class="articles_detail">2026年10月09日 11:31</div></div><div id="vsb_content_7"><div class="v_news_content">${body}</div></div>`,
     fisheries: `<div class="art-tit"><h3>2026年测试竞赛报名通知</h3><p>发布时间：2026-10-22</p></div><div id="vsb_content_7"><div class="v_news_content">${body}</div></div>`,
     forestry: `<form name="_newscontent_fromname"><span class="title">2026年测试竞赛报名通知</span><div class="source">发布日期：2026-10-22</div><div id="vsb_content_6"><div class="v_news_content">${body}</div></div></form>`,
+    horticulture: `<form name="_newscontent_fromname"><div class="content"><h3>2026年测试竞赛报名通知</h3><span class="pr">发布日期：2026-10-21</span><div id="vsb_content_2" class="content"><div class="v_news_content">${body}</div></div></div></form>`,
+    "landscape-architecture": `<h1 class="page_box_news_title">2026年测试竞赛报名通知</h1><h2>时间：2026-10-21</h2><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
+    resources: `<form name="_newscontent_fromname"><div><h1>2026年测试竞赛报名通知</h1><div align="center">2026年10月16日</div><div id="vsb_content"><div class="v_news_content">${body}</div></div></div></form>`,
+    environment: `<h1 class="page_box_news_title">2026年测试竞赛报名通知</h1><h2>时间：2026-09-20</h2><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
+    management: `<form name="_newscontent_fromname"><div class="article_w on"><h1>2026年测试竞赛报名通知</h1><p>2026年10月18日</p><div id="vsb_content"><div class="v_news_content">${body}</div></div></div></form>`,
   };
   for (const source of sources) {
     const html = pages[source.id];

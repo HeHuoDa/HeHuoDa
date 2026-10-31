@@ -275,7 +275,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学院通知栏目前两页：当届职业规划大赛校内选拔赛、茶学技能大赛通知与团员名单公示并存；列表日期拆成「年-月」与「日」两块；已登记来源 horticulture（默认停用）",
     },
     {
       collegeId: "landscape-architecture",
@@ -304,7 +304,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：当届职业规划大赛预通知；置顶 2025 年旧条目与当届通知混排，历史页可遍历；已登记来源 landscape-architecture（默认停用）",
     },
     {
       collegeId: "resources",
@@ -333,7 +333,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第 2 页有挑战杯校内预选赛结果公示，正文未观测到附件；已登记来源 resources（默认停用），暂不开放附件主机",
     },
     {
       collegeId: "environment",
@@ -374,7 +374,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第 2 页有挑战杯校内预选赛与创新大赛网报通知；已登记来源 environment（默认停用）",
     },
     {
       collegeId: "economics",
@@ -409,7 +409,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 受阻：学生工作栏目抽样 12 条通知正文全部以站内 PDF 内嵌 iframe 发布，HTML 适配器按设计不解析 PDF，未登记可执行来源；人工入口 https://jjxy.sicau.edu.cn/sylm/xsgz.htm",
     },
     {
       collegeId: "management",
@@ -438,7 +438,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学生类栏目：第 2 页有职业规划大赛、挑战杯院内预选赛通知；列表只有「月-日 时:分」无年份，日期以正文为准；已登记来源 management（默认停用）",
     },
     {
       collegeId: "agricultural-engineering",
