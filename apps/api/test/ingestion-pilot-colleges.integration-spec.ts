@@ -39,6 +39,14 @@ const agriculturePage = (rows: string) =>
   `<ul class="list cleafix">${rows}</ul><div class="pb_sys_common"><span class="p_pages"><span class="p_next_d p_fun_d">下页</span></span></div>`;
 const agricultureArticle = (title: string, date: string) =>
   `<form name="_newscontent_fromname"><div class="con_nav"><h2>${title}</h2><div class="ly">时间:${date}</div><div id="vsb_content_7" class="hznr"><div class="v_news_content">${body(title)}</div></div></div></form>`;
+// 管理学院列表只有「月-日 时:分」没有年份，正文日期才是发布日期。
+const management = sources.find((source) => source.id === "management")!;
+const managementRow = (id: number, title: string, date: string) =>
+  `<li id="line_u6_${id}"><a href="../info/1076/${id}.htm"> <span class="leftDate">${date}</span> <span class="title" title="${title}">${title}</span> </a></li>`;
+const managementPage = (rows: string) =>
+  `<ul>${rows}</ul><div class="pb_sys_common"><span class="p_pages"><span class="p_next_d p_fun_d">下页</span></span></div>`;
+const managementArticle = (title: string, date: string) =>
+  `<form name="_newscontent_fromname"><div class="article_w on"><h1>${title}</h1><p>${date}</p><div id="vsb_content"><div class="v_news_content">${body(title)}</div></div></div></form>`;
 
 describe("四院试点新来源的隔离库扫描", () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
@@ -225,6 +233,56 @@ describe("四院试点新来源的隔离库扫描", () => {
     expect(dates.rows.map((row) => row.published)).toEqual([
       "2026-03-22",
       "2026-10-22",
+    ]);
+  });
+  it("管理学院列表无年份日期不截断分页，范围以正文日期为准", async () => {
+    const recent = "2026年近期竞赛报名通知";
+    const older = "2026年早期竞赛报名通知";
+    const pages = {
+      [management.listUrl]: managementPage(
+        managementRow(200, recent, "10-29 22:19") +
+          managementRow(201, older, "03-22 10:00"),
+      ),
+      "https://glxy.sicau.edu.cn/info/1076/200.htm": managementArticle(
+        recent,
+        "2026年10月29日",
+      ),
+      "https://glxy.sicau.edu.cn/info/1076/201.htm": managementArticle(
+        older,
+        "2026年03月22日",
+      ),
+    };
+    await db.pool.query(
+      "UPDATE ingestion_sources SET enabled=true WHERE id=$1",
+      [management.id],
+    );
+    await db.pool.query(
+      "UPDATE ingestion_channels SET enabled=true,verification_status='verified',activated_on='2026-10-31' WHERE source_id=$1",
+      [management.id],
+    );
+    const runner = scanner(pages, []);
+    expect(
+      await runner.scan({ sourceId: management.id, phase: "fresh" }),
+    ).toMatchObject({ status: "succeeded" });
+    const afterFresh = await db.pool.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM ingestion_notices WHERE source_id=$1",
+      [management.id],
+    );
+    expect(afterFresh.rows[0].count).toBe(1);
+    expect(
+      await runner.scan({ sourceId: management.id, phase: "backfill" }),
+    ).toMatchObject({ status: "succeeded" });
+    const dates = await db.pool.query<{ published: string }>(
+      `SELECT v.article->>'publishedAt' AS published
+         FROM ingestion_notices n
+         JOIN ingestion_versions v ON v.id = n.latest_version
+        WHERE n.source_id = $1
+        ORDER BY published`,
+      [management.id],
+    );
+    expect(dates.rows.map((row) => row.published)).toEqual([
+      "2026-03-22",
+      "2026-10-29",
     ]);
   });
 });

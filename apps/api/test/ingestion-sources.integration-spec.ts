@@ -2,7 +2,15 @@ import { testDatabase } from "./competition-fixture.js";
 import { initializeSources } from "../src/ingestion/store.js";
 import { sources } from "@hehuoda/sicau-connectors/notices";
 
-describe("四院试点来源在隔离库的默认状态", () => {
+// 按注册表推导：新增来源默认停用，迁移前已存在的来源沿用默认启用语义。
+const newIds = sources
+  .filter((source) => !source.legacyDefaultEnabled)
+  .map((source) => source.id);
+const legacyIds = sources
+  .filter((source) => source.legacyDefaultEnabled)
+  .map((source) => source.id);
+
+describe("注册表来源在隔离库的默认状态", () => {
   let db: Awaited<ReturnType<typeof testDatabase>>;
   beforeAll(async () => {
     db = await testDatabase();
@@ -12,7 +20,7 @@ describe("四院试点来源在隔离库的默认状态", () => {
     await db?.close();
   });
 
-  it("新增两院默认停用且栏目待核验，原两院沿用默认启用语义", async () => {
+  it("新增来源默认停用且栏目待核验，原两院沿用默认启用语义", async () => {
     const rows = (
       await db.pool.query<{
         id: string;
@@ -31,7 +39,7 @@ describe("四院试点来源在隔离库的默认状态", () => {
       sources.map((entry) => entry.id).sort(),
     );
 
-    for (const id of ["science", "arts-media"]) {
+    for (const id of newIds) {
       expect(rows.find((row) => row.id === id)).toEqual({
         id,
         enabled: false,
@@ -40,7 +48,7 @@ describe("四院试点来源在隔离库的默认状态", () => {
         activated_on: null,
       });
     }
-    for (const id of ["information-engineering", "life-sciences"]) {
+    for (const id of legacyIds) {
       const row = rows.find((entry) => entry.id === id);
       expect(row).toMatchObject({ enabled: true, channel_enabled: true });
       expect(row?.activated_on).not.toBeNull();
@@ -50,12 +58,12 @@ describe("四院试点来源在隔离库的默认状态", () => {
   it("新增来源的栏目预算随来源默认值初始化，未启用时不产生扫描任务", async () => {
     const tasks = await db.pool.query<{ count: string }>(
       "SELECT count(*)::text AS count FROM ingestion_scan_tasks WHERE source_id = ANY($1)",
-      [["science", "arts-media"]],
+      [newIds],
     );
     expect(tasks.rows[0].count).toBe("0");
     const runs = await db.pool.query<{ count: string }>(
       "SELECT count(*)::text AS count FROM ingestion_runs WHERE source_id = ANY($1)",
-      [["science", "arts-media"]],
+      [newIds],
     );
     expect(runs.rows[0].count).toBe("0");
   });
