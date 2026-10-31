@@ -87,7 +87,7 @@ API 继续负责数据库锁、任务调度、游标和恢复链、运行记录�
 
 ### 多栏目底座与持续扫描（#174）
 
-`Source` 增加目录 `collegeId`、`defaultChannelId` 和只读 `channels`。稳定来源 ID、旧 `listUrl`、适配版本和 Article 返回结构保持兼容：`life-sciences` 仍是来源 ID，对应目录学院 `life-science`。不传栏目时，`extractList`／`extractArticle` 使用默认栏目；第四个参数可选择该来源已注册的栏目 ID。当前正式注册为四院试点与批次一：原两院默认栏目，理学院（`science`）、艺术与传媒学院（`arts-media`），以及批次一的农学院（`agriculture`）、动物科技学院（`animal-science`）、动物医学院（`veterinary-medicine`）、草业科技学院（`grassland-science`）、水产学院（`fisheries`）、林学院（`forestry`），各一个默认栏目。新增来源不带 `legacyDefaultEnabled`，默认停用，须在管理端登记栏目核验后才能启用；同站第二栏目的支持通过最小离线样例验证。
+`Source` 增加目录 `collegeId`、`defaultChannelId` 和只读 `channels`。稳定来源 ID、旧 `listUrl`、适配版本和 Article 返回结构保持兼容：`life-sciences` 仍是来源 ID，对应目录学院 `life-science`。不传栏目时，`extractList`／`extractArticle` 使用默认栏目；第四个参数可选择该来源已注册的栏目 ID。当前正式注册为四院试点、批次一与批次二：原两院默认栏目，理学院（`science`）、艺术与传媒学院（`arts-media`），批次一的农学院（`agriculture`）、动物科技学院（`animal-science`）、动物医学院（`veterinary-medicine`）、草业科技学院（`grassland-science`）、水产学院（`fisheries`）、林学院（`forestry`），批次二的园艺学院（`horticulture`）、风景园林学院（`landscape-architecture`）、资源学院（`resources`）、环境学院（`environment`）、管理学院（`management`），各一个默认栏目。经济学院（`economics`）学生工作栏目抽样 12 条通知正文全部以站内 PDF 内嵌发布，HTML 适配器按设计不解析 PDF，暂不登记，保留人工入口。新增来源不带 `legacyDefaultEnabled`，默认停用，须在管理端登记栏目核验后才能启用；同站第二栏目的支持通过最小离线样例验证。
 
 `vsb-selectors` 适配器以仓库中的选择器、通知路径、分页路径和日期规则解析页面，不再按学院名称分支。默认使用 next-link；可配置 `pagination.mode=numbered`，从两个明确选择器读取当前／总页数，再生成路径模板或查询参数。`datePattern` 的前三个捕获组分别为完整年、月、日，缺年份仍未知。配置在模块载入时校验；新增配置必须经代码审阅，管理写接口不能修改主机、选择器、路径和适配器。管理来源查询的 OpenAPI 同步声明这些只读定义。
 
@@ -168,7 +168,7 @@ CLI 可在旧 `scan` 上追加 `--channel <id> --phase fresh|backfill|revisit|re
 
 ## 后续实施前置与验证
 
-公开通知抽包覆盖四院试点与批次一来源，以离线测试和隔离数据库验证解析、证据、去重、版本、续跑、审核与发布行为。数据库和正式比赛查询契约不因抽包改变。
+公开通知抽包覆盖四院试点、批次一与批次二来源，以离线测试和隔离数据库验证解析、证据、去重、版本、续跑、审核与发布行为。数据库和正式比赛查询契约不因抽包改变。
 
 认证前置证据与本轮用户确认见上文。后续真实账号复测仍需要单独授权且由用户手填验证码；包测试及镜像 smoke 均不请求学校。平台 API、小程序核验界面和正式开放分别由 #135/#136/#140 负责。无法可靠确认成功或取得稳定标识时，不启用正式校园核验，不用前端自报或页面提示代替。
 
