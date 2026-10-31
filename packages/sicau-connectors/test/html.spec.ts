@@ -19,6 +19,18 @@ import {
   scienceArticle,
   artsMediaList,
   artsMediaArticle,
+  agricultureList,
+  agricultureArticle,
+  animalScienceList,
+  animalScienceArticle,
+  veterinaryList,
+  veterinaryArticle,
+  grasslandList,
+  grasslandArticle,
+  fisheriesList,
+  fisheriesArticle,
+  forestryList,
+  forestryArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -28,6 +40,22 @@ describe("来源适配器的离线页面", () => {
     ).toBe("2026-10-28");
     expect(publishedDate("20260230", "(20\\d{2})(\\d{2})(\\d{2})")).toBeNull();
     expect(publishedDate("10-28")).toBeNull();
+  });
+  it("列表日期分块顺序不同时用命名组，缺组配置在加载时拒绝", () => {
+    expect(
+      publishedDate(
+        "22\n2026-03",
+        "(?<day>\\d{1,2})\\s*(?<year>20\\d{2})\\s*-\\s*(?<month>\\d{1,2})",
+      ),
+    ).toBe("2026-03-22");
+    const source = sources[2];
+    const channel = channelById(source);
+    expect(() =>
+      validateSource({
+        ...source,
+        channels: [{ ...channel, listDatePattern: "(?<day>\\d{1,2})" }],
+      }),
+    ).toThrow("配置");
   });
   it.each(["query", "path"] as const)(
     "复用%s页码分页规则，保持业务参数且不猜缺失日期",
@@ -431,5 +459,98 @@ describe("来源适配器的离线页面", () => {
         sources[3],
       ),
     ).toThrow(/分页|路径/);
+  });
+  it("批次一新增六院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "agriculture",
+        list: agricultureList,
+        article: agricultureArticle,
+        listDate: "2026-03-22",
+        articleDate: "2026-03-22",
+        attachments: 1,
+        next: "https://nxy.sicau.edu.cn/sqyr1/cxcy/2.htm",
+        skipped: 0,
+      },
+      {
+        id: "animal-science",
+        list: animalScienceList,
+        article: animalScienceArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: null,
+        skipped: 0,
+      },
+      {
+        id: "veterinary-medicine",
+        list: veterinaryList,
+        article: veterinaryArticle,
+        listDate: "2026-10-28",
+        articleDate: "2026-10-28",
+        attachments: 1,
+        next: "https://dyy.sicau.edu.cn/xwzx1/tzgg/9.htm",
+        skipped: 0,
+      },
+      {
+        id: "grassland-science",
+        list: grasslandList,
+        article: grasslandArticle,
+        listDate: null,
+        articleDate: "2026-10-09",
+        attachments: 1,
+        next: "https://cgst.sicau.edu.cn/index/tzgg/xsl/52.htm",
+        skipped: 1,
+      },
+      {
+        id: "fisheries",
+        list: fisheriesList,
+        article: fisheriesArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://scxy.sicau.edu.cn/index/tzgg/2.htm",
+        skipped: 0,
+      },
+      {
+        id: "forestry",
+        list: forestryList,
+        article: forestryArticle,
+        listDate: "2026-05-09",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://lxy.sicau.edu.cn/index/tzgg/27.htm",
+        skipped: 0,
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(entry.skipped);
+      const article = extractArticle(entry.article, page.items[0].url, source);
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+    }
+  });
+  it("草业科技学院把站外转载记为跳过原因，不当作采集失败", () => {
+    const source = sources.find((item) => item.id === "grassland-science")!;
+    const page = extractList(grasslandList, source.listUrl, source);
+    expect(page.skipped).toEqual([
+      expect.objectContaining({ reason: expect.stringContaining("白名单") }),
+    ]);
   });
 });
