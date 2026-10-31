@@ -4,6 +4,9 @@
 # Machine-specific agent settings and credentials
 .codex/
 .claude/settings.local.json
+# WorkBuddy 本地工作区数据（记忆、会话）与 ACL 恢复报告，只存在于开发机
+.workbuddy-ai/
+.acl-recovery/
 .secrets/
 .aws/
 /deploy/state/
