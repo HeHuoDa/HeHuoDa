@@ -8,6 +8,7 @@ import {
   channelById,
   validateSource,
   publishedDate,
+  collegeVerificationCandidates,
 } from "../dist/notices/index.js";
 
 import {
@@ -31,6 +32,16 @@ import {
   fisheriesArticle,
   forestryList,
   forestryArticle,
+  horticultureList,
+  horticultureArticle,
+  landscapeList,
+  landscapeArticle,
+  resourcesList,
+  resourcesArticle,
+  environmentList,
+  environmentArticle,
+  managementList,
+  managementArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -559,5 +570,108 @@ describe("来源适配器的离线页面", () => {
     expect(page.skipped).toEqual([
       expect.objectContaining({ reason: expect.stringContaining("白名单") }),
     ]);
+  });
+  it("批次二新增五院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "horticulture",
+        list: horticultureList,
+        article: horticultureArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        items: 2,
+        next: "https://yyx.sicau.edu.cn/xyxw/xytz/1.htm",
+      },
+      {
+        id: "landscape-architecture",
+        list: landscapeList,
+        article: landscapeArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        items: 2,
+        next: "https://fjylxy.sicau.edu.cn/xwzx1/tzgg/3.htm",
+      },
+      {
+        id: "resources",
+        list: resourcesList,
+        article: resourcesArticle,
+        listDate: "2026-10-16",
+        articleDate: "2026-10-16",
+        attachments: 0,
+        items: 1,
+        next: "https://zyxy.sicau.edu.cn/sy/tzgg/64.htm",
+      },
+      {
+        id: "environment",
+        list: environmentList,
+        article: environmentArticle,
+        listDate: "2026-09-20",
+        articleDate: "2026-09-20",
+        attachments: 1,
+        items: 1,
+        next: "https://hjxy.sicau.edu.cn/xwzx1/tzgg/6.htm",
+      },
+      {
+        id: "management",
+        list: managementList,
+        article: managementArticle,
+        listDate: null,
+        articleDate: "2026-10-18",
+        attachments: 1,
+        items: 1,
+        next: "https://glxy.sicau.edu.cn/ggl/xsl/37.htm",
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(entry.items);
+      expect(page.items.at(-1)).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(0);
+      const article = extractArticle(
+        entry.article,
+        page.items.at(-1)!.url,
+        source,
+      );
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+    }
+  });
+  it("园艺学院按命名组取「年-月」与「日」两块日期", () => {
+    const source = sources.find((item) => item.id === "horticulture")!;
+    const page = extractList(horticultureList, source.listUrl, source);
+    expect(page.items.map((item) => item.publishedAt)).toEqual([
+      "2025-12-29",
+      "2026-10-21",
+    ]);
+  });
+  it("管理学院列表只有月日没有年份，列表日期留空交由正文判定", () => {
+    const source = sources.find((item) => item.id === "management")!;
+    const page = extractList(managementList, source.listUrl, source);
+    expect(page.items[0].publishedAt).toBeNull();
+    expect(
+      extractArticle(managementArticle, page.items[0].url, source).publishedAt,
+    ).toBe("2026-10-18");
+  });
+  it("经济学院正文以站内 PDF 内嵌发布，未登记为可执行来源", () => {
+    expect(sources.map((source) => source.id)).not.toContain("economics");
+    const candidate = collegeVerificationCandidates.find(
+      (entry) => entry.collegeId === "economics",
+    )!;
+    expect(candidate.note).toContain("PDF");
   });
 });
