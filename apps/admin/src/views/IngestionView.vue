@@ -63,7 +63,57 @@ const service = computed(() =>
     ? (exampleService.value ?? unavailableReview)
     : (injected ?? unavailableReview),
 );
-const query = computed(() => readQuery(route.query, reviewStates));
+const classifications = {
+  definite: "明确赛事",
+  suspected: "疑似赛事",
+  non_competition: "非赛事",
+};
+const kinds = {
+  registration: "报名通知",
+  supplement: "变更补充",
+  award: "获奖公示",
+  news: "新闻回顾",
+};
+const attachmentStates = {
+  pending: "待获取",
+  extracted: "已提取",
+  "needs-review": "需人工核对",
+  blocked: "受阻",
+  failed: "失败",
+  stale: "已过期",
+};
+const query = computed(() => ({
+  ...readQuery(route.query, reviewStates),
+  classification: Object.hasOwn(
+    classifications,
+    String(route.query.classification),
+  )
+    ? String(route.query.classification)
+    : "",
+  kind: Object.hasOwn(kinds, String(route.query.kind))
+    ? String(route.query.kind)
+    : "",
+  needsReview: ["true", "false"].includes(String(route.query.needsReview))
+    ? String(route.query.needsReview)
+    : "",
+  attachmentStatus: Object.hasOwn(
+    attachmentStates,
+    String(route.query.attachmentStatus),
+  )
+    ? String(route.query.attachmentStatus)
+    : "",
+  collegeId:
+    typeof route.query.collegeId === "string" ? route.query.collegeId : "",
+  channelId:
+    typeof route.query.channelId === "string" ? route.query.channelId : "",
+}));
+function filter(key: string, event: Event) {
+  updateQuery({
+    ...query.value,
+    [key]: (event.target as HTMLInputElement).value,
+    page: 1,
+  });
+}
 const controller = createResourceController<ReviewSummary, ReviewRecord>(),
   state = controller.state;
 const draft = ref<ReviewMaterial | null>(null),
@@ -156,6 +206,10 @@ onUnmounted(() => {
   previewEpoch++;
   window.removeEventListener("beforeunload", beforeUnload);
 });
+const classification = ref<"definite" | "suspected" | "non_competition">(
+    "suspected",
+  ),
+  classifyDialog = ref(false);
 async function load() {
   const currentLoad = ++loadEpoch;
   previewEpoch++;
@@ -166,6 +220,7 @@ async function load() {
   acknowledged.value = false;
   error.value = "";
   dialog.value = false;
+  classifyDialog.value = false;
   stale.value = false;
   pending.value = false;
   writing.value = false;
@@ -191,6 +246,8 @@ async function load() {
       initialKey.value = JSON.stringify(draft.value);
       target.value = draft.value.targetId;
       targetMode.value = draft.value.formalBefore ? "existing" : "new";
+      // 人工分类默认停在服务端当前结论，避免把未改动的下拉当作新分类提交。
+      classification.value = state.detail.classification ?? "suspected";
     }
   } else
     await controller.load(() => service.value.list(kind.value, query.value));
@@ -242,6 +299,10 @@ function can(action: ReviewAction) {
     !stale.value &&
     state.detail.material.sourceVersion === state.detail.latestVersion &&
     allowedReviewAction(state.detail.status, action) &&
+    !(
+      state.detail.classification === "non_competition" &&
+      ["approve", "import"].includes(action)
+    ) &&
     !(action === "import" && state.detail.requiresReapproval) &&
     !(
       action === "publish" &&
@@ -363,6 +424,67 @@ async function execute(reason: string) {
 async function reload() {
   if (await mayLeave()) await load();
 }
+
+let classificationCommand: {
+  id: string;
+  baseline: string;
+  classification: typeof classification.value;
+  operationId: string;
+} | null = null;
+async function openClassification() {
+  if (
+    !state.detail ||
+    !service.value.classify ||
+    state.detail.status === "imported" ||
+    pending.value ||
+    stale.value
+  )
+    return;
+  if (dirty.value && !(await mayLeave())) return;
+  previewEpoch++;
+  preview.value = null;
+  acknowledged.value = false;
+  classificationCommand = {
+    id: state.detail.id,
+    baseline: state.detail.stateBaseline!,
+    classification: classification.value,
+    operationId: crypto.randomUUID(),
+  };
+  classifyDialog.value = true;
+}
+async function executeClassification(reason: string) {
+  if (
+    !classificationCommand ||
+    !service.value.classify ||
+    stale.value ||
+    pending.value
+  )
+    throw new Error("请重新加载候选");
+  const turn = loadEpoch;
+  pending.value = true;
+  writing.value = true;
+  try {
+    const { id, ...body } = classificationCommand;
+    await service.value.classify(id, { ...body, reason });
+    if (turn === loadEpoch) {
+      initialKey.value = JSON.stringify(draft.value);
+      await load();
+    }
+  } catch (cause) {
+    if (
+      turn === loadEpoch &&
+      cause instanceof ConsoleError &&
+      cause.status === 409
+    )
+      stale.value = true;
+    throw cause;
+  } finally {
+    if (turn === loadEpoch) {
+      pending.value = false;
+      writing.value = false;
+    }
+  }
+}
 </script>
 <template>
   <div class="page-heading">
@@ -398,8 +520,77 @@ async function reload() {
         })
       "
       >{{ example ? "退出示例" : "查看独立审核示例" }}</ElButton
-    ><span>原文以纯文本显示，附件只提供安全链接。</span>
+    ><span>原文与附件证据以纯文本显示，批准、导入和发布保持独立。</span>
   </div>
+  <section v-if="!route.params.id && !example" class="panel console-pad">
+    <div class="review-fields">
+      <label
+        >赛事分类<select
+          aria-label="赛事分类"
+          :value="query.classification"
+          @change="filter('classification', $event)"
+        >
+          <option value="">全部分类</option>
+          <option
+            v-for="(label, key) in classifications"
+            :key="key"
+            :value="key"
+          >
+            {{ label }}
+          </option>
+        </select></label
+      >
+      <label
+        >通知类型<select
+          aria-label="通知类型"
+          :value="query.kind"
+          @change="filter('kind', $event)"
+        >
+          <option value="">全部类型</option>
+          <option v-for="(label, key) in kinds" :key="key" :value="key">
+            {{ label }}
+          </option>
+        </select></label
+      >
+      <label
+        >需复核<select
+          :value="query.needsReview"
+          @change="filter('needsReview', $event)"
+        >
+          <option value="">全部</option>
+          <option value="true">需复核</option>
+          <option value="false">无需复核</option>
+        </select></label
+      >
+      <label
+        >附件状态<select
+          :value="query.attachmentStatus"
+          @change="filter('attachmentStatus', $event)"
+        >
+          <option value="">全部</option>
+          <option
+            v-for="(label, key) in attachmentStates"
+            :key="key"
+            :value="key"
+          >
+            {{ label }}
+          </option>
+        </select></label
+      >
+      <label
+        >学院 ID<input
+          :value="query.collegeId"
+          @change="filter('collegeId', $event)" /></label
+      ><label
+        >栏目 ID<input
+          :value="query.channelId"
+          @change="filter('channelId', $event)"
+      /></label>
+    </div>
+    <p>
+      分类与审核状态分别筛选；报名／变更优先级由服务端提供，空队列不代表没有赛事。
+    </p>
+  </section>
   <ResourceList
     v-if="!route.params.id"
     :searchable="example"
@@ -438,6 +629,52 @@ async function reload() {
           目标核对材料已重新导出，旧批准不适用，需重新填写日期并审核。
         </p>
         <h2 class="detail-heading">{{ state.detail.title }}</h2>
+        <template v-if="state.detail.classification">
+          <p>
+            赛事分类：{{ classifications[state.detail.classification] }} · 规则
+            {{ state.detail.ruleVersion }}
+          </p>
+          <details>
+            <summary>规则修订与人工分类历史</summary>
+            <pre class="notice-text">{{
+              JSON.stringify(
+                {
+                  rules: state.detail.extractionRevisions,
+                  history: state.detail.classificationHistory,
+                },
+                null,
+                2,
+              )
+            }}</pre>
+          </details>
+          <label
+            >人工分类<select
+              v-model="classification"
+              aria-label="人工分类"
+              :disabled="pending || stale || classifyDialog"
+            >
+              <option
+                v-for="(label, key) in classifications"
+                :key="key"
+                :value="key"
+              >
+                {{ label }}
+              </option>
+            </select></label
+          >
+          <ElButton
+            :disabled="
+              pending ||
+              stale ||
+              state.detail.status === 'imported' ||
+              classification === state.detail.classification ||
+              !service.classify
+            "
+            @click="openClassification"
+            >确认修改分类</ElButton
+          >
+          <p>改为非赛事与拒绝候选分别表达；恢复疑似需重新审核。</p>
+        </template>
         <p class="field-help">
           正式平台状态：{{
             state.detail.material.formalBefore?.publication ?? "尚无正式比赛"
@@ -502,7 +739,10 @@ async function reload() {
       </p>
       <div class="review-columns">
         <div class="review-column">
-          <ReviewEvidence :file="state.detail.material" />
+          <ReviewEvidence
+            :file="state.detail.material"
+            :notice-id="state.detail.noticeId"
+          />
         </div>
         <div class="review-column">
           <section class="panel console-pad">
@@ -590,6 +830,12 @@ async function reload() {
           >
         </div>
       </section>
+      <ReasonDialog
+        v-model="classifyDialog"
+        title="人工分类（将使旧批准和预览失效）"
+        :blocked="stale"
+        :execute="executeClassification"
+      />
     </template>
   </template>
   <ReasonDialog

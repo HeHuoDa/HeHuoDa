@@ -2120,6 +2120,14 @@ export interface components {
             pageSize: number;
             items: components["schemas"]["AdminNoticeListItemDto"][];
         };
+        AdminNoticeChannelDto: {
+            sourceId: string;
+            channelId: string;
+            /** Format: date-time */
+            firstDiscoveredAt: string;
+            /** Format: date-time */
+            lastDiscoveredAt: string;
+        };
         AdminPublicSourceDto: {
             id: string;
             publisher: string;
@@ -2141,6 +2149,8 @@ export interface components {
             competitionId: string | null;
         };
         AdminNoticeDetailDto: {
+            /** @description 实际发现该通知的栏目关联；不复制通知或候选链 */
+            channels: components["schemas"]["AdminNoticeChannelDto"][];
             /** Format: uuid */
             noticeId: string;
             sourceId: string;

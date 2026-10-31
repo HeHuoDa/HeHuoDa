@@ -3,6 +3,12 @@ import { ServiceUnavailable } from "../services";
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 export interface PageQuery {
+  classification?: string;
+  kind?: string;
+  needsReview?: string;
+  collegeId?: string;
+  channelId?: string;
+  attachmentStatus?: string;
   q: string;
   status: string;
   from: string;

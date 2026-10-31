@@ -88,6 +88,48 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     };
   }
 
+  it("同一通知的两个发现栏目可追溯，仍只有一条候选链", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const detail = (
+      await test.request("GET", `admin/ingestion/candidates/${id}`, undefined, {
+        cookie: auth.cookie,
+      })
+    ).json();
+    await test.pool.query(
+      "INSERT INTO ingestion_channels(source_id,id,data) SELECT source_id,'secondary',data FROM ingestion_channels WHERE source_id=$1 AND id=$2",
+      [source.id, source.defaultChannelId],
+    );
+    await test.pool.query(
+      "INSERT INTO ingestion_notice_channels(notice_id,source_id,channel_id) VALUES($1,$2,$3),($1,$2,'secondary') ON CONFLICT DO NOTHING",
+      [detail.noticeId, source.id, source.defaultChannelId],
+    );
+    const notice = await test.request(
+      "GET",
+      `admin/ingestion/notices/${detail.noticeId}`,
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(notice.statusCode).toBe(200);
+    expect(notice.json().channels).toEqual([
+      expect.objectContaining({
+        sourceId: source.id,
+        channelId: source.defaultChannelId,
+        firstDiscoveredAt: expect.any(String),
+        lastDiscoveredAt: expect.any(String),
+      }),
+      expect.objectContaining({ sourceId: source.id, channelId: "secondary" }),
+    ]);
+    expect(notice.json().candidate.id).toBe(id);
+    const queue = await test.request(
+      "GET",
+      "admin/ingestion/candidates",
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(queue.json().total).toBe(1);
+  });
+
   it("队列按报名、其他明确、疑似、非赛事排序，学院/栏目/附件筛选可组合", async () => {
     const auth = await session();
     const ids: string[] = [];

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { safeSourceUrl, type ReviewInput } from "../console/review";
-const props = defineProps<{ file: ReviewInput }>();
+const props = defineProps<{ file: ReviewInput; noticeId?: string }>();
 const fields = computed(() => props.file.candidate.fields);
 const times = [
   ["startsAt", "报名开始"],
@@ -9,6 +9,36 @@ const times = [
   ["materialsAt", "材料截止"],
   ["eventAt", "比赛时间"],
 ] as const;
+function location(evidence: {
+  format?: string;
+  noticeVersion?: string;
+  sourceVersion?: string;
+  attachmentVersion?: string | null;
+  url: string;
+  page?: number;
+  paragraph?: number;
+}) {
+  const attachment = evidence.format === "pdf" || evidence.format === "docx";
+  const segment =
+    evidence.format === "pdf" ? evidence.page : evidence.paragraph;
+  return {
+    path: "/ingestion/notices/" + encodeURIComponent(props.noticeId!),
+    query: {
+      version:
+        evidence.noticeVersion ??
+        evidence.sourceVersion ??
+        props.file.sourceVersion,
+      ...(attachment
+        ? {
+            attachmentUrl: evidence.url,
+            attachmentVersion: evidence.attachmentVersion ?? undefined,
+            segment: String(segment ?? 1),
+            attachmentPage: String(Math.ceil((segment ?? 1) / 10)),
+          }
+        : { paragraph: String(evidence.paragraph ?? 0) }),
+    },
+  };
+}
 </script>
 <template>
   <section class="panel console-pad">
@@ -75,16 +105,50 @@ const times = [
       </div>
     </div>
     <h3>字段证据</h3>
+    <p v-if="file.candidate.classification">
+      规则 {{ file.candidate.classification.ruleVersion }} ·
+      {{ file.candidate.classification.classification }} ·
+      {{ file.candidate.classification.reasons.join("；") }}
+    </p>
+    <details
+      v-for="conflict in file.candidate.fieldConflicts"
+      :key="conflict.field"
+    >
+      <summary>{{ conflict.field }} 的冲突候选值（须人工解决）</summary>
+      <div v-for="(choice, index) in conflict.values" :key="index">
+        <pre class="notice-text">{{
+          JSON.stringify(choice.value, null, 2)
+        }}</pre>
+        <blockquote v-for="(evidence, i) in choice.evidence" :key="i">
+          <p>{{ evidence.excerpt }}</p>
+          <RouterLink v-if="noticeId" :to="location(evidence)"
+            >定位此值的版本证据</RouterLink
+          >
+        </blockquote>
+      </div>
+    </details>
     <blockquote
       v-for="(evidence, index) in file.candidate.evidence"
       :key="index"
       class="evidence-quote"
     >
       <strong
-        >{{ evidence.field }} · 第{{ evidence.paragraph }}段 ·
-        {{ evidence.sourceVersion || file.sourceVersion }}</strong
+        >{{ evidence.field }} ·
+        {{
+          evidence.format === "pdf"
+            ? "PDF 第" + evidence.page + "页"
+            : evidence.format === "docx"
+              ? "DOCX 第" + evidence.paragraph + "段"
+              : evidence.paragraph >= 0
+                ? "HTML 第" + (evidence.paragraph + 1) + "段"
+                : "标题／元数据"
+        }}
+        · {{ evidence.sourceVersion || file.sourceVersion }}</strong
       >
       <p>{{ evidence.excerpt }}</p>
+      <RouterLink v-if="noticeId" :to="location(evidence)"
+        >定位平台版本证据</RouterLink
+      >
       <a
         v-if="safeSourceUrl(evidence.url)"
         :href="safeSourceUrl(evidence.url)!"
@@ -93,6 +157,24 @@ const times = [
         >查看证据来源</a
       ><span v-else>证据链接不安全，已禁用</span>
     </blockquote>
+    <details v-if="file.evidenceReferences?.length">
+      <summary>附件／正文证据引用（不可变版本）</summary>
+      <blockquote v-for="(evidence, i) in file.evidenceReferences" :key="i">
+        <strong
+          >{{ evidence.field }} · {{ evidence.format }} ·
+          {{ evidence.attachmentVersion ?? evidence.noticeVersion }}</strong
+        >
+        <p>{{ evidence.excerpt }}</p>
+        <RouterLink v-if="noticeId" :to="location(evidence)"
+          >定位该版本
+          {{
+            evidence.page
+              ? "第" + evidence.page + "页"
+              : "第" + evidence.paragraph + "段"
+          }}</RouterLink
+        >
+      </blockquote>
+    </details>
   </section>
   <section class="panel console-pad">
     <h2>通知原文与旧版本（纯文本）</h2>

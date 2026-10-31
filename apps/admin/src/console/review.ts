@@ -6,6 +6,7 @@ import type {
 } from "@hehuoda/api-types";
 import type { PageQuery, PageResult } from "./resource";
 import { ServiceUnavailable } from "../services";
+import type { Schema } from "../http";
 export type CandidateStatus = "pending" | "approved" | "rejected" | "imported";
 export type ReviewAction =
   "save" | "approve" | "reject" | "reopen" | "import" | "publish";
@@ -35,7 +36,7 @@ export interface ReviewMaterial {
   mappingBaseline?: string;
   evidenceRevision?: number;
   evidence?: unknown[];
-  evidenceReferences?: unknown[];
+  evidenceReferences?: Schema["EvidenceReferenceDto"][];
   operationId: string;
   candidateId: string;
   sourceVersion: string;
@@ -54,6 +55,8 @@ export interface ReviewMaterial {
   article: Article;
   previousArticle: Article | null;
   candidate: {
+    classification?: Schema["AdminRuleClassificationDto"];
+    fieldConflicts?: Schema["AdminFieldConflictDto"][];
     fields: {
       name: string;
       edition: string | null;
@@ -82,6 +85,10 @@ export interface ReviewMaterial {
       paragraph: number;
       url: string;
       sourceVersion?: string;
+      format?: "html" | "pdf" | "docx";
+      noticeVersion?: string;
+      attachmentVersion?: string | null;
+      page?: number;
     }[];
     missing: string[];
     conflicts: string[];
@@ -94,6 +101,11 @@ export interface ReviewMaterial {
   resolution: string;
 }
 export interface ReviewRecord {
+  noticeId?: string;
+  classification?: Schema["AdminCandidateDetailDto"]["classification"];
+  ruleVersion?: string;
+  classificationHistory?: Schema["AdminClassificationHistoryDto"][];
+  extractionRevisions?: Schema["AdminExtractionRevisionDto"][];
   id: string;
   title: string;
   status: CandidateStatus;
@@ -128,6 +140,10 @@ export interface PreviewReceipt {
   changes?: import("../http").Schema["AdminImportChangeDto"][];
 }
 export interface ReviewService {
+  classify?(
+    id: string,
+    body: Schema["AdminClassificationCommandDto"],
+  ): Promise<void>;
   list(
     kind: "candidates" | "notices",
     query: PageQuery,

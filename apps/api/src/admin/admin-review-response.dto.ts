@@ -485,7 +485,19 @@ export class AdminNoticeListDto extends AdminPageDto {
   items!: AdminNoticeListItemDto[];
 }
 
+export class AdminNoticeChannelDto {
+  @ApiProperty() sourceId!: string;
+  @ApiProperty() channelId!: string;
+  @ApiProperty({ format: "date-time" }) firstDiscoveredAt!: string;
+  @ApiProperty({ format: "date-time" }) lastDiscoveredAt!: string;
+}
+
 export class AdminNoticeDetailDto {
+  @ApiProperty({
+    type: [AdminNoticeChannelDto],
+    description: "实际发现该通知的栏目关联；不复制通知或候选链",
+  })
+  channels!: AdminNoticeChannelDto[];
   @ApiProperty({ format: "uuid" }) noticeId!: string;
   @ApiProperty() sourceId!: string;
   @ApiProperty({ format: "uri" }) url!: string;

@@ -9,6 +9,32 @@ import {
 import { queryPage } from "./resource";
 export const sourceExamples: SourceConfig[] = fixedSources.map((s, i) => ({
   id: s.id,
+  listUrl: s.listUrl,
+  channels: [
+    {
+      id: "default",
+      enabled: !i,
+      settings: { ...defaultSettings },
+      baseline: `example-channel-${i}`,
+      verificationStatus: "verified",
+      verifiedAt: "2026-10-20",
+      verifiedBy: "example",
+      activatedOn: "2026-10-01",
+      pendingCount: 0,
+      backoffUntil: null,
+      failureCount: 0,
+      coverage: {},
+      lastSuccessfulCheck: null,
+      budgetUsage: null,
+      latestRound: null,
+      discoveryDelay: {
+        precision: "days",
+        sampleCount: 0,
+        averageDays: null,
+        maxDays: null,
+      },
+    },
+  ],
   title: s.publisher,
   status: i ? "disabled" : "enabled",
   date: "2026-10-20",

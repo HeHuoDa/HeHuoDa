@@ -2,6 +2,7 @@ import type { InjectionKey } from "vue";
 import { ServiceUnavailable } from "../services";
 import { validDate } from "./review";
 import { type PageQuery, type PageResult } from "./resource";
+import type { Schema } from "../http";
 // 页面模型：待 #39 合并后用生成契约接线，不在浏览器加载 Node 采集器。
 export const fixedSources = [
   {
@@ -52,19 +53,25 @@ export function validateSettings(settings: SourceSettings): string | null {
 }
 export interface ScanInput {
   sourceId: string;
+  channelId?: string;
+  phase?: "fresh" | "backfill" | "revisit" | "retry";
   from: string;
   to: string;
   url: string;
   preview: boolean;
 }
-export function validateScan(input: ScanInput): string | null {
-  const source = fixedSources.find((v) => v.id === input.sourceId);
+export function validateScan(
+  input: ScanInput,
+  sources: readonly { id: string; listUrl: string }[] = [],
+): string | null {
+  const source = sources.find((v) => v.id === input.sourceId);
   if (!source) return "请选择已实现的固定来源。";
   if (
-    !validDate(input.from) ||
-    !validDate(input.to) ||
-    input.from > input.to ||
-    Date.parse(input.to) - Date.parse(input.from) > 365 * 86400000
+    input.phase !== "backfill" &&
+    (!validDate(input.from) ||
+      !validDate(input.to) ||
+      input.from > input.to ||
+      Date.parse(input.to) - Date.parse(input.from) > 365 * 86400000)
   )
     return "日期范围须为有效的 1–366 天（含起止日期）。";
   if (input.url) {
@@ -85,6 +92,9 @@ export function validateScan(input: ScanInput): string | null {
 }
 export interface SourceConfig {
   id: string;
+  listUrl?: string;
+  collegeId?: string;
+  channels?: Schema["IngestionChannelStateDto"][];
   title: string;
   status: string;
   date: string;
@@ -111,6 +121,9 @@ export const availabilityLabels = {
   failed: "最近请求失败，可核对后重试",
 };
 export interface IngestionRun {
+  channelId?: string;
+  phase?: string | null;
+  taskId?: string | null;
   budgetUsage?: Record<string, unknown> | null;
   id: string;
   title: string;
@@ -134,6 +147,10 @@ export interface IngestionRun {
   nextRunId: string | null;
 }
 export interface AcceptedRequest {
+  channelId?: string | null;
+  phase?: string | null;
+  taskProgress?: Record<string, unknown> | null;
+  budgetUsage?: Record<string, unknown> | null;
   state: "accepted" | "running" | "completed" | "failed" | "interrupted";
   requestId: string;
   runId?: string;
@@ -143,6 +160,11 @@ export interface AcceptedRequest {
   errorCode?: string | null;
 }
 export interface IngestionControlService {
+  attachment(
+    id: string,
+    operation: "recheck" | "reparse",
+    body: Schema["AttachmentCommandDto"] & { versionId?: string },
+  ): Promise<AcceptedRequest>;
   sources(): Promise<SourceConfig[]>;
   configure(
     id: string,
@@ -194,6 +216,7 @@ const unavailable = async (): Promise<never> => {
   );
 };
 export const unavailableControl: IngestionControlService = {
+  attachment: unavailable,
   sources: unavailable,
   configure: unavailable,
   runs: unavailable,
