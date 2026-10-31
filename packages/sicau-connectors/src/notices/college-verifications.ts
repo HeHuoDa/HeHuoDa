@@ -65,7 +65,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验创新创业栏目前两页：当届中国国际大学生创新大赛校内选拔赛、挑战杯校赛通知与普通通知并存；已登记来源 agriculture（默认停用）",
     },
     {
       collegeId: "animal-science",
@@ -100,7 +100,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：当届职业规划大赛通知；列表仅一页，下页为不可点文本；已登记来源 animal-science（默认停用）",
     },
     {
       collegeId: "veterinary-medicine",
@@ -135,7 +135,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：生泰尔杯、天康杯专业技能竞赛通知；历史页可遍历；已登记来源 veterinary-medicine（默认停用）",
     },
     {
       collegeId: "grassland-science",
@@ -170,7 +170,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学生类栏目：第 2 页有 2026 年草学类专业综合实践技能大赛报名通知；列表只有月/日无年份，日期以正文为准；转载教务处条目按站外跳过；已登记来源 grassland-science（默认停用）",
     },
     {
       collegeId: "fisheries",
@@ -205,7 +205,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：2026 年大学生职业规划大赛院赛通知；已登记来源 fisheries（默认停用）",
     },
     {
       collegeId: "forestry",
@@ -240,7 +240,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第十四届职业规划大赛院内选拔赛预通知；列表日期拆为「日」与「年-月」两块；已登记来源 forestry（默认停用）",
     },
     {
       collegeId: "horticulture",
