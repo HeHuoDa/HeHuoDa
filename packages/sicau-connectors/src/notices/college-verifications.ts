@@ -531,7 +531,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 已按实站列表、分页、正文和附件主机核验，登记为可执行来源 science（默认停用）；启用仍需管理端登记栏目核验",
     },
     {
       collegeId: "life-science",
@@ -888,7 +888,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 已按实站列表、分页、正文和附件主机核验，登记为可执行来源 arts-media（默认停用）；启用仍需管理端登记栏目核验",
     },
     {
       collegeId: "architecture-planning",
