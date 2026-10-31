@@ -10,16 +10,20 @@ export function publishedDate(value: string, pattern?: string): string | null {
       : /\b(20\d{2})[年/.-](\d{1,2})[月/.-](\d{1,2})日?/
   ).exec(value);
   if (!match) return null;
+  // 默认按年、月、日的捕获顺序；日期分块顺序不同的站点用 year/month/day 命名组声明。
+  const year = match.groups?.year ?? match[1];
+  const month = match.groups?.month ?? match[2];
+  const day = match.groups?.day ?? match[3];
   if (
-    !match[1] ||
-    !match[2] ||
-    !match[3] ||
-    !/^20\d{2}$/.test(match[1]) ||
-    !/^\d{1,2}$/.test(match[2]) ||
-    !/^\d{1,2}$/.test(match[3])
+    !year ||
+    !month ||
+    !day ||
+    !/^20\d{2}$/.test(year) ||
+    !/^\d{1,2}$/.test(month) ||
+    !/^\d{1,2}$/.test(day)
   )
     return null;
-  const result = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const result = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   const parsed = new Date(result);
   return Number.isFinite(parsed.getTime()) &&
     parsed.toISOString().slice(0, 10) === result
@@ -102,7 +106,7 @@ export function extractList(
           title,
           publishedAt: publishedDate(
             row.find(selectors.date).text(),
-            channel.datePattern,
+            channel.listDatePattern ?? channel.datePattern,
           ),
         },
       ];
