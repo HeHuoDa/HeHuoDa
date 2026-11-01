@@ -76,7 +76,9 @@ export function classifyNotice(
           // 首次发布的助学金、职业规划大赛通知误判成补充通知。
           /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(title)
           ? "supplement"
-          : /报名|参赛|竞赛.*通知|比赛.*通知/.test(text)
+          : /报名|参赛/.test(text) ||
+              (!/评选|评定|评审/.test(title) &&
+                /竞赛.*通知|比赛.*通知/.test(text))
             ? "registration"
             : "news";
   if (list) exclusions.push("applicant-list");

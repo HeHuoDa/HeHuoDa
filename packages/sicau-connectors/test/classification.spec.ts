@@ -588,6 +588,27 @@ describe("赛事分类独立于审核状态", () => {
         },
       );
   });
+  it("评选赛事未开放报名时进入普通复核，不占用报名优先级", () => {
+    for (const title of [
+      "关于开展数学比赛作品评审的通知",
+      "关于开展设计大赛作品评选的通知",
+    ]) {
+      expect(
+        classifyNotice(title, ["请专家按既定评分标准完成作品审核。"]),
+      ).toMatchObject({
+        classification: "definite",
+        notificationKind: "news",
+        priority: 1,
+        needsReview: true,
+      });
+      expect(
+        classifyNotice(title, ["报名截止：2026年11月20日。"]),
+      ).toMatchObject({
+        notificationKind: "registration",
+        priority: 0,
+      });
+    }
+  });
   it("结果公示与评选、评定类通知按非赛事处理，不进入复核", () => {
     for (const title of [
       "资源学院关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛校内预选赛项目结果公示",
