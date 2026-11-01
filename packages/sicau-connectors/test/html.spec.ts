@@ -4,6 +4,7 @@ import {
   extractList,
   isCompetitionNotice,
   containsApplicantList,
+  containsPersonalNameList,
   sources,
   channelById,
   validateSource,
@@ -259,6 +260,25 @@ describe("来源适配器的离线页面", () => {
         "请在大赛平台准确、完整填写报名信息，并上传参赛材料",
       ),
     ).toBe(false);
+  });
+  it("评优、奖助学金与拟发展公示同样按个人名单跳过", () => {
+    for (const title of [
+      "2026年环境学院秋季发展对象名单公示",
+      "学院关于2026-2027学年第一学期拟发展团员名单的公示",
+      "资源学院关于2025-2026学年度“优秀学生干部奖学金”拟评结果的公示",
+      "关于2026-2027学年国家助学金拟评名单的公示",
+      "管理学院2025-2026学年度“优秀学生”“优秀学生干部”拟评名单公示",
+    ])
+      expect(containsPersonalNameList(title)).toBe(true);
+    // 赛事结果、评选通知和报名说明不是个人名单，不能被误伤。
+    for (const title of [
+      "资源学院关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛校内预选赛项目结果公示",
+      "关于组织开展2025—2026学年创新创业典型评选工作的通知",
+      "关于2025-2026学年度本科生“优秀学生标兵”遴选推荐的通知",
+      "环境学院关于评定2026-2027学年国家助学金的通知",
+      "关于举办风景园林学院大学生职业规划大赛的预通知",
+    ])
+      expect(containsPersonalNameList(title)).toBe(false);
   });
   it("正文外的官方附件列表仍记录链接，不读取附件内容", () => {
     const html =

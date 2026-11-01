@@ -288,6 +288,7 @@ describe("四院试点新来源的隔离库扫描", () => {
   it("名单类通知只跳过该条，后续竞赛通知照常入库", async () => {
     const first = "2026年测试竞赛报名通知";
     const sensitive = "2026年测试竞赛结果通知";
+    const awardList = "关于2025-2026学年度国家助学金拟评名单的公示";
     const last = "2026年第二次测试竞赛报名通知";
     const sensitiveArticle = (title: string, date: string) =>
       `<p class="burl">${title}</p><p class="time">${date}</p><div class="wenzan" id="vsb_content"><div class="v_news_content"><p>${title}</p><p>参赛对象：全校学生。</p><p>现将参赛学生名单公示如下：张三、李四、王五。</p></div></div>`;
@@ -295,7 +296,8 @@ describe("四院试点新来源的隔离库扫描", () => {
       [science.listUrl]: sciencePage(
         scienceRow(300, first, "2026年10月20日") +
           scienceRow(301, sensitive, "2026年10月21日") +
-          scienceRow(302, last, "2026年10月22日"),
+          scienceRow(302, awardList, "2026年10月21日") +
+          scienceRow(303, last, "2026年10月22日"),
       ),
       "https://lixueyuan.sicau.edu.cn/info/1071/300.htm": scienceArticle(
         first,
@@ -305,7 +307,7 @@ describe("四院试点新来源的隔离库扫描", () => {
         sensitive,
         "2026-10-21",
       ),
-      "https://lixueyuan.sicau.edu.cn/info/1071/302.htm": scienceArticle(
+      "https://lixueyuan.sicau.edu.cn/info/1071/303.htm": scienceArticle(
         last,
         "2026-10-22",
       ),
@@ -316,11 +318,16 @@ describe("四院试点新来源的隔离库扫描", () => {
     });
     expect(result).toMatchObject({
       status: "succeeded",
-      counts: { ignored: 1, new: 2, failed: 0 },
+      counts: { ignored: 2, new: 2, failed: 0 },
     });
     expect(result.errors).toEqual([
       expect.objectContaining({
         url: "https://lixueyuan.sicau.edu.cn/info/1071/301.htm",
+        code: "applicant-list",
+        kind: "skipped",
+      }),
+      expect.objectContaining({
+        url: "https://lixueyuan.sicau.edu.cn/info/1071/302.htm",
         code: "applicant-list",
         kind: "skipped",
       }),
@@ -331,7 +338,7 @@ describe("四院试点新来源的隔离库扫描", () => {
     );
     expect(stored.rows.map((row) => row.url)).toEqual([
       "https://lixueyuan.sicau.edu.cn/info/1071/300.htm",
-      "https://lixueyuan.sicau.edu.cn/info/1071/302.htm",
+      "https://lixueyuan.sicau.edu.cn/info/1071/303.htm",
     ]);
   });
 });

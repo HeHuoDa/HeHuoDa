@@ -11,6 +11,7 @@ import {
   extractList,
   isCompetitionNotice,
   containsApplicantList,
+  containsPersonalNameList,
   parseCandidate,
   sourceById,
   type ListItem,
@@ -668,7 +669,7 @@ export class IngestionRunner {
           cursor.pending.some(
             (item) =>
               isCompetitionNotice(item.title) &&
-              !containsApplicantList(item.title),
+              !containsPersonalNameList(item.title),
           )
         )
           break;
@@ -744,15 +745,25 @@ export class IngestionRunner {
         attempted.add(item.url);
         try {
           await checkStopped();
+          // 标题即个人名单（报名者名单、评优或奖助学金公示）时跳过该条并留下原因；
+          // 超出日期范围的条目保持静默跳过，避免把正常过滤记成异常。
+          const personalList = containsPersonalNameList(item.title);
           if (
             !options.url &&
             options.phase !== "retry" &&
             ((item.publishedAt &&
               (item.publishedAt < options.from ||
                 item.publishedAt > options.to)) ||
-              containsApplicantList(item.title))
+              personalList)
           ) {
             counts.ignored++;
+            if (personalList)
+              errors.push({
+                url: item.url,
+                kind: "skipped",
+                code: "applicant-list",
+                message: "通知标题为个人名单（报名者或评优公示），跳过该条",
+              });
             cursor.pending.shift();
             await checkpoint();
             continue;
@@ -819,13 +830,17 @@ export class IngestionRunner {
               });
             // 名单类通知只跳过该条：隐私目标由「不保存正文」达成，中断整源会让同栏目
             // 的正常通知长期采不到——恢复会再次命中同一条，形成永久停摆。
-            if (containsApplicantList(article.title + "\n" + article.text)) {
+            if (
+              containsApplicantList(article.title + "\n" + article.text) ||
+              containsPersonalNameList(article.title)
+            ) {
               counts.ignored++;
               errors.push({
                 url: item.url,
                 kind: "skipped",
                 code: "applicant-list",
-                message: "通知涉及报名者名单，跳过该条并保留正式数据",
+                message:
+                  "通知涉及个人名单（报名者或评优公示），跳过该条并保留正式数据",
               });
               cursor.pending.shift();
               await checkpoint();

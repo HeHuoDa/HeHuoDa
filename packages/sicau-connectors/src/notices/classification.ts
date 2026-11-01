@@ -1,4 +1,4 @@
-import { containsApplicantList } from "./html.js";
+import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
 export const noticeRuleVersion = "competition-rules-1";
 export type Classification = "definite" | "suspected" | "non_competition";
@@ -35,7 +35,9 @@ export function classifyNotice(
   const exclusions: string[] = [];
   const reasons: string[] = [];
   // An excluded attachment blocks that attachment, not an otherwise safe parent notice.
-  const list = containsApplicantList([title, ...paragraphs].join("\n"));
+  const list =
+    containsApplicantList([title, ...paragraphs].join("\n")) ||
+    containsPersonalNameList(title);
   const competition =
     /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛/.test(text);
   const ambiguous = /征文|作品征集|活动赛|创新创业|职业规划|艺术节|体育节/.test(

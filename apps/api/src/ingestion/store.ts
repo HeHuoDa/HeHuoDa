@@ -9,6 +9,7 @@ import {
   defaultLimits,
   classifyNotice,
   containsApplicantList,
+  containsPersonalNameList,
   parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 import type { ParsedCandidate } from "./types.js";
@@ -158,8 +159,11 @@ export async function persistArticle(
     article.paragraphs,
     article.attachments.map((a) => a.title),
   );
-  if (containsApplicantList([article.title, article.text].join("\n")))
-    throw new Error("通知涉及报名者名单，禁止保存正文与个人资料");
+  if (
+    containsApplicantList([article.title, article.text].join("\n")) ||
+    containsPersonalNameList(article.title)
+  )
+    throw new Error("通知涉及个人名单，禁止保存正文与个人资料");
   if (classification.classification === "non_competition") {
     article = { ...article, text: "", paragraphs: [], attachments: [] };
     response = { ...response, body: new Uint8Array(), html: "", headers: {} };

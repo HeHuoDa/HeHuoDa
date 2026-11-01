@@ -66,6 +66,15 @@ export const containsApplicantList = (title: string) =>
   /报名(?:者|人员|学生)?(?:名单|汇总)|报名(?:者|人员|学生)?信息(?:表|汇总)|参赛(?:者|人员|学生)?名单/.test(
     title,
   );
+/**
+ * 标题层面的个人名单判定：报名者名单之外，评优、奖助学金、拟发展等公示同样逐条列人名。
+ * 只看标题，避免正文里「名单另行公布」这类表述误伤正常赛事通知。
+ */
+export const containsPersonalNameList = (title: string) =>
+  containsApplicantList(title) ||
+  /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
+    title,
+  );
 export function extractList(
   html: string,
   url: string,
