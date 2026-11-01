@@ -44,6 +44,12 @@ test("构建入口独立完成已注册来源的公开正文抓取与候选解�
     resources: `<form name="_newscontent_fromname"><div><h1>2026年测试竞赛报名通知</h1><div align="center">2026年10月16日</div><div id="vsb_content"><div class="v_news_content">${body}</div></div></div></form>`,
     environment: `<h1 class="page_box_news_title">2026年测试竞赛报名通知</h1><h2>时间：2026-09-20</h2><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
     management: `<form name="_newscontent_fromname"><div class="article_w on"><h1>2026年测试竞赛报名通知</h1><p>2026年10月18日</p><div id="vsb_content"><div class="v_news_content">${body}</div></div></div></form>`,
+    "agricultural-engineering": `<header class="article-head"><h1>2026年测试竞赛报名通知</h1><div class="meta"><span>发布时间：2026-10-30</span></div></header><div id="vsb_content_6"><div class="v_news_content">${body}</div></div>`,
+    "food-science": `<div class="article"><h2 class="tit">2026年测试竞赛报名通知</h2><p class="conttime"><span>发布时间：2026-10-29</span></p><div id="vsb_content_7"><div class="v_news_content">${body}</div></div></div>`,
+    "mechanical-electrical": `<header class="jdxy-article-head"><h1>2026年测试竞赛报名通知</h1><div class="jdxy-article-meta"><span>发布时间：2026-10-21</span></div></header><div id="vsb_content_7"><div class="v_news_content">${body}</div></div>`,
+    "water-conservancy": `<div class="article-header"><h1 class="article-title">2026年测试竞赛报名通知</h1><div class="article-meta">发布时间：2026年10月20日</div></div><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
+    humanities: `<form name="_newscontent_fromname"><div class="article-title"><p2>2026年测试竞赛报名通知</p2><div class="borde"><p3>发布于:2026年10月22日</p3></div></div><div class="article-words" id="vsb_content"><div class="v_news_content">${body}</div></div></form>`,
+    "public-administration": `<div id="newsconttitle"><h1>2026年测试竞赛报名通知</h1><p>2026-10-29</p></div><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
   };
   for (const source of sources) {
     const html = pages[source.id];

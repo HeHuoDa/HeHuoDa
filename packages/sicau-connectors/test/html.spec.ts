@@ -44,6 +44,18 @@ import {
   environmentArticle,
   managementList,
   managementArticle,
+  agriculturalEngineeringList,
+  agriculturalEngineeringArticle,
+  foodScienceList,
+  foodScienceArticle,
+  mechanicalElectricalList,
+  mechanicalElectricalArticle,
+  waterConservancyList,
+  waterConservancyArticle,
+  humanitiesList,
+  humanitiesArticle,
+  publicAdministrationList,
+  publicAdministrationArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -707,5 +719,109 @@ describe("来源适配器的离线页面", () => {
       publishedAt: "2026-10-22",
     });
     expect(article.text).toContain("报名截止：2026年10月20日24:00");
+  });
+  it("批次三新增六院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "agricultural-engineering",
+        list: agriculturalEngineeringList,
+        article: agriculturalEngineeringArticle,
+        listDate: "2026-10-30",
+        articleDate: "2026-10-30",
+        attachments: 1,
+        next: "https://nygcxy.sicau.edu.cn/index/tzgg/4.htm",
+      },
+      {
+        id: "food-science",
+        list: foodScienceList,
+        article: foodScienceArticle,
+        listDate: "2026-10-29",
+        articleDate: "2026-10-29",
+        attachments: 1,
+        next: "https://spxy.sicau.edu.cn/index/tzgg/12.htm",
+      },
+      {
+        id: "mechanical-electrical",
+        list: mechanicalElectricalList,
+        article: mechanicalElectricalArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        next: "https://jdxy.sicau.edu.cn/index/tzgg/52.htm",
+      },
+      {
+        id: "water-conservancy",
+        list: waterConservancyList,
+        article: waterConservancyArticle,
+        listDate: "2026-10-20",
+        articleDate: "2026-10-20",
+        attachments: 1,
+        next: "https://slsd.sicau.edu.cn/tzgg/10.htm",
+      },
+      {
+        id: "humanities",
+        list: humanitiesList,
+        article: humanitiesArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://rwy.sicau.edu.cn/index/tz/78.htm",
+      },
+      {
+        id: "public-administration",
+        list: publicAdministrationList,
+        article: publicAdministrationArticle,
+        listDate: "2026-10-29",
+        articleDate: "2026-10-29",
+        attachments: 1,
+        next: "https://fpa.sicau.edu.cn/sylm/tzgg/xsl/16.htm",
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(source.attachmentPaths).toEqual([
+        "^/system/_content/download\\.jsp$",
+      ]);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(0);
+      const article = extractArticle(entry.article, page.items[0].url, source);
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+      expect(article.attachments[0].url).toContain(
+        "/system/_content/download.jsp",
+      );
+    }
+  });
+  it("人文学院列表日期是「年月日」整串，正文标题在自定义标签 p2 内", () => {
+    const source = sources.find((item) => item.id === "humanities")!;
+    const page = extractList(humanitiesList, source.listUrl, source);
+    expect(page.items[0].publishedAt).toBe("2026-10-22");
+    const article = extractArticle(
+      humanitiesArticle,
+      page.items[0].url,
+      source,
+    );
+    expect(article.title).toBe("2026年测试竞赛报名通知");
+    expect(article.publishedAt).toBe("2026-10-22");
+  });
+  it("公共管理学院学生类栏目用旧版表格分页，没有 .p_pages 也能定位下页", () => {
+    const source = sources.find((item) => item.id === "public-administration")!;
+    expect(source.channels[0].selectors.pagination).not.toContain("p_pages");
+    const page = extractList(publicAdministrationList, source.listUrl, source);
+    expect(page.next).toBe("https://fpa.sicau.edu.cn/sylm/tzgg/xsl/16.htm");
   });
 });
