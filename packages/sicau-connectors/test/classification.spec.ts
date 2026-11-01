@@ -534,4 +534,24 @@ describe("赛事分类独立于审核状态", () => {
         .evidence[0],
     ).toMatchObject({ format: "docx", paragraph: 3, attachmentVersion: "a1" });
   });
+  it("正文泛指「调整」不把首次通知判成补充通知", () => {
+    // 2026-11-01 实站抽样：助学金、职业规划大赛首次通知因正文出现「调整」被判 supplement。
+    expect(
+      classifyNotice("环境学院关于评定2026-2027学年国家助学金的通知", [
+        "如上级政策调整，以最新通知为准。",
+        "请符合条件的同学按时提交材料。",
+      ]),
+    ).toMatchObject({ notificationKind: "news" });
+    expect(
+      classifyNotice("关于举办风景园林学院大学生职业规划大赛的预通知", [
+        "比赛时间根据省赛安排可能调整。",
+        "参赛对象：全院本科生。",
+      ]),
+    ).toMatchObject({ notificationKind: "registration" });
+    expect(
+      classifyNotice("数学建模竞赛报名延期通知", [
+        "报名截止延至2026年11月10日。",
+      ]),
+    ).toMatchObject({ notificationKind: "supplement" });
+  });
 });

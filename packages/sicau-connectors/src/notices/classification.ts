@@ -60,7 +60,9 @@ export function classifyNotice(
       ? "award"
       : /新闻|回顾|圆满|荣获|喜报/.test(title) || bodyNews
         ? "news"
-        : /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(text)
+        : // 变更只在标题里判定：正文常出现「政策如有调整」这类泛指，按整篇匹配会把
+          // 首次发布的助学金、职业规划大赛通知误判成补充通知。
+          /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(title)
           ? "supplement"
           : /报名|参赛|竞赛.*通知|比赛.*通知/.test(text)
             ? "registration"
