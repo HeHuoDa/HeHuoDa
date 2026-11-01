@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-2";
+export const noticeRuleVersion = "competition-rules-3";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -45,7 +45,7 @@ export function classifyNotice(
   const competition = competitionPattern.test(text);
   const ambiguous = ambiguousPattern.test(text);
   const excluded =
-    /体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅|入团|入党|团课|党校|推优|研修班|交互班|训练营/.test(
+    /体质健康测试|体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅|入团|入党|发展团员|团员发展|党员发展|团课|党校|推优|研修班|交互班|训练营/.test(
       title,
     ) && !/竞赛|比赛|大赛/.test(title);
   // 结果公示仍排除；普通评选只在标题没有其他赛事线索时排除，正文提及旧比赛不算。

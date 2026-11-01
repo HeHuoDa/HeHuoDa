@@ -177,7 +177,7 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     const after = await get();
     expect(after).toMatchObject({
       status: "pending",
-      ruleVersion: "competition-rules-2",
+      ruleVersion: noticeRuleVersion,
       classification: "definite",
       candidateRevision: before.candidateRevision + 1,
       sourceVersion: before.sourceVersion,
@@ -188,7 +188,7 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
         (entry: { ruleVersion: string }) => entry.ruleVersion,
       ),
     ).toEqual(
-      expect.arrayContaining(["competition-rules-1", "competition-rules-2"]),
+      expect.arrayContaining(["competition-rules-1", noticeRuleVersion]),
     );
     expect(
       (

@@ -72,7 +72,7 @@ export const containsApplicantList = (title: string) =>
  */
 export const containsPersonalNameList = (title: string) =>
   containsApplicantList(title) ||
-  /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
+  /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|补贴|资助|补助|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
     title,
   );
 export function extractList(
