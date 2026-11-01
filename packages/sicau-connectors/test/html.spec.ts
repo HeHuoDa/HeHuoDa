@@ -56,6 +56,16 @@ import {
   humanitiesArticle,
   publicAdministrationList,
   publicAdministrationArticle,
+  lawList,
+  lawArticle,
+  sportsList,
+  sportsArticle,
+  architectureList,
+  architectureArticle,
+  civilList,
+  civilArticle,
+  businessTourismList,
+  businessTourismArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -823,5 +833,110 @@ describe("来源适配器的离线页面", () => {
     expect(source.channels[0].selectors.pagination).not.toContain("p_pages");
     const page = extractList(publicAdministrationList, source.listUrl, source);
     expect(page.next).toBe("https://fpa.sicau.edu.cn/sylm/tzgg/xsl/16.htm");
+  });
+  it("批次四新增五院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "law",
+        list: lawList,
+        article: lawArticle,
+        listDate: "2026-09-23",
+        articleDate: "2026-10-20",
+        attachments: 1,
+        next: "https://fxy.sicau.edu.cn/index/tzgg/54.htm",
+      },
+      {
+        id: "sports",
+        list: sportsList,
+        article: sportsArticle,
+        listDate: "2026-10-28",
+        articleDate: "2026-10-14",
+        attachments: 1,
+        next: "https://ytxy.sicau.edu.cn/qtlm/tzgg/3.htm",
+      },
+      {
+        id: "architecture-planning",
+        list: architectureList,
+        article: architectureArticle,
+        listDate: "2026-10-31",
+        articleDate: "2026-10-27",
+        attachments: 1,
+        next: "https://jg.sicau.edu.cn/index/tzgg/12.htm",
+      },
+      {
+        id: "civil-engineering",
+        list: civilList,
+        article: civilArticle,
+        listDate: "2026-10-29",
+        articleDate: "2026-10-23",
+        attachments: 1,
+        next: "https://tmgcxy.sicau.edu.cn/index/tzgg/5.htm",
+      },
+      {
+        id: "business-tourism",
+        list: businessTourismList,
+        article: businessTourismArticle,
+        listDate: "2026-10-20",
+        articleDate: "2026-10-20",
+        attachments: 1,
+        next: null,
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(source.attachmentPaths).toEqual([
+        "^/system/_content/download\\.jsp$",
+      ]);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(0);
+      const article = extractArticle(entry.article, page.items[0].url, source);
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+      expect(article.attachments[0].url).toContain(
+        "/system/_content/download.jsp",
+      );
+    }
+  });
+  it("法学院列表的「快速链接」重复入口不产生第二条候选", () => {
+    const source = sources.find((item) => item.id === "law")!;
+    const page = extractList(lawList, source.listUrl, source);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].title).toBe("2026年测试竞赛报名通知");
+  });
+  it("体育学院正文附件同时出现在正文与文末列表时只按文末列表计数", () => {
+    const source = sources.find((item) => item.id === "sports")!;
+    const article = extractArticle(
+      sportsArticle,
+      "https://ytxy.sicau.edu.cn/info/1095/100.htm",
+      source,
+    );
+    expect(article.attachments).toHaveLength(1);
+    expect(article.publishedAt).toBe("2026-10-14");
+  });
+  it("建筑与城乡规划学院把「日」与「年-月」两块日期拼成完整日期", () => {
+    const source = sources.find((item) => item.id === "architecture-planning")!;
+    const page = extractList(architectureList, source.listUrl, source);
+    expect(page.items[0].publishedAt).toBe("2026-10-31");
+  });
+  it("商旅学院单页栏目的「下页」是不可点文本时按末页结束", () => {
+    const source = sources.find((item) => item.id === "business-tourism")!;
+    expect(source.channels[0].selectors.pagination).not.toContain("p_pages");
+    const page = extractList(businessTourismList, source.listUrl, source);
+    expect(page.next).toBeNull();
+    expect(page.items).toHaveLength(1);
   });
 });

@@ -50,6 +50,12 @@ test("构建入口独立完成已注册来源的公开正文抓取与候选解�
     "water-conservancy": `<div class="article-header"><h1 class="article-title">2026年测试竞赛报名通知</h1><div class="article-meta">发布时间：2026年10月20日</div></div><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
     humanities: `<form name="_newscontent_fromname"><div class="article-title"><p2>2026年测试竞赛报名通知</p2><div class="borde"><p3>发布于:2026年10月22日</p3></div></div><div class="article-words" id="vsb_content"><div class="v_news_content">${body}</div></div></form>`,
     "public-administration": `<div id="newsconttitle"><h1>2026年测试竞赛报名通知</h1><p>2026-10-29</p></div><div id="vsb_content"><div class="v_news_content">${body}</div></div>`,
+    // 批次四：正文模板取自实站，发布日期用早于报名截止的日期，避免样例本身触发时间冲突。
+    law: `<form name="_newscontent_fromname"><h3>2026年测试竞赛报名通知</h3><p class="abstitle"><i>2026年10月12日 08:26</i></p><div id="vsb_content_503"><div class="v_news_content">${body}</div></div></form>`,
+    sports: `<form name="_newscontent_fromname"><div class="container-main"><h1>2026年测试竞赛报名通知</h1><div class="article-info"><div class="article-info-item">发布于：2026-10-14 08:52:14</div></div><div id="vsb_content_4"><div class="v_news_content">${body}</div></div></div></form>`,
+    "architecture-planning": `<form name="_newscontent_fromname"><div class="art-tit cont-tit d"><h3>2026年测试竞赛报名通知</h3><p><span>时间：2026-10-12</span></p></div><div id="vsb_content"><div class="v_news_content">${body}</div></div></form>`,
+    "civil-engineering": `<form name="_newscontent_fromname"><h1>2026年测试竞赛报名通知</h1><div class="prompt"><div class="d_r">发布时间：2026年10月12日 11:16</div></div><div id="vsb_content_501"><div class="v_news_content">${body}</div></div></form>`,
+    "business-tourism": `<form name="_newscontent_fromname"><div id="newsconttitle"><h1>2026年测试竞赛报名通知</h1><p>2026-10-12</p></div><div id="vsb_content"><div class="v_news_content">${body}</div></div></form>`,
   };
   for (const source of sources) {
     const html = pages[source.id];
