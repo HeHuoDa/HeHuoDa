@@ -16,6 +16,7 @@ import {
   lifeList,
   informationArticle,
   lifeArticle,
+  lifeArticleCurrent,
   scienceList,
   scienceArticle,
   artsMediaList,
@@ -673,5 +674,18 @@ describe("来源适配器的离线页面", () => {
       (entry) => entry.collegeId === "economics",
     )!;
     expect(candidate.note).toContain("PDF");
+  });
+  it("生命科学学院正文改版后仍按通用容器与标题解析", () => {
+    const source = sources[1];
+    const article = extractArticle(
+      lifeArticleCurrent,
+      "https://smkx.sicau.edu.cn/info/1061/29521.htm",
+      source,
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-10-22",
+    });
+    expect(article.text).toContain("报名截止：2026年10月20日24:00");
   });
 });
