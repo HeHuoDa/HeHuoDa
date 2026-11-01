@@ -365,7 +365,13 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         sourceId: source.id,
         url,
       }),
-    ).toMatchObject({ status: "interrupted" });
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { ignored: 1, new: 0 },
+      errors: [
+        expect.objectContaining({ code: "applicant-list", kind: "skipped" }),
+      ],
+    });
     expect(
       (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
         .count,

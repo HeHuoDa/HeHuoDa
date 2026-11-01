@@ -817,8 +817,20 @@ export class IngestionRunner {
                 message:
                   "正文未提供可解析的完整发布日期；保留未知，不计算小时级发现延迟",
               });
-            if (containsApplicantList(article.title + "\n" + article.text))
-              throw new Error("通知涉及报名者名单，停止采集并保留正式数据");
+            // 名单类通知只跳过该条：隐私目标由「不保存正文」达成，中断整源会让同栏目
+            // 的正常通知长期采不到——恢复会再次命中同一条，形成永久停摆。
+            if (containsApplicantList(article.title + "\n" + article.text)) {
+              counts.ignored++;
+              errors.push({
+                url: item.url,
+                kind: "skipped",
+                code: "applicant-list",
+                message: "通知涉及报名者名单，跳过该条并保留正式数据",
+              });
+              cursor.pending.shift();
+              await checkpoint();
+              continue;
+            }
             if (
               !options.url &&
               options.phase !== "retry" &&
