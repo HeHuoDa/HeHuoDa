@@ -46,6 +46,13 @@ export function classifyNotice(
   const excluded =
     /体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅/.test(title) &&
     !/竞赛|比赛|大赛/.test(title);
+  // 结果公示与评选、评定类通知不是可报名赛事：即使标题带赛事词，也按非赛事处理，
+  // 不进入复核队列。含报名或参赛的赛事通知不受影响。
+  const resultNotice =
+    !/报名|参赛/.test(title) &&
+    /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|评选|评定|评审|拟评|拟推荐|名单公示/.test(
+      title,
+    );
   const explicitRegistration = /报名/.test(title);
   const bodyAward =
     !explicitRegistration &&
@@ -71,21 +78,23 @@ export function classifyNotice(
             : "news";
   if (list) exclusions.push("applicant-list");
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
+  if (resultNotice) exclusions.push("结果公示或评选通知，不是可报名赛事");
   if (competition) reasons.push("原文含赛事标识");
   if (ambiguous) reasons.push("征集或活动语义不足以确认赛事");
-  const classification: Classification = list
-    ? "non_competition"
-    : excluded
-      ? competition || ambiguous || attachmentTitles.length > 0
-        ? "suspected"
-        : "non_competition"
-      : competition
-        ? "definite"
-        : ambiguous ||
-            attachmentTitles.length > 0 ||
-            /补充通知|延期通知|规则变更/.test(title)
+  const classification: Classification =
+    list || resultNotice
+      ? "non_competition"
+      : excluded
+        ? competition || ambiguous || attachmentTitles.length > 0
           ? "suspected"
-          : "non_competition";
+          : "non_competition"
+        : competition
+          ? "definite"
+          : ambiguous ||
+              attachmentTitles.length > 0 ||
+              /补充通知|延期通知|规则变更/.test(title)
+            ? "suspected"
+            : "non_competition";
   if (attachmentTitles.length)
     reasons.push("附件待核对，不按缺少正文关键字排除");
   if (!reasons.length && !exclusions.length)

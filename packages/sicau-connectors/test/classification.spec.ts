@@ -554,4 +554,27 @@ describe("赛事分类独立于审核状态", () => {
       ]),
     ).toMatchObject({ notificationKind: "supplement" });
   });
+  it("结果公示与评选、评定类通知按非赛事处理，不进入复核", () => {
+    for (const title of [
+      "资源学院关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛校内预选赛项目结果公示",
+      "关于组织开展2025—2026学年创新创业典型评选工作的通知",
+      "环境学院关于评定2026-2027学年国家助学金的通知",
+      "2025-2026学年度学生奖励评审结果公示",
+    ])
+      expect(classifyNotice(title, ["现将结果公示如下。"])).toMatchObject({
+        classification: "non_competition",
+        needsReview: false,
+      });
+    // 带报名或参赛语义的赛事通知仍按赛事处理。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛报名通知", [
+        "报名截止：2026年10月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite" });
+    expect(
+      classifyNotice("关于组织参加第二十届“挑战杯”竞赛参赛作品评选的通知", [
+        "参赛作品提交截止：2026年10月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite" });
+  });
 });
