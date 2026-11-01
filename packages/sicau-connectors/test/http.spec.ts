@@ -290,4 +290,17 @@ describe("有边界的 HTTP 采集", () => {
     );
     await expect(local.checkRobots()).rejects.toThrow("危险连接地址");
   });
+  it("站内搜索组件写在脚本里的验证码提示不当作拦截页", async () => {
+    // 环境学院等 VSB 站点把「请输入验证码后继续查询」写进搜索组件的 script 字符串。
+    const page = `<html><head><title>2026年环境学院秋季发展对象名单公示</title></head><body><div class="content">正文</div><script>news_search.yzmts ="您的查询过于频繁，请输入验证码后继续查询";</script></body></html>`;
+    const ok = fetcher([response(404), response(200, page)]);
+    await ok.fetcher.checkRobots();
+    await expect(ok.fetcher.get(url)).resolves.toMatchObject({ status: 200 });
+    const blocked = fetcher([
+      response(404),
+      response(200, "<html><body><p>请输入验证码后继续访问</p></body></html>"),
+    ]);
+    await blocked.fetcher.checkRobots();
+    await expect(blocked.fetcher.get(url)).rejects.toThrow("验证码");
+  });
 });
