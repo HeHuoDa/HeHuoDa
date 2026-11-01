@@ -38,21 +38,24 @@ export function classifyNotice(
   const list =
     containsApplicantList([title, ...paragraphs].join("\n")) ||
     containsPersonalNameList(title);
-  const competition =
-    /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛/.test(text);
-  const ambiguous = /征文|作品征集|活动赛|创新创业|职业规划|艺术节|体育节/.test(
-    text,
-  );
+  const competitionPattern =
+    /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛/;
+  const ambiguousPattern =
+    /征文|作品征集|活动赛|创新创业|职业规划|艺术节|体育节/;
+  const competition = competitionPattern.test(text);
+  const ambiguous = ambiguousPattern.test(text);
   const excluded =
-    /体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅/.test(title) &&
-    !/竞赛|比赛|大赛/.test(title);
-  // 结果公示与评选、评定类通知不是可报名赛事：即使标题带赛事词，也按非赛事处理，
-  // 不进入复核队列。含报名或参赛的赛事通知不受影响。
-  const resultNotice =
-    !/报名|参赛/.test(title) &&
-    /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|评选|评定|评审|拟评|拟推荐|名单公示/.test(
+    /体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅|入团|入党|团课|党校|推优|研修班|交互班|训练营/.test(
       title,
-    );
+    ) && !/竞赛|比赛|大赛/.test(title);
+  // 结果公示仍排除；普通评选只在标题没有其他赛事线索时排除，正文提及旧比赛不算。
+  const resultNotice =
+    /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示/.test(
+      title,
+    ) ||
+    (/评选|评定|评审|拟评|拟推荐/.test(title) &&
+      !competitionPattern.test(title) &&
+      !ambiguousPattern.test(title));
   const explicitRegistration = /报名/.test(title);
   const bodyAward =
     !explicitRegistration &&
