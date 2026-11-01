@@ -611,4 +611,45 @@ describe("管理采集栏目核验与调度 API", () => {
     ).rows[0];
     expect(after).toEqual(before);
   });
+
+  it("未落库的新来源按注册表默认停用，详情基线可直接提交", async () => {
+    const pendingSource: Source = {
+      ...fixtureSource,
+      id: "issue-178-pending-source",
+      collegeId: "issue-178-pending-source",
+    };
+    sources.push(pendingSource);
+    try {
+      const detail = (
+        await test.request(
+          "GET",
+          `admin/ingestion/sources/${pendingSource.id}`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      expect(detail.enabled).toBe(false);
+      const patched = await test.request(
+        "PATCH",
+        `admin/ingestion/sources/${pendingSource.id}`,
+        {
+          enabled: false,
+          baseline: detail.baseline,
+          operationId: randomUUID(),
+          reason: "未落库来源保持停用",
+        },
+        authHeaders(),
+      );
+      expect(patched.statusCode).toBe(200);
+    } finally {
+      sources.splice(sources.indexOf(pendingSource), 1);
+      await test.pool.query(
+        "DELETE FROM ingestion_channels WHERE source_id=$1",
+        [pendingSource.id],
+      );
+      await test.pool.query("DELETE FROM ingestion_sources WHERE id=$1", [
+        pendingSource.id,
+      ]);
+    }
+  });
 });

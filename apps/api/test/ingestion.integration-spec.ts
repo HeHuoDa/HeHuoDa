@@ -11,6 +11,7 @@ import {
   sources,
   extractArticle,
   parseCandidate,
+  noticeRuleVersion,
 } from "@hehuoda/sicau-connectors/notices";
 
 import {
@@ -140,7 +141,7 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       await runner([http(404), http(304)]).scan({ sourceId: source.id, url }),
     ).toMatchObject({ status: "succeeded", counts: { unchanged: 1 } });
     expect(await candidate()).toMatchObject({
-      rule_version: "competition-rules-1",
+      rule_version: noticeRuleVersion,
       status: "pending",
       revision: file.candidateRevision + 1,
     });
@@ -365,7 +366,13 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         sourceId: source.id,
         url,
       }),
-    ).toMatchObject({ status: "interrupted" });
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { ignored: 1, new: 0 },
+      errors: [
+        expect.objectContaining({ code: "applicant-list", kind: "skipped" }),
+      ],
+    });
     expect(
       (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
         .count,

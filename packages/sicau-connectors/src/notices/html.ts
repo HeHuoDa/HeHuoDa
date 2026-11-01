@@ -10,16 +10,20 @@ export function publishedDate(value: string, pattern?: string): string | null {
       : /\b(20\d{2})[年/.-](\d{1,2})[月/.-](\d{1,2})日?/
   ).exec(value);
   if (!match) return null;
+  // 默认按年、月、日的捕获顺序；日期分块顺序不同的站点用 year/month/day 命名组声明。
+  const year = match.groups?.year ?? match[1];
+  const month = match.groups?.month ?? match[2];
+  const day = match.groups?.day ?? match[3];
   if (
-    !match[1] ||
-    !match[2] ||
-    !match[3] ||
-    !/^20\d{2}$/.test(match[1]) ||
-    !/^\d{1,2}$/.test(match[2]) ||
-    !/^\d{1,2}$/.test(match[3])
+    !year ||
+    !month ||
+    !day ||
+    !/^20\d{2}$/.test(year) ||
+    !/^\d{1,2}$/.test(month) ||
+    !/^\d{1,2}$/.test(day)
   )
     return null;
-  const result = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const result = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   const parsed = new Date(result);
   return Number.isFinite(parsed.getTime()) &&
     parsed.toISOString().slice(0, 10) === result
@@ -58,7 +62,17 @@ function checkPage(html: string) {
 export const isCompetitionNotice = (title: string) =>
   /竞赛|比赛|大赛|挑战杯|创新创业|互联网\s*\+/.test(title);
 export const containsApplicantList = (title: string) =>
-  /报名(?:者|人员|学生)?(?:信息|名单|汇总)|参赛(?:者|人员|学生)?名单/.test(
+  // 「填写报名信息」这类普通表述不算名单；只有名单、汇总或信息表才按个人资料拦截。
+  /报名(?:者|人员|学生)?(?:名单|汇总)|报名(?:者|人员|学生)?信息(?:表|汇总)|参赛(?:者|人员|学生)?名单/.test(
+    title,
+  );
+/**
+ * 标题层面的个人名单判定：报名者名单之外，评优、奖助学金、拟发展等公示同样逐条列人名。
+ * 只看标题，避免正文里「名单另行公布」这类表述误伤正常赛事通知。
+ */
+export const containsPersonalNameList = (title: string) =>
+  containsApplicantList(title) ||
+  /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
     title,
   );
 export function extractList(
@@ -102,7 +116,7 @@ export function extractList(
           title,
           publishedAt: publishedDate(
             row.find(selectors.date).text(),
-            channel.datePattern,
+            channel.listDatePattern ?? channel.datePattern,
           ),
         },
       ];

@@ -437,9 +437,14 @@ export class BoundedFetcher {
       res.status === 304
         ? ""
         : decodeHtml(res.body, res.headers["content-type"]);
+    // 只在可见内容里判断拦截：站内搜索组件常把「请输入验证码」写进 script 字符串，
+    // 直接匹配整页 HTML 会把正常正文误判成验证码页。
+    const visible = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "");
     if (
       res.status === 200 &&
-      /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(html)
+      /验证码|captcha|访问过于频繁|访问被拒绝|登录后访问/i.test(visible)
     )
       throw new Error("出现验证码、登录或拦截页，停止来源采集");
     return { ...res, body: rawBody, html };

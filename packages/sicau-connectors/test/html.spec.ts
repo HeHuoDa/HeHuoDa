@@ -4,10 +4,12 @@ import {
   extractList,
   isCompetitionNotice,
   containsApplicantList,
+  containsPersonalNameList,
   sources,
   channelById,
   validateSource,
   publishedDate,
+  collegeVerificationCandidates,
 } from "../dist/notices/index.js";
 
 import {
@@ -15,6 +17,45 @@ import {
   lifeList,
   informationArticle,
   lifeArticle,
+  lifeArticleCurrent,
+  scienceList,
+  scienceArticle,
+  artsMediaList,
+  artsMediaArticle,
+  agricultureList,
+  agricultureArticle,
+  animalScienceList,
+  animalScienceArticle,
+  veterinaryList,
+  veterinaryArticle,
+  grasslandList,
+  grasslandArticle,
+  fisheriesList,
+  fisheriesArticle,
+  forestryList,
+  forestryArticle,
+  horticultureList,
+  horticultureArticle,
+  landscapeList,
+  landscapeArticle,
+  resourcesList,
+  resourcesArticle,
+  environmentList,
+  environmentArticle,
+  managementList,
+  managementArticle,
+  agriculturalEngineeringList,
+  agriculturalEngineeringArticle,
+  foodScienceList,
+  foodScienceArticle,
+  mechanicalElectricalList,
+  mechanicalElectricalArticle,
+  waterConservancyList,
+  waterConservancyArticle,
+  humanitiesList,
+  humanitiesArticle,
+  publicAdministrationList,
+  publicAdministrationArticle,
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
@@ -24,6 +65,22 @@ describe("来源适配器的离线页面", () => {
     ).toBe("2026-10-28");
     expect(publishedDate("20260230", "(20\\d{2})(\\d{2})(\\d{2})")).toBeNull();
     expect(publishedDate("10-28")).toBeNull();
+  });
+  it("列表日期分块顺序不同时用命名组，缺组配置在加载时拒绝", () => {
+    expect(
+      publishedDate(
+        "22\n2026-03",
+        "(?<day>\\d{1,2})\\s*(?<year>20\\d{2})\\s*-\\s*(?<month>\\d{1,2})",
+      ),
+    ).toBe("2026-03-22");
+    const source = sources[2];
+    const channel = channelById(source);
+    expect(() =>
+      validateSource({
+        ...source,
+        channels: [{ ...channel, listDatePattern: "(?<day>\\d{1,2})" }],
+      }),
+    ).toThrow("配置");
   });
   it.each(["query", "path"] as const)(
     "复用%s页码分页规则，保持业务参数且不猜缺失日期",
@@ -208,6 +265,32 @@ describe("来源适配器的离线页面", () => {
     expect(isCompetitionNotice("程序设计竞赛报名通知")).toBe(true);
     expect(containsApplicantList("程序设计竞赛报名人员名单")).toBe(true);
     expect(containsApplicantList("竞赛参赛名单")).toBe(true);
+    expect(containsApplicantList("报名信息汇总表")).toBe(true);
+    // 「准确、完整填写报名信息」是报名说明，不是报名者名单。
+    expect(
+      containsApplicantList(
+        "请在大赛平台准确、完整填写报名信息，并上传参赛材料",
+      ),
+    ).toBe(false);
+  });
+  it("评优、奖助学金与拟发展公示同样按个人名单跳过", () => {
+    for (const title of [
+      "2026年环境学院秋季发展对象名单公示",
+      "学院关于2026-2027学年第一学期拟发展团员名单的公示",
+      "资源学院关于2025-2026学年度“优秀学生干部奖学金”拟评结果的公示",
+      "关于2026-2027学年国家助学金拟评名单的公示",
+      "管理学院2025-2026学年度“优秀学生”“优秀学生干部”拟评名单公示",
+    ])
+      expect(containsPersonalNameList(title)).toBe(true);
+    // 这些标题不是逐条列人名的名单，名字规则不能误伤；它们是否进入候选由分类决定。
+    for (const title of [
+      "资源学院关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛校内预选赛项目结果公示",
+      "关于组织开展2025—2026学年创新创业典型评选工作的通知",
+      "关于2025-2026学年度本科生“优秀学生标兵”遴选推荐的通知",
+      "环境学院关于评定2026-2027学年国家助学金的通知",
+      "关于举办风景园林学院大学生职业规划大赛的预通知",
+    ])
+      expect(containsPersonalNameList(title)).toBe(false);
   });
   it("正文外的官方附件列表仍记录链接，不读取附件内容", () => {
     const html =
@@ -331,5 +414,414 @@ describe("来源适配器的离线页面", () => {
     expect(() =>
       decodeHtml(Uint8Array.from([0xff]), "text/html; charset=utf-8"),
     ).toThrow("编码");
+  });
+  it("四院试点新增来源默认停用，沿用已核验来源的附件主机口径", () => {
+    const [science, artsMedia] = [sources[2], sources[3]];
+    expect(science).toMatchObject({
+      id: "science",
+      collegeId: "science",
+      host: "lixueyuan.sicau.edu.cn",
+    });
+    expect(artsMedia).toMatchObject({
+      id: "arts-media",
+      collegeId: "arts-media",
+      host: "yscm.sicau.edu.cn",
+    });
+    for (const source of [science, artsMedia]) {
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.attachmentPaths).toEqual([
+        "^/system/_content/download\\.jsp$",
+      ]);
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+    }
+  });
+  it("理学院列表区分置顶旧通知与当届通知，正文和附件按配置解析", () => {
+    expect(extractList(scienceList, sources[2].listUrl, sources[2])).toEqual({
+      items: [
+        {
+          url: "https://lixueyuan.sicau.edu.cn/info/1071/100.htm",
+          title: "【置顶】2025年旧竞赛报名通知",
+          publishedAt: "2025-03-06",
+        },
+        {
+          url: "https://lixueyuan.sicau.edu.cn/info/1071/101.htm",
+          title: "2026年测试竞赛报名通知",
+          publishedAt: "2026-09-22",
+        },
+      ],
+      next: "https://lixueyuan.sicau.edu.cn/xwjtz/tzgg/6.htm",
+    });
+    const article = extractArticle(
+      scienceArticle,
+      "https://lixueyuan.sicau.edu.cn/info/1071/101.htm",
+      sources[2],
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-09-22",
+    });
+    expect(article.text).toContain("报名截止：2026年10月20日24:00");
+    expect(article.attachments).toHaveLength(1);
+  });
+  it("艺术与传媒学院列表标题取 title 属性，正文容器外的附件仍记录", () => {
+    expect(extractList(artsMediaList, sources[3].listUrl, sources[3])).toEqual({
+      items: [
+        {
+          url: "https://yscm.sicau.edu.cn/info/1053/99.htm",
+          title: "【置顶】旧交流项目招生简章",
+          publishedAt: "2023-05-06",
+        },
+        {
+          url: "https://yscm.sicau.edu.cn/info/1053/100.htm",
+          title: "2026年测试竞赛报名通知",
+          publishedAt: "2026-10-26",
+        },
+      ],
+      next: "https://yscm.sicau.edu.cn/qt/tzgg/xsl/25.htm",
+    });
+    const article = extractArticle(
+      artsMediaArticle,
+      "https://yscm.sicau.edu.cn/info/1053/100.htm",
+      sources[3],
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-10-26",
+    });
+    expect(article.attachments.map((item) => item.title)).toEqual([
+      "附件：规则.docx",
+      "附件：报名表.xlsx",
+    ]);
+  });
+  it("新增来源的分页仍拒绝越界路径与自循环", () => {
+    for (const next of ["/admin/login", sources[2].listUrl])
+      expect(() =>
+        extractList(
+          scienceList.replace("tzgg/6.htm", next),
+          sources[2].listUrl,
+          sources[2],
+        ),
+      ).toThrow(/分页|路径/);
+    expect(() =>
+      extractList(
+        artsMediaList.replace("xsl/25.htm", "/qt/tzgg/xsl.htm"),
+        sources[3].listUrl,
+        sources[3],
+      ),
+    ).toThrow(/分页|路径/);
+  });
+  it("批次一新增六院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "agriculture",
+        list: agricultureList,
+        article: agricultureArticle,
+        listDate: "2026-03-22",
+        articleDate: "2026-03-22",
+        attachments: 1,
+        next: "https://nxy.sicau.edu.cn/sqyr1/cxcy/2.htm",
+        skipped: 0,
+      },
+      {
+        id: "animal-science",
+        list: animalScienceList,
+        article: animalScienceArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: null,
+        skipped: 0,
+      },
+      {
+        id: "veterinary-medicine",
+        list: veterinaryList,
+        article: veterinaryArticle,
+        listDate: "2026-10-28",
+        articleDate: "2026-10-28",
+        attachments: 1,
+        next: "https://dyy.sicau.edu.cn/xwzx1/tzgg/9.htm",
+        skipped: 0,
+      },
+      {
+        id: "grassland-science",
+        list: grasslandList,
+        article: grasslandArticle,
+        listDate: null,
+        articleDate: "2026-10-09",
+        attachments: 1,
+        next: "https://cgst.sicau.edu.cn/index/tzgg/xsl/52.htm",
+        skipped: 1,
+      },
+      {
+        id: "fisheries",
+        list: fisheriesList,
+        article: fisheriesArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://scxy.sicau.edu.cn/index/tzgg/2.htm",
+        skipped: 0,
+      },
+      {
+        id: "forestry",
+        list: forestryList,
+        article: forestryArticle,
+        listDate: "2026-05-09",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://lxy.sicau.edu.cn/index/tzgg/27.htm",
+        skipped: 0,
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(entry.skipped);
+      const article = extractArticle(entry.article, page.items[0].url, source);
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+    }
+  });
+  it("草业科技学院把站外转载记为跳过原因，不当作采集失败", () => {
+    const source = sources.find((item) => item.id === "grassland-science")!;
+    const page = extractList(grasslandList, source.listUrl, source);
+    expect(page.skipped).toEqual([
+      expect.objectContaining({ reason: expect.stringContaining("白名单") }),
+    ]);
+  });
+  it("批次二新增五院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "horticulture",
+        list: horticultureList,
+        article: horticultureArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        items: 2,
+        next: "https://yyx.sicau.edu.cn/xyxw/xytz/1.htm",
+      },
+      {
+        id: "landscape-architecture",
+        list: landscapeList,
+        article: landscapeArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        items: 2,
+        next: "https://fjylxy.sicau.edu.cn/xwzx1/tzgg/3.htm",
+      },
+      {
+        id: "resources",
+        list: resourcesList,
+        article: resourcesArticle,
+        listDate: "2026-10-16",
+        articleDate: "2026-10-16",
+        attachments: 0,
+        items: 1,
+        next: "https://zyxy.sicau.edu.cn/sy/tzgg/64.htm",
+      },
+      {
+        id: "environment",
+        list: environmentList,
+        article: environmentArticle,
+        listDate: "2026-09-20",
+        articleDate: "2026-09-20",
+        attachments: 1,
+        items: 1,
+        next: "https://hjxy.sicau.edu.cn/xwzx1/tzgg/6.htm",
+      },
+      {
+        id: "management",
+        list: managementList,
+        article: managementArticle,
+        listDate: null,
+        articleDate: "2026-10-18",
+        attachments: 1,
+        items: 1,
+        next: "https://glxy.sicau.edu.cn/ggl/xsl/37.htm",
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(entry.items);
+      expect(page.items.at(-1)).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(0);
+      const article = extractArticle(
+        entry.article,
+        page.items.at(-1)!.url,
+        source,
+      );
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+    }
+  });
+  it("园艺学院按命名组取「年-月」与「日」两块日期", () => {
+    const source = sources.find((item) => item.id === "horticulture")!;
+    const page = extractList(horticultureList, source.listUrl, source);
+    expect(page.items.map((item) => item.publishedAt)).toEqual([
+      "2025-12-29",
+      "2026-10-21",
+    ]);
+  });
+  it("管理学院列表只有月日没有年份，列表日期留空交由正文判定", () => {
+    const source = sources.find((item) => item.id === "management")!;
+    const page = extractList(managementList, source.listUrl, source);
+    expect(page.items[0].publishedAt).toBeNull();
+    expect(
+      extractArticle(managementArticle, page.items[0].url, source).publishedAt,
+    ).toBe("2026-10-18");
+  });
+  it("经济学院正文以站内 PDF 内嵌发布，未登记为可执行来源", () => {
+    expect(sources.map((source) => source.id)).not.toContain("economics");
+    const candidate = collegeVerificationCandidates.find(
+      (entry) => entry.collegeId === "economics",
+    )!;
+    expect(candidate.note).toContain("PDF");
+  });
+  it("生命科学学院正文改版后仍按通用容器与标题解析", () => {
+    const source = sources[1];
+    const article = extractArticle(
+      lifeArticleCurrent,
+      "https://smkx.sicau.edu.cn/info/1061/29521.htm",
+      source,
+    );
+    expect(article).toMatchObject({
+      title: "2026年测试竞赛报名通知",
+      publishedAt: "2026-10-22",
+    });
+    expect(article.text).toContain("报名截止：2026年10月20日24:00");
+  });
+  it("批次三新增六院默认停用，列表与正文按各自模板解析", () => {
+    const cases = [
+      {
+        id: "agricultural-engineering",
+        list: agriculturalEngineeringList,
+        article: agriculturalEngineeringArticle,
+        listDate: "2026-10-30",
+        articleDate: "2026-10-30",
+        attachments: 1,
+        next: "https://nygcxy.sicau.edu.cn/index/tzgg/4.htm",
+      },
+      {
+        id: "food-science",
+        list: foodScienceList,
+        article: foodScienceArticle,
+        listDate: "2026-10-29",
+        articleDate: "2026-10-29",
+        attachments: 1,
+        next: "https://spxy.sicau.edu.cn/index/tzgg/12.htm",
+      },
+      {
+        id: "mechanical-electrical",
+        list: mechanicalElectricalList,
+        article: mechanicalElectricalArticle,
+        listDate: "2026-10-21",
+        articleDate: "2026-10-21",
+        attachments: 1,
+        next: "https://jdxy.sicau.edu.cn/index/tzgg/52.htm",
+      },
+      {
+        id: "water-conservancy",
+        list: waterConservancyList,
+        article: waterConservancyArticle,
+        listDate: "2026-10-20",
+        articleDate: "2026-10-20",
+        attachments: 1,
+        next: "https://slsd.sicau.edu.cn/tzgg/10.htm",
+      },
+      {
+        id: "humanities",
+        list: humanitiesList,
+        article: humanitiesArticle,
+        listDate: "2026-10-22",
+        articleDate: "2026-10-22",
+        attachments: 1,
+        next: "https://rwy.sicau.edu.cn/index/tz/78.htm",
+      },
+      {
+        id: "public-administration",
+        list: publicAdministrationList,
+        article: publicAdministrationArticle,
+        listDate: "2026-10-29",
+        articleDate: "2026-10-29",
+        attachments: 1,
+        next: "https://fpa.sicau.edu.cn/sylm/tzgg/xsl/16.htm",
+      },
+    ];
+    for (const entry of cases) {
+      const source = sources.find((item) => item.id === entry.id)!;
+      expect(source.collegeId).toBe(entry.id);
+      expect(source.legacyDefaultEnabled).toBeUndefined();
+      expect(source.channels).toHaveLength(1);
+      expect(source.attachmentPaths).toEqual([
+        "^/system/_content/download\\.jsp$",
+      ]);
+      expect(() => validateSource(source)).not.toThrow();
+      const page = extractList(entry.list, source.listUrl, source);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.listDate,
+      });
+      expect(page.next).toBe(entry.next);
+      expect(page.skipped ?? []).toHaveLength(0);
+      const article = extractArticle(entry.article, page.items[0].url, source);
+      expect(article).toMatchObject({
+        title: "2026年测试竞赛报名通知",
+        publishedAt: entry.articleDate,
+      });
+      expect(article.text).toContain("报名截止：2026年10月20日24:00");
+      expect(article.attachments).toHaveLength(entry.attachments);
+      expect(article.attachments[0].url).toContain(
+        "/system/_content/download.jsp",
+      );
+    }
+  });
+  it("人文学院列表日期是「年月日」整串，正文标题在自定义标签 p2 内", () => {
+    const source = sources.find((item) => item.id === "humanities")!;
+    const page = extractList(humanitiesList, source.listUrl, source);
+    expect(page.items[0].publishedAt).toBe("2026-10-22");
+    const article = extractArticle(
+      humanitiesArticle,
+      page.items[0].url,
+      source,
+    );
+    expect(article.title).toBe("2026年测试竞赛报名通知");
+    expect(article.publishedAt).toBe("2026-10-22");
+  });
+  it("公共管理学院学生类栏目用旧版表格分页，没有 .p_pages 也能定位下页", () => {
+    const source = sources.find((item) => item.id === "public-administration")!;
+    expect(source.channels[0].selectors.pagination).not.toContain("p_pages");
+    const page = extractList(publicAdministrationList, source.listUrl, source);
+    expect(page.next).toBe("https://fpa.sicau.edu.cn/sylm/tzgg/xsl/16.htm");
   });
 });

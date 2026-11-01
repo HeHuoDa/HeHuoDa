@@ -1,4 +1,5 @@
 import { authTestApp, type AuthTestApp } from "./auth-fixture.js";
+import { sources } from "@hehuoda/sicau-connectors/notices";
 import { passwordHash } from "../src/admin/admin-security.js";
 import { createAdminAccount } from "../src/admin/admin.service.js";
 import { ConfigService } from "@nestjs/config";
@@ -317,7 +318,7 @@ describe("管理接口认证 HTTP 契约", () => {
         expect.objectContaining({
           module: "sources",
           available: true,
-          count: 2,
+          count: sources.length,
         }),
       ]),
     );

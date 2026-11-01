@@ -8,6 +8,7 @@ import { refreshExtraction } from "../src/ingestion/extraction-store.js";
 import {
   parseCandidate,
   sources,
+  noticeRuleVersion,
   type Article,
 } from "@hehuoda/sicau-connectors/notices";
 import { importBatch } from "../src/competitions/import.js";
@@ -141,7 +142,7 @@ describe("分类提取修订使用已有快照", () => {
       )
     ).rows;
     expect(revisions.map((r) => r.rule_version)).toEqual([
-      "competition-rules-1",
+      noticeRuleVersion,
       "competition-rules-test-2",
     ]);
     expect(revisions[0].data.fields.deadline.value).toBe("2026-11-01");

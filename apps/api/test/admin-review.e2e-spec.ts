@@ -10,9 +10,16 @@ import {
   extractArticle,
   parseCandidate,
   sources,
+  BoundedFetcher,
+  noticeRuleVersion,
   type FetchResult,
 } from "@hehuoda/sicau-connectors/notices";
-import { initializeSources, persistArticle } from "../src/ingestion/store.js";
+import {
+  hash,
+  initializeSources,
+  persistArticle,
+} from "../src/ingestion/store.js";
+import { IngestionRunner } from "../src/ingestion/runner.js";
 import { persistAttachment } from "../src/ingestion/attachment-store.js";
 
 describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
@@ -87,6 +94,125 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
       },
     };
   }
+
+  it("旧规则候选收到304后按当前规则重算、追加历史并撤销旧批准，同版再扫幂等", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const get = async () => {
+      const response = await test.request("GET", path, undefined, {
+        cookie: auth.cookie,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    };
+    const original = await get();
+    // 模拟部署前已有的v1快照和分类，不清空提取键，以覆盖版本未升级时的短路。
+    const oldData = structuredClone(original.candidate);
+    oldData.classification.ruleVersion = "competition-rules-1";
+    oldData.classification.classification = "suspected";
+    const oldKey = hash({
+      sourceVersion: original.sourceVersion,
+      evidenceRevision: original.evidenceRevision,
+      ruleVersion: "competition-rules-1",
+    });
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET rule_version='competition-rules-1',extraction_key=$2,classification='suspected',priority=2,data=$3 WHERE id=$1",
+      [id, oldKey, oldData],
+    );
+    await test.pool.query(
+      "UPDATE ingestion_extraction_revisions SET rule_version='competition-rules-1',extraction_key=$2,data=$3 WHERE candidate_id=$1",
+      [id, oldKey, oldData],
+    );
+    const review = correctedReview(
+      (
+        await test.request("GET", path + "/review", undefined, {
+          cookie: auth.cookie,
+        })
+      ).json(),
+    );
+    const approval = await test.request(
+      "POST",
+      path + "/approve",
+      {
+        operationId: randomUUID(),
+        reason: "核对旧规则候选",
+        review,
+      },
+      auth.headers,
+    );
+    expect(approval.statusCode).toBe(200);
+    const before = await get();
+    expect(before).toMatchObject({
+      status: "approved",
+      ruleVersion: "competition-rules-1",
+      classification: "suspected",
+    });
+    const requested: string[] = [];
+    let time = 0;
+    const runner = new IngestionRunner(
+      test.pool,
+      (s, limits) =>
+        new BoundedFetcher(
+          s,
+          limits,
+          async (target) => {
+            requested.push(target.pathname);
+            return {
+              status: target.pathname === "/robots.txt" ? 404 : 304,
+              headers: {},
+              body: new Uint8Array(),
+            };
+          },
+          () => time,
+          async (ms) => {
+            time += ms;
+          },
+        ),
+    );
+    expect(await runner.scan({ sourceId: source.id, url })).toMatchObject({
+      status: "succeeded",
+      counts: { unchanged: 1 },
+    });
+    const after = await get();
+    expect(after).toMatchObject({
+      status: "pending",
+      ruleVersion: "competition-rules-2",
+      classification: "definite",
+      candidateRevision: before.candidateRevision + 1,
+      sourceVersion: before.sourceVersion,
+    });
+    expect(after.extractionRevisions).toHaveLength(2);
+    expect(
+      after.extractionRevisions.map(
+        (entry: { ruleVersion: string }) => entry.ruleVersion,
+      ),
+    ).toEqual(
+      expect.arrayContaining(["competition-rules-1", "competition-rules-2"]),
+    );
+    expect(
+      (
+        await test.request(
+          "POST",
+          path + "/approve",
+          {
+            operationId: randomUUID(),
+            reason: "旧材料必须重新核对",
+            review: { ...review, operationId: randomUUID() },
+          },
+          auth.headers,
+        )
+      ).statusCode,
+    ).toBe(409);
+    expect(requested).toEqual(["/robots.txt", "/info/1043/100.htm"]);
+    expect(await runner.scan({ sourceId: source.id, url })).toMatchObject({
+      status: "succeeded",
+      counts: { unchanged: 1 },
+    });
+    const repeated = await get();
+    expect(repeated.candidateRevision).toBe(after.candidateRevision);
+    expect(repeated.extractionRevisions).toEqual(after.extractionRevisions);
+  });
 
   it("同一通知的两个发现栏目可追溯，仍只有一条候选链", async () => {
     const id = await candidateId();
@@ -312,7 +438,7 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(filtered.json().items[0]).toMatchObject({
       candidateId: id,
       priority: 3,
-      ruleVersion: "competition-rules-1",
+      ruleVersion: noticeRuleVersion,
     });
     expect(
       (

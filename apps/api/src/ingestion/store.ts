@@ -9,6 +9,7 @@ import {
   defaultLimits,
   classifyNotice,
   containsApplicantList,
+  containsPersonalNameList,
   parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 import type { ParsedCandidate } from "./types.js";
@@ -58,10 +59,11 @@ export async function transaction<T>(
   }
 }
 export async function initializeSources(pool: Pool) {
+  // 新来源默认停用；只有迁移前已存在的来源沿用旧的默认启用语义，已有行不被重置。
   for (const source of sources)
     await pool.query(
-      "INSERT INTO ingestion_sources(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
-      [source.id, source],
+      "INSERT INTO ingestion_sources(id,data,enabled) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",
+      [source.id, source, !!source.legacyDefaultEnabled],
     );
   await initializeChannels(pool);
 }
@@ -157,8 +159,11 @@ export async function persistArticle(
     article.paragraphs,
     article.attachments.map((a) => a.title),
   );
-  if (containsApplicantList([article.title, article.text].join("\n")))
-    throw new Error("通知涉及报名者名单，禁止保存正文与个人资料");
+  if (
+    containsApplicantList([article.title, article.text].join("\n")) ||
+    containsPersonalNameList(article.title)
+  )
+    throw new Error("通知涉及个人名单，禁止保存正文与个人资料");
   if (classification.classification === "non_competition") {
     article = { ...article, text: "", paragraphs: [], attachments: [] };
     response = { ...response, body: new Uint8Array(), html: "", headers: {} };

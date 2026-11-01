@@ -534,4 +534,126 @@ describe("赛事分类独立于审核状态", () => {
         .evidence[0],
     ).toMatchObject({ format: "docx", paragraph: 3, attachmentVersion: "a1" });
   });
+  it("正文泛指「调整」不把首次通知判成补充通知", () => {
+    // 2026-11-01 实站抽样：助学金、职业规划大赛首次通知因正文出现「调整」被判 supplement。
+    expect(
+      classifyNotice("环境学院关于评定2026-2027学年国家助学金的通知", [
+        "如上级政策调整，以最新通知为准。",
+        "请符合条件的同学按时提交材料。",
+      ]),
+    ).toMatchObject({ notificationKind: "news" });
+    expect(
+      classifyNotice("关于举办风景园林学院大学生职业规划大赛的预通知", [
+        "比赛时间根据省赛安排可能调整。",
+        "参赛对象：全院本科生。",
+      ]),
+    ).toMatchObject({ notificationKind: "registration" });
+    expect(
+      classifyNotice("数学建模竞赛报名延期通知", [
+        "报名截止延至2026年11月10日。",
+      ]),
+    ).toMatchObject({ notificationKind: "supplement" });
+  });
+  it("评选标题同时含赛事线索时进入复核，单独评选与结果公示仍排除", () => {
+    for (const title of [
+      "关于举办2026年大学生优秀设计作品评选大赛的通知",
+      "关于开展数学比赛作品评审的通知",
+    ])
+      expect(
+        classifyNotice(title, ["面向全校学生，报名截止：2026年11月20日。"]),
+      ).toMatchObject({
+        classification: "definite",
+        needsReview: true,
+      });
+    expect(classifyNotice("关于开展征文作品评选的通知", [])).toMatchObject({
+      classification: "suspected",
+      needsReview: true,
+    });
+    expect(
+      classifyNotice("关于组织开展创新创业典型评选工作的通知", []),
+    ).toMatchObject({
+      classification: "suspected",
+      needsReview: true,
+    });
+    for (const title of [
+      "关于开展优秀作品评选的通知",
+      "关于开展项目评审的通知",
+      "数学比赛评审结果公示",
+      "设计大赛获奖名单公示",
+    ])
+      expect(classifyNotice(title, ["此前数学比赛报名已结束。"])).toMatchObject(
+        {
+          classification: "non_competition",
+          needsReview: false,
+        },
+      );
+  });
+  it("评选赛事未开放报名时进入普通复核，不占用报名优先级", () => {
+    for (const title of [
+      "关于开展数学比赛作品评审的通知",
+      "关于开展设计大赛作品评选的通知",
+    ]) {
+      expect(
+        classifyNotice(title, ["请专家按既定评分标准完成作品审核。"]),
+      ).toMatchObject({
+        classification: "definite",
+        notificationKind: "news",
+        priority: 1,
+        needsReview: true,
+      });
+      expect(
+        classifyNotice(title, ["报名截止：2026年11月20日。"]),
+      ).toMatchObject({
+        notificationKind: "registration",
+        priority: 0,
+      });
+    }
+  });
+  it("结果公示与评选、评定类通知按非赛事处理，不进入复核", () => {
+    for (const title of [
+      "资源学院关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛校内预选赛项目结果公示",
+      "关于组织开展2025—2026学年优秀典型评选工作的通知",
+      "环境学院关于评定2026-2027学年国家助学金的通知",
+      "2025-2026学年度学生奖励评审结果公示",
+    ])
+      expect(classifyNotice(title, ["现将结果公示如下。"])).toMatchObject({
+        classification: "non_competition",
+        needsReview: false,
+      });
+    // 带报名或参赛语义的赛事通知仍按赛事处理。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛报名通知", [
+        "报名截止：2026年10月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite" });
+    expect(
+      classifyNotice("关于组织参加第二十届“挑战杯”竞赛参赛作品评选的通知", [
+        "参赛作品提交截止：2026年10月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite" });
+  });
+  it("党团事务与培训班通知不因正文提到比赛就判为明确赛事", () => {
+    // 实站样本：正文提到往届比赛，标题本身是入团或培训班通知。
+    expect(
+      classifyNotice("机电学院关于2026年度下半年青年入团相关通知", [
+        "各团支部组织团员参加知识比赛与志愿服务。",
+      ]),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+    expect(
+      classifyNotice("食品学院关于开展第三期“春笋计划”赛训育人交互班的通知", [
+        "培训围绕学科比赛备赛展开。",
+      ]),
+    ).toMatchObject({ classification: "suspected" });
+    expect(
+      classifyNotice("风景园林学院关于2026年秋季入团积极分子确定与培养的通知", [
+        "结合比赛获奖情况择优推荐。",
+      ]),
+    ).toMatchObject({ classification: "suspected" });
+    // 标题本身写明竞赛的党团或培训类活动仍按赛事处理。
+    expect(
+      classifyNotice("关于举办党校学员党史知识竞赛的通知", [
+        "报名截止：2026年10月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite" });
+  });
 });

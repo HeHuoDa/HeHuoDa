@@ -131,7 +131,8 @@ export class AdminIngestionService
         [id],
       )
     ).rows[0];
-    const enabled: boolean = row?.enabled ?? true;
+    // 未落库的新来源按注册表默认停用，不能沿用旧来源的默认启用语义。
+    const enabled: boolean = row?.enabled ?? !!source.legacyDefaultEnabled;
     const settings = { ...defaultSettings, ...row?.settings };
     const latest =
       (
@@ -350,7 +351,7 @@ export class AdminIngestionService
           )
         ).rows[0];
         const settings = { ...defaultSettings, ...current?.settings };
-        const enabled = current?.enabled ?? true;
+        const enabled = current?.enabled ?? !!source.legacyDefaultEnabled;
         if (body.baseline !== hash({ enabled, settings }))
           throw new ConflictException();
         if (body.enabled === true && !source.legacyDefaultEnabled) {

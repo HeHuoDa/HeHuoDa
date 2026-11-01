@@ -65,7 +65,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验创新创业栏目前两页：当届中国国际大学生创新大赛校内选拔赛、挑战杯校赛通知与普通通知并存；已登记来源 agriculture（默认停用）",
     },
     {
       collegeId: "animal-science",
@@ -100,7 +100,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：当届职业规划大赛通知；列表仅一页，下页为不可点文本；已登记来源 animal-science（默认停用）",
     },
     {
       collegeId: "veterinary-medicine",
@@ -135,7 +135,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：生泰尔杯、天康杯专业技能竞赛通知；历史页可遍历；已登记来源 veterinary-medicine（默认停用）",
     },
     {
       collegeId: "grassland-science",
@@ -170,7 +170,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学生类栏目：第 2 页有 2026 年草学类专业综合实践技能大赛报名通知；列表只有月/日无年份，日期以正文为准；转载教务处条目按站外跳过；已登记来源 grassland-science（默认停用）",
     },
     {
       collegeId: "fisheries",
@@ -205,7 +205,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：2026 年大学生职业规划大赛院赛通知；已登记来源 fisheries（默认停用）",
     },
     {
       collegeId: "forestry",
@@ -240,7 +240,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第十四届职业规划大赛院内选拔赛预通知；列表日期拆为「日」与「年-月」两块；已登记来源 forestry（默认停用）",
     },
     {
       collegeId: "horticulture",
@@ -275,7 +275,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学院通知栏目前两页：当届职业规划大赛校内选拔赛、茶学技能大赛通知与团员名单公示并存；列表日期拆成「年-月」与「日」两块；已登记来源 horticulture（默认停用）",
     },
     {
       collegeId: "landscape-architecture",
@@ -304,7 +304,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：当届职业规划大赛预通知；置顶 2025 年旧条目与当届通知混排，历史页可遍历；已登记来源 landscape-architecture（默认停用）",
     },
     {
       collegeId: "resources",
@@ -333,7 +333,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第 2 页有挑战杯校内预选赛结果公示，正文未观测到附件；已登记来源 resources（默认停用），暂不开放附件主机",
     },
     {
       collegeId: "environment",
@@ -374,7 +374,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验通知公告：第 2 页有挑战杯校内预选赛与创新大赛网报通知；已登记来源 environment（默认停用）",
     },
     {
       collegeId: "economics",
@@ -409,7 +409,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 受阻：学生工作栏目抽样 12 条通知正文全部以站内 PDF 内嵌 iframe 发布，HTML 适配器按设计不解析 PDF，未登记可执行来源；人工入口 https://jjxy.sicau.edu.cn/sylm/xsgz.htm",
     },
     {
       collegeId: "management",
@@ -438,7 +438,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 核验学生类栏目：第 2 页有职业规划大赛、挑战杯院内预选赛通知；列表只有「月-日 时:分」无年份，日期以正文为准；已登记来源 management（默认停用）",
     },
     {
       collegeId: "agricultural-engineering",
@@ -467,7 +467,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：当届职业规划大赛通知与团员名单公示并存，列表日期在 time，附件在 footer.article-links；已登记来源 agricultural-engineering（默认停用）。原候选栏目 /xsgz/cxcy.htm 只有 3 条获奖新闻，未作为采集入口",
     },
     {
       collegeId: "food-science",
@@ -496,7 +496,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：当届泡菜创意技能比赛、食品学科专业竞赛复赛与班规设计大赛并存，列表行无 id、标题与日期同在一个 a 内；已登记来源 food-science（默认停用）。原候选栏目 /xsgz/xsdt.htm 为学生动态新闻",
     },
     {
       collegeId: "science",
@@ -531,7 +531,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 已按实站列表、分页、正文和附件主机核验，登记为可执行来源 science（默认停用）；启用仍需管理端登记栏目核验",
     },
     {
       collegeId: "life-science",
@@ -595,7 +595,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：第 2 页有大学生职业规划大赛通知、挑战杯院内初赛与机械创新设计大赛结果公示，正文 4 个同源附件；已登记来源 mechanical-electrical（默认停用）",
     },
     {
       collegeId: "information-engineering",
@@ -671,7 +671,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /tzgg.htm：当届职业规划大赛预通知、工程测量技能大赛通知与挑战杯院内选拔公示并存，列表带摘要、日期在 .meta-date，附件在 .article-attachments；已登记来源 water-conservancy（默认停用）",
     },
     {
       collegeId: "humanities",
@@ -712,7 +712,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tz.htm（首页「通知公告」更多入口）：当届班徽班训设计大赛、国学经典诵读大赛通知与拟发展团员名单公示并存，列表日期为「年月日」整串、正文标题在自定义标签 p2；已登记来源 humanities（默认停用）",
     },
     {
       collegeId: "public-administration",
@@ -753,7 +753,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验学生类 /sylm/tzgg/xsl.htm：当届「职等你来」人力资源管理技能竞赛、班徽班训设计大赛与挑战杯校内预选赛并存；沿用旧版表格分页（无 .p_pages，第 2 页起「上页」由 span 变 a）；已登记来源 public-administration（默认停用）",
     },
     {
       collegeId: "law",
@@ -888,7 +888,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-10-31 已按实站列表、分页、正文和附件主机核验，登记为可执行来源 arts-media（默认停用）；启用仍需管理端登记栏目核验",
     },
     {
       collegeId: "architecture-planning",
