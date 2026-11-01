@@ -467,7 +467,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：当届职业规划大赛通知与团员名单公示并存，列表日期在 time，附件在 footer.article-links；已登记来源 agricultural-engineering（默认停用）。原候选栏目 /xsgz/cxcy.htm 只有 3 条获奖新闻，未作为采集入口",
     },
     {
       collegeId: "food-science",
@@ -496,7 +496,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：当届泡菜创意技能比赛、食品学科专业竞赛复赛与班规设计大赛并存，列表行无 id、标题与日期同在一个 a 内；已登记来源 food-science（默认停用）。原候选栏目 /xsgz/xsdt.htm 为学生动态新闻",
     },
     {
       collegeId: "science",
@@ -595,7 +595,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tzgg.htm：第 2 页有大学生职业规划大赛通知、挑战杯院内初赛与机械创新设计大赛结果公示，正文 4 个同源附件；已登记来源 mechanical-electrical（默认停用）",
     },
     {
       collegeId: "information-engineering",
@@ -671,7 +671,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /tzgg.htm：当届职业规划大赛预通知、工程测量技能大赛通知与挑战杯院内选拔公示并存，列表带摘要、日期在 .meta-date，附件在 .article-attachments；已登记来源 water-conservancy（默认停用）",
     },
     {
       collegeId: "humanities",
@@ -712,7 +712,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验通知公告 /index/tz.htm（首页「通知公告」更多入口）：当届班徽班训设计大赛、国学经典诵读大赛通知与拟发展团员名单公示并存，列表日期为「年月日」整串、正文标题在自定义标签 p2；已登记来源 humanities（默认停用）",
     },
     {
       collegeId: "public-administration",
@@ -753,7 +753,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-01 核验学生类 /sylm/tzgg/xsl.htm：当届「职等你来」人力资源管理技能竞赛、班徽班训设计大赛与挑战杯校内预选赛并存；沿用旧版表格分页（无 .p_pages，第 2 页起「上页」由 span 变 a）；已登记来源 public-administration（默认停用）",
     },
     {
       collegeId: "law",
