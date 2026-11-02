@@ -100,7 +100,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "2026-10-31 核验通知公告：当届职业规划大赛通知；列表仅一页，下页为不可点文本；已登记来源 animal-science（默认停用）",
+      note: "2026-11-02 核验通知公告：6条，分页无可点击链接；已登记来源 animal-science（默认停用）。另核学生工作 xsgz/xgdt.htm 前3页，确有分页，但抽样未取得当届报名正例，保持未注册；通知公告单页与这次抽样均不证明全院首年历史完整覆盖。",
     },
     {
       collegeId: "veterinary-medicine",
@@ -1020,6 +1020,6 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "",
+      note: "2026-11-02 核验已注册的 index/tzgg.htm：9条，分页无可点击链接；来源 business-tourism 默认停用。另核团学动态 txdt2.htm 前3页及摄影征集正文，样本是活动回顾，未取得当届报名正例，保持未注册；组织机构 zzjg.htm 也不是已验证赛事列表。当前单页与这次抽样均不证明全院首年历史完整覆盖。",
     },
   ] as const;

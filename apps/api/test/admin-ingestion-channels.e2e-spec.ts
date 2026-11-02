@@ -203,6 +203,72 @@ describe("管理采集栏目核验与调度 API", () => {
     ).toBe(401);
   });
 
+  it("覆盖保留不连续的已完成任务范围，不把日期空档显示成已覆盖", async () => {
+    const ids = [randomUUID(), randomUUID(), randomUUID()];
+    try {
+      for (const [index, from, to, status, pending, pages] of [
+        [0, "2026-01-01", "2026-01-31", "succeeded", [], []],
+        [1, "2026-03-01", "2026-03-31", "succeeded", [], []],
+        [
+          2,
+          "2026-04-01",
+          "2026-04-30",
+          "partial",
+          [{ url: sampleUrl }],
+          [fixtureSource.listUrl],
+        ],
+      ] as const) {
+        await test.pool.query(
+          `INSERT INTO ingestion_scan_tasks(id,source_id,channel_id,phase,from_date,to_date,config_hash,status,cursor)
+           VALUES($1,$2,$3,'backfill',$4,$5,'coverage-fixture',$6,$7)`,
+          [
+            ids[index],
+            sourceId,
+            channelId,
+            from,
+            to,
+            status,
+            { pending, pages, seen: [] },
+          ],
+        );
+      }
+      const channel = await channelState();
+      expect(channel.coverage.backfill).toMatchObject({
+        total: 3,
+        statuses: { succeeded: 2, partial: 1 },
+      });
+      expect(channel.coverage.backfill.ranges).toEqual([
+        expect.objectContaining({
+          from: "2026-01-01",
+          to: "2026-01-31",
+          completed: true,
+          pendingNotices: 0,
+          pendingPages: 0,
+        }),
+        expect.objectContaining({
+          from: "2026-03-01",
+          to: "2026-03-31",
+          completed: true,
+          pendingNotices: 0,
+          pendingPages: 0,
+        }),
+        expect.objectContaining({
+          from: "2026-04-01",
+          to: "2026-04-30",
+          completed: false,
+          pendingNotices: 1,
+          pendingPages: 1,
+        }),
+      ]);
+      expect(channel.pendingCount).toBe(2);
+    } finally {
+      await test.pool.query(
+        "DELETE FROM ingestion_scan_tasks WHERE id=ANY($1::text[])",
+        [ids],
+      );
+    }
+  });
+
   it("栏目配置拒绝未核验启用、未知对象和过期基线，并支持 operationId 幂等", async () => {
     const initial = await channelState();
     const url = `admin/ingestion/sources/${sourceId}/channels/${channelId}`;

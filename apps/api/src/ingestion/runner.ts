@@ -16,6 +16,7 @@ import {
   sourceById,
   type ListItem,
   NoticeParseError,
+  AttachmentParseError,
   channelById,
 } from "@hehuoda/sicau-connectors/notices";
 
@@ -82,6 +83,8 @@ export function dateRange(options: ScanOptions, now = new Date()) {
 }
 const errorSummary = (error: unknown) =>
   error instanceof NoticeParseError ||
+  (error instanceof AttachmentParseError &&
+    error.code === "attachment-verification-required") ||
   (error instanceof Error && !("code" in error))
     ? error.message.slice(0, 500)
     : "数据库或网络错误；未输出连接信息";
