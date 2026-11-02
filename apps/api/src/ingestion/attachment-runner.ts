@@ -123,9 +123,12 @@ export async function checkNoticeAttachments(
         response.headers["content-type"],
       );
       if (!mediaType) {
-        const visible = /(?:text\/html|application\/xhtml\+xml)/i.test(
-          response.headers["content-type"] ?? "",
-        )
+        // 下载端可能漏标或错标类型；先按字节识别HTML，二进制附件不作文本解码。
+        const html =
+          /<!doctype\s+html\b|<(?:html|head|body|title|form)\b/i.test(
+            new TextDecoder().decode(response.body.subarray(0, 2048)),
+          );
+        const visible = html
           ? decodeHtml(response.body, response.headers["content-type"])
               .replace(/<script[\s\S]*?<\/script>/gi, "")
               .replace(/<style[\s\S]*?<\/style>/gi, "")

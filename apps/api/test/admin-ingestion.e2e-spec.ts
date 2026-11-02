@@ -825,6 +825,24 @@ describe("管理员采集运行 API", () => {
       runStatus: "interrupted",
     },
     {
+      name: "错误声明类型的验证码HTML",
+      id: 178198,
+      status: 200,
+      contentType: "application/octet-stream",
+      body: "<html><body>请输入验证码</body></html>",
+      code: "attachment-verification-required",
+      runStatus: "interrupted",
+    },
+    {
+      name: "未声明类型的验证码HTML",
+      id: 178199,
+      status: 200,
+      contentType: "",
+      body: "<html><body>请输入验证码</body></html>",
+      code: "attachment-verification-required",
+      runStatus: "interrupted",
+    },
+    {
       name: "脚本中的验证码文字",
       id: 178195,
       status: 200,
@@ -856,29 +874,43 @@ describe("管理员采集运行 API", () => {
     process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
     try {
       const title = `2026年第${sample.id}项附件受阻回归竞赛报名通知`;
-      installTransport(async (url) => ({
-        status:
-          url.pathname === "/robots.txt"
-            ? 404
-            : url.pathname.endsWith("download.jsp")
-              ? sample.status
-              : 200,
-        headers: {
-          "content-type": url.pathname.endsWith("download.jsp")
-            ? sample.contentType
-            : "text/html; charset=utf-8",
-        },
-        body: Buffer.from(
-          url.pathname === "/robots.txt"
-            ? ""
-            : url.pathname.endsWith("download.jsp")
-              ? sample.body
-              : informationArticle.replace("2026年测试竞赛报名通知", title),
-        ),
-      }));
-      const accepted = await submitScan({
-        url: `https://xxgc.sicau.edu.cn/info/1043/${sample.id}.htm`,
+      const noticeUrl = `https://xxgc.sicau.edu.cn/info/1043/${sample.id}.htm`;
+      const nextUrl = `https://xxgc.sicau.edu.cn/info/1043/${sample.id + 100}.htm`;
+      const challenge = sample.code === "attachment-verification-required";
+      const requested: string[] = [];
+      const list =
+        [noticeUrl, nextUrl]
+          .map(
+            (url, index) =>
+              `<div id="line_u9_${index}"><h1 class="content-page-title"><a rel="bookmark" href="${url}">${title}</a></h1><span class="spanTime">2026-10-08</span></div>`,
+          )
+          .join("") + '<div class="p_pages"></div>';
+      installTransport(async (url) => {
+        requested.push(url.toString());
+        return {
+          status:
+            url.pathname === "/robots.txt"
+              ? 404
+              : url.pathname.endsWith("download.jsp")
+                ? sample.status
+                : 200,
+          headers: {
+            "content-type": url.pathname.endsWith("download.jsp")
+              ? sample.contentType
+              : "text/html; charset=utf-8",
+          },
+          body: Buffer.from(
+            url.pathname === "/robots.txt"
+              ? ""
+              : url.pathname.endsWith("download.jsp")
+                ? sample.body
+                : url.pathname === new URL(sources[0].listUrl).pathname
+                  ? list
+                  : informationArticle.replace("2026年测试竞赛报名通知", title),
+          ),
+        };
       });
+      const accepted = await submitScan(challenge ? {} : { url: noticeUrl });
       expect(accepted.statusCode).toBe(202);
       const request = await waitForRequest(accepted.json().requestId);
       const run = await test.request(
@@ -888,6 +920,15 @@ describe("管理员采集运行 API", () => {
         { cookie },
       );
       expect(run.json().status).toBe(sample.runStatus);
+      if (challenge) {
+        expect(requested).not.toContain(nextUrl);
+        expect(run.json().cursor.pending).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ url: noticeUrl }),
+            expect.objectContaining({ url: nextUrl }),
+          ]),
+        );
+      }
       const queue = (
         await test.request("GET", "admin/ingestion/candidates", undefined, {
           cookie,
