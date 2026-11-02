@@ -656,4 +656,42 @@ describe("赛事分类独立于审核状态", () => {
       ]),
     ).toMatchObject({ classification: "definite" });
   });
+  it("发展团员与体质健康测试通知不因正文赛事词或补充字样进入明确赛事", () => {
+    // 批次四实站样本：发展团员通知的申请材料里列了「比赛获奖」，标题仍是团务。
+    expect(
+      classifyNotice("关于法学院2026年秋季学期发展团员工作的通知", [
+        "提交附件3以及相关证明材料（如成绩、志愿时长、比赛获奖、荣誉证书等）。",
+      ]),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+    expect(
+      classifyNotice("建筑与城乡规划学院2026年下半年团员发展通知", [
+        "参考比赛获奖情况。",
+      ]),
+    ).toMatchObject({ classification: "suspected" });
+    // 体质健康测试是测试安排，不是赛事；标题带「补充通知」也不进复核。
+    expect(
+      classifyNotice("关于都江堰校区2025、2026级学生体质健康测试的补充通知", [
+        "请各学院按规定时间组织学生参加测试。",
+      ]),
+    ).toMatchObject({ classification: "non_competition", needsReview: false });
+  });
+  it("求职补贴等资助类人员公示按个人名单跳过", () => {
+    // 批次四实站样本：补贴公示逐条列人名，标题未出现「名单」二字。
+    expect(
+      classifyNotice(
+        "土木工程学院关于2027届毕业本科生一次性求职补贴人员的公示",
+        ["经审核，现将名单公示如下。"],
+      ),
+    ).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+    // 只是组织评选的通知不是名单，仍按非赛事保留而不按个人名单跳过。
+    expect(
+      classifyNotice(
+        "法学院关于开展2026年“盟遂合作”遂宁籍学子资助金评选推荐工作的通知",
+        ["请各班级按条件推荐。"],
+      ).exclusions,
+    ).not.toContain("applicant-list");
+  });
 });

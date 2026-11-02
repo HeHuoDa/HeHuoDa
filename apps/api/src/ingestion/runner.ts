@@ -738,6 +738,19 @@ export class IngestionRunner {
         await checkpoint();
       }
       const catalog = await readCatalog(lock);
+      // 跳过名单抓取不等于保留旧批准；用已有快照升级规则，不保存新的名单正文。
+      const refreshSkippedNotice = async (url: string) => {
+        if (input.preview) return;
+        await transaction(this.pool, async (client) => {
+          const notice = (
+            await client.query(
+              "SELECT id FROM ingestion_notices WHERE source_id=$1 AND url=$2",
+              [source.id, url],
+            )
+          ).rows[0];
+          if (notice) await refreshExtraction(client, notice.id);
+        });
+      };
       const attempted = new Set<string>();
       while (cursor.pending.length) {
         const item = cursor.pending[0];
@@ -757,13 +770,15 @@ export class IngestionRunner {
               personalList)
           ) {
             counts.ignored++;
-            if (personalList)
+            if (personalList) {
+              await refreshSkippedNotice(item.url);
               errors.push({
                 url: item.url,
                 kind: "skipped",
                 code: "applicant-list",
                 message: "通知标题为个人名单（报名者或评优公示），跳过该条",
               });
+            }
             cursor.pending.shift();
             await checkpoint();
             continue;
@@ -834,6 +849,7 @@ export class IngestionRunner {
               containsApplicantList(article.title + "\n" + article.text) ||
               containsPersonalNameList(article.title)
             ) {
+              await refreshSkippedNotice(item.url);
               counts.ignored++;
               errors.push({
                 url: item.url,

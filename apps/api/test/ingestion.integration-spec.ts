@@ -153,6 +153,70 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       ),
     ).rejects.toThrow(/过期|变化/);
   });
+  it.each(["list", "article"])(
+    "%s 命中新名单规则时撤销已有旧版批准，不再抓取或保存名单正文",
+    async (boundary) => {
+      const title = "土木工程学院关于2027届毕业本科生一次性求职补贴人员的公示";
+      const html = informationArticle.replace("2026年测试竞赛报名通知", title);
+      const file = await approved();
+      // 模拟 v2 已保存的旧快照；当前持久化入口已禁止新增这类名单。
+      await db.pool.query(
+        "UPDATE ingestion_versions SET article=jsonb_set(article,'{title}',to_jsonb($1::text)) WHERE id=$2",
+        [title, file.sourceVersion],
+      );
+      await db.pool.query(
+        "UPDATE ingestion_candidates SET rule_version='competition-rules-2',extraction_key=NULL WHERE id=$1",
+        [file.candidateId],
+      );
+      await runner([http(404), http(200, html)]).scan({
+        sourceId: source.id,
+        url,
+        preview: true,
+      });
+      expect(await candidate()).toMatchObject({
+        status: "approved",
+        rule_version: "competition-rules-2",
+        revision: file.candidateRevision,
+      });
+      const responses =
+        boundary === "list"
+          ? [
+              http(404),
+              http(
+                200,
+                informationList
+                  .replace("2026年测试竞赛报名通知", title)
+                  .replace(/<a href="tz\/3.htm">下页<\/a>/, ""),
+              ),
+            ]
+          : [http(404), http(200, html)];
+      expect(
+        await runner(responses).scan({
+          sourceId: source.id,
+          ...(boundary === "article" ? { url } : {}),
+        }),
+      ).toMatchObject({
+        status: "succeeded",
+        counts: { ignored: 1, failed: 0 },
+      });
+      expect(responses).toHaveLength(0);
+      expect(await candidate()).toMatchObject({
+        rule_version: noticeRuleVersion,
+        status: "pending",
+        approved_file: null,
+        revision: file.candidateRevision + 1,
+        classification: "non_competition",
+      });
+      await expect(applyReview(db.pool, file, "maintainer")).rejects.toThrow(
+        /过期|变化|审核/,
+      );
+      expect((await formal()).competitions).toHaveLength(0);
+      expect(
+        (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
+          .count,
+      ).toBe("1");
+    },
+  );
   it("拒绝不被重复采集重开，显式重开或新版本才恢复待审核", async () => {
     const stored = await persist();
     await setReviewState(
