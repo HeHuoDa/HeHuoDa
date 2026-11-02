@@ -162,8 +162,8 @@ export class AdminIngestionService
         const verificationStatus = channelRow?.verification_status ?? "pending";
         const taskRows = (
           await this.database.pool.query(
-            `SELECT phase,status,count(*)::int AS count,min(from_date)::text AS "from",max(to_date)::text AS "to",sum(jsonb_array_length(cursor->'pending'))::int AS "pendingNotices",sum(jsonb_array_length(cursor->'pages'))::int AS "pendingPages" FROM ingestion_scan_tasks
-             WHERE source_id=$1 AND channel_id=$2 GROUP BY phase,status ORDER BY phase,status`,
+            `SELECT phase,status,count(*)::int AS count,from_date::text AS "from",to_date::text AS "to",sum(jsonb_array_length(cursor->'pending'))::int AS "pendingNotices",sum(jsonb_array_length(cursor->'pages'))::int AS "pendingPages" FROM ingestion_scan_tasks
+             WHERE source_id=$1 AND channel_id=$2 GROUP BY phase,status,from_date,to_date ORDER BY phase,from_date,to_date,status`,
             [source.id, channel.id],
           )
         ).rows as {
@@ -184,7 +184,8 @@ export class AdminIngestionService
             coverage[task.phase] ??
             (coverage[task.phase] = { total: 0, statuses: {}, ranges: [] });
           phase.total += task.count;
-          phase.statuses[task.status] = task.count;
+          phase.statuses[task.status] =
+            (phase.statuses[task.status] ?? 0) + task.count;
           phase.ranges.push({
             status: task.status,
             from: task.from,
