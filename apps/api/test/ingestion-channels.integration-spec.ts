@@ -195,7 +195,10 @@ describe("多栏目任务、全局预算与公平持续扫描", () => {
     expect(String(task.from_date).slice(0, 10)).toBe("2025-10-28");
     expect(String(task.to_date).slice(0, 10)).toBe("2026-10-28");
     clock += 86400000;
-    const changed = { ...original[0], version: "2" };
+    const changed = {
+      ...original[0],
+      version: `${original[0].version}-test-upgrade`,
+    };
     source.channels = [changed, second];
     expect(
       await runner.scan({ sourceId: source.id, phase: "backfill" }),
@@ -430,7 +433,10 @@ describe("多栏目任务、全局预算与公平持续扫描", () => {
         "SELECT id,cursor,from_date::text AS from_date,to_date::text AS to_date FROM ingestion_scan_tasks WHERE phase='backfill' AND status='partial'",
       )
     ).rows[0];
-    source.channels = [{ ...original[0], version: "2" }, second];
+    source.channels = [
+      { ...original[0], version: `${original[0].version}-test-upgrade` },
+      second,
+    ];
     expect(
       (
         await runner.scan({

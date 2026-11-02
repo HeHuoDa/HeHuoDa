@@ -6,10 +6,13 @@ import {
   sources,
   type HttpResponse,
   type Transport,
+  extractAttachmentText,
+  extractArticle,
+  parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 import { AdminIngestionService } from "../src/ingestion/admin-ingestion.service.js";
 import { IngestionRunner } from "../src/ingestion/runner.js";
-import { initializeSources } from "../src/ingestion/store.js";
+import { initializeSources, persistArticle } from "../src/ingestion/store.js";
 import { authTestApp, type AuthTestApp } from "./auth-fixture.js";
 import { informationArticle, informationList } from "./notice-fixtures.js";
 
@@ -137,7 +140,10 @@ describe("管理员采集运行 API", () => {
     );
   };
 
-  const installTransport = (transport: Transport) => {
+  const installTransport = (
+    transport: Transport,
+    attachmentParser?: ConstructorParameters<typeof IngestionRunner>[3],
+  ) => {
     let now = 0;
     test.app.get(AdminIngestionService).runner = new IngestionRunner(
       test.pool,
@@ -151,6 +157,8 @@ describe("管理员采集运行 API", () => {
             now += ms;
           },
         ),
+      undefined,
+      attachmentParser,
     );
   };
 
@@ -268,6 +276,150 @@ describe("管理员采集运行 API", () => {
       body: new TextEncoder().encode(html),
     };
   };
+
+  it("管理HTTP扫描内嵌PDF，空HTML正文与PDF页证据分别保留", async () => {
+    const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
+    process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
+    try {
+      const noticeUrl = "https://xxgc.sicau.edu.cn/info/1043/100.htm";
+      const oldArticle = extractArticle(
+        informationArticle,
+        noticeUrl,
+        sources[0],
+      );
+      await persistArticle(
+        test.pool,
+        { ...sources[0], version: "1" },
+        noticeUrl,
+        {
+          status: 200,
+          headers: { etag: '"old-html"' },
+          body: Buffer.from(informationArticle),
+          html: informationArticle,
+          url: noticeUrl,
+        },
+        oldArticle,
+        parseCandidate(oldArticle, noticeUrl, []),
+      );
+      let conditionalRequest: string | undefined;
+      const stream =
+        "BT /F1 12 Tf 10 100 Td (Official competition rules) Tj ET";
+      const objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+      ];
+      let pdf = "%PDF-1.4\n";
+      const offsets = [0];
+      objects.forEach((object, i) => {
+        offsets.push(Buffer.byteLength(pdf));
+        pdf += `${i + 1} 0 obj\n${object}\nendobj\n`;
+      });
+      const xref = Buffer.byteLength(pdf);
+      pdf += `xref\n0 6\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((offset) => String(offset).padStart(10, "0") + " 00000 n \n")
+        .join(
+          "",
+        )}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+      const html = `<h1 class="page-title">数学建模竞赛通知</h1><div class="news-body"><div id="vsb_content"><div class="v_news_content"><script>showVsbpdfIframe("/__local/A/BB/CC/rules.pdf","800","1000");</script></div></div></div>`;
+      // 合成PDF使用纯解析边界；Linux禁止出网的沙箱另由镜像验收覆盖。
+      installTransport(
+        async (url, _limits, headers) => {
+          if (url.toString() === noticeUrl)
+            conditionalRequest = headers["If-None-Match"];
+          return {
+            status:
+              url.pathname === "/robots.txt"
+                ? 404
+                : headers["If-None-Match"]
+                  ? 304
+                  : 200,
+            headers: {
+              "content-type": url.pathname.endsWith(".pdf")
+                ? "application/pdf"
+                : "text/html",
+            },
+            body: Buffer.from(url.pathname.endsWith(".pdf") ? pdf : html),
+          };
+        },
+        (bytes, mediaType) => extractAttachmentText(bytes, mediaType),
+      );
+      const accepted = await submitScan({
+        url: "https://xxgc.sicau.edu.cn/info/1043/100.htm",
+      });
+      expect(accepted.statusCode).toBe(202);
+      const request = await waitForRequest(accepted.json().requestId);
+      expect(conditionalRequest).toBeUndefined();
+      const run = await test.request(
+        "GET",
+        `admin/ingestion/runs/${request.runId}`,
+        undefined,
+        { cookie },
+      );
+      expect(run.json()).toMatchObject({
+        status: "succeeded",
+        counts: { failed: 0 },
+      });
+      const candidates = await test.request(
+        "GET",
+        "admin/ingestion/candidates",
+        undefined,
+        { cookie },
+      );
+      const item = candidates
+        .json()
+        .items.find(
+          (entry: { article: { title: string } }) =>
+            entry.article.title === "数学建模竞赛通知",
+        );
+      expect(item).toBeDefined();
+      expect(item.article).toMatchObject({ text: "", paragraphs: [] });
+      const detail = (
+        await test.request(
+          "GET",
+          `admin/ingestion/candidates/${item.candidateId}`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      const attachments = (
+        await test.request(
+          "GET",
+          `admin/ingestion/notices/${detail.noticeId}/attachments`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      const embedded = attachments.items.filter((entry: { url: string }) =>
+        entry.url.endsWith("/__local/A/BB/CC/rules.pdf"),
+      );
+      expect(embedded).toHaveLength(1);
+      const attachment = embedded[0];
+      if (attachment.extractionStatus !== "extracted")
+        throw new Error(JSON.stringify(attachment));
+      expect(attachment.state).toBe("extracted");
+      const evidence = await test.request(
+        "GET",
+        `admin/ingestion/attachments/${attachment.attachmentId}/versions/${attachment.latestVersion}`,
+        undefined,
+        { cookie },
+      );
+      expect(evidence.json()).toMatchObject({
+        status: "extracted",
+        segments: [
+          { kind: "page", index: 1, text: "Official competition rules" },
+        ],
+      });
+      expect(evidence.json()).not.toHaveProperty("body");
+    } finally {
+      if (previous === undefined)
+        delete process.env.INGESTION_ATTACHMENTS_ENABLED;
+      else process.env.INGESTION_ATTACHMENTS_ENABLED = previous;
+    }
+  });
 
   it("采集来源详情受管理员会话保护，并提供配置基线", async () => {
     const denied = await test.request(

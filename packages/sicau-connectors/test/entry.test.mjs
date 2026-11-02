@@ -29,6 +29,7 @@ test("auth 自引用解析到构建 ESM，与 notices 共存且关闭后无需�
 test("构建入口独立完成已注册来源的公开正文抓取与候选解析", async () => {
   const body = "<p>参赛对象：全校学生。</p><p>报名截止：2026年10月20日。</p>";
   const pages = {
+    economics: `<form name="_newscontent_fromname"><h1>2026年测试竞赛报名通知</h1><p>2026-10-20</p><div id="vsb_content"><div class="v_news_content">${body}</div></div></form>`,
     "information-engineering": `<h1 class="page-title">2026年测试竞赛报名通知</h1><div class="news-body"><div id="vsb_content"><div class="v_news_content">${body}</div></div></div>`,
     "life-sciences": `<h1 class="pageArticleTitle">2026年测试竞赛报名通知</h1><div id="vsb_content_4"><div class="v_news_content">${body}</div></div>`,
     science: `<p class="burl">2026年测试竞赛报名通知</p><p class="time">2026-09-22</p><div class="wenzan" id="vsb_content"><div class="v_news_content">${body}</div></div>`,

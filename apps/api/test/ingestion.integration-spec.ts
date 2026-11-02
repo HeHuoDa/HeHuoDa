@@ -118,7 +118,10 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         .action,
     ).toBe("changed");
     expect((await candidate()).revision).toBe(2);
-    await persist(informationArticle.replace("10月20日", "10月21日"), "2");
+    await persist(
+      informationArticle.replace("10月20日", "10月21日"),
+      `${source.version}-test-upgrade`,
+    );
     expect((await candidate()).revision).toBe(3);
     const restarted = new Pool({ connectionString: db.url });
     try {

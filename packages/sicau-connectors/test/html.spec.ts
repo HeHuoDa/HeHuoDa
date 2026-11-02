@@ -69,6 +69,73 @@ import {
 } from "./fixtures.js";
 
 describe("来源适配器的离线页面", () => {
+  it("经济学院学生通知栏目登记但默认停用，解析列表分页和内嵌PDF正反例", () => {
+    const source = sources.find((s) => s.id === "economics")!;
+    expect(source).toBeDefined();
+    expect(source.legacyDefaultEnabled).toBeUndefined();
+    const page = `<ul><li id="line_u9_0"><span>2026-09-08</span><a href="../../info/1074/23832.htm" title="挑战杯竞赛院内预选赛通知">挑战杯竞赛院内预选赛通知</a></li><li id="line_u9_1"><span>2026-10-08</span><a href="../../info/1074/24882.htm">新生班团委选举通知</a></li></ul><span class="p_pages"><a href="xsl/4.htm">下页</a></span>`;
+    expect(extractList(page, source.listUrl, source)).toMatchObject({
+      next: "https://jjxy.sicau.edu.cn/sylm/tzgg/xsl/4.htm",
+      items: [{ publishedAt: "2026-09-08" }, { publishedAt: "2026-10-08" }],
+    });
+    for (const title of ["挑战杯竞赛院内预选赛通知", "新生班团委选举通知"]) {
+      expect(
+        extractArticle(
+          `<form name="_newscontent_fromname"><div><h1>${title}</h1><p>2026-09-08 作者：学院</p></div><div id="vsb_content"><div class="v_news_content"><script>showVsbpdfIframe("/__local/A/BB/CC/rules.pdf","800","1000");</script></div></div></form>`,
+          "https://jjxy.sicau.edu.cn/info/1074/23832.htm",
+          source,
+        ),
+      ).toMatchObject({
+        title,
+        publishedAt: "2026-09-08",
+        text: "",
+        attachments: [
+          { title, url: "https://jjxy.sicau.edu.cn/__local/A/BB/CC/rules.pdf" },
+        ],
+      });
+    }
+  });
+  it("内嵌PDF只登记已核准同源静态地址，不伪造HTML正文", () => {
+    const source = {
+      ...sources[0],
+      attachmentPaths: ["^/__local/[A-Za-z0-9_/]+\\.pdf$"],
+    };
+    const page = (script: string) =>
+      `<h1 class="page-title">数学建模竞赛通知</h1><div class="news-body"><div id="vsb_content"><div class="v_news_content"><p><script>${script}</script></p></div></div></div><div class="news-meta"><time>2026-11-02</time></div>`;
+    const article = extractArticle(
+      page('showVsbpdfIframe("/__local/A/rules.pdf","800","1000");'),
+      source.listUrl,
+      source,
+    );
+    expect(article).toMatchObject({
+      text: "",
+      paragraphs: [],
+      publishedAt: "2026-11-02",
+      attachments: [
+        {
+          title: "数学建模竞赛通知",
+          url: "https://xxgc.sicau.edu.cn/__local/A/rules.pdf",
+        },
+      ],
+    });
+    for (const script of [
+      'showVsbpdfIframe("https://other.test/__local/rules.pdf","800");',
+      'showVsbpdfIframe("/private/rules.pdf","800");',
+      'showVsbpdfIframe("/__local/rules.pdf" + token,"800");',
+      'showVsbpdfIframe(getPdfUrl(),"800");',
+      'showVsbpdfIframe("/__local/rules.jpg","800");',
+    ])
+      expect(() =>
+        extractArticle(page(script), source.listUrl, source),
+      ).toThrow("正文为空");
+    expect(() =>
+      extractArticle(
+        page('showVsbpdfIframe("/__local/A/rules.pdf","800");'),
+        source.listUrl,
+        sources[0],
+      ),
+    ).toThrow("正文为空");
+  });
   it("仓库日期规则仍要求完整合法年月日，缺年与不存在的日期保持未知", () => {
     expect(
       publishedDate("发布时间：20261028", "(20\\d{2})(\\d{2})(\\d{2})"),
@@ -710,8 +777,10 @@ describe("来源适配器的离线页面", () => {
       extractArticle(managementArticle, page.items[0].url, source).publishedAt,
     ).toBe("2026-10-18");
   });
-  it("经济学院正文以站内 PDF 内嵌发布，未登记为可执行来源", () => {
-    expect(sources.map((source) => source.id)).not.toContain("economics");
+  it("经济学院保留PDF人工处理说明，不因注册宣称运行覆盖", () => {
+    expect(
+      sources.find((source) => source.id === "economics")?.legacyDefaultEnabled,
+    ).toBeUndefined();
     const candidate = collegeVerificationCandidates.find(
       (entry) => entry.collegeId === "economics",
     )!;
@@ -792,9 +861,9 @@ describe("来源适配器的离线页面", () => {
       expect(source.collegeId).toBe(entry.id);
       expect(source.legacyDefaultEnabled).toBeUndefined();
       expect(source.channels).toHaveLength(1);
-      expect(source.attachmentPaths).toEqual([
-        "^/system/_content/download\\.jsp$",
-      ]);
+      expect(source.attachmentPaths).toEqual(
+        expect.arrayContaining(["^/system/_content/download\\.jsp$"]),
+      );
       expect(() => validateSource(source)).not.toThrow();
       const page = extractList(entry.list, source.listUrl, source);
       expect(page.items).toHaveLength(1);
@@ -887,9 +956,9 @@ describe("来源适配器的离线页面", () => {
       expect(source.collegeId).toBe(entry.id);
       expect(source.legacyDefaultEnabled).toBeUndefined();
       expect(source.channels).toHaveLength(1);
-      expect(source.attachmentPaths).toEqual([
-        "^/system/_content/download\\.jsp$",
-      ]);
+      expect(source.attachmentPaths).toEqual(
+        expect.arrayContaining(["^/system/_content/download\\.jsp$"]),
+      );
       expect(() => validateSource(source)).not.toThrow();
       const page = extractList(entry.list, source.listUrl, source);
       expect(page.items).toHaveLength(1);
