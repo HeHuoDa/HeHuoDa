@@ -7,6 +7,8 @@ import {
   attachmentEligibility,
   classifyAttachment,
   attachmentExtractorVersion,
+  AttachmentParseError,
+  decodeHtml,
   type Article,
   type AttachmentMediaType,
 } from "@hehuoda/sicau-connectors/notices";
@@ -111,12 +113,37 @@ export async function checkNoticeAttachments(
     }
     try {
       const response = await fetcher.getAttachment(canonical);
-      if (response.status !== 200) throw new Error("attachment-http-status");
+      if (response.status !== 200)
+        throw new AttachmentParseError(
+          "attachment-http-status",
+          "附件下载返回非200状态，需人工核对",
+        );
       const mediaType = classifyAttachment(
         response.body,
         response.headers["content-type"],
       );
-      if (!mediaType) throw new Error("unsupported-attachment-type");
+      if (!mediaType) {
+        const visible = /(?:text\/html|application\/xhtml\+xml)/i.test(
+          response.headers["content-type"] ?? "",
+        )
+          ? decodeHtml(response.body, response.headers["content-type"])
+              .replace(/<script[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+          : "";
+        if (
+          /验证码|captcha|登录后访问|登录验证|访问验证|访问被拒绝/i.test(
+            visible,
+          )
+        )
+          throw new AttachmentParseError(
+            "attachment-verification-required",
+            "附件下载需要人工验证，停止来源采集",
+          );
+        throw new AttachmentParseError(
+          "unsupported-attachment-type",
+          "附件不是受支持的PDF或DOCX，需人工核对",
+        );
+      }
       const result = await parse(response.body, mediaType);
       await persistAttachment(pool, {
         noticeId,

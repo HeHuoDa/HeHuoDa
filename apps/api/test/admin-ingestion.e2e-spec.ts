@@ -814,6 +814,128 @@ describe("管理员采集运行 API", () => {
     }
   });
 
+  it.each([
+    {
+      name: "验证码HTML",
+      id: 178194,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      body: "<html><title>附件下载</title><body><label>请输入验证码</label></body></html>",
+      code: "attachment-verification-required",
+      runStatus: "interrupted",
+    },
+    {
+      name: "脚本中的验证码文字",
+      id: 178195,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      body: '<html><body>普通下载说明<script>const hint="请输入验证码";</script></body></html>',
+      code: "unsupported-attachment-type",
+      runStatus: "succeeded",
+    },
+    {
+      name: "不支持的文件字节",
+      id: 178196,
+      status: 200,
+      contentType: "application/octet-stream",
+      body: "unsupported-file-fixture",
+      code: "unsupported-attachment-type",
+      runStatus: "succeeded",
+    },
+    {
+      name: "非200响应",
+      id: 178197,
+      status: 404,
+      contentType: "text/plain",
+      body: "unavailable",
+      code: "attachment-http-status",
+      runStatus: "succeeded",
+    },
+  ])("附件返回$name时保留人工原因，不保存假附件版本", async (sample) => {
+    const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
+    process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
+    try {
+      const title = `2026年第${sample.id}项附件受阻回归竞赛报名通知`;
+      installTransport(async (url) => ({
+        status:
+          url.pathname === "/robots.txt"
+            ? 404
+            : url.pathname.endsWith("download.jsp")
+              ? sample.status
+              : 200,
+        headers: {
+          "content-type": url.pathname.endsWith("download.jsp")
+            ? sample.contentType
+            : "text/html; charset=utf-8",
+        },
+        body: Buffer.from(
+          url.pathname === "/robots.txt"
+            ? ""
+            : url.pathname.endsWith("download.jsp")
+              ? sample.body
+              : informationArticle.replace("2026年测试竞赛报名通知", title),
+        ),
+      }));
+      const accepted = await submitScan({
+        url: `https://xxgc.sicau.edu.cn/info/1043/${sample.id}.htm`,
+      });
+      expect(accepted.statusCode).toBe(202);
+      const request = await waitForRequest(accepted.json().requestId);
+      const run = await test.request(
+        "GET",
+        `admin/ingestion/runs/${request.runId}`,
+        undefined,
+        { cookie },
+      );
+      expect(run.json().status).toBe(sample.runStatus);
+      const queue = (
+        await test.request("GET", "admin/ingestion/candidates", undefined, {
+          cookie,
+        })
+      ).json();
+      const item = queue.items.find(
+        (entry: { article: { title: string } }) =>
+          entry.article.title === title,
+      );
+      const detail = (
+        await test.request(
+          "GET",
+          `admin/ingestion/candidates/${item.candidateId}`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      const attachments = (
+        await test.request(
+          "GET",
+          `admin/ingestion/notices/${detail.noticeId}/attachments`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      expect(attachments.items).toEqual([
+        expect.objectContaining({
+          state: "needs-review",
+          errorCode: sample.code,
+          latestVersion: null,
+        }),
+      ]);
+      const versions = (
+        await test.request(
+          "GET",
+          `admin/ingestion/attachments/${attachments.items[0].attachmentId}/versions`,
+          undefined,
+          { cookie },
+        )
+      ).json();
+      expect(versions.items).toEqual([]);
+    } finally {
+      if (previous === undefined)
+        delete process.env.INGESTION_ATTACHMENTS_ENABLED;
+      else process.env.INGESTION_ATTACHMENTS_ENABLED = previous;
+    }
+  });
+
   it("应用重启会把未完成的受理与运行明确标记为中断", async () => {
     const requestId = randomUUID();
     const runId = randomUUID();
