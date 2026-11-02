@@ -7,10 +7,12 @@ import {
   type HttpResponse,
   type Transport,
   extractAttachmentText,
+  extractArticle,
+  parseCandidate,
 } from "@hehuoda/sicau-connectors/notices";
 import { AdminIngestionService } from "../src/ingestion/admin-ingestion.service.js";
 import { IngestionRunner } from "../src/ingestion/runner.js";
-import { initializeSources } from "../src/ingestion/store.js";
+import { initializeSources, persistArticle } from "../src/ingestion/store.js";
 import { authTestApp, type AuthTestApp } from "./auth-fixture.js";
 import { informationArticle, informationList } from "./notice-fixtures.js";
 
@@ -279,6 +281,27 @@ describe("管理员采集运行 API", () => {
     const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
     process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
     try {
+      const noticeUrl = "https://xxgc.sicau.edu.cn/info/1043/100.htm";
+      const oldArticle = extractArticle(
+        informationArticle,
+        noticeUrl,
+        sources[0],
+      );
+      await persistArticle(
+        test.pool,
+        { ...sources[0], version: "1" },
+        noticeUrl,
+        {
+          status: 200,
+          headers: { etag: '"old-html"' },
+          body: Buffer.from(informationArticle),
+          html: informationArticle,
+          url: noticeUrl,
+        },
+        oldArticle,
+        parseCandidate(oldArticle, noticeUrl, []),
+      );
+      let conditionalRequest: string | undefined;
       const stream =
         "BT /F1 12 Tf 10 100 Td (Official competition rules) Tj ET";
       const objects = [
@@ -304,15 +327,24 @@ describe("管理员采集运行 API", () => {
       const html = `<h1 class="page-title">数学建模竞赛通知</h1><div class="news-body"><div id="vsb_content"><div class="v_news_content"><script>showVsbpdfIframe("/__local/A/BB/CC/rules.pdf","800","1000");</script></div></div></div>`;
       // 合成PDF使用纯解析边界；Linux禁止出网的沙箱另由镜像验收覆盖。
       installTransport(
-        async (url) => ({
-          status: url.pathname === "/robots.txt" ? 404 : 200,
-          headers: {
-            "content-type": url.pathname.endsWith(".pdf")
-              ? "application/pdf"
-              : "text/html",
-          },
-          body: Buffer.from(url.pathname.endsWith(".pdf") ? pdf : html),
-        }),
+        async (url, _limits, headers) => {
+          if (url.toString() === noticeUrl)
+            conditionalRequest = headers["If-None-Match"];
+          return {
+            status:
+              url.pathname === "/robots.txt"
+                ? 404
+                : headers["If-None-Match"]
+                  ? 304
+                  : 200,
+            headers: {
+              "content-type": url.pathname.endsWith(".pdf")
+                ? "application/pdf"
+                : "text/html",
+            },
+            body: Buffer.from(url.pathname.endsWith(".pdf") ? pdf : html),
+          };
+        },
         (bytes, mediaType) => extractAttachmentText(bytes, mediaType),
       );
       const accepted = await submitScan({
@@ -320,6 +352,7 @@ describe("管理员采集运行 API", () => {
       });
       expect(accepted.statusCode).toBe(202);
       const request = await waitForRequest(accepted.json().requestId);
+      expect(conditionalRequest).toBeUndefined();
       const run = await test.request(
         "GET",
         `admin/ingestion/runs/${request.runId}`,
@@ -360,8 +393,11 @@ describe("管理员采集运行 API", () => {
           { cookie },
         )
       ).json();
-      expect(attachments.items).toHaveLength(1);
-      const attachment = attachments.items[0];
+      const embedded = attachments.items.filter((entry: { url: string }) =>
+        entry.url.endsWith("/__local/A/BB/CC/rules.pdf"),
+      );
+      expect(embedded).toHaveLength(1);
+      const attachment = embedded[0];
       if (attachment.extractionStatus !== "extracted")
         throw new Error(JSON.stringify(attachment));
       expect(attachment.state).toBe("extracted");

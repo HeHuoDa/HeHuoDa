@@ -64,7 +64,7 @@ export const sources: Source[] = [
         id: "default",
         listUrl: "https://xxgc.sicau.edu.cn/xygl/tz.htm",
         adapterId: "vsb-selectors",
-        version: "1",
+        version: "2",
         noticePath: "^/info/\\d+/\\d+\\.htm$",
         listPath: "^/xygl/(?:tz\\.htm|tz/\\d+\\.htm)$",
         selectors: {
@@ -769,7 +769,7 @@ export const sources: Source[] = [
         id: "default",
         listUrl: "https://ytxy.sicau.edu.cn/qtlm/tzgg.htm",
         adapterId: "vsb-selectors",
-        version: "1",
+        version: "2",
         noticePath: "^/info/\\d+/\\d+\\.htm$",
         listPath: "^/qtlm/(?:tzgg\\.htm|tzgg/\\d+\\.htm)$",
         selectors: {
