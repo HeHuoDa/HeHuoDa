@@ -384,7 +384,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
       candidateChannels: [
         {
           channelId: "economics-channel-1",
-          channelUrl: "https://jjxy.sicau.edu.cn/sylm/xwdt.htm",
+          channelUrl: "https://jjxy.sicau.edu.cn/sylm/tzgg/xsl.htm",
           status: "pending_full_validation",
           enabled: false,
         },
@@ -395,11 +395,14 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
           enabled: false,
         },
       ],
-      sampleNoticeUrls: ["https://jjxy.sicau.edu.cn/info/1007/25202.htm"],
-      checkedAt: "2026-10-28",
+      sampleNoticeUrls: [
+        "https://jjxy.sicau.edu.cn/info/1074/23832.htm",
+        "https://jjxy.sicau.edu.cn/info/1074/24882.htm",
+      ],
+      checkedAt: "2026-11-02",
       status: "pending",
       reason:
-        "研究记录未完成 DOM 解析、分页完整性、发布日期、附件链接及站点访问安全核验；候选栏目保持关闭，不进入可执行来源或网络白名单。页面返回文本不等于解析契约已验证。",
+        "学生通知栏目已单独登记为默认停用来源 economics；本候选记录不授予运行核验或启用权限。来源启停、覆盖与批次观察须以管理端数据库元数据为准，其余候选栏目仍待核验。",
       observations: {
         homePageOutcome: "timeout_or_internal_error",
         candidateListsOutcome: "text_read",
