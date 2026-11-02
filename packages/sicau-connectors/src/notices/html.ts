@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 import type { Article, Page } from "./types.js";
 import { channelById, type Source } from "./sources.js";
-import { normalizeUrl, safeUrl } from "./http.js";
+import { normalizeUrl, normalizeAttachmentUrl, safeUrl } from "./http.js";
 
 export function publishedDate(value: string, pattern?: string): string | null {
   const match = (
@@ -203,6 +203,24 @@ export function extractArticle(
   const meta = $(selectors.meta).text();
   if (!title || !content.length)
     throw new NoticeParseError("article-selector", "正文选择器失效");
+  const embeddedPdfs: Article["attachments"] = [];
+  // 只读取VSB的静态参数，不执行脚本；下载仍须通过逐站核准的附件路径。
+  content.find("script").each((_, element) => {
+    for (const match of $(element)
+      .text()
+      .matchAll(/\bshowVsbpdfIframe\(\s*(["'])([^"'\\\r\n]+)\1\s*,/g)) {
+      try {
+        const link = normalizeAttachmentUrl(
+          new URL(match[2], url).toString(),
+          source,
+        );
+        if (/\.pdf$/i.test(new URL(link).pathname))
+          embeddedPdfs.push({ title, url: link });
+      } catch {
+        // 未核准地址不能让空白正文被当作有效通知。
+      }
+    }
+  });
   content.find("script,style,noscript,.clickCount,#clickTimes").remove();
   const paragraphs = content
     .find("p,li,tr")
@@ -212,7 +230,7 @@ export function extractArticle(
   if (!paragraphs.length)
     paragraphs.push(...clean(content.text()).split(/\n+/).filter(Boolean));
   const text = paragraphs.join("\n");
-  if (text.length < 20)
+  if (text.length < 20 && !embeddedPdfs.length)
     throw new NoticeParseError("empty-article", "通知正文为空或过短");
   const attachments: Article["attachments"] = [];
   const wrapper = $(selectors.attachments).first();
@@ -233,6 +251,10 @@ export function extractArticle(
     publishedAt: publishedDate(meta, datePattern),
     text,
     paragraphs,
-    attachments,
+    attachments: [
+      ...new Map(
+        [...attachments, ...embeddedPdfs].map((a) => [a.url, a]),
+      ).values(),
+    ],
   };
 }

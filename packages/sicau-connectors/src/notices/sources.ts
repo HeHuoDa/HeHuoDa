@@ -52,9 +52,12 @@ export const sources: Source[] = [
     collegeId: "information-engineering",
     publisher: "信息工程学院",
     host: "xxgc.sicau.edu.cn",
-    attachmentPaths: ["^/system/_content/download\\.jsp$"],
+    attachmentPaths: [
+      "^/system/_content/download\\.jsp$",
+      "^/__local/[0-9A-F]/[0-9A-F]{2}/[0-9A-F]{2}/[A-Za-z0-9_]+\\.pdf$",
+    ],
     listUrl: "https://xxgc.sicau.edu.cn/xygl/tz.htm",
-    version: "1",
+    version: "2",
     defaultChannelId: "default",
     channels: [
       {
@@ -754,9 +757,12 @@ export const sources: Source[] = [
     collegeId: "sports",
     publisher: "体育学院",
     host: "ytxy.sicau.edu.cn",
-    attachmentPaths: ["^/system/_content/download\\.jsp$"],
+    attachmentPaths: [
+      "^/system/_content/download\\.jsp$",
+      "^/__local/[0-9A-F]/[0-9A-F]{2}/[0-9A-F]{2}/[A-Za-z0-9_]+\\.pdf$",
+    ],
     listUrl: "https://ytxy.sicau.edu.cn/qtlm/tzgg.htm",
-    version: "1",
+    version: "2",
     defaultChannelId: "default",
     channels: [
       {
@@ -875,6 +881,40 @@ export const sources: Source[] = [
           content: "#vsb_content .v_news_content",
           meta: "#newsconttitle p",
           attachments: "form[name=_newscontent_fromname] > ul",
+        },
+      },
+    ],
+  },
+  {
+    id: "economics",
+    collegeId: "economics",
+    publisher: "经济学院",
+    host: "jjxy.sicau.edu.cn",
+    attachmentPaths: [
+      "^/system/_content/download\\.jsp$",
+      "^/__local/[0-9A-F]/[0-9A-F]{2}/[0-9A-F]{2}/[A-Za-z0-9_]+\\.pdf$",
+    ],
+    listUrl: "https://jjxy.sicau.edu.cn/sylm/tzgg/xsl.htm",
+    version: "1",
+    defaultChannelId: "default",
+    channels: [
+      {
+        id: "default",
+        listUrl: "https://jjxy.sicau.edu.cn/sylm/tzgg/xsl.htm",
+        adapterId: "vsb-selectors",
+        version: "1",
+        noticePath: "^/info/1074/\\d+\\.htm$",
+        listPath: "^/sylm/tzgg/(?:xsl\\.htm|xsl/\\d+\\.htm)$",
+        selectors: {
+          rows: "li[id^='line_u']",
+          link: "a",
+          date: "span",
+          pagination: ".p_pages",
+          nextText: "^(下页|下一页|下一頁|Next|>)$",
+          title: "form[name=_newscontent_fromname] h1",
+          content: "#vsb_content .v_news_content",
+          meta: "form[name=_newscontent_fromname] h1 + p",
+          attachments: "form[name=_newscontent_fromname]",
         },
       },
     ],

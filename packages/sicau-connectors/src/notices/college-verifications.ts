@@ -409,7 +409,7 @@ export const collegeVerificationCandidates: readonly CollegeVerificationCandidat
         attachmentsAndHosts: "not_verified",
         robotsDnsTls: "not_tested",
       },
-      note: "2026-10-31 受阻：学生工作栏目抽样 12 条通知正文全部以站内 PDF 内嵌 iframe 发布，HTML 适配器按设计不解析 PDF，未登记可执行来源；人工入口 https://jjxy.sicau.edu.cn/sylm/xsgz.htm",
+      note: "2026-11-02 学生通知栏目 /sylm/tzgg/xsl.htm 登记为默认停用来源 economics；showVsbpdfIframe 的同源静态 PDF 作为附件复用受限解析与隐私检查，HTML 正文保持为空，不执行脚本。扫描件、名单与未核准地址保留人工处理；来源登记不表示已启用或两轮观察通过。人工入口 https://jjxy.sicau.edu.cn/sylm/tzgg/xsl.htm",
     },
     {
       collegeId: "management",
