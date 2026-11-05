@@ -259,18 +259,18 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
   it("队列按报名、其他明确、疑似、非赛事排序，学院/栏目/附件筛选可组合", async () => {
     const auth = await session();
     const ids: string[] = [];
-    for (const [index, title] of [
-      "数学竞赛报名通知",
-      "数学竞赛新闻回顾",
-      "作品征集",
-      "图书馆开放通知",
+    for (const [index, [title, text]] of [
+      ["数学竞赛报名通知", "参赛对象为全校本科生，报名截止2026年11月1日。"],
+      ["数学竞赛赛程安排", "比赛时间为2026年11月8日，地点为第一教学楼。"],
+      ["作品征集", "请核对本次通知的具体安排和规则。"],
+      ["图书馆开放通知", "请核对本次通知的具体安排和规则。"],
     ].entries()) {
       const targetUrl = `https://${source.host}/info/1043/${index + 200}.htm`;
       const article = {
         title,
         publishedAt: null,
-        text: "请核对本次通知的具体安排和规则。",
-        paragraphs: ["请核对本次通知的具体安排和规则。"],
+        text,
+        paragraphs: [text],
         attachments: [],
       };
       const saved = await persistArticle(

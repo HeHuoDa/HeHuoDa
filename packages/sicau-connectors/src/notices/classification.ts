@@ -71,10 +71,15 @@ export function classifyNotice(
     competitionPattern.test(title);
   // 「推荐/遴选」既可能是评优（推荐优秀学生），也可能是赛事选拔（推荐参赛队伍）。
   // 只要标题里同时出现推荐类动作与参赛/队伍/作品，就按赛事选拔处理，
-  // 不因语序不同（「推荐参加…」与「推荐…参赛队伍」）漏判。
+  // 不因语序不同（「推荐参加…」与「推荐…参赛队伍」）漏判；「参加」分支
+  // 仍要求标题点明赛事，并排除参加评优评奖的表述。
+  const participationTarget =
+    /(?:推荐|遴选)[^｜|]{0,20}参加([^｜|]+)/.exec(title)?.[1] ?? "";
   const selectionByCompetition =
     /(?:推荐|遴选)[^｜|]{0,20}(?:参赛|队伍|作品)/.test(title) ||
-    /(?:参赛|队伍)[^｜|]{0,20}(?:推荐|遴选)/.test(title);
+    /(?:参赛|队伍)[^｜|]{0,20}(?:推荐|遴选)/.test(title) ||
+    (competitionPattern.test(participationTarget) &&
+      !/评选|评定|评比|评审|表彰/.test(title));
   const resultNotice =
     /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示|的公示|公示$/.test(
       title,
@@ -120,20 +125,18 @@ export function classifyNotice(
             : "news";
   if (list) exclusions.push("applicant-list");
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
-  if (resultNotice) exclusions.push("结果公示或评选通知，不是可报名赛事");
-  if (titleRecap) exclusions.push("赛后回顾报道，不是可报名赛事");
+  if (resultNotice || bodyAward)
+    exclusions.push("结果公示或评选通知，不是可报名赛事");
+  if (titleRecap || bodyNews) exclusions.push("赛后回顾报道，不是可报名赛事");
   if (competition) reasons.push("原文含赛事标识");
   if (competition && !competitionInTitle && notificationKind !== "supplement")
     reasons.push("赛事仅出现在正文，按旁证处理");
   if (ambiguous) reasons.push("征集或活动语义不足以确认赛事");
   // 补充/延期/更正通知的标题从不点名赛事，但它明确指向某场已有赛事的变更，
   // 属赛事进程而非「正文旁证」，不受标题优先约束。
-  // 正文已明确判为获奖公示或赛后回顾时，性质已由正文确定，也不按旁证降级。
+  // 正文已明确判为获奖公示或赛后回顾时，由下方排除分支处理。
   const titleDeclaresCompetition =
-    competitionInTitle ||
-    notificationKind === "supplement" ||
-    bodyAward ||
-    bodyNews;
+    competitionInTitle || notificationKind === "supplement";
   // protocol v2 B1：definite 还要求正文有「可核对安排」，只有标题或只有转发语
   // 不足以确认。可核对安排指时间、地点、参赛对象、报名方式、赛程或联系方式一类
   // 具体事实。判据看内容形态而非长度：短句「报名截止：2026年11月1日。」同样算安排；
@@ -155,7 +158,7 @@ export function classifyNotice(
       competitionPattern.test(attachmentTitle),
     );
   const classification: Classification =
-    list || resultNotice || titleRecap
+    list || resultNotice || titleRecap || bodyAward || bodyNews
       ? "non_competition"
       : excluded
         ? competition || ambiguous || attachmentTitles.length > 0

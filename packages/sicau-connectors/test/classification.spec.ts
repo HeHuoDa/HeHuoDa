@@ -237,7 +237,11 @@ describe("赛事分类独立于审核状态", () => {
           precision: "unknown",
           value: null,
         });
-        expect(result.classification?.priority).toBe(1);
+        expect(result.classification).toMatchObject({
+          classification: "non_competition",
+          priority: 3,
+          needsReview: false,
+        });
       }
   });
   it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
@@ -814,13 +818,27 @@ describe("赛事分类独立于审核状态", () => {
       "关于推荐优秀本科生参加2026年电子设计竞赛的通知",
       "关于遴选2026年数学建模竞赛参赛队伍的通知",
     ])
-      expect(classifyNotice(title, ["请各学院按要求推荐。"])).not.toBe(
-        "non_competition",
-      );
+      expect(
+        classifyNotice(title, ["参赛对象为全校本科生，请各学院按要求推荐。"]),
+      ).toMatchObject({
+        classification: "definite",
+        notificationKind: "registration",
+      });
     // 纯评优推荐仍是评奖通知。
     expect(
       classifyNotice("关于开展优秀学生推荐工作的通知", ["请各班级按条件推荐。"])
         .classification,
+    ).toBe("non_competition");
+    for (const action of ["评选", "评审"])
+      expect(
+        classifyNotice(`关于推荐学生参加运动会优秀运动员${action}的通知`, [
+          "请各班级按条件推荐，评审时间为2026年11月1日。",
+        ]).classification,
+      ).toBe("non_competition");
+    expect(
+      classifyNotice("关于运动会后推荐学生参加交流活动的通知", [
+        "活动时间为2026年11月1日。",
+      ]).classification,
     ).toBe("non_competition");
   });
 });
