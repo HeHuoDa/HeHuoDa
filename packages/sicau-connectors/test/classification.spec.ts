@@ -237,7 +237,11 @@ describe("赛事分类独立于审核状态", () => {
           precision: "unknown",
           value: null,
         });
-        expect(result.classification?.priority).toBe(1);
+        expect(result.classification).toMatchObject({
+          classification: "non_competition",
+          priority: 3,
+          needsReview: false,
+        });
       }
   });
   it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
@@ -693,5 +697,148 @@ describe("赛事分类独立于审核状态", () => {
         ["请各班级按条件推荐。"],
       ).exclusions,
     ).not.toContain("applicant-list");
+  });
+  it("赛后回顾报道不算可报名赛事", () => {
+    // #179 冻结质量集样本 025bcfcf：标题「圆满落幕」，正文全是赛后描述。
+    const result = classifyNotice(
+      "农学院第三届“物华农业杯”创新创业大赛暨2026中国国际大学生创新创业大赛院赛选拔赛圆满落幕",
+      [
+        "3月17日下午，农学院第三届“物华农业杯”创新创业大赛在第二教学楼201会议室隆重举行。",
+        "本届大赛共有11个优秀项目入围决赛，项目内容涵盖乡村振兴、科技创新、智慧农业等多个农业科技前沿领域。",
+      ],
+    );
+    expect(result.classification).toBe("non_competition");
+    expect(result.notificationKind).toBe("news");
+  });
+  it("奖项评选标题含赛事词仍是评奖通知", () => {
+    // #179 冻结质量集样本 074982a6：标题同时含「运动会」与「评选…奖」。
+    expect(
+      classifyNotice(
+        "建筑与城乡规划学院关于评选“匠心筑梦青春，运动赋能成长”第四届班级运动会精神文明风尚奖的通知",
+        [
+          "学院决定在“匠心筑梦青春，运动赋能成长”第四届班级运动会期间开展精神文明风尚奖的评比。",
+          "三、评选指标及流程：全院评选1个精神文明风尚奖。",
+        ],
+      ).classification,
+    ).toBe("non_competition");
+    // 奖学金评选正文列举「竞赛奖」，同样是奖项类别而非赛事。
+    expect(
+      classifyNotice("林学院关于开展2025-2026学年单项奖学金推荐工作的通知", [
+        "现将2025-2026学年单项奖学金推荐相关工作安排通知如下：",
+        "竞赛奖按学校规定评定。",
+      ]).classification,
+    ).toBe("non_competition");
+  });
+  it("遴选公示按结果公示排除，不判为可报名赛事", () => {
+    // #179 冻结质量集样本 af6de5fa：标题以「遴选的公示」结尾。
+    expect(
+      classifyNotice(
+        "关于第二十届“挑战杯”全国大学生课外学术科技作品竞赛院赛遴选的公示",
+        [
+          "现将土木工程学院拟推荐参加校赛的初选结果予以公示。",
+          "最终报送结果将根据修改后的材料质量确定。",
+        ],
+      ).classification,
+    ).toBe("non_competition");
+    // 但「遴选的通知」是组织遴选的工作通知，属赛事进程，不能一并排除。
+    expect(
+      classifyNotice(
+        "公共管理学院关于第二十届“挑战杯”中国大学生课外学术科技作品竞赛校内预选赛及校内重点项目（第一轮）遴选的通知",
+        ["现将学院相关安排通知如下。", "一、参赛对象 在校本科生、硕士研究生。"],
+      ).classification,
+    ).toBe("definite");
+  });
+  it("正文旁证不足以单独确认赛事，标题无赛事词时只判疑似", () => {
+    // #179 冻结质量集中被误判明确的四类真实样本：正文提到「竞赛」，
+    // 但「竞赛」出现在项目类型、培养成果、研究方向或发展材料里，不是通知性质声明。
+    const cases: Array<[string, string[]]> = [
+      [
+        "2027年寒假世界名校海外访学项目报名通知",
+        [
+          "面向全校本科生及研究生开放专业学习、语言文化、竞赛、导师推荐信、就业实习类线下访学项目。",
+          "2027年寒假完整项目清单详见附件。",
+        ],
+      ],
+      [
+        "人工智能应用实验室招新",
+        [
+          "信息工程学院“人工智能应用工作室”拟于2026年11月开展招新工作。",
+          "实验室聚焦深度学习、机器学习等核心领域，鼓励成员参加各类竞赛。",
+        ],
+      ],
+      [
+        "四川农业大学社会工作硕士研究生招生宣传资料",
+        [
+          "本学位点立足四川、面向西部，培养高层次应用型社会工作人才。",
+          "鼓励学生参与各类学科竞赛。",
+        ],
+      ],
+      [
+        "环境学院关于做好2026年秋季组织发展工作通知",
+        ["各团支部、党支部：", "请按要求提交发展材料，参考比赛获奖情况。"],
+      ],
+    ];
+    for (const [title, paragraphs] of cases) {
+      const result = classifyNotice(title, paragraphs);
+      // 标题没有赛事词时，正文命中只能到疑似，并进入人工复核。
+      expect(result.classification).toBe("suspected");
+      expect(result.needsReview).toBe(true);
+    }
+    // 标题本身点明赛事时，正文旁证不影响，仍是明确赛事。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛的通知", [
+        "同时鼓励学生参加各类创新创业竞赛。",
+        "报名截止 2026年11月20日。",
+      ]).classification,
+    ).toBe("definite");
+  });
+  it("只有标题或只有转发语时不足以判明确赛事", () => {
+    // protocol v2 B1：definite 要求正文能确认赛事名称、举办/报名事实，
+    // 且至少一项可核对安排；只有标题或只有转发语应判 suspected。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛的通知", []).classification,
+    ).toBe("suspected");
+    expect(
+      classifyNotice("转发：关于举办2026年挑战杯竞赛的通知", [
+        "现将通知转发如下，请关注。",
+      ]).classification,
+    ).toBe("suspected");
+    // 正文有可核对安排时仍是明确赛事。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛的通知", [
+        "一、参赛对象 全校本科生。",
+        "二、报名截止 2026年11月20日。",
+      ]).classification,
+    ).toBe("definite");
+  });
+  it("推荐或遴选参赛队伍属赛事选拔，不按评奖排除", () => {
+    // 「推荐」既可指评优也可指赛事选拔；标题同时出现参赛/队伍时属赛事进程。
+    for (const title of [
+      "关于推荐2026年四川省大学生电子设计竞赛参赛队伍的通知",
+      "关于推荐优秀本科生参加2026年电子设计竞赛的通知",
+      "关于遴选2026年数学建模竞赛参赛队伍的通知",
+    ])
+      expect(
+        classifyNotice(title, ["参赛对象为全校本科生，请各学院按要求推荐。"]),
+      ).toMatchObject({
+        classification: "definite",
+        notificationKind: "registration",
+      });
+    // 纯评优推荐仍是评奖通知。
+    expect(
+      classifyNotice("关于开展优秀学生推荐工作的通知", ["请各班级按条件推荐。"])
+        .classification,
+    ).toBe("non_competition");
+    for (const action of ["评选", "评审"])
+      expect(
+        classifyNotice(`关于推荐学生参加运动会优秀运动员${action}的通知`, [
+          "请各班级按条件推荐，评审时间为2026年11月1日。",
+        ]).classification,
+      ).toBe("non_competition");
+    expect(
+      classifyNotice("关于运动会后推荐学生参加交流活动的通知", [
+        "活动时间为2026年11月1日。",
+      ]).classification,
+    ).toBe("non_competition");
   });
 });
