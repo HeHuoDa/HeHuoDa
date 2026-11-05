@@ -784,7 +784,43 @@ describe("赛事分类独立于审核状态", () => {
     expect(
       classifyNotice("关于举办2026年数学建模竞赛的通知", [
         "同时鼓励学生参加各类创新创业竞赛。",
+        "报名截止 2026年11月20日。",
       ]).classification,
     ).toBe("definite");
+  });
+  it("只有标题或只有转发语时不足以判明确赛事", () => {
+    // protocol v2 B1：definite 要求正文能确认赛事名称、举办/报名事实，
+    // 且至少一项可核对安排；只有标题或只有转发语应判 suspected。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛的通知", []).classification,
+    ).toBe("suspected");
+    expect(
+      classifyNotice("转发：关于举办2026年挑战杯竞赛的通知", [
+        "现将通知转发如下，请关注。",
+      ]).classification,
+    ).toBe("suspected");
+    // 正文有可核对安排时仍是明确赛事。
+    expect(
+      classifyNotice("关于举办2026年数学建模竞赛的通知", [
+        "一、参赛对象 全校本科生。",
+        "二、报名截止 2026年11月20日。",
+      ]).classification,
+    ).toBe("definite");
+  });
+  it("推荐或遴选参赛队伍属赛事选拔，不按评奖排除", () => {
+    // 「推荐」既可指评优也可指赛事选拔；标题同时出现参赛/队伍时属赛事进程。
+    for (const title of [
+      "关于推荐2026年四川省大学生电子设计竞赛参赛队伍的通知",
+      "关于推荐优秀本科生参加2026年电子设计竞赛的通知",
+      "关于遴选2026年数学建模竞赛参赛队伍的通知",
+    ])
+      expect(classifyNotice(title, ["请各学院按要求推荐。"])).not.toBe(
+        "non_competition",
+      );
+    // 纯评优推荐仍是评奖通知。
+    expect(
+      classifyNotice("关于开展优秀学生推荐工作的通知", ["请各班级按条件推荐。"])
+        .classification,
+    ).toBe("non_competition");
   });
 });

@@ -69,8 +69,12 @@ export function classifyNotice(
   const evaluatesEntryOfCompetition =
     /作品(?:评审|评选|评比)|参赛作品(?:评审|评选)/.test(title) &&
     competitionPattern.test(title);
+  // 「推荐/遴选」既可能是评优（推荐优秀学生），也可能是赛事选拔（推荐参赛队伍）。
+  // 只要标题里同时出现推荐类动作与参赛/队伍/作品，就按赛事选拔处理，
+  // 不因语序不同（「推荐参加…」与「推荐…参赛队伍」）漏判。
   const selectionByCompetition =
-    /推荐参加|推荐参赛|遴选.*(?:队伍|参赛|作品)/.test(title);
+    /(?:推荐|遴选)[^｜|]{0,20}(?:参赛|队伍|作品)/.test(title) ||
+    /(?:参赛|队伍)[^｜|]{0,20}(?:推荐|遴选)/.test(title);
   const resultNotice =
     /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示|的公示|公示$/.test(
       title,
@@ -130,6 +134,26 @@ export function classifyNotice(
     notificationKind === "supplement" ||
     bodyAward ||
     bodyNews;
+  // protocol v2 B1：definite 还要求正文有「可核对安排」，只有标题或只有转发语
+  // 不足以确认。可核对安排指时间、地点、参赛对象、报名方式、赛程或联系方式一类
+  // 具体事实。判据看内容形态而非长度：短句「报名截止：2026年11月1日。」同样算安排；
+  // 纯转发语、空正文、或只有附件链接才算不满足。
+  const bodyText = paragraphs.join("\n").trim();
+  const onlyForwarding =
+    bodyText.length === 0 ||
+    /^(?:现将(?:通知|文件|有关事项)?(?:转发)?如下[。，,]?|请(?:关注|查看)附件[。]?|详见附件[。]?)$/.test(
+      bodyText,
+    );
+  const hasCheckableArrangement =
+    (!onlyForwarding &&
+      /报名|截止|截至|参赛对象|参赛资格|参赛范围|参赛要求|时间|地点|赛程|赛制|日程|邮箱|QQ|群号|联系方式|联系人|提交|报送|评审|评分|审核|答辩|奖励|名额|赛道|组别|作品要求|比赛规则|竞赛内容|活动安排/.test(
+        bodyText,
+      )) ||
+    // 附件标题本身写明赛事名与具体事项（如「数学竞赛延期通知.pdf」）时，
+    // 也是可核对依据，不因为正文只有「详见附件」就降级。
+    attachmentTitles.some((attachmentTitle) =>
+      competitionPattern.test(attachmentTitle),
+    );
   const classification: Classification =
     list || resultNotice || titleRecap
       ? "non_competition"
@@ -137,7 +161,7 @@ export function classifyNotice(
         ? competition || ambiguous || attachmentTitles.length > 0
           ? "suspected"
           : "non_competition"
-        : competition && titleDeclaresCompetition
+        : competition && titleDeclaresCompetition && hasCheckableArrangement
           ? "definite"
           : competition ||
               ambiguous ||
