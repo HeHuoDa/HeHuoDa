@@ -52,7 +52,10 @@ export function classifyNotice(
   // 「遴选」类公示（如「…院赛遴选的公示」）同样是结果公示，不因含赛事词而失效。
   // 评审对象决定性质：标题里点明了具体赛事（「数学比赛作品评审」）时，评的是赛事作品，
   // 仍属赛事进程；只有泛称（「优秀作品评选」「项目评审」）才是纯评奖。
+  // 「遴选」在标题里有两种含义：「…遴选的公示」是结果公示，应排除；
+  // 「…遴选的通知」是组织遴选的工作通知，属赛事进程，不能当评奖排除。
   const evaluationAction = /评选|评定|评审|拟评|拟推荐|遴选|评比|推荐/.test(title);
+  const announcesSelectionResult = /遴选(?:的|结果)?公示|遴选(?:结果)$/.test(title);
   const evaluatesEntryOfCompetition =
     /作品(?:评审|评选|评比)|参赛作品(?:评审|评选)/.test(title) &&
     competitionPattern.test(title);
@@ -61,10 +64,13 @@ export function classifyNotice(
     /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示|的公示|公示$/.test(
       title,
     ) ||
+    announcesSelectionResult ||
     (evaluationAction &&
       !evaluatesEntryOfCompetition &&
       !selectionByCompetition &&
       !/关于举办|关于组织参加/.test(title) &&
+      // 「遴选…的通知」是组织遴选的工作通知，不是结果公示
+      !/遴选的通知|遴选工作/.test(title) &&
       !ambiguousPattern.test(title));
   const explicitRegistration = /报名/.test(title);
   const bodyAward =
