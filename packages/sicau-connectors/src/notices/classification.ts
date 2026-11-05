@@ -60,12 +60,17 @@ export function classifyNotice(
   // 仍属赛事进程；只有泛称（「优秀作品评选」「项目评审」）才是纯评奖。
   // 「遴选」在标题里有两种含义：「…遴选的公示」是结果公示，应排除；
   // 「…遴选的通知」是组织遴选的工作通知，属赛事进程，不能当评奖排除。
-  const evaluationAction = /评选|评定|评审|拟评|拟推荐|遴选|评比|推荐/.test(title);
-  const announcesSelectionResult = /遴选(?:的|结果)?公示|遴选(?:结果)$/.test(title);
+  const evaluationAction = /评选|评定|评审|拟评|拟推荐|遴选|评比|推荐/.test(
+    title,
+  );
+  const announcesSelectionResult = /遴选(?:的|结果)?公示|遴选(?:结果)$/.test(
+    title,
+  );
   const evaluatesEntryOfCompetition =
     /作品(?:评审|评选|评比)|参赛作品(?:评审|评选)/.test(title) &&
     competitionPattern.test(title);
-  const selectionByCompetition = /推荐参加|推荐参赛|遴选.*(?:队伍|参赛|作品)/.test(title);
+  const selectionByCompetition =
+    /推荐参加|推荐参赛|遴选.*(?:队伍|参赛|作品)/.test(title);
   const resultNotice =
     /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示|的公示|公示$/.test(
       title,
