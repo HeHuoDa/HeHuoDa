@@ -38,11 +38,17 @@ export function classifyNotice(
   const list =
     containsApplicantList([title, ...paragraphs].join("\n")) ||
     containsPersonalNameList(title);
+  // 赛事词表覆盖官网常见命名；「对抗赛」「辩论赛」「技能赛」等以「赛」结尾的
+  // 具体赛事形式此前被漏掉，导致标题显式点明赛事却被当作正文旁证降级。
   const competitionPattern =
-    /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛/;
+    /竞赛|比赛|大赛|挑战杯|互联网\s*\+|运动会|锦标赛|联赛|对抗赛|辩论赛|演讲比赛|技能赛|选拔赛|邀请赛|公开赛|擂台赛/;
   const ambiguousPattern =
     /征文|作品征集|活动赛|创新创业|职业规划|艺术节|体育节/;
   const competition = competitionPattern.test(text);
+  // 标题是发布方对通知性质的自我声明，正文常列举、引用、举例（招生宣传的成果、
+  // 实验室招新的方向、项目类型清单）。标题没有赛事词时，正文命中只作旁证，
+  // 最多判到疑似并进入人工复核，不足以单独确认赛事。
+  const competitionInTitle = competitionPattern.test(title);
   const ambiguous = ambiguousPattern.test(text);
   const excluded =
     /体质健康测试|体质测试|体测|考试|讲座|培训|沙龙|分享会|报告会|招聘|志愿活动|图书借阅|入团|入党|发展团员|团员发展|党员发展|团课|党校|推优|研修班|交互班|训练营/.test(
@@ -108,7 +114,17 @@ export function classifyNotice(
   if (resultNotice) exclusions.push("结果公示或评选通知，不是可报名赛事");
   if (titleRecap) exclusions.push("赛后回顾报道，不是可报名赛事");
   if (competition) reasons.push("原文含赛事标识");
+  if (competition && !competitionInTitle && notificationKind !== "supplement")
+    reasons.push("赛事仅出现在正文，按旁证处理");
   if (ambiguous) reasons.push("征集或活动语义不足以确认赛事");
+  // 补充/延期/更正通知的标题从不点名赛事，但它明确指向某场已有赛事的变更，
+  // 属赛事进程而非「正文旁证」，不受标题优先约束。
+  // 正文已明确判为获奖公示或赛后回顾时，性质已由正文确定，也不按旁证降级。
+  const titleDeclaresCompetition =
+    competitionInTitle ||
+    notificationKind === "supplement" ||
+    bodyAward ||
+    bodyNews;
   const classification: Classification =
     list || resultNotice || titleRecap
       ? "non_competition"
@@ -116,9 +132,10 @@ export function classifyNotice(
         ? competition || ambiguous || attachmentTitles.length > 0
           ? "suspected"
           : "non_competition"
-        : competition
+        : competition && titleDeclaresCompetition
           ? "definite"
-          : ambiguous ||
+          : competition ||
+              ambiguous ||
               attachmentTitles.length > 0 ||
               /补充通知|延期通知|规则变更/.test(title)
             ? "suspected"
