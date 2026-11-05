@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-3";
+export const noticeRuleVersion = "competition-rules-4";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -45,16 +45,26 @@ export function classifyNotice(
   const competition = competitionPattern.test(text);
   const ambiguous = ambiguousPattern.test(text);
   const excluded =
-    /体质健康测试|体质测试|体测|考试|讲座|培训|招聘|志愿活动|图书借阅|入团|入党|发展团员|团员发展|党员发展|团课|党校|推优|研修班|交互班|训练营/.test(
+    /体质健康测试|体质测试|体测|考试|讲座|培训|沙龙|分享会|报告会|招聘|志愿活动|图书借阅|入团|入党|发展团员|团员发展|党员发展|团课|党校|推优|研修班|交互班|训练营/.test(
       title,
     ) && !/竞赛|比赛|大赛/.test(title);
   // 结果公示仍排除；普通评选只在标题没有其他赛事线索时排除，正文提及旧比赛不算。
+  // 「遴选」类公示（如「…院赛遴选的公示」）同样是结果公示，不因含赛事词而失效。
+  // 评审对象决定性质：标题里点明了具体赛事（「数学比赛作品评审」）时，评的是赛事作品，
+  // 仍属赛事进程；只有泛称（「优秀作品评选」「项目评审」）才是纯评奖。
+  const evaluationAction = /评选|评定|评审|拟评|拟推荐|遴选|评比|推荐/.test(title);
+  const evaluatesEntryOfCompetition =
+    /作品(?:评审|评选|评比)|参赛作品(?:评审|评选)/.test(title) &&
+    competitionPattern.test(title);
+  const selectionByCompetition = /推荐参加|推荐参赛|遴选.*(?:队伍|参赛|作品)/.test(title);
   const resultNotice =
-    /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示/.test(
+    /结果公示|获奖名单|获奖情况|评审结果|评选结果|评定结果|名单公示|的公示|公示$/.test(
       title,
     ) ||
-    (/评选|评定|评审|拟评|拟推荐/.test(title) &&
-      !competitionPattern.test(title) &&
+    (evaluationAction &&
+      !evaluatesEntryOfCompetition &&
+      !selectionByCompetition &&
+      !/关于举办|关于组织参加/.test(title) &&
       !ambiguousPattern.test(title));
   const explicitRegistration = /报名/.test(title);
   const bodyAward =
@@ -64,8 +74,14 @@ export function classifyNotice(
     );
   const bodyNews =
     !explicitRegistration &&
-    /(?:竞赛|比赛)[^。；\n]{0,40}(?:圆满结束|成功举办|落下帷幕)|(?:竞赛|比赛)新闻回顾/.test(
+    /(?:竞赛|比赛|大赛)[^。；\n]{0,40}(?:圆满结束|圆满落幕|成功举办|顺利举办|落下帷幕|隆重举行)|(?:竞赛|比赛)新闻回顾/.test(
       text,
+    );
+  // 标题本身是赛后回顾（「…圆满落幕」「…成功举办」）时，无论正文提及多少赛事细节，
+  // 都不是可报名赛事；这类通知只在页面上作历史记录，不能进入报名正例。
+  const titleRecap =
+    /圆满落幕|圆满结束|成功举办|顺利举办|落下帷幕|隆重举行|赛后|回顾|喜报|荣获/.test(
+      title,
     );
   const notificationKind =
     /获奖|结果公示|名单公示|表彰|获奖新闻/.test(title) || bodyAward
@@ -84,10 +100,11 @@ export function classifyNotice(
   if (list) exclusions.push("applicant-list");
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
   if (resultNotice) exclusions.push("结果公示或评选通知，不是可报名赛事");
+  if (titleRecap) exclusions.push("赛后回顾报道，不是可报名赛事");
   if (competition) reasons.push("原文含赛事标识");
   if (ambiguous) reasons.push("征集或活动语义不足以确认赛事");
   const classification: Classification =
-    list || resultNotice
+    list || resultNotice || titleRecap
       ? "non_competition"
       : excluded
         ? competition || ambiguous || attachmentTitles.length > 0
