@@ -8,14 +8,14 @@
 
 依据 #179 正文第 4、5 条及 2026-11-05 修订记录：
 
-| 项 | 要求 |
-| --- | --- |
-| 样本总量 | ≥100 条不同官方通知，URL 规范化后去重 |
-| 五类有效正例 | 学科竞赛、创新创业、职业规划／技能、艺术文化、体育各至少一个 |
-| 非赛事对照 | ≥20 条 |
-| 学院覆盖 | 按实际可核验的最大数量如实报告，**不设 27 院硬性下限**；缺哪个院、缺几条写真实数量，不凑数 |
-| 延期／变更 | **不设下限，仅如实报告实际数量**（该类通知在真实站点本就稀缺），实际为 0 也要写明 |
-| 字段正确性 | #179 第 5 条：报名／变更正例不被丢弃；自动字段无证据或错误确定资格／时间的未解决缺陷为 0；报告误收、误判明确、人工修正和疑似数量 |
+| 项           | 要求                                                                                                                             |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| 样本总量     | ≥100 条不同官方通知，URL 规范化后去重                                                                                            |
+| 五类有效正例 | 学科竞赛、创新创业、职业规划／技能、艺术文化、体育各至少一个                                                                     |
+| 非赛事对照   | ≥20 条                                                                                                                           |
+| 学院覆盖     | 按实际可核验的最大数量如实报告，**不设 27 院硬性下限**；缺哪个院、缺几条写真实数量，不凑数                                       |
+| 延期／变更   | **不设下限，仅如实报告实际数量**（该类通知在真实站点本就稀缺），实际为 0 也要写明                                                |
+| 字段正确性   | #179 第 5 条：报名／变更正例不被丢弃；自动字段无证据或错误确定资格／时间的未解决缺陷为 0；报告误收、误判明确、人工修正和疑似数量 |
 
 数量不足记「未满足」并报告缺口，不能生成文本冒充真实抽样，不能用抽样结论外推全站准确率或漏收率。冻结答案不因发现缺陷而回改。
 
@@ -23,11 +23,11 @@
 
 一条通知「是否属于赛事」与「是否计入某次验收的样本配额」是两件事，必须由独立字段表达：
 
-| 字段 | 回答的问题 | 取值 |
-| --- | --- | --- |
-| `classification` | 内容性质是否为赛事 | `definite` / `suspected` / `non_competition` |
-| `audience` | 通知明示的适用对象 | `undergraduate` / `graduate-only` / `all` / `unknown` / `staff` |
-| `quotaIncluded` | 是否计入本次本科生正例配额 | `true` / `false` |
+| 字段             | 回答的问题                 | 取值                                                            |
+| ---------------- | -------------------------- | --------------------------------------------------------------- |
+| `classification` | 内容性质是否为赛事         | `definite` / `suspected` / `non_competition`                    |
+| `audience`       | 通知明示的适用对象         | `undergraduate` / `graduate-only` / `all` / `unknown` / `staff` |
+| `quotaIncluded`  | 是否计入本次本科生正例配额 | `true` / `false`                                                |
 
 只面向研究生的赛事仍是赛事，只在 `quotaIncluded` 记为 `false`，不得改成 `non_competition`。未区分本研视为包含本科生，不从发布学院、专业或站点反推适用人群。研究生奖学金、招聘等通知本来就可以是非赛事；`graduate-only + non_competition` 只是**待人工复核的提示**，不能仅凭人群与分类组合认定标注污染。
 
@@ -39,22 +39,22 @@
 
 顶层文档必填字段：
 
-| 字段 | 类型 | 必填条件 |
-| --- | --- | --- |
-| `schema_version` | number | 恒为 `2` |
-| `protocolVersion` | string | 恒为 `"v2"` |
-| `dataset` | string | 必填，数据集标识 |
-| `frozen` | boolean | 必填；pre-freeze 为 `false`，post-freeze 为 `true` |
-| `frozenAt` | string \| null | ISO 8601；`frozen=true` 时必填，否则 `null` |
-| `frozenBy` | string \| null | `frozen=true` 时必填，否则 `null` |
-| `classifierNotRun` | boolean | 必填，标注阶段不得调用分类器 |
-| `boundCommit` | string \| null | 评估前必填，绑定规则的准确提交 |
-| `boundRuleVersion` | string \| null | 评估前必填 |
-| `editionPolicy` | object | 必填，固定当届判断口径，见 3.2 |
-| `totals` | object | 必填，`{samples: number, sources: number}`，且 `samples === samples.length` |
-| `quotaRecord` | object | 必填，键见下 |
-| `annotation_meta` | object | 必填，键见下 |
-| `samples` | array | 必填，每条样本结构见本节开头 |
+| 字段               | 类型           | 必填条件                                                                    |
+| ------------------ | -------------- | --------------------------------------------------------------------------- |
+| `schema_version`   | number         | 恒为 `2`                                                                    |
+| `protocolVersion`  | string         | 恒为 `"v2"`                                                                 |
+| `dataset`          | string         | 必填，数据集标识                                                            |
+| `frozen`           | boolean        | 必填；pre-freeze 为 `false`，post-freeze 为 `true`                          |
+| `frozenAt`         | string \| null | ISO 8601；`frozen=true` 时必填，否则 `null`                                 |
+| `frozenBy`         | string \| null | `frozen=true` 时必填，否则 `null`                                           |
+| `classifierNotRun` | boolean        | 必填，标注阶段不得调用分类器                                                |
+| `boundCommit`      | string \| null | 评估前必填，绑定规则的准确提交                                              |
+| `boundRuleVersion` | string \| null | 评估前必填                                                                  |
+| `editionPolicy`    | object         | 必填，固定当届判断口径，见 3.2                                              |
+| `totals`           | object         | 必填，`{samples: number, sources: number}`，且 `samples === samples.length` |
+| `quotaRecord`      | object         | 必填，键见下                                                                |
+| `annotation_meta`  | object         | 必填，键见下                                                                |
+| `samples`          | array          | 必填，每条样本结构见本节开头                                                |
 
 `editionPolicy` 结构：`{ asOfDate: "YYYY-MM-DD", timezone: "Asia/Shanghai", rules: string[] }`。`asOfDate` 与 `timezone` 固定当届判断日期与时区，**由数据集元数据一次性确定，票 A 标注与票 B 冻结都读同一份，不得随执行日期滚动**；`asOfDate` 在生成数据集时填入真实日期，示例中的 `YYYY-MM-DD` 仅为占位。
 
@@ -125,7 +125,9 @@
       "frozen": true,
       "eligibleForIndependentAcceptance": false,
       "reason": "已用于发现和修复分类缺陷",
-      "members": [{ "id": "sampleId", "url": "https://example.edu/notice/1.htm" }]
+      "members": [
+        { "id": "sampleId", "url": "https://example.edu/notice/1.htm" }
+      ]
     }
   ],
   "reviewAttestation": {
@@ -158,12 +160,12 @@
 
 `fields` 覆盖且仅覆盖以下 15 个键，每个键都是同一结构 `{state, value, evidence}`。四种 `state` 的 `value` / `evidence` 结构分别如下（时间字段的 `state=supported` 值结构见 3.4）：
 
-| `state` | `value` | `evidence` |
-| --- | --- | --- |
-| `supported` | 按下表对应类型；时间字段为 `{value, precision}` 对象 | `{paragraph: 整数, quote: 绑定文件对应段落中的原文片段}`，两值必填且非空 |
-| `unknown` | `null` | `{paragraph: null, quote: null}`；未知原因可记在 `annotation.reason` |
-| `conflict` | `{ "candidates": [ { "value": <该字段 supported 时的类型>, "scope": "适用对象或赛段等限定", "evidence": {paragraph, quote} } ], "resolution": null }` | `{paragraph: null, quote: null}`，各候选自带 evidence；`resolution` 恒为 `null`，不自动选值、不取更晚值 |
-| `not_applicable` | `null` | `{paragraph: null, quote: null}` |
+| `state`          | `value`                                                                                                                                               | `evidence`                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `supported`      | 按下表对应类型；时间字段为 `{value, precision}` 对象                                                                                                  | `{paragraph: 整数, quote: 绑定文件对应段落中的原文片段}`，两值必填且非空                                |
+| `unknown`        | `null`                                                                                                                                                | `{paragraph: null, quote: null}`；未知原因可记在 `annotation.reason`                                    |
+| `conflict`       | `{ "candidates": [ { "value": <该字段 supported 时的类型>, "scope": "适用对象或赛段等限定", "evidence": {paragraph, quote} } ], "resolution": null }` | `{paragraph: null, quote: null}`，各候选自带 evidence；`resolution` 恒为 `null`，不自动选值、不取更晚值 |
+| `not_applicable` | `null`                                                                                                                                                | `{paragraph: null, quote: null}`                                                                        |
 
 时间字段冲突示例（**两组本科生各有互不覆盖的截止时间，且通知中不存在面向全体参赛者的统一截止**时才记 `conflict`；若存在面向全体参赛者的截止，按 3.4 取该条、多条并存时取最早，不记冲突；本科生／研究生两套截止按 3.4 只取本科生那条，也不记冲突）：
 
@@ -193,23 +195,23 @@
 
 `supported` 时 `value` 不得为空；未确定项填 `unknown` 且 `value=null`，不留空缺、不猜测。15 个键在 `state=supported` 时的 `value` 类型：
 
-| 键 | `state=supported` 时 `value` 的结构 |
-| --- | --- |
-| `name` | 字符串：比赛名称（比较时做 NFKC 归一、去空白与标点） |
-| `edition` | 字符串：届次名称或年份标识 |
-| `kind` | 字符串：赛事种类／项目类型 |
-| `organizer` | 字符串：主办单位 |
-| `hosts` | 字符串数组：承办单位列表 |
-| `scope` | 对象 `{ "kind": "all|specified|other|unknown", "colleges": ["学院ID"] }`；含否定或排除语义时保留复杂原文，不把禁入学院列为允许范围 |
-| `mode` | 字符串：参赛形式（个人／团队等） |
-| `tracks` | 字符串数组：赛道 |
-| `members` | 字符串或数字：人数要求，按原文表述记录 |
-| `rules` | 字符串数组：规则条目 |
-| `stageNames` | 字符串数组：赛段名称 |
-| `startsAt` | 对象 `{ "value": "YYYY-MM-DD" 或 ISO 时刻或 null, "precision": "instant|date|unknown" }`，见 3.4 |
-| `deadline` | 同上；只取本科生适用口径的报名截止，见 3.4 |
-| `materialsAt` | 同上；材料提交截止，不混进 `deadline` |
-| `eventAt` | 同上；比赛／赛段时间 |
+| 键            | `state=supported` 时 `value` 的结构                                     |
+| ------------- | ----------------------------------------------------------------------- |
+| `name`        | 字符串：比赛名称（比较时做 NFKC 归一、去空白与标点）                    |
+| `edition`     | 字符串：届次名称或年份标识                                              |
+| `kind`        | 字符串：赛事种类／项目类型                                              |
+| `organizer`   | 字符串：主办单位                                                        |
+| `hosts`       | 字符串数组：承办单位列表                                                |
+| `scope`       | 对象 `{ "kind": "all                                                    | specified | other               | unknown", "colleges": ["学院ID"] }`；含否定或排除语义时保留复杂原文，不把禁入学院列为允许范围 |
+| `mode`        | 字符串：参赛形式（个人／团队等）                                        |
+| `tracks`      | 字符串数组：赛道                                                        |
+| `members`     | 字符串或数字：人数要求，按原文表述记录                                  |
+| `rules`       | 字符串数组：规则条目                                                    |
+| `stageNames`  | 字符串数组：赛段名称                                                    |
+| `startsAt`    | 对象 `{ "value": "YYYY-MM-DD" 或 ISO 时刻或 null, "precision": "instant | date      | unknown" }`，见 3.4 |
+| `deadline`    | 同上；只取本科生适用口径的报名截止，见 3.4                              |
+| `materialsAt` | 同上；材料提交截止，不混进 `deadline`                                   |
+| `eventAt`     | 同上；比赛／赛段时间                                                    |
 
 `scope`、`hosts`、`tracks`、`rules`、`stageNames` 等数组或对象字段比较时按键排序后逐值比对；时间字段按 `value.value` 与 `value.precision` 分别比对。字段证据须绑定通知版本与附件版本；HTML 段落从 0 起，标题／元数据为 -1，PDF 页与 DOCX 段落从 1 起。
 
@@ -275,13 +277,13 @@
 
 评估器读取 `gold.classification`、`gold.event_category`（中文，按下表映射后与旧英文格式统一）、`gold.current_edition_positive`（旧格式回退 `selection.current_edition_positive`）、`gold.is_change_notice`（旧格式回退 `selection.is_change_notice`）、`gold.quotaIncluded`（旧格式无此字段时按 `classification` 回退）。
 
-| 中文 | 评估器内部键 |
-| --- | --- |
-| 学科竞赛 | `discipline` |
-| 创新创业 | `innovation` |
-| 职业规划技能 / 职业规划／技能 | `career` |
-| 艺术文化 | `arts` |
-| 体育 | `sports` |
+| 中文                          | 评估器内部键 |
+| ----------------------------- | ------------ |
+| 学科竞赛                      | `discipline` |
+| 创新创业                      | `innovation` |
+| 职业规划技能 / 职业规划／技能 | `career`     |
+| 艺术文化                      | `arts`       |
+| 体育                          | `sports`     |
 
 `--quota-only` 只输出配额重算，不能代替字段级评估；正式评估必须跑完整流程并检查字段级混淆、报名／变更漏判与字段误差。
 
