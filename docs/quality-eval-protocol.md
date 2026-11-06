@@ -195,23 +195,23 @@
 
 `supported` 时 `value` 不得为空；未确定项填 `unknown` 且 `value=null`，不留空缺、不猜测。15 个键在 `state=supported` 时的 `value` 类型：
 
-| 键            | `state=supported` 时 `value` 的结构                                     |
-| ------------- | ----------------------------------------------------------------------- |
-| `name`        | 字符串：比赛名称（比较时做 NFKC 归一、去空白与标点）                    |
-| `edition`     | 字符串：届次名称或年份标识                                              |
-| `kind`        | 字符串：赛事种类／项目类型                                              |
-| `organizer`   | 字符串：主办单位                                                        |
-| `hosts`       | 字符串数组：承办单位列表                                                |
-| `scope`       | 对象 `{ "kind": "all                                                    | specified | other               | unknown", "colleges": ["学院ID"] }`；含否定或排除语义时保留复杂原文，不把禁入学院列为允许范围 |
-| `mode`        | 字符串：参赛形式（个人／团队等）                                        |
-| `tracks`      | 字符串数组：赛道                                                        |
-| `members`     | 字符串或数字：人数要求，按原文表述记录                                  |
-| `rules`       | 字符串数组：规则条目                                                    |
-| `stageNames`  | 字符串数组：赛段名称                                                    |
-| `startsAt`    | 对象 `{ "value": "YYYY-MM-DD" 或 ISO 时刻或 null, "precision": "instant | date      | unknown" }`，见 3.4 |
-| `deadline`    | 同上；只取本科生适用口径的报名截止，见 3.4                              |
-| `materialsAt` | 同上；材料提交截止，不混进 `deadline`                                   |
-| `eventAt`     | 同上；比赛／赛段时间                                                    |
+| 键            | `state=supported` 时 `value` 的结构                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | 字符串：比赛名称（比较时做 NFKC 归一、去空白与标点）                                                                                  |
+| `edition`     | 字符串：届次名称或年份标识                                                                                                            |
+| `kind`        | 字符串：赛事种类／项目类型                                                                                                            |
+| `organizer`   | 字符串：主办单位                                                                                                                      |
+| `hosts`       | 字符串数组：承办单位列表                                                                                                              |
+| `scope`       | 对象 `{ "kind": "all\|specified\|other\|unknown", "colleges": ["学院ID"] }`；含否定或排除语义时保留复杂原文，不把禁入学院列为允许范围 |
+| `mode`        | 字符串：参赛形式（个人／团队等）                                                                                                      |
+| `tracks`      | 字符串数组：赛道                                                                                                                      |
+| `members`     | 字符串或数字：人数要求，按原文表述记录                                                                                                |
+| `rules`       | 字符串数组：规则条目                                                                                                                  |
+| `stageNames`  | 字符串数组：赛段名称                                                                                                                  |
+| `startsAt`    | 对象 `{ "value": "YYYY-MM-DD" 或 ISO 时刻或 null, "precision": "instant\|date\|unknown" }`，见 3.4                                    |
+| `deadline`    | 同上；只取本科生适用口径的报名截止，见 3.4                                                                                            |
+| `materialsAt` | 同上；材料提交截止，不混进 `deadline`                                                                                                 |
+| `eventAt`     | 同上；比赛／赛段时间                                                                                                                  |
 
 `scope`、`hosts`、`tracks`、`rules`、`stageNames` 等数组或对象字段比较时按键排序后逐值比对；时间字段按 `value.value` 与 `value.precision` 分别比对。字段证据须绑定通知版本与附件版本；HTML 段落从 0 起，标题／元数据为 -1，PDF 页与 DOCX 段落从 1 起。
 
