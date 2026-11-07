@@ -238,7 +238,28 @@
 
 ### 3.5 `annotation` 与复核状态
 
-每条含 `annotator`、`annotated_at`、`exposure`、`dual_blind`、`review_status`、`reason`。`review_status` 取 `pending` / `in-review` / `completed`；`dual_blind` 固定为 `false`（单人复核、非双盲）；`reason` 记录判断依据。**只有 `annotator=user` 且 `review_status=completed` 才算完成逐条复核**；停在 `AI-draft` 或 `pending` 不得冻结。
+每条含 `annotator`、`annotated_at`、`exposure`、`dual_blind`、`review_status`、`review_method`、`human_personally_reviewed`、`reason`。`review_status` 取 `pending` / `in-review` / `completed`；`dual_blind` 固定为 `false`（单人复核、非双盲）；`reason` 记录判断依据。停在 `AI-draft` 或 `pending` 不得冻结。
+
+`review_method` 取以下三种，决定 `annotator` 的合法取值与必须附带的记录：
+
+| `review_method`            | 含义                                 | `annotator`           | 必须附带                |
+| -------------------------- | ------------------------------------ | --------------------- | ----------------------- |
+| `user-personal`            | 用户本人逐条复核                     | `user`                | 无需额外记录            |
+| `user-delegated-ai-review` | 用户明确委托 AI 逐条复核并采用其结论 | `AI-delegated-review` | `delegation` 对象，见下 |
+| `ai-draft`                 | 仅 AI 草稿，尚未复核                 | `AI-draft`            | 不得冻结                |
+
+`review_method=user-delegated-ai-review` 时，顶层文档必须带 `delegation`，如实记录授权依据而非仅写结论：
+
+| 键                     | 类型     | 必填条件                                          |
+| ---------------------- | -------- | ------------------------------------------------- |
+| `basis`                | string   | 必填，用户委托的原话，逐字引用，不改写            |
+| `basisDate`            | string   | 必填，`YYYY-MM-DD`，委托发生日期                  |
+| `basisLocation`        | string   | 必填，委托所在会话、载体或链接，便于追溯          |
+| `adopted`              | boolean  | 恒为 `true`；未采用结论即不属本模式               |
+| `userSpotChecked`      | boolean  | 必填，用户是否另行抽检                            |
+| `spotCheckedSampleIds` | string[] | `userSpotChecked=true` 时必填且非空；否则为空数组 |
+
+**`user-delegated-ai-review` 不等于 `user-personal`**：不得写成 `annotator=user`，不得宣称用户亲审或双盲，`human_personally_reviewed` 恒为 `false`。用户另行抽检时，只能把抽检结果记入 `delegation.userSpotChecked` 与 `spotCheckedSampleIds`，**不得据此把未抽检样本写成用户逐条复核**——抽检只证明抽检过的样本。
 
 `exposure` 取 `blind` / `classifier-not-consulted-during-labeling` / `predictions-exposed`。标注阶段不得读取任何 predictions 文件、不得调用分类器；若已查看，须如实改为 `predictions-exposed`。
 
@@ -259,15 +280,17 @@
 
 1. **字段齐全**：3.2 与 3.3 的所有字段均存在，按四种 `state` 的结构填写，未确定项填 `unknown`，枚举与取值合法；`totals`／`quotaRecord`／`annotation_meta`／`editionPolicy` 按 3.1 的最小结构齐备。
 2. **原文依据**：每个 `supported` 字段有段落定位与原文引文，且证据绑定按 3.6 可复核——哈希匹配、**从绑定文件核对正文与样本身份**、引文出现在绑定文件对应段落。
-3. **用户逐条复核**：每条复核完成、复核人与暴露状态如实记录；单人复核、非双盲。
+3. **复核完成**：每条的 `review_status=completed`，且 `review_method` 与 `annotator` 组合合法（见 3.5）——`user-personal` 配 `user`，或 `user-delegated-ai-review` 配 `AI-delegated-review` 并带完整 `delegation`。复核方式与暴露状态如实记录；单人复核、非双盲。**不得把委托复核写成用户亲审，也不得把抽检写成逐条复核。**
 4. **配额如实记录**：`quotaRecord` 必须与从样本重算的结果一致（总量、五类、非赛事、学院覆盖实际数、变更实际数），不能手工把布尔值填成 `true`。
 
 **冻结前准入检查**（`freeze-check.mjs --mode=pre-freeze`）还须通过：URL 去重、与 dev 用途清单零重叠、用途清单可读且结构完整（读取失败即阻止）、三字段分离、转载关系逐对核对、配额从样本重算。此阶段文件应为 `frozen=false`，**不要求** `frozenAt`/`frozenBy`；把冻结元数据当作准入前提会造成循环。
 
+**转载未决的处理（区分「保留待办」与「计入验收」）**：`undetermined` 不强迫下结论，但相关样本必须**排除出独立计数与配额重算**。已排除且不影响剩余配额结论的未决关系，允许作为待办保留并如实计数，**不阻断准入**；未排除的新样本仍留在独立计数里时才阻断。两者不能混为一谈：保留待办不等于把未决样本计入验收。
+
 ## 5. 冻结与评估顺序
 
 1. 采集与标注阶段不运行分类器、不读预测；模板生成器写入相对 `evidence_path` 与证据哈希，并从绑定文件读取 `title`／`paragraphs`／样本身份。
-2. 完成用户逐条复核后，跑 `freeze-check.mjs --mode=pre-freeze` 做**冻结前准入检查**（B2 四条、独立性、配额重算）。此时文件为 `frozen=false`，不要求冻结元数据。
+2. 完成复核后（用户亲审，或用户委托 AI 复核并采用，见 3.5），跑 `freeze-check.mjs --mode=pre-freeze` 做**冻结前准入检查**（B2 四条、独立性、配额重算）。此时文件为 `frozen=false`，不要求冻结元数据。
 3. 准入通过后写入 `frozen=true`、`frozenAt`、`frozenBy`；再跑 `freeze-check.mjs --mode=post-freeze` 做**冻结文件完整性检查**（含冻结元数据）。两次都通过才算冻结完成。
 4. 评估前把 `boundCommit` / `boundRuleVersion` 指向所用规则的**准确提交与规则版本**；同一规则版本内实现也可能变动，不能仅凭版本号断言与历史评估一致或不一致。
 5. 冻结之后才对最终规则评估；分类指标与字段级指标分别报告。发现缺陷先写红测试、只在 dev 集复跑，验证集不调参，不回改冻结答案。
@@ -289,7 +312,7 @@
 
 ## 7. 标注方式与独立性
 
-标注方式为 **AI 草稿 + 用户逐条复核，单人复核、非双人独立盲标**，如实记录 `annotator` 与 `exposure`，不宣称双标一致性。不设第二位标注人或仲裁人。
+标注方式为 **AI 草稿 + 复核**，复核可为用户亲审（`user-personal`）或用户委托 AI 复核并采用结论（`user-delegated-ai-review`），单人复核、非双人独立盲标，如实记录 `annotator`、`review_method`、`exposure` 与 `delegation`，不宣称双标一致性。不设第二位标注人或仲裁人。委托模式不得写成用户亲审；用户抽检只覆盖被抽检的样本。
 
 独立集须与开发语料分开：URL 规范化去重、与 dev 用途清单零重叠、同标题条目逐对核对是否为多院转载同一通知（URL 不同不等于通知独立）。用途清单不可读、结构不完整或读取失败时不得放行。
 
