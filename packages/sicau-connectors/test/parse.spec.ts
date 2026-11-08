@@ -240,6 +240,39 @@ describe("候选领域解析", () => {
         .rules,
     ).toEqual(["参赛要求为原创作品"]);
   });
+  it("编号标题冒号后的同段正文保留字段值和原文定位", () => {
+    const paragraphs = [
+      "二、参赛对象：理学院本科生",
+      "四、参赛要求：原创作品",
+    ];
+    const parsed = parseEvidenceCandidate(
+      article(paragraphs),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.scope).toMatchObject({
+      kind: "colleges",
+      colleges: ["science"],
+    });
+    expect(parsed.fields.rules).toEqual([paragraphs[1]]);
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "scope",
+          paragraph: 0,
+          excerpt: paragraphs[0],
+          noticeVersion: "notice-v1",
+        }),
+        expect.objectContaining({
+          field: "rules",
+          paragraph: 1,
+          excerpt: paragraphs[1],
+          noticeVersion: "notice-v1",
+        }),
+      ]),
+    );
+  });
   it("带冒号的小节标题不进入规则取值", () => {
     expect(
       parseCandidate(
@@ -248,6 +281,37 @@ describe("候选领域解析", () => {
         directory,
       ).fields.rules,
     ).toEqual(["作品须原创。"]);
+  });
+  it.each(["参赛要求", "参赛要求：", "四、参赛要求："])(
+    "纯标题 %s 读取所属正文并在下一节停止",
+    (heading) => {
+      const parsed = parseEvidenceCandidate(
+        article([heading, "", "作品须原创。", "报名方式", "在线填写报名表。"]),
+        url,
+        directory,
+        "notice-v1",
+      );
+      expect(parsed.fields.rules).toEqual(["作品须原创。"]);
+      expect(parsed.evidence.filter((entry) => entry.field === "rules")).toEqual([
+        expect.objectContaining({
+          excerpt: "作品须原创。",
+          paragraph: 2,
+          noticeVersion: "notice-v1",
+        }),
+      ]);
+    },
+  );
+  it("末尾无编号纯标题不支撑规则或范围", () => {
+    const parsed = parseCandidate(
+      article(["参赛要求", "报名对象"]),
+      url,
+      directory,
+    );
+    expect(parsed.fields.rules).toEqual([]);
+    expect(parsed.fields.scope.kind).toBe("unknown");
+    expect(
+      parsed.evidence.filter((entry) => ["rules", "scope"].includes(entry.field)),
+    ).toEqual([]);
   });
   it("资格小节读取全部正文，后续限制条款不被截断", () => {
     const parsed = parseCandidate(

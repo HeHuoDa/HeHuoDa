@@ -13,15 +13,20 @@ const headingPrefix =
   /^(?:[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|[一二三四五六七八九十\d]+\s*[、.．]|第\s*[一二三四五六七八九十\d]+\s*[章节条部分])\s*/;
 /** A clause carries content; these markers mean the text is a sentence, not a heading. */
 const clauseMarker = /须|应|需|不得|不可|可以|按|每|如|若|未|由|限/;
+// Unnumbered lines are headings only when the whole line is a known section label.
+const sectionLabel =
+  /^(?:参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求|参赛对象(?:及要求)?|参赛范围|参赛资格|报名对象|报名方式|报名时间|报名须知|比赛时间|竞赛时间|时间安排|活动安排|奖项设置|联系方式)$/;
 const isSectionHeading = (text: string) => {
-  // Without a numbering prefix a short line may be a plain sentence; never drop it.
-  if (!headingPrefix.test(text)) return false;
   const body = text
     .replace(headingPrefix, "")
     .replace(/[：:\s]+$/, "")
     .trim();
+  if (sectionLabel.test(body)) return true;
+  // Other unnumbered short lines may be plain sentences; never drop them.
+  if (!headingPrefix.test(text)) return false;
   if (!body || body.length > 20) return false;
-  if (/[。；;，,]/.test(body)) return false;
+  // A remaining colon separates a label from content in the same paragraph.
+  if (/[。；;，,：:]/.test(body)) return false;
   if (clauseMarker.test(body)) return false;
   return true;
 };
