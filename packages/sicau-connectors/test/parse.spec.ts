@@ -219,6 +219,80 @@ describe("候选领域解析", () => {
       ).fields.materialsAt,
     ).toEqual({ precision: "unknown", value: null });
   });
+  it.each([
+    ["学校报送作品截止2026年11月12日。"],
+    ["作品报送截止2026年11月12日。"],
+    ["请于2026年11月12日前报送作品。"],
+  ])("「截止」不代替义务主体判断：%s", (paragraph) => {
+    expect(
+      parseCandidate(article([paragraph]), url, directory).fields.materialsAt,
+    ).toEqual({ precision: "unknown", value: null });
+  });
+  it("短的无编号句子是正文而不是标题", () => {
+    expect(
+      parseCandidate(article(["二、参赛对象", "理学院本科生"]), url, directory)
+        .fields.scope,
+    ).toMatchObject({ kind: "colleges", colleges: ["science"] });
+  });
+  it("同一段里的规则句不被误判成标题而丢弃", () => {
+    expect(
+      parseCandidate(article(["参赛要求为原创作品"]), url, directory).fields
+        .rules,
+    ).toEqual(["参赛要求为原创作品"]);
+  });
+  it("带冒号的小节标题不进入规则取值", () => {
+    expect(
+      parseCandidate(
+        article(["四、参赛要求：", "作品须原创。"]),
+        url,
+        directory,
+      ).fields.rules,
+    ).toEqual(["作品须原创。"]);
+  });
+  it("资格小节读取全部正文，后续限制条款不被截断", () => {
+    const parsed = parseCandidate(
+      article([
+        "二、参赛对象",
+        "全校学生。",
+        "不含毕业年级学生。",
+        "三、报名方式",
+      ]),
+      url,
+      directory,
+    );
+    expect(parsed.fields.scope.kind).toBe("complex");
+    expect(parsed.fields.scope.note).toContain("不含毕业年级学生");
+    expect(
+      parsed.evidence
+        .filter((entry) => entry.field === "scope")
+        .map((entry) => entry.paragraph),
+    ).toEqual([1, 2]);
+  });
+  it("资格标题与正文跨来源时保持未知，不加关联", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["二、参赛对象"]),
+      url,
+      directory,
+      "notice-v1",
+      [
+        {
+          format: "docx",
+          url: "https://example.edu/a.docx",
+          noticeVersion: "notice-v1",
+          attachmentVersion: "attachment-v1",
+          segments: [{ kind: "paragraph", index: 1, text: "理学院学生。" }],
+        },
+      ],
+    );
+    expect(parsed.fields.scope).toEqual({
+      kind: "unknown",
+      colleges: [],
+      note: "跨来源资格标题不能自动关联",
+    });
+    expect(parsed.conflicts).toContain(
+      "资格标题与内容分属不同来源，须人工核对",
+    );
+  });
   it("小节标题不能单独作为参赛规则证据", () => {
     const parsed = parseCandidate(
       article([

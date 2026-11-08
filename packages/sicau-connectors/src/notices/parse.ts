@@ -10,47 +10,89 @@ const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
 
 /** Section numbers carry no content; a heading alone cannot support a value. */
 const headingPrefix =
-  /^(?:[（(]?\s*[一二三四五六七八九十\d]+\s*[）)]?\s*[、.．]|第\s*[一二三四五六七八九十\d]+\s*[章节条部分]\s*)\s*/;
+  /^(?:[（(]\s*[一二三四五六七八九十\d]+\s*[）)]|[一二三四五六七八九十\d]+\s*[、.．]|第\s*[一二三四五六七八九十\d]+\s*[章节条部分])\s*/;
+/** A clause carries content; these markers mean the text is a sentence, not a heading. */
+const clauseMarker = /须|应|需|不得|不可|可以|按|每|如|若|未|由|限/;
 const isSectionHeading = (text: string) => {
-  const body = text.replace(headingPrefix, "").trim();
-  return body.length > 0 && body.length <= 20 && !/[。；;，,：:]/.test(body);
+  // Without a numbering prefix a short line may be a plain sentence; never drop it.
+  if (!headingPrefix.test(text)) return false;
+  const body = text
+    .replace(headingPrefix, "")
+    .replace(/[：:\s]+$/, "")
+    .trim();
+  if (!body || body.length > 20) return false;
+  if (/[。；;，,]/.test(body)) return false;
+  if (clauseMarker.test(body)) return false;
+  return true;
 };
 const rulesHeading = /参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求/;
 const scopeHeading = /参赛对象|参赛范围|参赛资格|报名对象/;
+/** Clauses that describe another field; they must not shape a scope value. */
+const isOtherFieldClause = (text: string) =>
+  /个人赛|团队赛|团体赛|组队|赛道|比赛时间|竞赛时间|报名时间|截止|材料|作品提交|联系人|电话|地点/.test(
+    text,
+  );
+/** Wording that genuinely narrows eligibility, as opposed to an unrelated "不". */
+const scopeOnly = /除|不含|不包括|不面向|仅限|不包括/;
+const exclusionMarker =
+  /除[^。；\n]{0,20}(?:外|以外)|不含|不包括|不面向|禁止|排除|不接受|不招收|(?:不|禁止|不得|不可|不予|非)[^。；，,\n]{0,12}(?:参加|参加|报名|参赛|申报|申请|参与)/;
+
+interface SectionRead {
+  parts: { text: string; index: number }[];
+  /** Set when the section would continue into another source; the value cannot be trusted. */
+  blockedBySource: boolean;
+}
 
 /**
- * Read the body that belongs to a section heading. Stops at the next heading so a
- * section never swallows the following one. Returns null when no body follows.
+ * Read every paragraph belonging to a section heading, stopping at the next heading
+ * so a section never swallows the following one. Each paragraph keeps its own
+ * location, so no joined text is passed off as a single source.
  */
 const sectionBody = (
   paragraphs: string[],
   index: number,
-): { text: string; index: number } | null => {
+  barriers?: Set<number>,
+): SectionRead => {
+  const parts: { text: string; index: number }[] = [];
   for (let next = index + 1; next < paragraphs.length; next++) {
     const text = paragraphs[next]?.trim();
     if (!text) continue;
-    if (isSectionHeading(text)) return null;
-    return { text, index: next };
+    if (isSectionHeading(text)) break;
+    if (barriers?.has(next - 1)) return { parts, blockedBySource: true };
+    parts.push({ text, index: next });
   }
-  return null;
+  return { parts, blockedBySource: false };
 };
+
+const participantSubject =
+  /参赛者|参赛队|参赛学生|参赛人员|参赛选手|选手|个人|团队|作者|学生本人|每人|每组|每队|报名者/;
+const organizerNoun =
+  /学院|学校|我校|教务处|团委|党委|承办|主办|组委会|评审|专家|组织方|工作小组|教育部/g;
+const collectiveAction =
+  /(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选)[^。；\n]{0,12}(?:报送|提交|上报|递交)/;
+const submitVerb = /提交|递交|上交/;
 
 /**
  * Material deadlines belong to whoever must act: applicants submit, while colleges
  * aggregate, review and forward. A forwarding duty is not the applicant deadline.
+ * "截止" alone does not identify the actor; a bare "报送" is a forwarding duty, so it
+ * stays unknown instead of being guessed as the applicant deadline.
  */
 const materialsActor = (clause: string): "participant" | "organizer" | null => {
-  const organizerSubject =
-    /(?:学院|学校|我校|校|教务处|团委|党委|承办|主办|组委会|评审|专家|组织方|工作小组|教育部)[^。；\n]{0,16}(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关)/;
-  const collectiveAction =
-    /(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选)[^。；\n]{0,12}(?:报送|提交|上报|递交)/;
-  const participantSubject =
-    /参赛者|参赛队|参赛学生|参赛人员|参赛选手|选手|个人|团队|作者|学生本人|每人|每组|每队|报名者/;
-  if (organizerSubject.test(clause)) return "organizer";
-  if (collectiveAction.test(clause) && !participantSubject.test(clause))
-    return "organizer";
-  if (/截止|截至/.test(clause)) return "participant";
-  if (participantSubject.test(clause)) return "participant";
+  const participantAt = clause.search(participantSubject);
+  for (const match of clause.matchAll(organizerNoun)) {
+    const after = clause.slice(match.index + match[0].length);
+    if (
+      /^[^。；\n]{0,16}?(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关|报送)/.test(
+        after,
+      ) &&
+      (participantAt === -1 || participantAt > match.index)
+    )
+      return "organizer";
+  }
+  if (collectiveAction.test(clause) && participantAt === -1) return "organizer";
+  if (participantAt !== -1) return "participant";
+  if (/截止|截至/.test(clause) && submitVerb.test(clause)) return "participant";
   return null;
 };
 
@@ -91,6 +133,8 @@ export function parseCandidate(
   url: string,
   directory: Directory,
   notificationKind?: CandidateFields["kind"],
+  /** Paragraph gaps where consecutive text belongs to different sources; never joined. */
+  sourceBarriers?: Set<number>,
 ): ParsedCandidate {
   const evidence: Evidence[] = [
     { field: "name", excerpt: article.title, paragraph: -1, url },
@@ -188,27 +232,49 @@ export function parseCandidate(
       }
     }
     if (scopeHeading.test(paragraph)) {
-      // A heading carries no scope text; read the section beneath it instead.
-      const headed = isSectionHeading(paragraph)
-        ? sectionBody(article.paragraphs, index)
+      const heading = isSectionHeading(paragraph);
+      // A heading carries no scope text; read the whole section beneath it instead.
+      const section = heading
+        ? sectionBody(article.paragraphs, index, sourceBarriers)
         : null;
-      // A heading with no readable body cannot support a scope value at all.
-      if (isSectionHeading(paragraph) && !headed) {
+      if (heading && section?.blockedBySource) {
+        // A scope heading whose body continues in another source cannot be joined.
+        fields.scope = {
+          kind: "unknown",
+          colleges: [],
+          note: "跨来源资格标题不能自动关联",
+        };
+        conflicts.push("资格标题与内容分属不同来源，须人工核对");
+      } else if (heading && !section?.parts.length) {
+        // A heading with no readable body cannot support a scope value at all.
         warnings.push("资格小节标题下未读取到正文，参赛范围待核对");
       } else {
-        const scopeText =
-          headed?.text ??
-          (/(?:参赛对象|参赛范围|参赛资格|报名对象)[：:\s]*$/.test(paragraph) &&
-          article.paragraphs[index + 1]
-            ? paragraph + "\n" + article.paragraphs[index + 1]
-            : paragraph);
-        // Citation must land on the paragraph that actually states the scope.
-        const scopeIndex = headed?.index ?? index;
+        const paragraphs = section?.parts.length
+          ? section.parts
+          : [
+              {
+                text:
+                  /(?:参赛对象|参赛范围|参赛资格|报名对象)[：:\s]*$/.test(
+                    paragraph,
+                  ) && article.paragraphs[index + 1]
+                    ? paragraph + "\n" + article.paragraphs[index + 1]
+                    : paragraph,
+                index,
+              },
+            ];
+        // A section can mix eligibility with mode or schedule; only eligibility clauses
+        // may shape the scope value, but every kept clause still keeps its own citation.
+        const eligibility = paragraphs.filter(
+          (part) => !isOtherFieldClause(part.text) || scopeOnly.test(part.text),
+        );
+        const kept = eligibility.length ? eligibility : paragraphs;
+        const scopeText = kept.map((part) => part.text).join("\n");
         const collegeIds = directory
           .filter((c) => scopeText.includes(c.name))
           .map((c) => c.id);
         const unknownCollege = hasUnknownCollege(scopeText);
-        const excludedEligibility = /除|不|非|禁止|排除/.test(
+        // Bare "不" is too broad; only explicit exclusion wording narrows eligibility.
+        const excludedEligibility = exclusionMarker.test(
           scopeText.replace(/不限|不受[^。；，,]{0,20}限制/g, ""),
         );
         const scope =
@@ -243,7 +309,8 @@ export function parseCandidate(
             !/全校|各学院/.test(scopeText))
         )
           warnings.push("资格条款含未知学院名称");
-        add("scope", scopeText, scopeIndex);
+        // Each sentence keeps its own location and citation.
+        for (const part of paragraphs) add("scope", part.text, part.index);
       }
     }
     const modeText = paragraph.replace(
@@ -274,12 +341,16 @@ export function parseCandidate(
       add("members", paragraph, index);
     }
     if (isSectionHeading(paragraph) && rulesHeading.test(paragraph)) {
-      // A heading carries no rule text; read the section beneath it.
-      const body = sectionBody(article.paragraphs, index);
-      if (body) {
-        fields.rules.push(body.text);
-        add("rules", body.text, body.index);
-      }
+      // A heading carries no rule text; read the whole section beneath it.
+      const section = sectionBody(article.paragraphs, index, sourceBarriers);
+      if (section.blockedBySource) {
+        conflicts.push("参赛规则标题与内容分属不同来源，须人工核对");
+        warnings.push("规则小节跨来源，未自动拼接");
+      } else
+        for (const part of section.parts) {
+          fields.rules.push(part.text);
+          add("rules", part.text, part.index);
+        }
     } else if (rulesHeading.test(paragraph) && !isSectionHeading(paragraph)) {
       fields.rules.push(paragraph);
       add("rules", paragraph, index);
