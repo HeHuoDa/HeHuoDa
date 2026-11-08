@@ -8,6 +8,52 @@ import type {
 import type { TimeValue } from "./types.js";
 const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
 
+/** Section numbers carry no content; a heading alone cannot support a value. */
+const headingPrefix =
+  /^(?:[（(]?\s*[一二三四五六七八九十\d]+\s*[）)]?\s*[、.．]|第\s*[一二三四五六七八九十\d]+\s*[章节条部分]\s*)\s*/;
+const isSectionHeading = (text: string) => {
+  const body = text.replace(headingPrefix, "").trim();
+  return body.length > 0 && body.length <= 20 && !/[。；;，,：:]/.test(body);
+};
+const rulesHeading = /参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求/;
+const scopeHeading = /参赛对象|参赛范围|参赛资格|报名对象/;
+
+/**
+ * Read the body that belongs to a section heading. Stops at the next heading so a
+ * section never swallows the following one. Returns null when no body follows.
+ */
+const sectionBody = (
+  paragraphs: string[],
+  index: number,
+): { text: string; index: number } | null => {
+  for (let next = index + 1; next < paragraphs.length; next++) {
+    const text = paragraphs[next]?.trim();
+    if (!text) continue;
+    if (isSectionHeading(text)) return null;
+    return { text, index: next };
+  }
+  return null;
+};
+
+/**
+ * Material deadlines belong to whoever must act: applicants submit, while colleges
+ * aggregate, review and forward. A forwarding duty is not the applicant deadline.
+ */
+const materialsActor = (clause: string): "participant" | "organizer" | null => {
+  const organizerSubject =
+    /(?:学院|学校|我校|校|教务处|团委|党委|承办|主办|组委会|评审|专家|组织方|工作小组|教育部)[^。；\n]{0,16}(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关)/;
+  const collectiveAction =
+    /(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选)[^。；\n]{0,12}(?:报送|提交|上报|递交)/;
+  const participantSubject =
+    /参赛者|参赛队|参赛学生|参赛人员|参赛选手|选手|个人|团队|作者|学生本人|每人|每组|每队|报名者/;
+  if (organizerSubject.test(clause)) return "organizer";
+  if (collectiveAction.test(clause) && !participantSubject.test(clause))
+    return "organizer";
+  if (/截止|截至/.test(clause)) return "participant";
+  if (participantSubject.test(clause)) return "participant";
+  return null;
+};
+
 export function extractDates(text: string, year: string | null): TimeValue[] {
   const result: TimeValue[] = [];
   const pattern =
@@ -141,52 +187,64 @@ export function parseCandidate(
         add("organizer", paragraph, index);
       }
     }
-    if (/参赛对象|参赛范围|参赛资格|报名对象/.test(paragraph)) {
-      const scopeText =
-        /(?:参赛对象|参赛范围|参赛资格|报名对象)[：:\s]*$/.test(paragraph) &&
-        article.paragraphs[index + 1]
-          ? paragraph + "\n" + article.paragraphs[index + 1]
-          : paragraph;
-      const collegeIds = directory
-        .filter((c) => scopeText.includes(c.name))
-        .map((c) => c.id);
-      const unknownCollege = hasUnknownCollege(scopeText);
-      const excludedEligibility = /除|不|非|禁止|排除/.test(
-        scopeText.replace(/不限|不受[^。；，,]{0,20}限制/g, ""),
-      );
-      const scope =
-        unknownCollege || excludedEligibility
-          ? { kind: "complex" as const, colleges: [], note: scopeText }
-          : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
-                scopeText,
-              ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
-            ? { kind: "all" as const, colleges: [], note: scopeText }
-            : collegeIds.length
-              ? {
-                  kind: "colleges" as const,
-                  colleges: collegeIds,
-                  note: scopeText,
-                }
-              : { kind: "complex" as const, colleges: [], note: scopeText };
-      if (
-        fields.scope.kind !== "unknown" &&
-        JSON.stringify(fields.scope) !== JSON.stringify(scope)
-      ) {
-        conflicts.push("参赛资格有多个条款，须合并核对");
-        fields.scope = {
-          kind: "complex",
-          colleges: [],
-          note: fields.scope.note + "\n" + scopeText,
-        };
-      } else fields.scope = scope;
-      if (
-        unknownCollege ||
-        (/学院/.test(scopeText) &&
-          !collegeIds.length &&
-          !/全校|各学院/.test(scopeText))
-      )
-        warnings.push("资格条款含未知学院名称");
-      add("scope", scopeText, index);
+    if (scopeHeading.test(paragraph)) {
+      // A heading carries no scope text; read the section beneath it instead.
+      const headed = isSectionHeading(paragraph)
+        ? sectionBody(article.paragraphs, index)
+        : null;
+      // A heading with no readable body cannot support a scope value at all.
+      if (isSectionHeading(paragraph) && !headed) {
+        warnings.push("资格小节标题下未读取到正文，参赛范围待核对");
+      } else {
+        const scopeText =
+          headed?.text ??
+          (/(?:参赛对象|参赛范围|参赛资格|报名对象)[：:\s]*$/.test(paragraph) &&
+          article.paragraphs[index + 1]
+            ? paragraph + "\n" + article.paragraphs[index + 1]
+            : paragraph);
+        // Citation must land on the paragraph that actually states the scope.
+        const scopeIndex = headed?.index ?? index;
+        const collegeIds = directory
+          .filter((c) => scopeText.includes(c.name))
+          .map((c) => c.id);
+        const unknownCollege = hasUnknownCollege(scopeText);
+        const excludedEligibility = /除|不|非|禁止|排除/.test(
+          scopeText.replace(/不限|不受[^。；，,]{0,20}限制/g, ""),
+        );
+        const scope =
+          unknownCollege || excludedEligibility
+            ? { kind: "complex" as const, colleges: [], note: scopeText }
+            : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
+                  scopeText,
+                ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
+              ? { kind: "all" as const, colleges: [], note: scopeText }
+              : collegeIds.length
+                ? {
+                    kind: "colleges" as const,
+                    colleges: collegeIds,
+                    note: scopeText,
+                  }
+                : { kind: "complex" as const, colleges: [], note: scopeText };
+        if (
+          fields.scope.kind !== "unknown" &&
+          JSON.stringify(fields.scope) !== JSON.stringify(scope)
+        ) {
+          conflicts.push("参赛资格有多个条款，须合并核对");
+          fields.scope = {
+            kind: "complex",
+            colleges: [],
+            note: fields.scope.note + "\n" + scopeText,
+          };
+        } else fields.scope = scope;
+        if (
+          unknownCollege ||
+          (/学院/.test(scopeText) &&
+            !collegeIds.length &&
+            !/全校|各学院/.test(scopeText))
+        )
+          warnings.push("资格条款含未知学院名称");
+        add("scope", scopeText, scopeIndex);
+      }
     }
     const modeText = paragraph.replace(
       /(?:禁止|不得|不能|不可|不予|不允许|不接受|不准|不|非)(?:以)?(?:个人参赛|个人赛|个人|团队参赛|团队赛|团队|组队)/g,
@@ -215,9 +273,14 @@ export function parseCandidate(
         fields.members = members;
       add("members", paragraph, index);
     }
-    if (
-      /参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求/.test(paragraph)
-    ) {
+    if (isSectionHeading(paragraph) && rulesHeading.test(paragraph)) {
+      // A heading carries no rule text; read the section beneath it.
+      const body = sectionBody(article.paragraphs, index);
+      if (body) {
+        fields.rules.push(body.text);
+        add("rules", body.text, body.index);
+      }
+    } else if (rulesHeading.test(paragraph) && !isSectionHeading(paragraph)) {
       fields.rules.push(paragraph);
       add("rules", paragraph, index);
     }
@@ -254,7 +317,16 @@ export function parseCandidate(
         add(field, clause, index);
       };
       if (/材料|作品|论文/.test(clause) && /提交|报送|截止/.test(clause)) {
-        if (dates.length === 1) set("materialsAt", dates[0]);
+        const actor = materialsActor(clause);
+        if (actor === "organizer") {
+          conflicts.push(
+            "materialsAt 主体为院校审核或报送，不能作为参赛者材料截止",
+          );
+          add("materialsAt", clause, index);
+        } else if (actor === null) {
+          conflicts.push("materialsAt 主体不明，保留原文待人工核对");
+          add("materialsAt", clause, index);
+        } else if (dates.length === 1) set("materialsAt", dates[0]);
         else if (dates.length > 1) conflicts.push("材料时间范围需人工核对");
       } else if (/报名|注册/.test(clause)) {
         if (dates.length === 2 && /至|到|—|~|～/.test(clause)) {
