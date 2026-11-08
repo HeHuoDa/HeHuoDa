@@ -37,8 +37,9 @@ const isOtherFieldClause = (text: string) =>
   /个人赛|团队赛|团体赛|组队|赛道|比赛时间|竞赛时间|报名时间|截止|材料|作品提交|联系人|电话|地点/.test(
     text,
   );
-/** Wording that genuinely narrows eligibility, as opposed to an unrelated "不". */
-const scopeOnly = /除|不含|不包括|不面向|仅限|不包括/;
+/** Explicit eligibility restrictions also apply when a clause mentions another field. */
+const scopeRestriction =
+  /(?:仅|只允许|只限|限于)[^。；\n]{0,30}(?:学院|学校|学生|本科|研究生|年级|专业|校区|教师|教职工)/;
 const exclusionMarker =
   /除[^。；\n]{0,20}(?:外|以外)|不含|不包括|不面向|禁止|排除|不接受|不招收|(?:不|禁止|不得|不可|不予|非)[^。；，,\n]{0,12}(?:参加|参加|报名|参赛|申报|申请|参与)/;
 
@@ -46,6 +47,7 @@ interface SectionRead {
   parts: { text: string; index: number }[];
   /** Set when the section would continue into another source; the value cannot be trusted. */
   blockedBySource: boolean;
+  blockedAt?: number;
 }
 
 /**
@@ -59,20 +61,25 @@ const sectionBody = (
   barriers?: Set<number>,
 ): SectionRead => {
   const parts: { text: string; index: number }[] = [];
+  let blockedBySource = false;
   for (let next = index + 1; next < paragraphs.length; next++) {
+    if (barriers?.has(next - 1)) blockedBySource = true;
     const text = paragraphs[next]?.trim();
     if (!text) continue;
     if (isSectionHeading(text)) break;
-    if (barriers?.has(next - 1)) return { parts, blockedBySource: true };
+    if (blockedBySource)
+      return { parts, blockedBySource: true, blockedAt: next };
     parts.push({ text, index: next });
   }
-  return { parts, blockedBySource: false };
+  return { parts, blockedBySource };
 };
 
 const participantSubject =
   /参赛者|参赛队|参赛学生|参赛人员|参赛选手|选手|个人|团队|作者|学生本人|每人|每组|每队|报名者/;
 const organizerNoun =
   /学院|学校|我校|教务处|团委|党委|承办|主办|组委会|评审|专家|组织方|工作小组|教育部/g;
+const organizerAction =
+  /汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关|报送|提交|递交|上交/;
 const collectiveAction =
   /(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选)[^。；\n]{0,12}(?:报送|提交|上报|递交)/;
 const submitVerb = /提交|递交|上交/;
@@ -86,12 +93,19 @@ const submitVerb = /提交|递交|上交/;
 const materialsActor = (clause: string): "participant" | "organizer" | null => {
   const participantAt = clause.search(participantSubject);
   for (const match of clause.matchAll(organizerNoun)) {
+    // Include the name before "学院" in e.g. "向理学院", but not a preceding action.
+    const recipient = /(?:向|至|到|交给|送交)([\p{Script=Han}\s]{0,20})$/u.exec(
+      clause.slice(0, match.index),
+    );
+    if (recipient && !organizerAction.test(recipient[1])) continue;
     const after = clause.slice(match.index + match[0].length);
+    const actionAt = after.search(organizerAction);
+    const nextParticipantAt = after.search(participantSubject);
     if (
-      /^[^。；\n]{0,16}?(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关|报送)/.test(
-        after,
-      ) &&
-      (participantAt === -1 || participantAt > match.index)
+      actionAt >= 0 &&
+      actionAt <= 16 &&
+      !/[。；\n]/.test(after.slice(0, actionAt)) &&
+      (nextParticipantAt === -1 || nextParticipantAt > actionAt)
     )
       return "organizer";
   }
@@ -250,6 +264,15 @@ export function parseCandidate(
           note: "跨来源资格标题不能自动关联",
         };
         conflicts.push("资格标题与内容分属不同来源，须人工核对");
+        // Preserve both sides for review without treating them as one supported value.
+        add("scope", paragraph, index);
+        for (const part of section.parts) add("scope", part.text, part.index);
+        if (section.blockedAt !== undefined)
+          add(
+            "scope",
+            article.paragraphs[section.blockedAt],
+            section.blockedAt,
+          );
       } else if (heading && !section?.parts.length) {
         // A heading with no readable body cannot support a scope value at all.
         warnings.push("资格小节标题下未读取到正文，参赛范围待核对");
@@ -270,7 +293,10 @@ export function parseCandidate(
         // A section can mix eligibility with mode or schedule; only eligibility clauses
         // may shape the scope value, but every kept clause still keeps its own citation.
         const eligibility = paragraphs.filter(
-          (part) => !isOtherFieldClause(part.text) || scopeOnly.test(part.text),
+          (part) =>
+            !isOtherFieldClause(part.text) ||
+            scopeRestriction.test(part.text) ||
+            exclusionMarker.test(part.text),
         );
         const kept = eligibility.length ? eligibility : paragraphs;
         const scopeText = kept.map((part) => part.text).join("\n");

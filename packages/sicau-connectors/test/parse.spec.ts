@@ -220,6 +220,52 @@ describe("候选领域解析", () => {
     ).toEqual({ precision: "unknown", value: null });
   });
   it.each([
+    "各参赛队须于2026年11月10日前向理学院报送作品。",
+    "理学院组织各参赛队于2026年11月10日前提交作品。",
+  ])("学院作为接收方或组织方时保留明确的参赛者截止：%s", (paragraph) => {
+    const parsed = parseEvidenceCandidate(
+      article([paragraph]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({
+      precision: "date",
+      value: "2026-11-10",
+    });
+    expect(
+      parsed.conflicts.filter((entry) => entry.startsWith("materialsAt")),
+    ).toEqual([]);
+  });
+  it.each([
+    "各参赛队的作品由学院于2026年11月12日前统一报送。",
+    "学校提交作品截止2026年11月12日。",
+  ])("材料时间按实际义务主体保留未知：%s", (paragraph) => {
+    const parsed = parseEvidenceCandidate(
+      article([paragraph]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(parsed.conflicts).toContain(
+      "materialsAt 主体为院校审核或报送，不能作为参赛者材料截止",
+    );
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "materialsAt",
+          excerpt: paragraph.replace(/。$/, ""),
+          paragraph: 0,
+          noticeVersion: "notice-v1",
+        }),
+      ]),
+    );
+  });
+  it.each([
     ["学校报送作品截止2026年11月12日。"],
     ["作品报送截止2026年11月12日。"],
     ["请于2026年11月12日前报送作品。"],
@@ -241,10 +287,7 @@ describe("候选领域解析", () => {
     ).toEqual(["参赛要求为原创作品"]);
   });
   it("编号标题冒号后的同段正文保留字段值和原文定位", () => {
-    const paragraphs = [
-      "二、参赛对象：理学院本科生",
-      "四、参赛要求：原创作品",
-    ];
+    const paragraphs = ["二、参赛对象：理学院本科生", "四、参赛要求：原创作品"];
     const parsed = parseEvidenceCandidate(
       article(paragraphs),
       url,
@@ -292,7 +335,9 @@ describe("候选领域解析", () => {
         "notice-v1",
       );
       expect(parsed.fields.rules).toEqual(["作品须原创。"]);
-      expect(parsed.evidence.filter((entry) => entry.field === "rules")).toEqual([
+      expect(
+        parsed.evidence.filter((entry) => entry.field === "rules"),
+      ).toEqual([
         expect.objectContaining({
           excerpt: "作品须原创。",
           paragraph: 2,
@@ -310,7 +355,9 @@ describe("候选领域解析", () => {
     expect(parsed.fields.rules).toEqual([]);
     expect(parsed.fields.scope.kind).toBe("unknown");
     expect(
-      parsed.evidence.filter((entry) => ["rules", "scope"].includes(entry.field)),
+      parsed.evidence.filter((entry) =>
+        ["rules", "scope"].includes(entry.field),
+      ),
     ).toEqual([]);
   });
   it("资格小节读取全部正文，后续限制条款不被截断", () => {
@@ -332,6 +379,46 @@ describe("候选领域解析", () => {
         .map((entry) => entry.paragraph),
     ).toEqual([1, 2]);
   });
+  it.each([
+    "仅允许理学院学生以团队赛形式参赛。",
+    "禁止理学院学生组队报名。",
+    "不接受理学院学生组队报名。",
+  ])("资格限制同时描述模式时不能被过滤：%s", (restriction) => {
+    const parsed = parseEvidenceCandidate(
+      article(["二、参赛对象", "全校本科生。", restriction, "三、报名方式"]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.scope.kind).not.toBe("all");
+    expect(parsed.fields.scope.note).toContain(restriction);
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "scope",
+          excerpt: restriction,
+          paragraph: 2,
+          noticeVersion: "notice-v1",
+        }),
+      ]),
+    );
+    if (restriction.startsWith("禁止") || restriction.startsWith("不接受"))
+      expect(parsed.fields.scope).toMatchObject({
+        kind: "complex",
+        colleges: [],
+      });
+  });
+  it.each(["仅以团队赛形式参赛。", "只允许团队赛形式参赛。", "仅限个人赛。"])(
+    "纯模式限制不收窄全校范围：%s",
+    (mode) => {
+      const parsed = parseCandidate(
+        article(["二、参赛对象", "全校本科生。", mode, "三、报名方式"]),
+        url,
+        directory,
+      );
+      expect(parsed.fields.scope).toMatchObject({ kind: "all", colleges: [] });
+    },
+  );
   it("资格标题与正文跨来源时保持未知，不加关联", () => {
     const parsed = parseEvidenceCandidate(
       article(["二、参赛对象"]),
@@ -355,6 +442,49 @@ describe("候选领域解析", () => {
     });
     expect(parsed.conflicts).toContain(
       "资格标题与内容分属不同来源，须人工核对",
+    );
+  });
+  it("附件起始空段不能绕过资格来源边界，双方证据分别保留", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["二、参赛对象"]),
+      url,
+      directory,
+      "notice-v1",
+      [
+        {
+          format: "docx",
+          url: "https://example.edu/a.docx",
+          noticeVersion: "notice-v1",
+          attachmentVersion: "attachment-v1",
+          segments: [
+            { kind: "paragraph", index: 1, text: "" },
+            { kind: "paragraph", index: 2, text: "理学院学生。" },
+          ],
+        },
+      ],
+    );
+    expect(parsed.fields.scope.kind).toBe("unknown");
+    expect(parsed.conflicts).toContain(
+      "资格标题与内容分属不同来源，须人工核对",
+    );
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "scope",
+          format: "html",
+          paragraph: 0,
+          excerpt: "二、参赛对象",
+          noticeVersion: "notice-v1",
+        }),
+        expect.objectContaining({
+          field: "scope",
+          format: "docx",
+          paragraph: 2,
+          excerpt: "理学院学生。",
+          noticeVersion: "notice-v1",
+          attachmentVersion: "attachment-v1",
+        }),
+      ]),
     );
   });
   it("小节标题不能单独作为参赛规则证据", () => {
