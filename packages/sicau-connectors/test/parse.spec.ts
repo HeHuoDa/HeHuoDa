@@ -56,7 +56,8 @@ describe("候选领域解析", () => {
       scope: { kind: "all", colleges: [] },
       mode: "team",
       deadline: { precision: "instant", value: "2026-10-20T16:00:00.000Z" },
-      materialsAt: { precision: "date", value: "2026-10-22" },
+      // The fixture labels a materials deadline without stating the submitting actor.
+      materialsAt: { precision: "unknown", value: null },
       eventAt: { precision: "date", value: "2026-10-25" },
     });
     expect(parsed.evidence).toContainEqual({
@@ -66,6 +67,17 @@ describe("候选领域解析", () => {
       url,
     });
     expect(parsed.warnings).toContain("附件仅记录链接，未解析或核实附件规则");
+    expect(parsed.conflicts).toContain(
+      "materialsAt 主体不明，保留原文待人工核对",
+    );
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "materialsAt",
+          excerpt: "材料提交截止：2026年10月22日",
+        }),
+      ]),
+    );
     expect(
       parseCandidate(
         article(["学院转发该比赛通知，请同学们留意。"]),
@@ -209,6 +221,166 @@ describe("候选领域解析", () => {
         directory,
       ).fields.materialsAt,
     ).toEqual({ precision: "date", value: "2026-11-10" });
+  });
+  it.each([
+    ["参赛者于2026年11月5日至2026年11月10日提交作品。", "date", "2026-11-10"],
+    ["参赛者于2026年11月5日-10日提交作品。", "date", "2026-11-10"],
+    ["参赛者于2026年11月5日–2026年11月10日提交作品。", "date", "2026-11-10"],
+    ["参赛者于2026年11月5日–10日提交作品。", "date", "2026-11-10"],
+    [
+      "参赛者于2026年11月5日09:00至2026年11月10日18:00提交作品。",
+      "instant",
+      "2026-11-10T18:00:00+08:00",
+    ],
+  ])("明确材料提交窗口取终点且保留原文：%s", (paragraph, precision, value) => {
+    const parsed = parseEvidenceCandidate(
+      article([paragraph]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({ precision, value });
+    expect(parsed.fields.deadline).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "materialsAt",
+          paragraph: 0,
+          excerpt: paragraph.replace(/。$/, ""),
+          noticeVersion: "notice-v1",
+        }),
+      ]),
+    );
+  });
+  it.each([false, true])(
+    "院校转交不阻断明确参赛者截止，顺序反转=%s",
+    (reverse) => {
+      const paragraphs = [
+        "学院于2026年11月12日前汇总报送作品。",
+        "参赛者于2026年11月10日前提交作品。",
+      ];
+      if (reverse) paragraphs.reverse();
+      const parsed = parseEvidenceCandidate(
+        article(paragraphs),
+        url,
+        directory,
+        "notice-v1",
+      );
+      expect(parsed.fields.materialsAt).toEqual({
+        precision: "date",
+        value: "2026-11-10",
+      });
+      expect(
+        parsed.evidence.filter((entry) => entry.field === "materialsAt"),
+      ).toEqual(
+        expect.arrayContaining(
+          paragraphs.map((paragraph, index) =>
+            expect.objectContaining({
+              paragraph: index,
+              excerpt: paragraph.replace(/。$/, ""),
+              noticeVersion: "notice-v1",
+            }),
+          ),
+        ),
+      );
+    },
+  );
+  it("同段逗号分隔的参赛者提交和院校报送分别核对主体", () => {
+    const parsed = parseEvidenceCandidate(
+      article([
+        "参赛者于2026年11月10日前提交作品，学院于2026年11月12日前统一报送。",
+      ]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({
+      precision: "date",
+      value: "2026-11-10",
+    });
+    expect(
+      parsed.evidence.filter((entry) => entry.field === "materialsAt"),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          paragraph: 0,
+          excerpt: "参赛者于2026年11月10日前提交作品",
+        }),
+        expect.objectContaining({
+          paragraph: 0,
+          excerpt: "学院于2026年11月12日前统一报送",
+        }),
+      ]),
+    );
+  });
+  it("材料提交截止标签本身不证明义务主体", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["作品提交截止2026年11月10日。"]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(parsed.conflicts).toContain(
+      "materialsAt 主体不明，保留原文待人工核对",
+    );
+  });
+  it.each([false, true])(
+    "主体不明日期不被明确截止覆盖，顺序反转=%s",
+    (reverse) => {
+      const paragraphs = [
+        "作品报送截止2026年11月12日。",
+        "参赛者于2026年11月10日前提交作品。",
+      ];
+      if (reverse) paragraphs.reverse();
+      const parsed = parseEvidenceCandidate(
+        article(paragraphs),
+        url,
+        directory,
+        "notice-v1",
+      );
+      expect(parsed.fields.materialsAt).toEqual({
+        precision: "unknown",
+        value: null,
+      });
+      expect(parsed.conflicts).toContain(
+        "materialsAt 主体不明，保留原文待人工核对",
+      );
+      expect(
+        parsed.evidence.filter((entry) => entry.field === "materialsAt"),
+      ).toHaveLength(2);
+    },
+  );
+  it.each([
+    "参赛者于2026年11月10日至2026年11月5日提交作品。",
+    "参赛者于2026年11月5日至2026年11月40日提交作品。",
+    "参赛者于2026年11月5日、2026年11月10日提交作品。",
+  ])("无法确定的材料窗口保持未知并保留原文：%s", (paragraph) => {
+    const parsed = parseEvidenceCandidate(
+      article([paragraph]),
+      url,
+      directory,
+      "notice-v1",
+    );
+    expect(parsed.fields.materialsAt).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    expect(parsed.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: "materialsAt",
+          paragraph: 0,
+          excerpt: paragraph.replace(/。$/, ""),
+        }),
+      ]),
+    );
   });
   it("组织方汇总报送的时间不升级为材料截止", () => {
     expect(
@@ -483,6 +655,45 @@ describe("候选领域解析", () => {
           excerpt: "理学院学生。",
           noticeVersion: "notice-v1",
           attachmentVersion: "attachment-v1",
+        }),
+      ]),
+    );
+  });
+  it("规则跨来源时不自动取值，但双方原文仍有独立位置和版本", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["四、参赛要求"]),
+      url,
+      directory,
+      "notice-v1",
+      [
+        {
+          format: "docx",
+          url: "https://example.edu/rules.docx",
+          noticeVersion: "notice-v1",
+          attachmentVersion: "rules-v1",
+          segments: [{ kind: "paragraph", index: 1, text: "作品须为原创。" }],
+        },
+      ],
+    );
+    expect(parsed.fields.rules).toEqual([]);
+    expect(parsed.conflicts).toContain(
+      "参赛规则标题与内容分属不同来源，须人工核对",
+    );
+    expect(parsed.evidence.filter((entry) => entry.field === "rules")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          format: "html",
+          paragraph: 0,
+          excerpt: "四、参赛要求",
+          noticeVersion: "notice-v1",
+          attachmentVersion: null,
+        }),
+        expect.objectContaining({
+          format: "docx",
+          paragraph: 1,
+          excerpt: "作品须为原创。",
+          noticeVersion: "notice-v1",
+          attachmentVersion: "rules-v1",
         }),
       ]),
     );

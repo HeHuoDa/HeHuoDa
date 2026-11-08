@@ -82,13 +82,17 @@ const organizerAction =
   /汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选|把关|报送|提交|递交|上交/;
 const collectiveAction =
   /(?:汇总|审核|筛选|评审|评选|择优|统一|推荐|上报|遴选)[^。；\n]{0,12}(?:报送|提交|上报|递交)/;
-const submitVerb = /提交|递交|上交/;
+const isMaterialClause = (text: string) =>
+  /材料|作品|论文/.test(text) && /提交|报送|截止/.test(text);
+const materialWindow =
+  /(?:20\d{2}\s*[年./-]\s*)?\d{1,2}\s*[月./-]\s*\d{1,2}\s*日?(?:\s*\d{1,2}[:：时]\d{2}\s*分?)?\s*(?:至|到|[-—–~～－])\s*(?:20\d{2}\s*[年./-]\s*)?\d{1,2}\s*[月./-]\s*\d{1,2}/;
+const organizerMaterialReason =
+  "materialsAt 主体为院校审核或报送，不能作为参赛者材料截止";
 
 /**
  * Material deadlines belong to whoever must act: applicants submit, while colleges
  * aggregate, review and forward. A forwarding duty is not the applicant deadline.
- * "截止" alone does not identify the actor; a bare "报送" is a forwarding duty, so it
- * stays unknown instead of being guessed as the applicant deadline.
+ * A submission verb or deadline label alone does not identify the actor.
  */
 const materialsActor = (clause: string): "participant" | "organizer" | null => {
   const participantAt = clause.search(participantSubject);
@@ -111,7 +115,6 @@ const materialsActor = (clause: string): "participant" | "organizer" | null => {
   }
   if (collectiveAction.test(clause) && participantAt === -1) return "organizer";
   if (participantAt !== -1) return "participant";
-  if (/截止|截至/.test(clause) && submitVerb.test(clause)) return "participant";
   return null;
 };
 
@@ -209,6 +212,16 @@ export function parseCandidate(
     });
   const add = (field: string, excerpt: string, paragraph: number) =>
     evidence.push({ field, excerpt, paragraph, url });
+  const addBlockedSectionEvidence = (
+    field: "scope" | "rules",
+    index: number,
+    section: SectionRead,
+  ) => {
+    add(field, article.paragraphs[index], index);
+    for (const part of section.parts) add(field, part.text, part.index);
+    if (section.blockedAt !== undefined)
+      add(field, article.paragraphs[section.blockedAt], section.blockedAt);
+  };
   const hasUnknownCollege = (text: string) => {
     for (const college of directory) text = text.replaceAll(college.name, "");
     return /[\p{Script=Han}A-Za-z]+学院/u.test(text.replace(/各学院/g, ""));
@@ -265,14 +278,7 @@ export function parseCandidate(
         };
         conflicts.push("资格标题与内容分属不同来源，须人工核对");
         // Preserve both sides for review without treating them as one supported value.
-        add("scope", paragraph, index);
-        for (const part of section.parts) add("scope", part.text, part.index);
-        if (section.blockedAt !== undefined)
-          add(
-            "scope",
-            article.paragraphs[section.blockedAt],
-            section.blockedAt,
-          );
+        addBlockedSectionEvidence("scope", index, section);
       } else if (heading && !section?.parts.length) {
         // A heading with no readable body cannot support a scope value at all.
         warnings.push("资格小节标题下未读取到正文，参赛范围待核对");
@@ -377,6 +383,7 @@ export function parseCandidate(
       if (section.blockedBySource) {
         conflicts.push("参赛规则标题与内容分属不同来源，须人工核对");
         warnings.push("规则小节跨来源，未自动拼接");
+        addBlockedSectionEvidence("rules", index, section);
       } else
         for (const part of section.parts) {
           fields.rules.push(part.text);
@@ -405,8 +412,32 @@ export function parseCandidate(
         fields.stageNames.push(name);
         add("stageNames", paragraph, index);
       }
-    for (const clause of paragraph.split(/[。；;\n]/)) {
-      const dates = years.length > 1 ? [] : extractDates(clause, titleYear);
+    const timeClauses = paragraph.split(/[。；;\n]/).flatMap((clause) => {
+      const parts = clause.split(/[，,]/);
+      // Split only independently dated material duties. Otherwise a comma may
+      // separate the actor from its action, so preserve the original sentence.
+      return isMaterialClause(clause) &&
+        parts.length > 1 &&
+        parts.every(
+          (part) =>
+            /提交|报送/.test(part) &&
+            materialsActor(part) !== null &&
+            extractDates(part, titleYear).length,
+        )
+        ? parts.map((text) => ({ text, material: true }))
+        : [{ text: clause, material: isMaterialClause(clause) }];
+    });
+    for (const { text: clause, material: materialClause } of timeClauses) {
+      // Expand only a material window's abbreviated end day for date parsing;
+      // evidence continues to cite the unchanged original clause.
+      const dateText = materialClause
+        ? clause.replace(
+            /((?:(20\d{2})年)?(\d{1,2})月\d{1,2}日)\s*([至到—–~～－-])\s*(\d{1,2})日/g,
+            (_match, start, year, month, separator, day) =>
+              `${start}${separator}${year ? year + "年" : ""}${month}月${day}日`,
+          )
+        : clause;
+      const dates = years.length > 1 ? [] : extractDates(dateText, titleYear);
       const set = (
         field: "startsAt" | "deadline" | "materialsAt" | "eventAt",
         value: TimeValue,
@@ -414,22 +445,43 @@ export function parseCandidate(
         if (fields[field].value && fields[field].value !== value.value) {
           conflicts.push(field + " 存在多个时间表述");
           fields[field] = unknownTime();
-        } else if (!conflicts.some((c) => c.startsWith(field + " ")))
+        } else if (
+          !conflicts.some(
+            (c) => c.startsWith(field + " ") && c !== organizerMaterialReason,
+          )
+        )
           fields[field] = value;
         add(field, clause, index);
       };
-      if (/材料|作品|论文/.test(clause) && /提交|报送|截止/.test(clause)) {
+      if (materialClause) {
         const actor = materialsActor(clause);
         if (actor === "organizer") {
-          conflicts.push(
-            "materialsAt 主体为院校审核或报送，不能作为参赛者材料截止",
-          );
+          // This is a different duty; keep its evidence without blocking an
+          // independently explicit participant deadline earlier or later in the text.
+          conflicts.push(organizerMaterialReason);
           add("materialsAt", clause, index);
         } else if (actor === null) {
-          conflicts.push("materialsAt 主体不明，保留原文待人工核对");
+          const reason = "materialsAt 主体不明，保留原文待人工核对";
+          if (dates.length) {
+            fields.materialsAt = unknownTime();
+            conflicts.push(reason);
+          } else warnings.push(reason);
           add("materialsAt", clause, index);
-        } else if (dates.length === 1) set("materialsAt", dates[0]);
-        else if (dates.length > 1) conflicts.push("材料时间范围需人工核对");
+        } else if (dates.length === 1 && !materialWindow.test(dateText))
+          set("materialsAt", dates[0]);
+        else if (
+          dates.length === 2 &&
+          materialWindow.test(dateText) &&
+          dates[0].value &&
+          dates[1].value &&
+          Date.parse(dates[0].value) <= Date.parse(dates[1].value)
+        )
+          set("materialsAt", dates[1]);
+        else if (dates.length > 1 || materialWindow.test(dateText)) {
+          fields.materialsAt = unknownTime();
+          conflicts.push("materialsAt 材料时间范围需人工核对");
+          add("materialsAt", clause, index);
+        }
       } else if (/报名|注册/.test(clause)) {
         if (dates.length === 2 && /至|到|—|~|～/.test(clause)) {
           set("startsAt", dates[0]);
