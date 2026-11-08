@@ -916,6 +916,118 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(saved.statusCode).toBe(409);
   });
 
+  it("院校报送阶段经 HTTP 查询后仍不给出参赛者材料截止", async () => {
+    const forwarded = [
+      "11月5日-11日：报名、准备作品。",
+      "11月12日-13日：作品审核、筛选、报送优秀作品参与教育部组织的展示活动。",
+    ];
+    // 标题需为赛事标题，否则非赛事策略会清空正文，无法验证证据链。
+    const html = `<h1 class="page-title">2026年测试竞赛报名通知</h1><div class="news-body"><div id="vsb_content"><div class="v_news_content">${forwarded.map((p) => `<p>${p}</p>`).join("")}</div></div></div>`;
+    const article = extractArticle(
+      html,
+      `https://${source.host}/info/1043/200.htm`,
+      source,
+    );
+    const saved = await persistArticle(
+      test.pool,
+      source,
+      `https://${source.host}/info/1043/200.htm`,
+      {
+        url: `https://${source.host}/info/1043/200.htm`,
+        status: 200,
+        headers: {},
+        body: new TextEncoder().encode(html),
+        html,
+      },
+      article,
+      parseCandidate(
+        article,
+        `https://${source.host}/info/1043/200.htm`,
+        directory!,
+      ),
+    );
+    const auth = await session();
+    const detail = (
+      await test.request(
+        "GET",
+        `admin/ingestion/candidates/${saved.candidateId}`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json();
+    expect(detail.candidate.fields).toMatchObject({
+      materialsAt: { precision: "unknown", value: null },
+    });
+    // 置未知的同时必须说明原因，便于人工复核。
+    expect(
+      detail.candidate.conflicts.filter((conflict: string) =>
+        conflict.startsWith("materialsAt"),
+      ).length,
+    ).toBeGreaterThan(0);
+    // 原文仍可核对，不因置未知而丢失证据。
+    expect(
+      detail.candidate.evidence
+        .filter((entry: { field: string }) => entry.field === "materialsAt")
+        .map((entry: { excerpt: string }) => entry.excerpt)
+        .join(""),
+    ).toContain("报送优秀作品");
+  });
+  it("候选详情返回的证据指向真实正文，材料主体不明时不给出确定截止", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const detail = await test.request(
+      "GET",
+      `admin/ingestion/candidates/${id}`,
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    const fields = body.candidate.fields;
+    const evidence: {
+      field: string;
+      excerpt: string;
+      paragraph: number;
+      noticeVersion?: string;
+    }[] = body.candidate.evidence;
+    const versions = (
+      await test.request(
+        "GET",
+        `admin/ingestion/notices/${body.noticeId}/versions`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json().items;
+    const versionId = versions[0].versionId as string;
+    const article = (
+      await test.request(
+        "GET",
+        `admin/ingestion/notices/${body.noticeId}/versions/${versionId}`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json().article as { paragraphs: string[] };
+    // 证据必须能在绑定版本中找到，且不是只引用小节标题。
+    for (const entry of evidence.filter((e) => e.paragraph >= 0)) {
+      expect(entry.noticeVersion).toBe(versionId);
+      expect(article.paragraphs[entry.paragraph]).toContain(entry.excerpt);
+      expect(entry.excerpt).not.toMatch(
+        /^[一二三四五六七八九十\d]+[、.．][^。；]{0,20}$/,
+      );
+    }
+    // 材料时间与报名截止互不串用。
+    if (fields.materialsAt.value === null)
+      expect(fields.materialsAt.precision).toBe("unknown");
+    else {
+      const [, month, day] = (fields.materialsAt.value as string).split("-");
+      expect(
+        evidence
+          .filter((e) => e.field === "materialsAt")
+          .map((e) => e.excerpt)
+          .join(""),
+      ).toContain(`${Number(month)}月${Number(day)}日`);
+    }
+  });
   it("通知版本分页与差异只返回解析后的纯文本，不暴露原始响应", async () => {
     const id = await candidateId();
     const auth = await session();

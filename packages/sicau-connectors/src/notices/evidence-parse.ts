@@ -62,11 +62,24 @@ export function parseEvidenceCandidate(
     paragraphs: locations.map((l) => l.text),
     text: locations.map((l) => l.text).join("\n"),
   };
+  // Paragraphs from different sources must never be read as one section.
+  const sourceBarriers = new Set<number>();
+  locations.forEach((location, index) => {
+    const next = locations[index + 1];
+    if (
+      next &&
+      (next.url !== location.url ||
+        next.noticeVersion !== location.noticeVersion ||
+        next.attachmentVersion !== location.attachmentVersion)
+    )
+      sourceBarriers.add(index);
+  });
   const result = parseCandidate(
     combined,
     url,
     directory,
     classification.notificationKind,
+    sourceBarriers,
   );
   const locate = (entry: Evidence): Evidence => {
     const location = locations[entry.paragraph];
