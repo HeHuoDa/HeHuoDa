@@ -797,6 +797,59 @@ describe("候选领域解析", () => {
       expect(extractDates(text, "2026")).toEqual([]);
   });
   describe("候选字段契约 v2", () => {
+    it("范围只输出契约字段，不泄漏内部学院识别标记", () => {
+      const parsed = parseCandidate(
+        article(["参赛对象：理学院学生。"]),
+        url,
+        directory,
+      );
+      expect(Object.keys(parsed.fields.scope).sort()).toEqual([
+        "colleges",
+        "kind",
+        "note",
+      ]);
+    });
+    it("全校资格不因同段承办学院而变成学院限制", () => {
+      for (const owner of ["理学院", "食品学院"]) {
+        for (const clause of [
+          `${owner}承办`,
+          `承办单位：${owner}`,
+          `承办单位为${owner}`,
+          `主办单位是${owner}`,
+          `${owner}为承办单位`,
+        ]) {
+          const text = `参赛对象：全校本科生均可参加，${clause}。`;
+          const parsed = parseEvidenceCandidate(
+            article([text]),
+            url,
+            directory,
+            "scope-owner-v1",
+          );
+          expect(parsed.fields.scope.kind).toBe("all");
+          expect(parsed.fields.scope.colleges).toEqual([]);
+          expect(parsed.fields.scope.note).toContain(text);
+          expect(parsed.warnings).not.toContain("资格条款含未知学院名称");
+        }
+      }
+    });
+    it("不同赛段规定相同参赛形式时仍可可靠归一", () => {
+      for (const [text, expected] of [
+        ["初赛为个人赛，决赛为个人赛。", "individual"],
+        ["初赛为团队赛，决赛为团队赛。", "team"],
+        ["初赛个人或团队均可，决赛个人或团队均可。", "mixed"],
+      ] as const) {
+        const parsed = parseEvidenceCandidate(
+          article([text]),
+          url,
+          directory,
+          "mode-stage-v1",
+        );
+        expect(parsed.fields.modeKind).toBe(expected);
+        expect(
+          parsed.conflicts.filter((reason) => /参赛形式/.test(reason)),
+        ).toEqual([]);
+      }
+    });
     it("契约标记存在，且候选不再有 fields.kind", () => {
       const parsed = parseCandidate(
         article(["参赛对象：全校本科生。"]),
@@ -879,6 +932,7 @@ describe("候选领域解析", () => {
     });
     it("name 只剥离通知套语，保留发文单位、年份届次、选拔层级与子赛道", () => {
       const cases: [string, string][] = [
+        ["关于举办数学竞赛的更正通知", "数学竞赛"],
         ["关于举办第五届农业机器人大赛决赛的通知", "第五届农业机器人大赛决赛"],
         [
           "食品学院关于举办“烽烟长征存赤脉”知识竞赛的通知",
@@ -1013,6 +1067,8 @@ describe("候选领域解析", () => {
         ["项目类型：院级研究生选拔赛。", "选拔层级或赛段不是赛事种类"],
         ["比赛类型：新生组。", "组别或人群不是赛事种类"],
         ["竞赛类型：决赛。", "选拔层级或赛段不是赛事种类"],
+        ["项目类型：创新创业类（复赛）。", "选拔层级或赛段不是赛事种类"],
+        ["比赛类型：体育类（新生组）。", "组别或人群不是赛事种类"],
       ] as const;
       for (const [text, reason] of rejected) {
         const parsed = parseCandidate(article([text]), url, directory);
@@ -1024,6 +1080,17 @@ describe("候选领域解析", () => {
         parseCandidate(article(["项目类型：创业计划类"]), url, directory).fields
           .eventKind,
       ).toBe("创业计划类");
+    });
+    it("name 不剥离未确认的前缀或赛事名末尾动作", () => {
+      for (const [title, expected] of [
+        ["关于印发数学竞赛规则的通知", "关于印发数学竞赛规则"],
+        ["理学院就举办数学竞赛的通知", "理学院就举办数学竞赛"],
+        ["关于举办数学竞赛遴选通知", "数学竞赛遴选"],
+      ]) {
+        expect(
+          parseCandidate(article([], title), url, directory).fields.name,
+        ).toBe(expected);
+      }
     });
     it("人数、教师和组队范围限制不否定已允许的参赛形式", () => {
       const cases = [

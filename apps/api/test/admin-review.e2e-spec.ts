@@ -1079,6 +1079,15 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(detail.candidate.fieldsV2).toHaveProperty("modeKind");
     expect(detail.candidate.fieldsV2).not.toHaveProperty("kind");
     expect(detail.candidate.fieldsV2.scope.kind).toBe("all");
+    expect(detail.extractionRevisions.length).toBeGreaterThan(0);
+    for (const revision of detail.extractionRevisions) {
+      expect(revision.data.fieldsV2).toHaveProperty("eventKind");
+      expect(revision.data.fieldsV2).toHaveProperty("modeKind");
+      expect(revision.data.fields).not.toHaveProperty("eventKind");
+      expect(revision.data.fields.kind).toBe(
+        revision.data.classification.notificationKind,
+      );
+    }
 
     // 把同一候选改写成 v1 形状：没有 fieldsContract，fields 是旧枚举。
     const v1Fields = structuredClone(detail.candidate.fieldsV2);

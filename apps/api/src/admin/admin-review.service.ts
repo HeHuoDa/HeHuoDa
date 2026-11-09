@@ -222,7 +222,10 @@ export class AdminReviewService {
             'SELECT id,source_version AS "sourceVersion",evidence_revision AS "evidenceRevision",rule_version AS "ruleVersion",data,created_at AS "createdAt" FROM ingestion_extraction_revisions WHERE candidate_id=$1 ORDER BY created_at DESC,id LIMIT 50',
             [candidateId],
           )
-        ).rows,
+        ).rows.map((revision) => ({
+          ...revision,
+          data: presentCandidate(revision.data),
+        })),
         classificationHistory: (
           await client.query(
             'SELECT candidate_revision AS "candidateRevision",previous_classification AS "previousClassification",classification,reason,checked_at AS "checkedAt",evidence_revision AS "evidenceRevision",baseline,actor_id AS "actorId" FROM ingestion_classification_revisions WHERE candidate_id=$1 ORDER BY checked_at DESC,id LIMIT 50',

@@ -621,6 +621,15 @@ describe("管理员采集运行 API", () => {
       throw new Error(JSON.stringify(request.result));
     expect(request.result).toMatchObject({ status: "succeeded" });
     expect(request.result.previews).toHaveLength(1);
+    const preview = request.result.previews[0].candidate;
+    expect(preview.fieldsContract).toBe("candidate-fields-v2");
+    expect(preview.fieldsV2).toHaveProperty("eventKind");
+    expect(preview.fieldsV2).toHaveProperty("modeKind");
+    expect(preview.fields).not.toHaveProperty("eventKind");
+    expect(preview.fields.kind).toBe(preview.classification.notificationKind);
+    expect(["all", "colleges", "complex", "unknown"]).toContain(
+      preview.fields.scope.kind,
+    );
     expect(await counts()).toEqual(before);
   });
 

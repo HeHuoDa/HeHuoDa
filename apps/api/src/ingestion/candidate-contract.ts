@@ -179,9 +179,14 @@ export function readCandidate(raw: unknown): {
   >;
   const stored = (value.fields ?? {}) as Record<string, unknown>;
   const isV2 = value.fieldsContract === candidateFieldsContract;
-  const fields = isV2
-    ? (rawFields as unknown as CandidateFields)
-    : normalizeCandidateFields(rawFields);
+  const fields =
+    value.privacyRedacted === true
+      ? normalizeCandidateFields({
+          scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+        })
+      : isV2
+        ? (rawFields as unknown as CandidateFields)
+        : normalizeCandidateFields(rawFields);
   const candidate: ParsedCandidate = {
     ...(value as unknown as ParsedCandidate),
     fieldsContract: candidateFieldsContract,

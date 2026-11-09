@@ -155,16 +155,14 @@ export function extractDates(text: string, year: string | null): TimeValue[] {
  * 「的通知／预通知」）。保留发文单位、年份届次、校内选拔赛与子赛道，避免把
  * 不同比赛合并成同名。剥离后为空或只剩套语时回退标题原文。
  */
-const noticeTitlePrefix =
-  /^关于(?:举办|举行|开展|组织参加|参加|做好|印发)(?:举办|举行|开展|组织)?/;
+const noticeTitlePrefix = /^关于(?:举办|举行|开展|组织参加)/;
 /**
  * 发文单位前缀（「食品学院关于举办…」）只去掉「关于举办」，单位本身保留：
  * 单位是否为赛事名组成部分无法可靠区分，删掉可能把不同单位的同名赛事合并。
  */
-const issuingUnitPrefix =
-  /^(.{2,30}?)(?:关于|就)(?:举办|举行|开展|组织参加|参加|做好|印发)(?:举办|举行|开展|组织)?/;
+const issuingUnitPrefix = /^(.{2,30}?)关于(?:举办|举行|开展|组织参加)/;
 const noticeTitleSuffix =
-  /(?:的)?(?:报名|参赛|组织|遴选|评选|举办)?(?:预通知|补充通知|变更通知|更正通知|通知)$/;
+  /(?:的)?(?:报名通知|参赛通知|预通知|补充通知|变更通知|更正通知|通知)$/;
 export function competitionName(title: string): string {
   const original = title.trim();
   let value = original;
@@ -204,9 +202,20 @@ const kindNoun =
  * 拿不准时不猜：宁可 unknown，也不把层级或组别当成种类。
  */
 export function eventKindRejection(value: string): string | null {
+  const annotations = [...value.matchAll(/[（(]([^()（）]+)[）)]/g)].map(
+    (match) => match[1].trim(),
+  );
   if (kindNotificationOnly.test(value)) return "通知种类不是赛事种类";
-  if (kindLevelOnly.test(value)) return "选拔层级或赛段不是赛事种类";
-  if (kindGroupOnly.test(value)) return "组别或人群不是赛事种类";
+  if (
+    kindLevelOnly.test(value) ||
+    annotations.some((part) => kindLevelOnly.test(part))
+  )
+    return "选拔层级或赛段不是赛事种类";
+  if (
+    kindGroupOnly.test(value) ||
+    annotations.some((part) => kindGroupOnly.test(part))
+  )
+    return "组别或人群不是赛事种类";
   if (!kindNoun.test(value)) return "无赛事种类依据";
   return null;
 }
@@ -344,8 +353,16 @@ export function competitionMode(text: string): {
       !deniesTeam,
   );
   const stages = new Set(affirmed.flatMap((mention) => mention.stages));
+  const stageForms = new Set(
+    affirmed.map((mention) =>
+      JSON.stringify([
+        mention.individual && !mention.deniesIndividual,
+        mention.team && !mention.deniesTeam,
+      ]),
+    ),
+  );
 
-  if (stages.size > 1)
+  if (stages.size > 1 && stageForms.size > 1)
     return {
       mode: original,
       modeKind: null,
@@ -474,15 +491,33 @@ export function parseCandidate(
     note: string;
     unresolvedCollege: boolean;
   } => {
+    // 承办/主办是组织关系，不能拿同段的承办学院缩小或污染资格。
+    const qualification = text
+      .split(/[，,。；;\n]/)
+      .filter(
+        (clause) =>
+          !/^(?:主办|承办)(?:单位|学院)?\s*(?:[：:]|为|是)/.test(
+            clause.trim(),
+          ) &&
+          !/^[^：:]{0,40}学院(?:(?:负责)?(?:主办|承办)|(?:为|是)(?:主办|承办)单位)$/.test(
+            clause.trim(),
+          ),
+      )
+      .join("；");
     const matched = colleges
-      .filter((c) => text.includes(c.name))
+      .filter((c) => qualification.includes(c.name))
       .map((c) => c.id);
-    const unresolvedCollege = hasUnknownCollege(text);
+    const unresolvedCollege = hasUnknownCollege(qualification);
     // 「不限」「不受…限制」是放开语义，不构成收窄。
-    const withoutUnlimited = text.replace(/不限|不受[^。；，,]{0,20}限制/g, "");
+    const withoutUnlimited = qualification.replace(
+      /不限|不受[^。；，,]{0,20}限制/g,
+      "",
+    );
     const excluded = exclusionMarker.test(withoutUnlimited);
     const allPhrase =
-      /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(text);
+      /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
+        qualification,
+      );
     const narrowed = /仅|限|除|不含|校区/.test(withoutUnlimited);
     const other = (note: string) => ({
       kind: "other" as const,
@@ -505,7 +540,7 @@ export function parseCandidate(
     // 看不到任何范围表述：无从断言，保持未知而不是猜成全校。
     if (
       !/学院|全校|全校师生|师生|学生|本科生|研究生|年级|专业|班级|校区/.test(
-        text,
+        qualification,
       )
     )
       return {
@@ -608,9 +643,10 @@ export function parseCandidate(
               note: "参赛范围待核对",
               unresolvedCollege: false,
             };
+        const { unresolvedCollege, ...scopeValue } = scope;
         if (
           fields.scope.kind !== "unknown" &&
-          JSON.stringify(fields.scope) !== JSON.stringify(scope)
+          JSON.stringify(fields.scope) !== JSON.stringify(scopeValue)
         ) {
           // 同一条通知内多个条款不能合并：保留原文即可追溯，不猜成某一侧。
           conflicts.push("参赛资格有多个条款，须合并核对");
@@ -619,8 +655,8 @@ export function parseCandidate(
             colleges: [],
             note: fields.scope.note + "\n" + scopeText,
           };
-        } else fields.scope = scope;
-        if (scope.unresolvedCollege) warnings.push("资格条款含未知学院名称");
+        } else fields.scope = scopeValue;
+        if (unresolvedCollege) warnings.push("资格条款含未知学院名称");
         // Each sentence keeps its own location and citation.
         for (const part of paragraphs) add("scope", part.text, part.index);
       }

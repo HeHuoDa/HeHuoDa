@@ -165,6 +165,32 @@ describe("候选字段契约 v2 的兼容与映射", () => {
 
   describe("HTTP 兼容投影", () => {
     type LegacyView = ReturnType<typeof legacyCandidateFields>;
+    it("隐私擦除后的旧形状修订仍投影为完整且空值的 v2", () => {
+      const projected = presentCandidate(
+        v2Row({
+          privacyRedacted: true,
+          fieldsV2: undefined,
+          fields: {
+            ...v2Fields,
+            eventKind: undefined,
+            modeKind: undefined,
+            kind: "news",
+            mode: null,
+            name: "",
+            organizer: null,
+            tracks: [],
+            scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+          },
+        }),
+      );
+      expect(projected.fieldsV2).not.toHaveProperty("kind");
+      expect(projected.fieldsV2).toMatchObject({
+        eventKind: null,
+        modeKind: null,
+        name: "",
+        organizer: null,
+      });
+    });
 
     it("fields 保持旧客户端认识的形状", () => {
       const projected = presentCandidate(
