@@ -235,10 +235,8 @@ const modeLabel =
 /** 可选其一的并列词；只有它们才把「个人 + 团队」解释为两者皆可。 */
 const alternativeMarker = /或|及|和|以及|均可|皆可|任一|任选/;
 /** 否定标记；用于判断与它相邻的形式是否被否定。 */
-const negationMarker = /禁止|不得|不能|不可|不予|不允许|不接受|不准|非|不/;
-/** 肯定标记；出现在形式之前时表明该形式被允许或要求。 */
-const affirmativeMarker =
-  /仅可|仅限|只可|只能|可以|允许|须|需|应|必须|为|可|独立/;
+const negationMarker =
+  /禁止|不得|不能|不可以|不可|不予|不允许|不接受|不准|非|不/;
 /** 赛段限定；同一形式出现在不同赛段时不能合并。 */
 const stageMarker = /初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛/g;
 
@@ -251,8 +249,6 @@ interface ModeMention {
   /** 该子句里被显式否定的形式；只否定点名的形式，不牵连其他形式。 */
   deniesIndividual: boolean;
   deniesTeam: boolean;
-  /** 该子句里存在位于否定之前的肯定表述。 */
-  hasAffirmative: boolean;
 }
 
 const individualForm =
@@ -261,50 +257,42 @@ const teamForm =
   /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|组队|团队形式|队伍|团队|一队|每队|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/;
 
 /**
- * 判断一条子句中各形式被肯定还是否定。否定作用范围按位置确定：
- * 前置否定（在全部形式之前）否定整句；后置否定只否定它紧邻点名的形式。
+ * 只把直接禁止参赛形式的表达作为否定依据。人数、教师数量、跨学院等
+ * 限制不能因临近「团队」就变成禁止团队；「不限」表达放开而不是否定。
  */
 function readModeMention(clause: string): ModeMention | null {
   const individual = individualForm.test(clause);
   const team = teamForm.test(clause);
   if (!individual && !team) return null;
-  const negation = clause.search(negationMarker);
-  const affirmative = clause.search(affirmativeMarker);
-  const firstForm = clause.search(
-    new RegExp([individualForm.source, teamForm.source].join("|")),
+  const interpretation = clause.replace(/不限(?:于)?|不限制/g, "允许");
+  const form = `(?:${individualForm.source}|${teamForm.source})`;
+  const joinedForms = `${form}(?:\\s*(?:或|及|和|以及)\\s*(?:以)?${form})*`;
+  const directNegation = new RegExp(
+    `(?:${negationMarker.source})(?:以|采用|进行)?${joinedForms}`,
+    "g",
+  );
+  const deniedAfterForm = new RegExp(
+    `${joinedForms}\\s*(?:均|都|皆)?(?:${negationMarker.source})(?:报名|参赛|参与|参加|提交|报送|申报)`,
+    "g",
   );
   let deniesIndividual = false;
   let deniesTeam = false;
-  if (negation >= 0) {
-    // 前置否定：否定出现在任何形式之前，整句按否定处理。
-    if (firstForm < 0 || negation < firstForm) {
-      deniesIndividual = individual;
-      deniesTeam = team;
-    } else {
-      // 后置否定：只否定紧邻点名的形式（「不组队」「个人赛不接受」）。
-      const before = clause.slice(Math.max(0, negation - 4), negation);
-      const after = clause.slice(negation, negation + 8);
-      deniesIndividual =
-        individualForm.test(before) || individualForm.test(after);
-      deniesTeam = teamForm.test(before) || teamForm.test(after);
-      // 后置否定既没点名前项也没点名后项时，退化为限定整句。
-      if (!deniesIndividual && !deniesTeam) {
-        deniesIndividual = individual;
-        deniesTeam = team;
-      }
-    }
+  for (const match of [
+    ...interpretation.matchAll(directNegation),
+    ...interpretation.matchAll(deniedAfterForm),
+  ]) {
+    deniesIndividual ||= individualForm.test(match[0]);
+    deniesTeam ||= teamForm.test(match[0]);
   }
   const negated = deniesIndividual || deniesTeam;
   return {
     individual,
     team,
     negated,
-    // 只有整句被否定且没有肯定标记时，才不在「肯定」集合里。
     alternative: alternativeMarker.test(clause),
     stages: [...new Set(clause.match(stageMarker) ?? [])],
     deniesIndividual,
     deniesTeam,
-    hasAffirmative: affirmative >= 0 && (!negated || affirmative < negation),
   };
 }
 export function competitionMode(text: string): {
@@ -333,9 +321,11 @@ export function competitionMode(text: string): {
     .filter((mention): mention is ModeMention => !!mention);
   if (!mentions.length) return { mode: null, modeKind: null, conflict: null };
 
-  // 肯定集合：整句未被否定，或该子句含否定之前的肯定表述。
+  // 同一子句可同时保留个人并禁止组队，不能因此丢掉未被否定的形式。
   const affirmed = mentions.filter(
-    (mention) => !mention.negated || mention.hasAffirmative,
+    (mention) =>
+      (mention.individual && !mention.deniesIndividual) ||
+      (mention.team && !mention.deniesTeam),
   );
   const denied = mentions.filter((mention) => mention.negated);
   // 后置否定只抵消它点名的形式，不把已确认的形式一并推翻。

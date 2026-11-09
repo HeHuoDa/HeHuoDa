@@ -120,7 +120,7 @@ interface CandidateFields {
 | 项           | 决定                                                                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | 契约标记     | 新候选写 `fieldsContract: "candidate-fields-v2"`；缺该键即为 v1                                                                         |
-| 规则版本     | `competition-rules-5` → `competition-rules-6`（按开工时最新 main 递增）；沿现有提取键使旧快照重算                                       |
+| 规则版本     | `competition-rules-5` → `competition-rules-7`（本地 v6 评审修复后再递增）；沿现有提取键使旧快照与 v6 候选重算                           |
 | 旧批准       | 规则版本变化使 `approved_file` 失效，候选回 `pending`；历史审核修订与正式数据保留                                                       |
 | 旧候选读取   | 显式 v1 归一：`colleges→specified`、`complex→other`、`all→all`、`unknown→unknown`；v1 `kind` 只进 legacy 视图，**不得**当作 `eventKind` |
 | 旧审核材料   | 继续按现有基线校验；契约或归一结果不一致时返回可行动错误（「审核文件过期…请重新导出」／「只读证据…被改动」），不静默接受                |

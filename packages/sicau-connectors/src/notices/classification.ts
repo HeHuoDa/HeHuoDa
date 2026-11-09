@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-6";
+export const noticeRuleVersion = "competition-rules-7";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;

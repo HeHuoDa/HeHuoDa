@@ -1025,5 +1025,43 @@ describe("候选领域解析", () => {
           .eventKind,
       ).toBe("创业计划类");
     });
+    it("人数、教师和组队范围限制不否定已允许的参赛形式", () => {
+      const cases = [
+        ["个人或团队均可，不得跨学院组队。", "mixed"],
+        ["团队人数不得超过3人。", "team"],
+        ["参赛形式不限个人或团队。", "mixed"],
+        ["以团队参赛，指导教师不得超过2人。", "team"],
+      ] as const;
+      for (const [text, expected] of cases) {
+        const parsed = parseEvidenceCandidate(
+          article([text]),
+          url,
+          directory,
+          "mode-constraints-v1",
+        );
+        expect(parsed.fields.mode).toBe(text);
+        expect(parsed.fields.modeKind).toBe(expected);
+        expect(parsed.conflicts).toEqual([]);
+      }
+    });
+    it("并列形式的共同后置否定不能变成允许两种形式", () => {
+      for (const text of [
+        "个人和团队均不得参赛。",
+        "个人和团队都不可以参赛。",
+        "个人及团队皆不接受报名。",
+        "个人或团队均不能报名。",
+        "个人和团队均不参赛。",
+      ]) {
+        const parsed = parseEvidenceCandidate(
+          article([text]),
+          url,
+          directory,
+          "mode-denial-v1",
+        );
+        expect(parsed.fields.mode).toBe(text);
+        expect(parsed.fields.modeKind).toBeNull();
+        expect(parsed.conflicts).toContain("参赛形式被否定，未形成可归一形式");
+      }
+    });
   });
 });
