@@ -272,6 +272,125 @@ describe("分类提取修订使用已有快照", () => {
       value: "2026-11-15",
     });
   });
+  it.each([
+    {
+      suffix: "205c",
+      title: "2026年校园武术公开赛执裁工作安排",
+      paragraphs: [
+        "我院受邀担任本次比赛裁判。比赛时间：2026年11月20日；各学院请于11月15日前报名。",
+      ],
+      classification: "definite",
+      priority: 0,
+    },
+    {
+      suffix: "205d",
+      title: "关于招募2026年院级篮球赛队员的通知",
+      paragraphs: ["本次篮球比赛面向全院本科生，报名截止：2026年11月15日。"],
+      classification: "suspected",
+      priority: 2,
+    },
+  ])("$title 入库后保留复核通道与正文附件", async (item) => {
+    const url = `https://${sources[0].host}/info/1043/${item.suffix}.htm`;
+    const article: Article = {
+      title: item.title,
+      publishedAt: "2026-10-25",
+      text: item.paragraphs.join("\n"),
+      paragraphs: item.paragraphs,
+      attachments: [
+        {
+          title: "报名表.docx",
+          url: `https://${sources[0].host}/forms/${item.suffix}.docx`,
+        },
+      ],
+    };
+    const saved = await persistArticle(
+      db.pool,
+      sources[0],
+      url,
+      { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    const review = await exportReview(db.pool, saved.candidateId!);
+    expect(review.candidate.classification).toMatchObject({
+      classification: item.classification,
+      notificationKind: "registration",
+      needsReview: true,
+      priority: item.priority,
+    });
+    const snapshot = (
+      await db.pool.query(
+        "SELECT article FROM ingestion_versions WHERE notice_id=$1",
+        [saved.noticeId],
+      )
+    ).rows[0].article;
+    expect(snapshot.paragraphs).toEqual(article.paragraphs);
+    expect(snapshot.attachments).toEqual(article.attachments);
+  });
+  it("执裁回顾裁剪正文后仍保留同版本分类，重复提取不抬回疑似", async () => {
+    const url = `https://${sources[0].host}/info/1043/205e.htm`;
+    const article: Article = {
+      title: "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+      publishedAt: "2026-10-20",
+      text: "体育学院武术队圆满完成执裁任务。",
+      paragraphs: ["体育学院武术队圆满完成执裁任务。"],
+      attachments: [],
+    };
+    const saved = await persistArticle(
+      db.pool,
+      sources[0],
+      url,
+      { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    const assertRecap = async () => {
+      const review = await exportReview(db.pool, saved.candidateId!);
+      expect(review.candidate.classification).toMatchObject({
+        classification: "non_competition",
+        notificationKind: "news",
+        needsReview: false,
+        priority: 3,
+        ruleVersion: noticeRuleVersion,
+      });
+      expect(review.candidate.classification!.exclusions).toContainEqual(
+        expect.stringContaining("执裁实践"),
+      );
+    };
+    await assertRecap();
+    const snapshot = (
+      await db.pool.query(
+        "SELECT article FROM ingestion_versions WHERE notice_id=$1",
+        [saved.noticeId],
+      )
+    ).rows[0].article;
+    expect(snapshot).toMatchObject({
+      text: "",
+      paragraphs: [],
+      attachments: [],
+    });
+    // 不新增来源正文，只改变证据修订号，强制走同版本的再次重提取。
+    await db.pool.query(
+      "UPDATE ingestion_notices SET evidence_revision=evidence_revision+1 WHERE id=$1",
+      [saved.noticeId],
+    );
+    await transaction(db.pool, (client) =>
+      refreshExtraction(client, saved.noticeId),
+    );
+    await assertRecap();
+    // 规则发生变化时不能沿用旧版本的排除结论，缺少正文则重新进入复核。
+    await transaction(db.pool, (client) =>
+      refreshExtraction(client, saved.noticeId, "competition-rules-next"),
+    );
+    expect(
+      (await exportReview(db.pool, saved.candidateId!)).candidate
+        .classification,
+    ).toMatchObject({
+      classification: "suspected",
+      needsReview: true,
+      ruleVersion: "competition-rules-next",
+    });
+  });
   it("附件是唯一赛事线索时仍登记附件并沿同一候选链提取", async () => {
     const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
     process.env.INGESTION_ATTACHMENTS_ENABLED = "true";

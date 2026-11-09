@@ -6,6 +6,7 @@ import {
   type Classification,
   parseEvidenceCandidate,
   type Article,
+  type ParsedCandidate,
   type RuleEvidenceInput,
 } from "@hehuoda/sicau-connectors/notices";
 import { hash } from "./store.js";
@@ -27,7 +28,7 @@ export async function refreshExtraction(
     return;
   const notice = (
     await client.query(
-      "SELECT n.*,v.article FROM ingestion_notices n JOIN ingestion_versions v ON v.id=n.latest_version WHERE n.id=$1 FOR UPDATE OF n",
+      "SELECT n.*,v.article,v.extracted FROM ingestion_notices n JOIN ingestion_versions v ON v.id=n.latest_version WHERE n.id=$1 FOR UPDATE OF n",
       [noticeId],
     )
   ).rows[0];
@@ -69,6 +70,20 @@ export async function refreshExtraction(
       segments: row.segments,
     })) as RuleEvidenceInput[],
   );
+  const article = notice.article as Article;
+  const snapshotClassification = (notice.extracted as ParsedCandidate | null)
+    ?.classification;
+  // 非赛事正文在首次入库前已裁剪；空快照不是一份推翻原判的新证据。
+  // 只在规则未变且没有附件新依据时保留同一来源版本的安全分类结果。
+  if (
+    !article.text &&
+    !article.paragraphs.length &&
+    !article.attachments.length &&
+    !attachments.length &&
+    snapshotClassification?.classification === "non_competition" &&
+    snapshotClassification.ruleVersion === ruleVersion
+  )
+    data.classification = snapshotClassification;
   data.classification!.ruleVersion = ruleVersion;
   const prior = (
     await client.query(

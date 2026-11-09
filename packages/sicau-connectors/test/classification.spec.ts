@@ -901,7 +901,9 @@ describe("赛事分类独立于审核状态", () => {
     expect(
       classifyNotice(
         "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
-        ["2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。"],
+        [
+          "2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行，圆满完成执裁任务。",
+        ],
         ["附件1.pdf"],
       ),
     ).toMatchObject({ classification: "non_competition", needsReview: false });
@@ -915,7 +917,7 @@ describe("赛事分类独立于审核状态", () => {
     // 附件自己写明赛事事项时同样封顶疑似，且不写「执裁实践回顾」这条未生效的结论。
     const competitionAttachment = classifyNotice(
       "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
-      ["2026年10月18日举行。"],
+      ["2026年10月18日举行，圆满完成执裁任务。"],
       ["公开赛竞赛规程.pdf"],
     );
     expect(competitionAttachment.classification).toBe("suspected");
@@ -1045,6 +1047,66 @@ describe("赛事分类独立于审核状态", () => {
       expect(
         classifyNotice(title, ["报名截止：2026年10月10日。"]),
       ).toMatchObject({ needsReview: true });
+  });
+  it("受邀执裁的未来赛事与日前报名仍保留参赛通知", () => {
+    for (const paragraphs of [
+      [
+        "我院受邀担任本次比赛裁判。比赛时间：2026年11月20日；各学院请于11月15日前报名。",
+      ],
+      [
+        "我院上届圆满完成执裁任务。本次比赛时间：2026年11月20日；各学院请于11月15日前报名。",
+      ],
+    ]) {
+      expect(
+        classifyNotice("2026年校园武术公开赛执裁工作安排", paragraphs),
+      ).toMatchObject({
+        classification: "definite",
+        notificationKind: "registration",
+        needsReview: true,
+        priority: 0,
+      });
+    }
+    expect(
+      classifyNotice("2026年校园武术公开赛执裁工作安排", [
+        "我院受邀担任本次比赛裁判。比赛时间：2026年11月20日。",
+      ]),
+    ).toMatchObject({ classification: "definite", needsReview: true });
+    expect(
+      classifyNotice("2026年校园武术公开赛裁判工作安排", [
+        "我院上届圆满完成执裁任务。本次比赛时间：2026年11月20日，地点：体育馆。",
+      ]),
+    ).toMatchObject({ classification: "definite", needsReview: true });
+  });
+  it("执裁安排总结是明确回顾，不能只因安排二字进入赛事队列", () => {
+    expect(
+      classifyNotice("2026年校园武术公开赛执裁工作安排总结", [
+        "赛事于2026年10月1日举行，武术队圆满完成执裁任务。",
+      ]),
+    ).toMatchObject({
+      classification: "non_competition",
+      notificationKind: "news",
+      needsReview: false,
+      priority: 3,
+    });
+  });
+  it("未确认报名对象的队伍招募保留正文赛事旁证进入复核", () => {
+    for (const title of [
+      "关于招募2026年院级篮球赛队员的通知",
+      "关于招募2026年全国大学生机器人赛队伍的通知",
+      "2026年全国大学生机器人赛招募通知",
+      "关于招募2026年全国大学生机器人赛志愿者的通知",
+    ]) {
+      expect(
+        classifyNotice(title, [
+          "本次比赛面向全院本科生，报名截止：2026年11月15日。",
+        ]),
+      ).toMatchObject({
+        classification: "suspected",
+        notificationKind: "registration",
+        needsReview: true,
+        priority: 2,
+      });
+    }
   });
   it("推荐或遴选参赛队伍属赛事选拔，不按评奖排除", () => {
     // 「推荐」既可指评优也可指赛事选拔；标题同时出现参赛/队伍时属赛事进程。
