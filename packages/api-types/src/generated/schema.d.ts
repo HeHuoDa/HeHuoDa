@@ -1572,15 +1572,22 @@ export interface components {
             values: components["schemas"]["AdminFieldChoiceDto"][];
         };
         AdminCandidateScopeDto: {
-            /** @enum {string} */
-            kind: "all" | "colleges" | "complex" | "unknown";
+            /**
+             * @description 协议 3.3 参赛范围。other 表示有明确限制但无法枚举；否定与排除不得写入 colleges
+             * @enum {string}
+             */
+            kind: "all" | "specified" | "other" | "unknown";
+            /** @description 仅允许参赛的学院；否定、排除与未知学院一律不写入 */
             colleges: string[];
             note: string;
         };
         AdminCandidateTrackDto: {
             name: string;
-            /** @enum {string|null} */
-            mode: "individual" | "team" | "mixed" | null;
+            /**
+             * @description 可靠归一结果；null 时导入须人工填写
+             * @enum {string|null}
+             */
+            modeKind: "individual" | "team" | "mixed" | null;
             members: string | null;
             rules: string | null;
         };
@@ -1592,13 +1599,18 @@ export interface components {
         AdminCandidateFieldsDto: {
             name: string;
             edition: string | null;
-            /** @enum {string} */
-            kind: "registration" | "supplement" | "award" | "news";
+            /** @description 赛事种类／项目类型；不承载通知种类、赛段、选拔层级或组别。未提取为 null */
+            eventKind: string | null;
             organizer: string | null;
             hosts: string[];
             scope: components["schemas"]["AdminCandidateScopeDto"];
-            /** @enum {string|null} */
-            mode: "individual" | "team" | "mixed" | null;
+            /** @description 参赛形式原文短语；协议 fields.mode 比较这一层 */
+            mode: string | null;
+            /**
+             * @description 可靠归一结果；无法可靠归一为 null，导入须人工填写
+             * @enum {string|null}
+             */
+            modeKind: "individual" | "team" | "mixed" | null;
             tracks: components["schemas"]["AdminCandidateTrackDto"][];
             members: string | null;
             rules: string[];
@@ -1608,12 +1620,36 @@ export interface components {
             materialsAt: components["schemas"]["AdminReviewTimeValueDto"];
             eventAt: components["schemas"]["AdminReviewTimeValueDto"];
         };
+        AdminLegacyScopeDto: {
+            /** @enum {string} */
+            kind: "all" | "colleges" | "complex" | "unknown";
+            colleges: string[];
+            note: string;
+        };
+        AdminLegacyCandidateFieldsDto: {
+            /**
+             * @description 通知种类的旧别名，取自 classification.notificationKind；不得读作赛事种类
+             * @enum {string|null}
+             */
+            kind: "registration" | "supplement" | "award" | "news" | null;
+            /** @description 正式比赛范围枚举的投影：specified→colleges、other→complex、all→all、unknown→unknown。仅用于旧读者 */
+            scope: components["schemas"]["AdminLegacyScopeDto"];
+            /**
+             * @description modeKind 的旧别名；null 表示无法可靠归一
+             * @enum {string|null}
+             */
+            mode: "individual" | "team" | "mixed" | null;
+        };
         AdminParsedCandidateDto: {
             /** @description 历史材料已按名单隐私规则擦除，不能复用 */
             privacyRedacted?: boolean;
+            /** @enum {string} */
+            fieldsContract?: "candidate-fields-v2";
             classification?: components["schemas"]["AdminRuleClassificationDto"];
             fieldConflicts?: components["schemas"]["AdminFieldConflictDto"][];
             fields: components["schemas"]["AdminCandidateFieldsDto"];
+            /** @description 过渡期兼容投影，供 #204 完成前的旧管理端读取 */
+            legacyFields?: components["schemas"]["AdminLegacyCandidateFieldsDto"];
             evidence: components["schemas"]["AdminCandidateEvidenceDto"][];
             missing: string[];
             conflicts: string[];

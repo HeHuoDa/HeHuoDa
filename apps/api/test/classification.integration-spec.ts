@@ -83,9 +83,14 @@ describe("分类提取修订使用已有快照", () => {
         body: Buffer.from("rules178"),
       });
       const review = await exportReview(db.pool, saved.candidateId!);
-      expect(review.candidate.fields).toMatchObject({
-        kind: "supplement",
-        deadline: { precision: "date", value: "2026-11-08" },
+      // 通知种类唯一来源是 classification；候选字段不再有 kind。
+      expect(review.candidate.classification?.notificationKind).toBe(
+        "supplement",
+      );
+      expect(review.candidate.fields).not.toHaveProperty("kind");
+      expect(review.candidate.fields.deadline).toEqual({
+        precision: "date",
+        value: "2026-11-08",
       });
       expect(review.evidenceReferences).toContainEqual(
         expect.objectContaining({ format: "pdf", page: 1, field: "deadline" }),

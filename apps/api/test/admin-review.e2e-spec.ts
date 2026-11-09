@@ -1056,4 +1056,83 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(detail.json()).not.toHaveProperty("rawResponse");
     expect(detail.json()).not.toHaveProperty("html");
   });
+
+  it("候选返回 v2 契约与兼容投影，旧 v1 候选显式归一且不串义", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const detail = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+
+    // v2：通知种类只在 classification，候选字段是赛事种类与原文参赛形式。
+    expect(detail.candidate.fieldsContract).toBe("candidate-fields-v2");
+    expect(detail.candidate.fields).not.toHaveProperty("kind");
+    expect(detail.candidate.fields).toHaveProperty("eventKind");
+    expect(detail.candidate.fields).toHaveProperty("modeKind");
+    expect(detail.candidate.fields.scope.kind).toBe("all");
+    // 兼容投影：kind 取通知种类，scope 折成正式四值。
+    expect(detail.candidate.legacyFields.kind).toBe(
+      detail.candidate.classification.notificationKind,
+    );
+    expect(detail.candidate.legacyFields.scope.kind).toBe("all");
+
+    // 把同一候选改写成 v1 形状：没有 fieldsContract，kind/mode 是旧枚举。
+    const v1 = structuredClone(detail.candidate);
+    delete v1.fieldsContract;
+    delete v1.legacyFields;
+    delete v1.fields.eventKind;
+    delete v1.fields.modeKind;
+    v1.fields.mode = "team";
+    v1.fields.kind = "supplement";
+    v1.fields.scope = {
+      kind: "complex",
+      colleges: [],
+      note: "须通过资格审核",
+    };
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [id, v1],
+    );
+
+    const legacy = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+    // v1 归一：complex→other、英文 mode→modeKind、通知种类不进入赛事种类。
+    expect(legacy.candidate.fieldsContract).toBe("candidate-fields-v2");
+    expect(legacy.candidate.fields.scope.kind).toBe("other");
+    expect(legacy.candidate.fields.modeKind).toBe("team");
+    expect(legacy.candidate.fields.eventKind).toBeNull();
+    expect(legacy.candidate.fields).not.toHaveProperty("kind");
+    // 投影把 other 折回 complex，旧读者按正式枚举处理。
+    expect(legacy.candidate.legacyFields.scope.kind).toBe("complex");
+    expect(legacy.candidate.legacyFields.mode).toBe("team");
+  });
+
+  it("正式通知种类取分类结果，不用候选赛事种类", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const detail = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+    const notificationKind = detail.candidate.classification
+      .notificationKind as string;
+    // 把候选的赛事种类改成一个绝不可能是通知种类的值，再看导出材料。
+    const data = structuredClone(detail.candidate);
+    data.fields.eventKind = "学科竞赛";
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [id, data],
+    );
+    const review = (
+      await test.request("GET", path + "/review", undefined, {
+        cookie: auth.cookie,
+      })
+    ).json();
+    // 正式 Notice.kind 是通知种类，与候选赛事种类无关。
+    expect(review.batch.competitions[0].notices[0].kind).toBe(notificationKind);
+    expect(review.batch.competitions[0].notices[0].kind).not.toBe("学科竞赛");
+    expect(review.candidate.fields.eventKind).toBe("学科竞赛");
+  });
 });

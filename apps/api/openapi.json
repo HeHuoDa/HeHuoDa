@@ -8028,12 +8028,14 @@
             "type": "string",
             "enum": [
               "all",
-              "colleges",
-              "complex",
+              "specified",
+              "other",
               "unknown"
-            ]
+            ],
+            "description": "协议 3.3 参赛范围。other 表示有明确限制但无法枚举；否定与排除不得写入 colleges"
           },
           "colleges": {
+            "description": "仅允许参赛的学院；否定、排除与未知学院一律不写入",
             "type": "array",
             "items": {
               "type": "string"
@@ -8055,14 +8057,15 @@
           "name": {
             "type": "string"
           },
-          "mode": {
+          "modeKind": {
             "type": "string",
             "enum": [
               "individual",
               "team",
               "mixed"
             ],
-            "nullable": true
+            "nullable": true,
+            "description": "可靠归一结果；null 时导入须人工填写"
           },
           "members": {
             "type": "string",
@@ -8075,7 +8078,7 @@
         },
         "required": [
           "name",
-          "mode",
+          "modeKind",
           "members",
           "rules"
         ]
@@ -8111,14 +8114,10 @@
             "type": "string",
             "nullable": true
           },
-          "kind": {
+          "eventKind": {
             "type": "string",
-            "enum": [
-              "registration",
-              "supplement",
-              "award",
-              "news"
-            ]
+            "nullable": true,
+            "description": "赛事种类／项目类型；不承载通知种类、赛段、选拔层级或组别。未提取为 null"
           },
           "organizer": {
             "type": "string",
@@ -8135,12 +8134,18 @@
           },
           "mode": {
             "type": "string",
+            "nullable": true,
+            "description": "参赛形式原文短语；协议 fields.mode 比较这一层"
+          },
+          "modeKind": {
+            "type": "string",
             "enum": [
               "individual",
               "team",
               "mixed"
             ],
-            "nullable": true
+            "nullable": true,
+            "description": "可靠归一结果；无法可靠归一为 null，导入须人工填写"
           },
           "tracks": {
             "type": "array",
@@ -8180,11 +8185,12 @@
         "required": [
           "name",
           "edition",
-          "kind",
+          "eventKind",
           "organizer",
           "hosts",
           "scope",
           "mode",
+          "modeKind",
           "tracks",
           "members",
           "rules",
@@ -8195,12 +8201,85 @@
           "eventAt"
         ]
       },
+      "AdminLegacyScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "colleges",
+              "complex",
+              "unknown"
+            ]
+          },
+          "colleges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "colleges",
+          "note"
+        ]
+      },
+      "AdminLegacyCandidateFieldsDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ],
+            "nullable": true,
+            "description": "通知种类的旧别名，取自 classification.notificationKind；不得读作赛事种类"
+          },
+          "scope": {
+            "description": "正式比赛范围枚举的投影：specified→colleges、other→complex、all→all、unknown→unknown。仅用于旧读者",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLegacyScopeDto"
+              }
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true,
+            "description": "modeKind 的旧别名；null 表示无法可靠归一"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "mode"
+        ]
+      },
       "AdminParsedCandidateDto": {
         "type": "object",
         "properties": {
           "privacyRedacted": {
             "type": "boolean",
             "description": "历史材料已按名单隐私规则擦除，不能复用"
+          },
+          "fieldsContract": {
+            "type": "string",
+            "enum": [
+              "candidate-fields-v2"
+            ]
           },
           "classification": {
             "$ref": "#/components/schemas/AdminRuleClassificationDto"
@@ -8213,6 +8292,14 @@
           },
           "fields": {
             "$ref": "#/components/schemas/AdminCandidateFieldsDto"
+          },
+          "legacyFields": {
+            "description": "过渡期兼容投影，供 #204 完成前的旧管理端读取",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLegacyCandidateFieldsDto"
+              }
+            ]
           },
           "evidence": {
             "type": "array",

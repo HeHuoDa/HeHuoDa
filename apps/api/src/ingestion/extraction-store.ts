@@ -82,9 +82,10 @@ export async function refreshExtraction(
     Number(prior?.evidence_revision) === Number(notice.evidence_revision);
   const override = sameEvidence ? candidate.classification_override : null;
   const classification = override ?? data.classification!.classification;
+  // 优先级只读通知种类，不读候选赛事种类（fields.eventKind）。
   const priority = classificationPriority(
     classification as Classification,
-    data.fields.kind,
+    data.classification!.notificationKind,
   );
   await client.query(
     `INSERT INTO ingestion_extraction_revisions(id,candidate_id,source_version,evidence_revision,rule_version,extraction_key,data)
