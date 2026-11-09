@@ -137,7 +137,8 @@ export function parseEvidenceCandidate(
     )
       result.evidence.push(
         locate({
-          field: "kind",
+          // 通知种类属于 classification，不是候选字段；证据按该来源记名。
+          field: "notificationKind",
           excerpt: location.text,
           paragraph: index,
           url,
@@ -149,7 +150,7 @@ export function parseEvidenceCandidate(
     if (/竞赛|比赛|报名|延期|规则|补充/.test(attachment.title))
       result.evidence.push(
         locate({
-          field: "kind",
+          field: "notificationKind",
           excerpt: attachment.title,
           paragraph: -1,
           url,
@@ -203,11 +204,15 @@ export function parseEvidenceCandidate(
               ? JSON.stringify({
                   kind: local.fields.scope.kind,
                   colleges: local.fields.scope.colleges,
-                  ...(local.fields.scope.kind === "complex"
+                  ...(local.fields.scope.kind === "other"
                     ? { note: local.fields.scope.note }
                     : {}),
                 })
-              : JSON.stringify(value);
+              : // 参赛形式的多段原文可以不同，只要归一结果一致就聚合，
+                // 不把措辞差异当成取值冲突。
+                field === "mode" && local.fields.modeKind
+                ? JSON.stringify({ modeKind: local.fields.modeKind })
+                : JSON.stringify(value);
           const choices = alternatives.get(field) ?? new Map();
           const choice = choices.get(key) ?? { value, evidence: [] };
           choice.evidence.push(locate({ ...evidence, paragraph: index }));
@@ -333,7 +338,10 @@ export function parseEvidenceCandidate(
           colleges: [],
           note: "资格证据冲突，待人工核对",
         };
-      else Object.assign(result.fields, { [field]: null });
+      else if (field === "mode") {
+        // 原文保留在 evidence 与 conflicts；归一枚举不再声称可靠。
+        result.fields.modeKind = null;
+      } else Object.assign(result.fields, { [field]: null });
     }
   }
   const publicationYear = article.publishedAt?.slice(0, 4);
