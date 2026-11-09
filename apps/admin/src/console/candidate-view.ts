@@ -25,14 +25,6 @@ export const candidateScopeLabels: Record<
   unknown: "未知",
 };
 
-/** 正式比赛 scope 标签，只用于正式记录与导入预览，不套用到候选。 */
-export const formalScopeLabels: Record<string, string> = {
-  all: "全校",
-  colleges: "指定学院",
-  complex: "复杂规则",
-  unknown: "未知",
-};
-
 export const modeKindLabels: Record<
   NonNullable<Schema["AdminCandidateFieldsDto"]["modeKind"]>,
   string
