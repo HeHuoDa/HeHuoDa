@@ -106,6 +106,126 @@ describe("分类提取修订使用已有快照", () => {
     ).rows[0].review;
     expect(approval).toEqual(review);
   });
+  it("v8 判疑似的执裁回顾按当前规则重算为非赛事，旧批准失效且历史保留", async () => {
+    // #205：v8 把「执裁回顾」这类通知判为 suspected/registration 并进入队列；
+    // 生产候选是按旧规则落库的完整正文，重算只能依赖已有快照，不能重新抓取。
+    const url = `https://${sources[0].host}/info/1043/205.htm`;
+    const paragraphs = [
+      "2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。",
+      "体育学院武术队受邀承担本次比赛裁判工作，圆满完成执裁任务。",
+      "比赛设男子长拳、女子南拳等12个项目，共有9支代表队参赛。",
+    ];
+    const article: Article = {
+      title: "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+      publishedAt: "2026-10-20",
+      text: paragraphs.join("\n"),
+      paragraphs,
+      attachments: [],
+    };
+    const saved = await persistArticle(
+      db.pool,
+      sources[0],
+      url,
+      { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    // 恢复被裁掉的正文，模拟 v8 时期落库的完整快照。
+    await db.pool.query(
+      "UPDATE ingestion_versions SET article=$2 WHERE notice_id=$1",
+      [saved.noticeId, article],
+    );
+    const stored = (
+      await db.pool.query("SELECT data FROM ingestion_candidates WHERE id=$1", [
+        saved.candidateId,
+      ])
+    ).rows[0].data;
+    // 固定 v8 的历史输出，不调用新解析器冒充旧实现。
+    stored.classification = {
+      ...stored.classification,
+      classification: "suspected",
+      notificationKind: "registration",
+      ruleVersion: "competition-rules-8",
+      reasons: ["原文含赛事标识"],
+      exclusions: [],
+      needsReview: true,
+      priority: 2,
+    };
+    const oldKey = hash({
+      sourceVersion: (
+        await db.pool.query(
+          "SELECT latest_version FROM ingestion_notices WHERE id=$1",
+          [saved.noticeId],
+        )
+      ).rows[0].latest_version,
+      evidenceRevision: (
+        await db.pool.query(
+          "SELECT evidence_revision FROM ingestion_notices WHERE id=$1",
+          [saved.noticeId],
+        )
+      ).rows[0].evidence_revision,
+      ruleVersion: "competition-rules-8",
+    });
+    await db.pool.query(
+      "UPDATE ingestion_candidates SET data=$2,classification='suspected',priority=2,needs_review=true,rule_version='competition-rules-8',extraction_key=$3 WHERE id=$1",
+      [saved.candidateId, stored, oldKey],
+    );
+    await db.pool.query(
+      "UPDATE ingestion_extraction_revisions SET data=$2,rule_version='competition-rules-8',extraction_key=$3 WHERE candidate_id=$1",
+      [saved.candidateId, stored, oldKey],
+    );
+    const review = correctedReview(
+      await exportReview(db.pool, saved.candidateId!),
+    );
+    await approveReview(db.pool, review, "maintainer");
+    expect(
+      (
+        await db.pool.query(
+          "SELECT status,approved_file IS NOT NULL AS approved FROM ingestion_candidates WHERE id=$1",
+          [saved.candidateId],
+        )
+      ).rows[0],
+    ).toEqual({ status: "approved", approved: true });
+    await transaction(db.pool, (client) =>
+      refreshExtraction(client, saved.noticeId),
+    );
+    const current = (
+      await db.pool.query(
+        "SELECT classification,priority,needs_review,status,approved_file,rule_version,data FROM ingestion_candidates WHERE id=$1",
+        [saved.candidateId],
+      )
+    ).rows[0];
+    expect(current).toMatchObject({
+      classification: "non_competition",
+      priority: 3,
+      needs_review: false,
+      status: "pending",
+      approved_file: null,
+      rule_version: noticeRuleVersion,
+    });
+    // 排除理由随候选一起保存，审核人员能看到为什么被判非赛事。
+    expect(current.data.classification.exclusions).toContainEqual(
+      expect.stringContaining("执裁实践"),
+    );
+    // v8 的提取历史与已批准材料都保留，只撤销当前批准。
+    const history = (
+      await db.pool.query(
+        "SELECT rule_version,data FROM ingestion_extraction_revisions WHERE candidate_id=$1 ORDER BY created_at",
+        [saved.candidateId],
+      )
+    ).rows;
+    expect(history.map((row) => row.rule_version)).toContain(
+      "competition-rules-8",
+    );
+    expect(
+      (
+        await db.pool.query(
+          "SELECT result->'review' AS review FROM ingestion_operations WHERE candidate_id=$1 AND kind='approve'",
+          [saved.candidateId],
+        )
+      ).rows[0].review,
+    ).toEqual(review);
+  });
   it("附件是唯一赛事线索时仍登记附件并沿同一候选链提取", async () => {
     const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
     process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
