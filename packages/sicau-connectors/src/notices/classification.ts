@@ -98,26 +98,37 @@ export function classifyNotice(
   // 招新、岗位招募、社会实践组队、假期与离校管理的主体是学院或学生组织，对象是
   // 部门、岗位或事务。两者的赛事只是成果举例或旁证，都不构成本项目要收的报名赛事。
   //
-  // 两条分支都不靠「出现执裁／招募就排除」：执裁分支要求标题没有安排、招募、
-  // 报名、参赛、队伍、选手这类「赛事进程或参赛资格」标记，因此「…公开赛裁判工作
-  // 安排」仍是赛事进程；业务分支要求标题不点明赛事、不涉及参赛者或作品，因此
-  // 「招募…竞赛参赛队伍」「招募…篮球赛选手」「推荐…参加…竞赛」仍是报名通知。
-  const officiatingPractice =
-    /执裁|担任裁判|裁判工作/.test(title) &&
-    !/安排|招募|遴选|报名|参赛|队伍|队员|选手|运动员|作品/.test(title) &&
+  // 两条分支都不靠「出现执裁／招募就排除」，而是要求**明确的非赛事依据**；
+  // 依据不足时保留疑似进复核——误排真实参赛通知会连带裁剪正文与附件，代价高于多一条待审。
+  const bodyRegistrationSignal =
+    /报名截止|报名时间|报名方式|报名表|报名邮箱|参赛对象|参赛资格|参赛范围|参赛要求|组队报名/.test(
+      paragraphs.join("\n"),
+    );
+  // 执裁回顾：既要有回顾/受邀/已完成的依据，又不能同时是面向参赛者的报名材料。
+  // 「执裁及竞赛规程」「执裁工作通知」加参赛对象与报名截止时属赛事进程，不判回顾。
+  const officiatingMention = /执裁|担任裁判|裁判工作/.test(title);
+  const officiatingRecapEvidence =
+    /受邀|回顾|总结|纪实|侧记|圆满完成|圆满完成执裁|赛后/.test(
+      [title, ...paragraphs].join("\n"),
+    ) &&
+    !bodyRegistrationSignal &&
+    !/规程|报名|参赛对象|参赛资格|材料|方案/.test(title) &&
     !/关于举办|关于组织|组织参加/.test(title);
+  const officiatingPractice = officiatingMention && officiatingRecapEvidence;
   // 「假期」只在管理类标题里成立（暑假、寒假同理）：海外访学、招生宣传一类标题
   // 写的是报名或项目，正文赛事提及仍按 ADR 0009 只作旁证，不能因此判非赛事。
   const vacationManagement =
     /假期|暑假|寒假/.test(title) &&
     /管理|安排|离校|留校|安全|登记|须知|值班|工作的通知/.test(title);
+  // 「报名」「队员」本身不阻止判定：招新报名、社会实践队员招募的报名对象是组织成员
+  // 或实践队，不是参赛者。真正表示报名对象是参赛者的是参赛、选手、运动员、作品。
   const nonCompetitionBusiness =
     !officiatingPractice &&
     (/招新|纳新|招募|招聘|社会实践|离校|助理/.test(title) ||
       vacationManagement) &&
     !competitionPattern.test(title) &&
     !ambiguousPattern.test(title) &&
-    !/参赛|队伍|队员|选手|运动员|作品|报名/.test(title) &&
+    !/参赛|选手|运动员|作品/.test(title) &&
     !/关于举办|关于组织|组织参加/.test(title);
   const declaresNonCompetitionBusiness =
     officiatingPractice || nonCompetitionBusiness;

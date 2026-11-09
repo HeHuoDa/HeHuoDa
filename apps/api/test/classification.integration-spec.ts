@@ -226,6 +226,52 @@ describe("分类提取修订使用已有快照", () => {
       ).rows[0].review,
     ).toEqual(review);
   });
+  it("含执裁措辞的真实参赛通知按赛事保留正文，不被非赛事裁剪", async () => {
+    // 回归：v9 早期把「执裁及竞赛规程」判成实践回顾并清空正文与附件；
+    // 这类通知正文有参赛对象与报名截止，是真实参赛通知，必须按赛事持久化。
+    const url = `https://${sources[0].host}/info/1043/205b.htm`;
+    const paragraphs = ["参赛对象：全校本科生。", "报名截止：2026年11月15日。"];
+    const article: Article = {
+      title: "2026年校园武术套路公开赛执裁及竞赛规程",
+      publishedAt: "2026-10-25",
+      text: paragraphs.join("\n"),
+      paragraphs,
+      attachments: [],
+    };
+    const saved = await persistArticle(
+      db.pool,
+      sources[0],
+      url,
+      { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    const row = (
+      await db.pool.query(
+        "SELECT classification,priority,needs_review,rule_version FROM ingestion_candidates WHERE id=$1",
+        [saved.candidateId],
+      )
+    ).rows[0];
+    expect(row).toMatchObject({
+      classification: "definite",
+      priority: 0,
+      needs_review: true,
+      rule_version: noticeRuleVersion,
+    });
+    // 正文没有被非赛事分支裁剪，报名截止仍可提取。
+    const snapshot = (
+      await db.pool.query(
+        "SELECT article FROM ingestion_versions WHERE notice_id=$1",
+        [saved.noticeId],
+      )
+    ).rows[0].article;
+    expect(snapshot.paragraphs).toEqual(paragraphs);
+    const review = await exportReview(db.pool, saved.candidateId!);
+    expect(review.candidate.fieldsV2.deadline).toEqual({
+      precision: "date",
+      value: "2026-11-15",
+    });
+  });
   it("附件是唯一赛事线索时仍登记附件并沿同一候选链提取", async () => {
     const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
     process.env.INGESTION_ATTACHMENTS_ENABLED = "true";
