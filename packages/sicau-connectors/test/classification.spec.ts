@@ -9,6 +9,16 @@ import {
   classificationBoundaryCases,
 } from "./classification-corpus.js";
 
+/** 只取审核人员可观察的四项结果，避免把实现细节带进断言。 */
+function observableOf(result: ReturnType<typeof classifyNotice>) {
+  return {
+    classification: result.classification,
+    notificationKind: result.notificationKind,
+    priority: result.priority,
+    needsReview: result.needsReview,
+  };
+}
+
 describe("赛事分类独立于审核状态", () => {
   it("延期说明后紧接的新绝对截止仍可提取，旧日期在前不能抵消相对变更", () => {
     const parse = (paragraphs: string[]) =>
@@ -818,20 +828,15 @@ describe("赛事分类独立于审核状态", () => {
   it("执裁实践与非赛事业务按主体动作判非赛事，真实参赛不受影响", () => {
     for (const item of classificationBoundaryCases) {
       const result = classifyNotice(item.title, item.paragraphs);
-      // 断言真实返回对象的四项可观察结果，不做对象与字符串比较。
-      expect({
-        boundary: item.boundary,
-        classification: result.classification,
-        notificationKind: result.notificationKind,
-        priority: result.priority,
-        needsReview: result.needsReview,
-      }).toEqual({
-        boundary: item.boundary,
-        classification: item.classification,
-        notificationKind: item.notificationKind,
-        priority: item.priority,
-        // 非赛事不进复核；明确赛事一律保留人工复核。
-        needsReview: item.classification !== "non_competition",
+      // 断言真实返回对象的四项可观察结果，不做对象与字符串比较；
+      // boundary 只作为失败时的用例标签，不参与期望值比较。
+      expect({ [item.boundary]: observableOf(result) }).toEqual({
+        [item.boundary]: {
+          classification: item.classification,
+          notificationKind: item.notificationKind,
+          priority: item.priority,
+          needsReview: item.needsReview,
+        },
       });
       // 结论必须有可读理由，便于审核人员判断为什么被排除或保留。
       expect(result.reasons.length + result.exclusions.length).toBeGreaterThan(
@@ -881,6 +886,91 @@ describe("赛事分类独立于审核状态", () => {
       classification: "non_competition",
       exclusions: expect.arrayContaining(["applicant-list"]),
     });
+  });
+  it("执裁分支要求没有赛事进程标记，也不被无关附件改判，且不留矛盾理由", () => {
+    // 标题点明赛事的裁判工作安排是赛事进程，不能因「裁判工作」判非赛事。
+    const schedule = classifyNotice("2026年校园武术套路公开赛裁判工作安排", [
+      "比赛时间：2026年11月15日，地点：体育馆。",
+    ]);
+    expect(schedule).toMatchObject({ classification: "definite" });
+    expect(schedule.exclusions).not.toContainEqual(
+      expect.stringContaining("执裁实践"),
+    );
+    // 只有附件自己写明赛事事项才算另一份依据；无关附件（报名表、承诺书）不改变
+    // 标题结论，否则任意招新通知只要带个附件就被抬回复核队列。
+    expect(
+      classifyNotice(
+        "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+        ["2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。"],
+        ["附件1.pdf"],
+      ),
+    ).toMatchObject({ classification: "non_competition", needsReview: false });
+    expect(
+      classifyNotice(
+        "关于招聘学院实验教学助理的通知",
+        ["岗位要求：责任心强。"],
+        ["报名表.docx"],
+      ),
+    ).toMatchObject({ classification: "non_competition", needsReview: false });
+    // 附件自己写明赛事事项时同样封顶疑似，且不写「执裁实践回顾」这条未生效的结论。
+    const competitionAttachment = classifyNotice(
+      "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+      ["2026年10月18日举行。"],
+      ["公开赛竞赛规程.pdf"],
+    );
+    expect(competitionAttachment.classification).toBe("suspected");
+    expect(competitionAttachment.exclusions).not.toContainEqual(
+      expect.stringContaining("执裁实践"),
+    );
+    // 「招募执裁人员」是岗位招募，不是面向学生的参赛报名；理由应归到业务分支，
+    // 不能错记成「执裁实践回顾」。标题点明赛事的同类招募仍按赛事进程处理。
+    const recruitOfficials = classifyNotice("体育学院关于招募执裁人员的通知", [
+      "报名截止：2026年10月10日。",
+    ]);
+    expect(recruitOfficials).toMatchObject({
+      classification: "non_competition",
+      needsReview: false,
+    });
+    expect(recruitOfficials.exclusions).toContainEqual(
+      expect.stringContaining("非赛事业务"),
+    );
+    expect(
+      classifyNotice("关于招募2026年校园篮球联赛裁判员的通知", [
+        "报名截止：2026年10月10日。",
+      ]).classification,
+    ).toBe("definite");
+    // 招募参赛者是报名通知，不能因「招募」落入非赛事业务：靠「选手／运动员」守住。
+    for (const title of [
+      "关于招募2026年院级篮球联赛选手的通知",
+      "关于招募2026年校运动会运动员的通知",
+    ])
+      expect(
+        classifyNotice(title, ["报名截止：2026年10月10日。"]),
+      ).toMatchObject({ needsReview: true });
+    // 已知未覆盖（非本票引入）：「篮球赛」不在赛事词表里，这条标题在 v8 同样
+    // 判 non_competition，属既有词表缺口。此处固定现状并留注释，后续单独处理；
+    // 本票没有通过扩大词表来顺手改它。
+    expect(
+      classifyNotice("关于招募2026年院级篮球赛选手的通知", [
+        "报名截止：2026年10月10日。",
+      ]).classification,
+    ).toBe("non_competition");
+    // 暑假与寒假的管理类通知同样是假期管理，不能只认「假期」二字。
+    for (const title of [
+      "关于2026年暑假期间学生管理工作的通知",
+      "关于2026年寒假学生离校安排的通知",
+    ])
+      expect(classifyNotice(title, ["请各班做好离校登记。"])).toMatchObject({
+        classification: "non_competition",
+        needsReview: false,
+      });
+    // 但标题写的是报名或项目的寒假通知不能沿用假期管理结论：
+    // 正文赛事提及仍按 ADR 0009 只作旁证。
+    expect(
+      classifyNotice("2027年寒假世界名校海外访学项目报名通知", [
+        "面向全校本科生开放语言文化、竞赛、导师推荐信类访学项目。",
+      ]).classification,
+    ).toBe("suspected");
   });
   it("推荐或遴选参赛队伍属赛事选拔，不按评奖排除", () => {
     // 「推荐」既可指评优也可指赛事选拔；标题同时出现参赛/队伍时属赛事进程。

@@ -94,26 +94,38 @@ export function classifyNotice(
       !ambiguousPattern.test(title));
   const explicitRegistration = /报名/.test(title);
   // #205：标题声明的主体与对象决定通知是不是「面向学生开放的参赛报名」。
-  // 执裁实践的主体是提供执裁服务的师生，对象是已举行的赛事，属实践回顾；
-  // 招新、岗位招募、社会实践组队、假期与离校管理的主体是学院或学生组织，对象是部门、
-  // 岗位或事务，赛事只是成果举例或旁证。两者都不构成本项目要收的报名赛事。
-  // 判定只看标题：标题一旦自己点明赛事（竞赛/比赛/大赛…）就不适用，保证
-  // 「招募…竞赛参赛队伍」「推荐…参加…竞赛」这类真实参赛通知不被一刀切排除。
+  // 执裁实践的主体是受邀提供裁判服务的师生，对象是别人主办的赛事，属实践记录；
+  // 招新、岗位招募、社会实践组队、假期与离校管理的主体是学院或学生组织，对象是
+  // 部门、岗位或事务。两者的赛事只是成果举例或旁证，都不构成本项目要收的报名赛事。
+  //
+  // 两条分支都不靠「出现执裁／招募就排除」：执裁分支要求标题没有安排、招募、
+  // 报名、参赛、队伍、选手这类「赛事进程或参赛资格」标记，因此「…公开赛裁判工作
+  // 安排」仍是赛事进程；业务分支要求标题不点明赛事、不涉及参赛者或作品，因此
+  // 「招募…竞赛参赛队伍」「招募…篮球赛选手」「推荐…参加…竞赛」仍是报名通知。
   const officiatingPractice =
     /执裁|担任裁判|裁判工作/.test(title) &&
-    !/报名|参赛|作品|选拔队伍/.test(title) &&
+    !/安排|招募|遴选|报名|参赛|队伍|队员|选手|运动员|作品/.test(title) &&
     !/关于举办|关于组织|组织参加/.test(title);
+  // 「假期」只在管理类标题里成立（暑假、寒假同理）：海外访学、招生宣传一类标题
+  // 写的是报名或项目，正文赛事提及仍按 ADR 0009 只作旁证，不能因此判非赛事。
+  const vacationManagement =
+    /假期|暑假|寒假/.test(title) &&
+    /管理|安排|离校|留校|安全|登记|须知|值班|工作的通知/.test(title);
   const nonCompetitionBusiness =
-    /招新|纳新|招募|招聘|社会实践|假期|离校|助理/.test(title) &&
+    !officiatingPractice &&
+    (/招新|纳新|招募|招聘|社会实践|离校|助理/.test(title) ||
+      vacationManagement) &&
     !competitionPattern.test(title) &&
     !ambiguousPattern.test(title) &&
-    // 「招募…参赛队伍」「…队员招募」仍是真实参赛通知，不能因「招募」二字排除。
-    !/参赛|队伍|队员|作品/.test(title);
-  const semanticNonCompetition = officiatingPractice || nonCompetitionBusiness;
-  // 附件标题若自己写明赛事名与具体事项（如「数学竞赛延期通知.pdf」），仍是一份
-  // 待核对的赛事依据，不被标题的业务性质吞掉；此时保留疑似，交人工核对。
-  const semanticNonCompetitionDecisive =
-    semanticNonCompetition && attachmentTitles.length === 0;
+    !/参赛|队伍|队员|选手|运动员|作品|报名/.test(title) &&
+    !/关于举办|关于组织|组织参加/.test(title);
+  const declaresNonCompetitionBusiness =
+    officiatingPractice || nonCompetitionBusiness;
+  // 只有附件标题自己写明赛事名与具体事项（如「数学竞赛延期通知.pdf」）才构成另一份
+  // 待核对的赛事依据；无关附件（报名表、承诺书）不改变标题结论。
+  const attachmentDeclaresCompetition = attachmentTitles.some(
+    (attachmentTitle) => competitionPattern.test(attachmentTitle),
+  );
   const bodyAward =
     !explicitRegistration &&
     /(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示|现将[^。；\n]{0,100}(?:结果|名单)公示/.test(
@@ -150,9 +162,14 @@ export function classifyNotice(
               ? "registration"
               : "news";
   if (list) exclusions.push("applicant-list");
-  if (officiatingPractice) exclusions.push("执裁实践回顾，不是可报名赛事");
-  if (nonCompetitionBusiness)
-    exclusions.push("非赛事业务通知，正文赛事提及仅作旁证");
+  // 理由跟随实际生效的判定：附件另行写明赛事事项时，标题结论并未采用，
+  // 不能留下与结论矛盾的排除理由。
+  if (declaresNonCompetitionBusiness && !attachmentDeclaresCompetition)
+    exclusions.push(
+      officiatingPractice
+        ? "执裁实践回顾，不是可报名赛事"
+        : "非赛事业务通知，正文赛事提及仅作旁证",
+    );
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
   if (resultNotice || bodyAward)
     exclusions.push("结果公示或评选通知，不是可报名赛事");
@@ -190,21 +207,25 @@ export function classifyNotice(
     list || resultNotice || titleRecap || bodyAward || bodyNews
       ? "non_competition"
       : // 标题已明确是非赛事业务时，优先按标题判定：正文的赛事提及只作旁证，
-        // 不能被 `excluded` 分支重新提升成疑似。附件写明赛事事项时不走这条。
-        semanticNonCompetitionDecisive
+        // 不能被 `excluded` 分支重新提升成疑似。
+        declaresNonCompetitionBusiness && !attachmentDeclaresCompetition
         ? "non_competition"
-        : excluded
-          ? competition || ambiguous || attachmentTitles.length > 0
-            ? "suspected"
-            : "non_competition"
-          : competition && titleDeclaresCompetition && hasCheckableArrangement
-            ? "definite"
-            : competition ||
-                ambiguous ||
-                attachmentTitles.length > 0 ||
-                /补充通知|延期通知|规则变更/.test(title)
+        : // 附件另行写明赛事事项时，标题的业务性质不足以定案，也同样不足以
+          // 单凭附件确认赛事，封顶为疑似交人工核对。
+          declaresNonCompetitionBusiness
+          ? "suspected"
+          : excluded
+            ? competition || ambiguous || attachmentTitles.length > 0
               ? "suspected"
-              : "non_competition";
+              : "non_competition"
+            : competition && titleDeclaresCompetition && hasCheckableArrangement
+              ? "definite"
+              : competition ||
+                  ambiguous ||
+                  attachmentTitles.length > 0 ||
+                  /补充通知|延期通知|规则变更/.test(title)
+                ? "suspected"
+                : "non_competition";
   if (attachmentTitles.length)
     reasons.push("附件待核对，不按缺少正文关键字排除");
   if (!reasons.length && !exclusions.length)

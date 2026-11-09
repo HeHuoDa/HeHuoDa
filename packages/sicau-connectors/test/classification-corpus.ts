@@ -101,6 +101,7 @@ export interface ClassificationBoundaryCase {
   classification: "definite" | "suspected" | "non_competition";
   notificationKind: "registration" | "supplement" | "award" | "news";
   priority: number;
+  needsReview: boolean;
 }
 
 export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
@@ -115,6 +116,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "news",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "学生组织招新不是赛事报名",
@@ -127,6 +129,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "registration",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "实验室招新提到竞赛方向仍是招新",
@@ -138,6 +141,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "news",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "社会实践团队招募不是赛事报名",
@@ -150,6 +154,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "registration",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "假期与离校管理不是赛事报名",
@@ -162,6 +167,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "news",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "岗位招募不是赛事报名",
@@ -174,6 +180,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "non_competition",
     notificationKind: "registration",
     priority: 3,
+    needsReview: false,
   },
   {
     boundary: "赛事队伍招募仍是明确赛事",
@@ -184,6 +191,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "definite",
     notificationKind: "registration",
     priority: 0,
+    needsReview: true,
   },
   {
     boundary: "推荐学生参加具体赛事仍是明确赛事",
@@ -192,6 +200,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "definite",
     notificationKind: "registration",
     priority: 0,
+    needsReview: true,
   },
   {
     boundary: "赛事通知提到执裁安排不因此降级",
@@ -203,6 +212,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "definite",
     notificationKind: "registration",
     priority: 0,
+    needsReview: true,
   },
   {
     boundary: "只面向研究生的真赛事仍是明确赛事",
@@ -211,6 +221,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "definite",
     notificationKind: "registration",
     priority: 0,
+    needsReview: true,
   },
   {
     boundary: "延期补充仍按赛事进程处理",
@@ -219,6 +230,7 @@ export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
     classification: "definite",
     notificationKind: "supplement",
     priority: 0,
+    needsReview: true,
   },
 ];
 
