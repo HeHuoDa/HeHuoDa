@@ -13,6 +13,7 @@ import {
   containsApplicantList,
   containsPersonalNameList,
   parseCandidate,
+  classifyNotice,
   sourceById,
   type ListItem,
   NoticeParseError,
@@ -28,6 +29,7 @@ import { checkNoticeAttachments } from "./attachment-runner.js";
 import { parseAttachmentIsolated } from "./attachment-parser.js";
 import { reserveAttachmentNetworkRequest } from "./attachment-budget.js";
 import { refreshExtraction } from "./extraction-store.js";
+import { presentCandidate } from "./candidate-contract.js";
 
 export type ScanPhase = "fresh" | "backfill" | "revisit" | "retry";
 
@@ -874,15 +876,26 @@ export class IngestionRunner {
             )
               counts.ignored++;
             else {
-              const parsed = platformCandidate(
-                parseCandidate(
+              const classification = classifyNotice(
+                article.title,
+                article.paragraphs,
+                article.attachments.map((attachment) => attachment.title),
+              );
+              const parsed = platformCandidate({
+                ...parseCandidate(
                   article,
                   item.url,
                   noticeDirectory(catalog.colleges),
+                  classification.notificationKind,
                 ),
-              );
+                classification,
+              });
               if (input.preview)
-                previews.push({ url: item.url, article, candidate: parsed });
+                previews.push({
+                  url: item.url,
+                  article,
+                  candidate: presentCandidate(parsed),
+                });
               else {
                 const result = await persistArticle(
                   this.pool,

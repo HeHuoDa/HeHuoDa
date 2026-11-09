@@ -24,6 +24,10 @@ import {
   type ReviewFile,
 } from "../ingestion/review.js";
 import { commandHash, hash, transaction } from "../ingestion/store.js";
+import {
+  presentCandidate,
+  readCandidate,
+} from "../ingestion/candidate-contract.js";
 import { AdminIngestionOperation } from "../ingestion/admin-ingestion-operation.js";
 import { DatabaseService } from "../database/database.service.js";
 import type { AdminContext } from "./admin.service.js";
@@ -121,7 +125,12 @@ export class AdminReviewService {
       }
       for (const [value, expression] of [
         [query.classification, "c.classification"],
-        [query.kind, "c.data->'fields'->>'kind'"],
+        // kind 筛选按通知种类过滤：唯一来源是分类结果，不是候选赛事种类。
+        // 兼容未写 classification 的历史候选时回退到旧的 fields.kind 别名。
+        [
+          query.kind,
+          "COALESCE(c.data->'classification'->>'notificationKind',c.data->'fields'->>'kind')",
+        ],
         [query.needsReview, "c.needs_review::text"],
       ]) {
         if (value !== undefined) {
@@ -174,6 +183,8 @@ export class AdminReviewService {
           rows.rows.map((row) => ({
             ...row,
             article: safeArticle(row.article),
+            // 归一为 v2 契约并附兼容投影；旧候选显式归一，不静默换义。
+            data: presentCandidate(row.data),
           })),
           count.rows[0]!.total,
           query.page,
@@ -211,7 +222,10 @@ export class AdminReviewService {
             'SELECT id,source_version AS "sourceVersion",evidence_revision AS "evidenceRevision",rule_version AS "ruleVersion",data,created_at AS "createdAt" FROM ingestion_extraction_revisions WHERE candidate_id=$1 ORDER BY created_at DESC,id LIMIT 50',
             [candidateId],
           )
-        ).rows,
+        ).rows.map((revision) => ({
+          ...revision,
+          data: presentCandidate(revision.data),
+        })),
         classificationHistory: (
           await client.query(
             'SELECT candidate_revision AS "candidateRevision",previous_classification AS "previousClassification",classification,reason,checked_at AS "checkedAt",evidence_revision AS "evidenceRevision",baseline,actor_id AS "actorId" FROM ingestion_classification_revisions WHERE candidate_id=$1 ORDER BY checked_at DESC,id LIMIT 50',
@@ -228,7 +242,7 @@ export class AdminReviewService {
           health: row.health,
         },
         article: safeArticle(row.article),
-        candidate: row.data,
+        candidate: presentCandidate(row.data),
         mapping: row.competitionId
           ? { competitionId: row.competitionId }
           : null,
@@ -284,9 +298,10 @@ export class AdminReviewService {
             candidateId,
             command.classification,
             command.classification !== "non_competition",
+            // 优先级只读通知种类；人工改分类不改变通知种类。
             classificationPriority(
               command.classification,
-              row.data.fields.kind,
+              readCandidate(row.data).notificationKind ?? "news",
             ),
             command.reason,
           ],

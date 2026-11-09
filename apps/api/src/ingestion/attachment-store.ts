@@ -85,6 +85,49 @@ async function recordEvidenceChange(
 
 const REDACTED_REVIEW_HASH = "privacy-redacted";
 
+const redactedTime = () => ({ precision: "unknown" as const, value: null });
+/** 旧形状投影的擦除值：与 v1 的键保持一致。 */
+function redactedCandidateFields() {
+  return {
+    name: "",
+    edition: null,
+    kind: "news",
+    organizer: null,
+    hosts: [],
+    scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+    mode: null,
+    tracks: [],
+    members: null,
+    rules: [],
+    stageNames: [],
+    startsAt: redactedTime(),
+    deadline: redactedTime(),
+    materialsAt: redactedTime(),
+    eventAt: redactedTime(),
+  };
+}
+/** 协议契约 v2 的擦除值：不含通知种类，赛事种类也一并清空。 */
+function redactedCandidateFieldsV2() {
+  return {
+    name: "",
+    edition: null,
+    eventKind: null,
+    organizer: null,
+    hosts: [],
+    scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
+    mode: null,
+    modeKind: null,
+    tracks: [],
+    members: null,
+    rules: [],
+    stageNames: [],
+    startsAt: redactedTime(),
+    deadline: redactedTime(),
+    materialsAt: redactedTime(),
+    eventAt: redactedTime(),
+  };
+}
+
 function redactAttachmentSnapshots(
   value: unknown,
   attachmentId: string,
@@ -103,7 +146,7 @@ function redactAttachmentSnapshots(
 
   const source = value as Record<string, unknown>;
   if (
-    source.fields &&
+    (source.fields || source.fieldsV2) &&
     Array.isArray(source.evidence) &&
     source.evidence.some(
       (entry) =>
@@ -117,23 +160,9 @@ function redactAttachmentSnapshots(
       value: {
         ...source,
         privacyRedacted: true,
-        fields: {
-          name: "",
-          edition: null,
-          kind: "news",
-          organizer: null,
-          hosts: [],
-          scope: { kind: "unknown", colleges: [], note: "隐私擦除" },
-          mode: null,
-          tracks: [],
-          members: null,
-          rules: [],
-          stageNames: [],
-          startsAt: { precision: "unknown", value: null },
-          deadline: { precision: "unknown", value: null },
-          materialsAt: { precision: "unknown", value: null },
-          eventAt: { precision: "unknown", value: null },
-        },
+        // 旧形状投影与协议契约都要擦除；只清一侧会让原文从另一侧泄漏。
+        fields: redactedCandidateFields(),
+        ...(source.fieldsV2 ? { fieldsV2: redactedCandidateFieldsV2() } : {}),
         evidence: [],
         fieldConflicts: [],
         warnings: ["名单隐私擦除：自动字段与定位摘录已移除"],

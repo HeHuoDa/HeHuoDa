@@ -8021,7 +8021,7 @@
           "values"
         ]
       },
-      "AdminCandidateScopeDto": {
+      "AdminLegacyScopeDto": {
         "type": "object",
         "properties": {
           "kind": {
@@ -8049,7 +8049,7 @@
           "note"
         ]
       },
-      "AdminCandidateTrackDto": {
+      "AdminLegacyCandidateTrackDto": {
         "type": "object",
         "properties": {
           "name": {
@@ -8101,7 +8101,7 @@
           "value"
         ]
       },
-      "AdminCandidateFieldsDto": {
+      "AdminLegacyCandidateFieldsDto": {
         "type": "object",
         "properties": {
           "name": {
@@ -8118,7 +8118,9 @@
               "supplement",
               "award",
               "news"
-            ]
+            ],
+            "nullable": true,
+            "description": "通知种类，取自 classification.notificationKind；不得读作赛事种类"
           },
           "organizer": {
             "type": "string",
@@ -8131,7 +8133,12 @@
             }
           },
           "scope": {
-            "$ref": "#/components/schemas/AdminCandidateScopeDto"
+            "description": "正式比赛范围枚举的投影：specified→colleges、other→complex。仅用于旧读者",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLegacyScopeDto"
+              }
+            ]
           },
           "mode": {
             "type": "string",
@@ -8140,12 +8147,13 @@
               "team",
               "mixed"
             ],
-            "nullable": true
+            "nullable": true,
+            "description": "modeKind 的旧别名；null 表示无法可靠归一"
           },
           "tracks": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AdminCandidateTrackDto"
+              "$ref": "#/components/schemas/AdminLegacyCandidateTrackDto"
             }
           },
           "members": {
@@ -8195,12 +8203,177 @@
           "eventAt"
         ]
       },
+      "AdminCandidateScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "specified",
+              "other",
+              "unknown"
+            ],
+            "description": "协议 3.3 参赛范围。other 表示有明确限制但无法枚举；否定与排除不得写入 colleges"
+          },
+          "colleges": {
+            "description": "仅允许参赛的学院；否定、排除与未知学院一律不写入",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "colleges",
+          "note"
+        ]
+      },
+      "AdminCandidateTrackDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "modeKind": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true,
+            "description": "可靠归一结果；null 时导入须人工填写"
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "modeKind",
+          "members",
+          "rules"
+        ]
+      },
+      "AdminCandidateFieldsDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventKind": {
+            "type": "string",
+            "nullable": true,
+            "description": "赛事种类／项目类型；不承载通知种类、赛段、选拔层级或组别。未提取为 null"
+          },
+          "organizer": {
+            "type": "string",
+            "nullable": true
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AdminCandidateScopeDto"
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true,
+            "description": "参赛形式原文短语；协议 fields.mode 比较这一层"
+          },
+          "modeKind": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true,
+            "description": "可靠归一结果；无法可靠归一为 null，导入须人工填写"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCandidateTrackDto"
+            }
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stageNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "materialsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "eventAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          }
+        },
+        "required": [
+          "name",
+          "edition",
+          "eventKind",
+          "organizer",
+          "hosts",
+          "scope",
+          "mode",
+          "modeKind",
+          "tracks",
+          "members",
+          "rules",
+          "stageNames",
+          "startsAt",
+          "deadline",
+          "materialsAt",
+          "eventAt"
+        ]
+      },
       "AdminParsedCandidateDto": {
         "type": "object",
         "properties": {
           "privacyRedacted": {
             "type": "boolean",
             "description": "历史材料已按名单隐私规则擦除，不能复用"
+          },
+          "fieldsContract": {
+            "type": "string",
+            "enum": [
+              "candidate-fields-v2"
+            ]
           },
           "classification": {
             "$ref": "#/components/schemas/AdminRuleClassificationDto"
@@ -8212,7 +8385,20 @@
             }
           },
           "fields": {
-            "$ref": "#/components/schemas/AdminCandidateFieldsDto"
+            "description": "旧形状兼容投影：kind=通知种类、scope=正式四值、mode=英文枚举。旧客户端按原路径读取即可，#204 之前保持",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLegacyCandidateFieldsDto"
+              }
+            ]
+          },
+          "fieldsV2": {
+            "description": "协议候选契约：eventKind 赛事种类、scope 协议四值、mode 原文 + modeKind。新代码只读这里",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminCandidateFieldsDto"
+              }
+            ]
           },
           "evidence": {
             "type": "array",
@@ -8241,6 +8427,7 @@
         },
         "required": [
           "fields",
+          "fieldsV2",
           "evidence",
           "missing",
           "conflicts",

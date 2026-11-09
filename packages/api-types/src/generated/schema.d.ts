@@ -1571,13 +1571,13 @@ export interface components {
             field: string;
             values: components["schemas"]["AdminFieldChoiceDto"][];
         };
-        AdminCandidateScopeDto: {
+        AdminLegacyScopeDto: {
             /** @enum {string} */
             kind: "all" | "colleges" | "complex" | "unknown";
             colleges: string[];
             note: string;
         };
-        AdminCandidateTrackDto: {
+        AdminLegacyCandidateTrackDto: {
             name: string;
             /** @enum {string|null} */
             mode: "individual" | "team" | "mixed" | null;
@@ -1589,16 +1589,67 @@ export interface components {
             precision: "instant" | "date" | "unknown";
             value: string | null;
         };
+        AdminLegacyCandidateFieldsDto: {
+            name: string;
+            edition: string | null;
+            /**
+             * @description 通知种类，取自 classification.notificationKind；不得读作赛事种类
+             * @enum {string|null}
+             */
+            kind: "registration" | "supplement" | "award" | "news" | null;
+            organizer: string | null;
+            hosts: string[];
+            /** @description 正式比赛范围枚举的投影：specified→colleges、other→complex。仅用于旧读者 */
+            scope: components["schemas"]["AdminLegacyScopeDto"];
+            /**
+             * @description modeKind 的旧别名；null 表示无法可靠归一
+             * @enum {string|null}
+             */
+            mode: "individual" | "team" | "mixed" | null;
+            tracks: components["schemas"]["AdminLegacyCandidateTrackDto"][];
+            members: string | null;
+            rules: string[];
+            stageNames: string[];
+            startsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            deadline: components["schemas"]["AdminReviewTimeValueDto"];
+            materialsAt: components["schemas"]["AdminReviewTimeValueDto"];
+            eventAt: components["schemas"]["AdminReviewTimeValueDto"];
+        };
+        AdminCandidateScopeDto: {
+            /**
+             * @description 协议 3.3 参赛范围。other 表示有明确限制但无法枚举；否定与排除不得写入 colleges
+             * @enum {string}
+             */
+            kind: "all" | "specified" | "other" | "unknown";
+            /** @description 仅允许参赛的学院；否定、排除与未知学院一律不写入 */
+            colleges: string[];
+            note: string;
+        };
+        AdminCandidateTrackDto: {
+            name: string;
+            /**
+             * @description 可靠归一结果；null 时导入须人工填写
+             * @enum {string|null}
+             */
+            modeKind: "individual" | "team" | "mixed" | null;
+            members: string | null;
+            rules: string | null;
+        };
         AdminCandidateFieldsDto: {
             name: string;
             edition: string | null;
-            /** @enum {string} */
-            kind: "registration" | "supplement" | "award" | "news";
+            /** @description 赛事种类／项目类型；不承载通知种类、赛段、选拔层级或组别。未提取为 null */
+            eventKind: string | null;
             organizer: string | null;
             hosts: string[];
             scope: components["schemas"]["AdminCandidateScopeDto"];
-            /** @enum {string|null} */
-            mode: "individual" | "team" | "mixed" | null;
+            /** @description 参赛形式原文短语；协议 fields.mode 比较这一层 */
+            mode: string | null;
+            /**
+             * @description 可靠归一结果；无法可靠归一为 null，导入须人工填写
+             * @enum {string|null}
+             */
+            modeKind: "individual" | "team" | "mixed" | null;
             tracks: components["schemas"]["AdminCandidateTrackDto"][];
             members: string | null;
             rules: string[];
@@ -1611,9 +1662,14 @@ export interface components {
         AdminParsedCandidateDto: {
             /** @description 历史材料已按名单隐私规则擦除，不能复用 */
             privacyRedacted?: boolean;
+            /** @enum {string} */
+            fieldsContract?: "candidate-fields-v2";
             classification?: components["schemas"]["AdminRuleClassificationDto"];
             fieldConflicts?: components["schemas"]["AdminFieldConflictDto"][];
-            fields: components["schemas"]["AdminCandidateFieldsDto"];
+            /** @description 旧形状兼容投影：kind=通知种类、scope=正式四值、mode=英文枚举。旧客户端按原路径读取即可，#204 之前保持 */
+            fields: components["schemas"]["AdminLegacyCandidateFieldsDto"];
+            /** @description 协议候选契约：eventKind 赛事种类、scope 协议四值、mode 原文 + modeKind。新代码只读这里 */
+            fieldsV2: components["schemas"]["AdminCandidateFieldsDto"];
             evidence: components["schemas"]["AdminCandidateEvidenceDto"][];
             missing: string[];
             conflicts: string[];

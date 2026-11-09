@@ -10,6 +10,11 @@ import {
 import { publishedDate, type Article } from "@hehuoda/sicau-connectors/notices";
 import { commandHash, hash, transaction, type CandidateRow } from "./store.js";
 import {
+  presentCandidate,
+  readCandidate,
+  type PresentedCandidate,
+} from "./candidate-contract.js";
+import {
   assertEvidenceBaseline,
   readCurrentEvidence,
   readAttachmentEvidenceReferences,
@@ -47,7 +52,7 @@ export interface ReviewFile {
   };
   article: Article;
   previousArticle: Article | null;
-  candidate: ParsedCandidate;
+  candidate: PresentedCandidate;
   mergeSuggestions: { id: string; name: string; edition: string }[];
   formalBefore: RecordData | null;
   batch: ImportBatch;
@@ -152,6 +157,12 @@ export async function exportReview(
         ? mapping.notice_ids[0]
         : "source-" + candidateId + "-" + hash(id).slice(0, 12);
     const fields = candidate.data.fields;
+    // 正式 Notice.kind 是通知种类，唯一来源是分类结果；不是候选赛事种类。
+    const { notificationKind } = readCandidate(candidate.data);
+    if (!notificationKind)
+      throw new Error(
+        "候选缺少通知分类，不能生成正式通知种类；请重新提取或先核对分类",
+      );
     const patch: ImportCompetition = {
       id,
       notices: [
@@ -162,7 +173,7 @@ export async function exportReview(
           url: notice.url,
           publishedAt: article.publishedAt,
           checkedAt: null,
-          kind: fields.kind,
+          kind: notificationKind,
         },
       ],
     };
@@ -220,7 +231,7 @@ export async function exportReview(
       },
       article,
       previousArticle: previous,
-      candidate: candidate.data,
+      candidate: presentCandidate(candidate.data),
       mergeSuggestions: catalog.competitions
         .filter(
           (c) => c.name.includes(fields.name) || fields.name.includes(c.name),
@@ -528,7 +539,9 @@ async function checkBaseline(client: PoolClient, file: ReviewFile) {
   if (
     commandHash(file.formalBefore) !== commandHash(before ?? null) ||
     commandHash(file.article) !== commandHash(notice.article) ||
-    commandHash(file.candidate) !== commandHash(candidate.data)
+    // 导出侧与校验侧使用同一投影，保证兼容视图不改变只读基线语义。
+    commandHash(file.candidate) !==
+      commandHash(presentCandidate(candidate.data))
   )
     throw new Error("审核文件的只读证据或正式差异基线被改动，请重新导出");
   const expectedSuggestions = catalog.competitions

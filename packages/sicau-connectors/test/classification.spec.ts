@@ -52,7 +52,7 @@ describe("赛事分类独立于审核状态", () => {
         "v1",
       );
       expect(result.fields.scope).toMatchObject({
-        kind: "complex",
+        kind: "other",
         colleges: [],
         note: text,
       });
@@ -135,9 +135,10 @@ describe("赛事分类独立于审核状态", () => {
       "v1",
     );
     expect(result.fields.organizer).toBe("教务处");
-    expect(result.fields.scope.kind).toBe("complex");
+    expect(result.fields.scope.kind).toBe("other");
     expect(result.fields.scope.colleges).toEqual([]);
-    expect(result.fields.mode).toBe("team");
+    expect(result.fields.modeKind).toBe("team");
+    expect(result.fields.mode).toContain("须以团队参加");
     expect(result.fieldConflicts?.some((c) => c.field === "mode")).toBe(false);
   });
   it("旧绝对截止后出现未锚定相对延期，不沿用旧截止", () => {
@@ -196,7 +197,7 @@ describe("赛事分类独立于审核状态", () => {
       2,
     );
   });
-  it("通用标题的kind证据必须包含真正支持通知种类的正文", () => {
+  it("通用标题的通知种类证据必须包含真正支持通知种类的正文", () => {
     const text = "2026年数学竞赛通知已发布。";
     const result = parseEvidenceCandidate(
       {
@@ -210,9 +211,15 @@ describe("赛事分类独立于审核状态", () => {
       [],
       "v1",
     );
+    // 通知种类属于 classification，不再写成候选字段 kind。
     expect(result.evidence).toContainEqual(
-      expect.objectContaining({ field: "kind", paragraph: 0, excerpt: text }),
+      expect.objectContaining({
+        field: "notificationKind",
+        paragraph: 0,
+        excerpt: text,
+      }),
     );
+    expect(result.fields).not.toHaveProperty("kind");
   });
   it("普通标题的结果公示或新闻不能因引用旧报名日期被当成报名", () => {
     for (const title of ["通知", "2026年数学竞赛通知", "参赛事项"])
@@ -232,7 +239,9 @@ describe("赛事分类独立于审核状态", () => {
           [],
           "v1",
         );
-        expect(result.fields.kind).toBe(kind);
+        // 通知种类只看 classification，不再从候选字段读。
+        expect(result.classification?.notificationKind).toBe(kind);
+        expect(result.fields).not.toHaveProperty("kind");
         expect(result.fields.deadline).toEqual({
           precision: "unknown",
           value: null,
@@ -371,7 +380,8 @@ describe("赛事分类独立于审核状态", () => {
         precision: "date",
         value: "2026-11-01",
       });
-      for (const field of ["name", "edition", "kind", "deadline"])
+      // 通知种类证据记在 notificationKind；候选字段不再有 kind。
+      for (const field of ["name", "edition", "notificationKind", "deadline"])
         expect(parsed.evidence).toContainEqual(
           expect.objectContaining({
             field,

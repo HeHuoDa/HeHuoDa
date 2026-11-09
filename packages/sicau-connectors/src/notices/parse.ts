@@ -5,7 +5,7 @@ import type {
   Evidence,
   ParsedCandidate,
 } from "./types.js";
-import type { TimeValue } from "./types.js";
+import { candidateFieldsContract, type TimeValue } from "./types.js";
 const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
 
 /** Section numbers carry no content; a heading alone cannot support a value. */
@@ -150,11 +150,257 @@ export function extractDates(text: string, year: string | null): TimeValue[] {
   return result;
 }
 
+/**
+ * 赛事名：只剥离可确认的通知套语（前缀「关于举办／开展／组织参加」与后缀
+ * 「的通知／预通知」）。保留发文单位、年份届次、校内选拔赛与子赛道，避免把
+ * 不同比赛合并成同名。剥离后为空或只剩套语时回退标题原文。
+ */
+const noticeTitlePrefix = /^关于(?:举办|举行|开展|组织参加)/;
+/**
+ * 发文单位前缀（「食品学院关于举办…」）只去掉「关于举办」，单位本身保留：
+ * 单位是否为赛事名组成部分无法可靠区分，删掉可能把不同单位的同名赛事合并。
+ */
+const issuingUnitPrefix = /^(.{2,30}?)关于(?:举办|举行|开展|组织参加)/;
+const noticeTitleSuffix =
+  /(?:的)?(?:报名通知|参赛通知|预通知|补充通知|变更通知|更正通知|通知)$/;
+export function competitionName(title: string): string {
+  const original = title.trim();
+  let value = original;
+  for (let round = 0; round < 3; round++) {
+    const next = value
+      // 有发文单位时只剥掉「关于举办」，单位保留。
+      .replace(issuingUnitPrefix, "$1")
+      .replace(noticeTitlePrefix, "")
+      .replace(noticeTitleSuffix, "")
+      .trim();
+    if (next === value) break;
+    value = next;
+  }
+  // 只剩套语或标点时不能用被清空的名称。
+  return value.replace(/[\s\p{P}\p{S}]/gu, "").length ? value : original;
+}
+
+/**
+ * 赛事种类／项目类型的显式标注。显式标注只是来源条件，取值还要过语义边界：
+ * 选拔层级、赛段、组别、届次与通知种类都不是赛事种类。
+ */
+const eventKindLabel =
+  /(?:赛事种类|竞赛类型|比赛类型|赛事类别|项目类型|竞赛类别|比赛类别)\s*[：:]\s*([^。；\n]{1,40})/;
+/** 选拔层级与赛段：描述比赛进行到哪一步，不是种类。 */
+const kindLevelOnly =
+  /(?:选拔赛|选拔|初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛|网评|路演)$|(?:院级|校级|省级|国家级|市级|校内|院内)(?:选拔|赛)/;
+/** 组别与人群：描述谁能参加，不是种类。 */
+const kindGroupOnly =
+  /(?:组|组别)$|^(?:新生|老生|研究生|本科生|专科生|教师|教职工|专业|年级|班级)/;
+/** 通知种类词不得混入赛事种类。 */
+const kindNotificationOnly =
+  /^(?:报名|补充|变更|延期|更正|获奖|公示|新闻|回顾)/;
+const kindNoun =
+  /竞赛|比赛|大赛|项目|活动|挑战杯|艺术|体育|创新|创业|职业|技能|学术|科技|学科|征文|设计/;
+/**
+ * 判断一个显式标注值能否作为赛事种类。返回 null 表示可用，否则给出拒绝原因。
+ * 拿不准时不猜：宁可 unknown，也不把层级或组别当成种类。
+ */
+export function eventKindRejection(value: string): string | null {
+  const annotations = [...value.matchAll(/[（(]([^()（）]+)[）)]/g)].map(
+    (match) => match[1].trim(),
+  );
+  if (kindNotificationOnly.test(value)) return "通知种类不是赛事种类";
+  if (
+    kindLevelOnly.test(value) ||
+    annotations.some((part) => kindLevelOnly.test(part))
+  )
+    return "选拔层级或赛段不是赛事种类";
+  if (
+    kindGroupOnly.test(value) ||
+    annotations.some((part) => kindGroupOnly.test(part))
+  )
+    return "组别或人群不是赛事种类";
+  if (!kindNoun.test(value)) return "无赛事种类依据";
+  return null;
+}
+export function competitionKind(paragraphs: string[]): {
+  value: string | null;
+  paragraph: number;
+  rejection: string | null;
+} {
+  for (let index = 0; index < paragraphs.length; index++) {
+    const match = eventKindLabel.exec(paragraphs[index] ?? "");
+    const value = match?.[1]?.trim().replace(/[，,、；;]$/, "");
+    if (!value) continue;
+    const rejection = eventKindRejection(value);
+    if (rejection) return { value: null, paragraph: index, rejection };
+    return { value, paragraph: index, rejection: null };
+  }
+  return { value: null, paragraph: -1, rejection: null };
+}
+
+/**
+ * 参赛形式判定。mode 始终是原文片段，不改写措辞；否定与肯定分别判断作用范围，
+ * 同一句里同时允许个人与团队才算 mixed，跨句互不覆盖或相互矛盾时保留冲突。
+ */
+const modeLabel =
+  /^(?:参赛形式|参赛方式|比赛形式|竞赛形式|组队形式)\s*[：:]\s*/;
+/** 可选其一的并列词；只有它们才把「个人 + 团队」解释为两者皆可。 */
+const alternativeMarker = /或|及|和|以及|均可|皆可|任一|任选/;
+/** 否定标记；用于判断与它相邻的形式是否被否定。 */
+const negationMarker =
+  /禁止|不得|不能|不可以|不可|不予|不允许|不接受|不准|非|不/;
+/** 赛段限定；同一形式出现在不同赛段时不能合并。 */
+const stageMarker = /初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛/g;
+
+interface ModeMention {
+  individual: boolean;
+  team: boolean;
+  negated: boolean;
+  alternative: boolean;
+  stages: string[];
+  /** 该子句里被显式否定的形式；只否定点名的形式，不牵连其他形式。 */
+  deniesIndividual: boolean;
+  deniesTeam: boolean;
+}
+
+const individualForm =
+  /个人赛|个人参赛|以个人|个人作品|个人形式|个人项目|个人身份|个人/;
+const teamForm =
+  /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|组队|团队形式|队伍|团队|一队|每队|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/;
+
+/**
+ * 只把直接禁止参赛形式的表达作为否定依据。人数、教师数量、跨学院等
+ * 限制不能因临近「团队」就变成禁止团队；「不限」表达放开而不是否定。
+ */
+function readModeMention(clause: string): ModeMention | null {
+  const individual = individualForm.test(clause);
+  const team = teamForm.test(clause);
+  if (!individual && !team) return null;
+  const interpretation = clause.replace(/不限(?:于)?|不限制/g, "允许");
+  const form = `(?:${individualForm.source}|${teamForm.source})`;
+  const joinedForms = `${form}(?:\\s*(?:或|及|和|以及)\\s*(?:以)?${form})*`;
+  const directNegation = new RegExp(
+    `(?:${negationMarker.source})(?:以|采用|进行)?${joinedForms}`,
+    "g",
+  );
+  const deniedAfterForm = new RegExp(
+    `${joinedForms}\\s*(?:均|都|皆)?(?:${negationMarker.source})(?:报名|参赛|参与|参加|提交|报送|申报)`,
+    "g",
+  );
+  let deniesIndividual = false;
+  let deniesTeam = false;
+  for (const match of [
+    ...interpretation.matchAll(directNegation),
+    ...interpretation.matchAll(deniedAfterForm),
+  ]) {
+    deniesIndividual ||= individualForm.test(match[0]);
+    deniesTeam ||= teamForm.test(match[0]);
+  }
+  const negated = deniesIndividual || deniesTeam;
+  return {
+    individual,
+    team,
+    negated,
+    alternative: alternativeMarker.test(clause),
+    stages: [...new Set(clause.match(stageMarker) ?? [])],
+    deniesIndividual,
+    deniesTeam,
+  };
+}
+export function competitionMode(text: string): {
+  mode: string | null;
+  modeKind: "individual" | "team" | "mixed" | null;
+  /** 无法可靠归一时的人工可读原因；mode 仍保留原文。 */
+  conflict: string | null;
+} {
+  const original = text.trim();
+  if (!original) return { mode: null, modeKind: null, conflict: null };
+  const body = original.replace(modeLabel, "").trim() || original;
+  // 逐子句判断：句号分号按句拆，逗号两侧各自都能独立判定形式时才拆开，
+  // 否则「独立参赛，不组队」会被切断成互不相关的两截。
+  const clauses = body
+    .split(/[。；;\n]/)
+    .flatMap((sentence) => {
+      const parts = sentence.split(/[，,]/).map((part) => part.trim());
+      if (parts.length < 2) return [sentence.trim()];
+      return parts.every((part) => readModeMention(part))
+        ? parts
+        : [sentence.trim()];
+    })
+    .filter(Boolean);
+  const mentions = clauses
+    .map((clause) => readModeMention(clause))
+    .filter((mention): mention is ModeMention => !!mention);
+  if (!mentions.length) return { mode: null, modeKind: null, conflict: null };
+
+  // 同一子句可同时保留个人并禁止组队，不能因此丢掉未被否定的形式。
+  const affirmed = mentions.filter(
+    (mention) =>
+      (mention.individual && !mention.deniesIndividual) ||
+      (mention.team && !mention.deniesTeam),
+  );
+  const denied = mentions.filter((mention) => mention.negated);
+  // 后置否定只抵消它点名的形式，不把已确认的形式一并推翻。
+  const deniesIndividual = denied.some((mention) => mention.deniesIndividual);
+  const deniesTeam = denied.some((mention) => mention.deniesTeam);
+  const individualAffirmed =
+    affirmed.some((mention) => mention.individual) && !deniesIndividual;
+  const teamAffirmed = affirmed.some((mention) => mention.team) && !deniesTeam;
+  // 同一子句里用并列词同时给出两种形式，才是可选其一。
+  const mixedInOneClause = affirmed.some(
+    (mention) =>
+      mention.individual &&
+      mention.team &&
+      mention.alternative &&
+      !deniesIndividual &&
+      !deniesTeam,
+  );
+  const stages = new Set(affirmed.flatMap((mention) => mention.stages));
+  const stageForms = new Set(
+    affirmed.map((mention) =>
+      JSON.stringify([
+        mention.individual && !mention.deniesIndividual,
+        mention.team && !mention.deniesTeam,
+      ]),
+    ),
+  );
+
+  if (stages.size > 1 && stageForms.size > 1)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式按赛段分别规定，不能合并为单一形式",
+    };
+  if (!individualAffirmed && !teamAffirmed)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式被否定，未形成可归一形式",
+    };
+  if (mixedInOneClause && individualAffirmed && teamAffirmed)
+    return { mode: original, modeKind: "mixed", conflict: null };
+  // 跨子句同时肯定两种互不覆盖的要求，属矛盾而非可选。
+  if (individualAffirmed && teamAffirmed)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式存在互不覆盖的要求，须人工核对",
+    };
+  return {
+    mode: original,
+    modeKind: individualAffirmed ? "individual" : "team",
+    conflict: null,
+  };
+}
+
 export function parseCandidate(
   article: Article,
   url: string,
   directory: Directory,
-  notificationKind?: CandidateFields["kind"],
+  /**
+   * 通知种类不再写入候选字段；参数保留以兼容既有调用点，
+   * 通知种类唯一来源是 classifyNotice 返回的 classification.notificationKind。
+   * 未传入时（直接调用 parseCandidate）只在内部按标题推断，用于「新闻／获奖
+   * 不证明报名开放」这一条守卫，不写入 fields。
+   */
+  notificationKind?: string,
   /** Paragraph gaps where consecutive text belongs to different sources; never joined. */
   sourceBarriers?: Set<number>,
 ): ParsedCandidate {
@@ -164,6 +410,8 @@ export function parseCandidate(
   const missing: string[] = [],
     conflicts: string[] = [],
     warnings: string[] = [];
+  /** 一旦参赛形式互不覆盖，就不再声称已可靠归一。 */
+  let modeConflict = false;
   const years = [
     ...new Set(
       (article.title + "\n" + article.text).match(
@@ -176,24 +424,16 @@ export function parseCandidate(
     conflicts.push(
       "年份冲突：" + years.join("、") + "；须区分届次、赛段和引用年份",
     );
-  const kind: CandidateFields["kind"] =
-    notificationKind ??
-    (/获奖|结果公示|名单公示|表彰/.test(article.title)
-      ? "award"
-      : /补充|延期|更正|调整/.test(article.title)
-        ? "supplement"
-        : /报名|参赛|竞赛.*通知|比赛.*通知/.test(article.title)
-          ? "registration"
-          : "news");
-  evidence.push({ field: "kind", excerpt: article.title, paragraph: -1, url });
+  const eventKind = competitionKind(article.paragraphs);
   const fields: CandidateFields = {
-    name: article.title,
+    name: competitionName(article.title),
     edition: years.length <= 1 ? titleYear : null,
-    kind,
+    eventKind: eventKind.value,
     organizer: null,
     hosts: [],
     scope: { kind: "unknown", colleges: [], note: "参赛范围待核对" },
     mode: null,
+    modeKind: null,
     tracks: [],
     members: null,
     rules: [],
@@ -203,6 +443,16 @@ export function parseCandidate(
     materialsAt: unknownTime(),
     eventAt: unknownTime(),
   };
+  if (eventKind.value)
+    evidence.push({
+      field: "eventKind",
+      excerpt: eventKind.value,
+      paragraph: eventKind.paragraph,
+      url,
+    });
+  else if (eventKind.rejection)
+    // 显式标注存在但取值不属赛事种类：保留原文与原因，不写入字段。
+    warnings.push("赛事种类标注被拒绝：" + eventKind.rejection);
   if (fields.edition)
     evidence.push({
       field: "edition",
@@ -225,6 +475,81 @@ export function parseCandidate(
   const hasUnknownCollege = (text: string) => {
     for (const college of directory) text = text.replaceAll(college.name, "");
     return /[\p{Script=Han}A-Za-z]+学院/u.test(text.replace(/各学院/g, ""));
+  };
+  /**
+   * 协议 3.3 的 scope：all / specified / other / unknown。
+   * 否定、排除、禁入与未知学院一律不写入 colleges——它们是限制，不是允许范围。
+   * 有明确限制但无法枚举成学院列表时用 other 并保留原文；有依据但无法判断范围
+   * 之外的空白情形由调用方给 unknown。
+   */
+  const readScope = (
+    text: string,
+    colleges: Directory,
+  ): {
+    kind: "all" | "specified" | "other" | "unknown";
+    colleges: string[];
+    note: string;
+    unresolvedCollege: boolean;
+  } => {
+    // 承办/主办是组织关系，不能拿同段的承办学院缩小或污染资格。
+    const qualification = text
+      .split(/[，,。；;\n]/)
+      .filter(
+        (clause) =>
+          !/^(?:主办|承办)(?:单位|学院)?\s*(?:[：:]|为|是)/.test(
+            clause.trim(),
+          ) &&
+          !/^[^：:]{0,40}学院(?:(?:负责)?(?:主办|承办)|(?:为|是)(?:主办|承办)单位)$/.test(
+            clause.trim(),
+          ),
+      )
+      .join("；");
+    const matched = colleges
+      .filter((c) => qualification.includes(c.name))
+      .map((c) => c.id);
+    const unresolvedCollege = hasUnknownCollege(qualification);
+    // 「不限」「不受…限制」是放开语义，不构成收窄。
+    const withoutUnlimited = qualification.replace(
+      /不限|不受[^。；，,]{0,20}限制/g,
+      "",
+    );
+    const excluded = exclusionMarker.test(withoutUnlimited);
+    const allPhrase =
+      /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
+        qualification,
+      );
+    const narrowed = /仅|限|除|不含|校区/.test(withoutUnlimited);
+    const other = (note: string) => ({
+      kind: "other" as const,
+      colleges: [],
+      note,
+      unresolvedCollege,
+    });
+    if (unresolvedCollege || excluded) return other(text);
+    // 年级／专业／班级属于人群口径，不因此把已命中的学院降级。
+    if (allPhrase && !narrowed && !matched.length)
+      return { kind: "all", colleges: [], note: text, unresolvedCollege };
+    if (matched.length && !allPhrase)
+      return {
+        kind: "specified",
+        colleges: matched,
+        note: text,
+        unresolvedCollege,
+      };
+    if (allPhrase) return other(text);
+    // 看不到任何范围表述：无从断言，保持未知而不是猜成全校。
+    if (
+      !/学院|全校|全校师生|师生|学生|本科生|研究生|年级|专业|班级|校区/.test(
+        qualification,
+      )
+    )
+      return {
+        kind: "unknown",
+        colleges: [],
+        note: "参赛范围待核对",
+        unresolvedCollege,
+      };
+    return other(text);
   };
   article.paragraphs.forEach((paragraph, index) => {
     for (const college of directory) {
@@ -305,64 +630,53 @@ export function parseCandidate(
             exclusionMarker.test(part.text),
         );
         const kept = eligibility.length ? eligibility : paragraphs;
-        const scopeText = kept.map((part) => part.text).join("\n");
-        const collegeIds = directory
-          .filter((c) => scopeText.includes(c.name))
-          .map((c) => c.id);
-        const unknownCollege = hasUnknownCollege(scopeText);
-        // Bare "不" is too broad; only explicit exclusion wording narrows eligibility.
-        const excludedEligibility = exclusionMarker.test(
-          scopeText.replace(/不限|不受[^。；，,]{0,20}限制/g, ""),
-        );
-        const scope =
-          unknownCollege || excludedEligibility
-            ? { kind: "complex" as const, colleges: [], note: scopeText }
-            : /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
-                  scopeText,
-                ) && !/仅|限|除|不含|校区/.test(scopeText.replace(/不限/g, ""))
-              ? { kind: "all" as const, colleges: [], note: scopeText }
-              : collegeIds.length
-                ? {
-                    kind: "colleges" as const,
-                    colleges: collegeIds,
-                    note: scopeText,
-                  }
-                : { kind: "complex" as const, colleges: [], note: scopeText };
+        const scopeText = kept
+          .map((part) => part.text)
+          .join("\n")
+          .trim();
+        // 没有任何资格依据（空文本）只能是未知；有依据但无法枚举才是 other。
+        const scope = scopeText
+          ? readScope(scopeText, directory)
+          : {
+              kind: "unknown" as const,
+              colleges: [] as string[],
+              note: "参赛范围待核对",
+              unresolvedCollege: false,
+            };
+        const { unresolvedCollege, ...scopeValue } = scope;
         if (
           fields.scope.kind !== "unknown" &&
-          JSON.stringify(fields.scope) !== JSON.stringify(scope)
+          JSON.stringify(fields.scope) !== JSON.stringify(scopeValue)
         ) {
+          // 同一条通知内多个条款不能合并：保留原文即可追溯，不猜成某一侧。
           conflicts.push("参赛资格有多个条款，须合并核对");
           fields.scope = {
-            kind: "complex",
+            kind: "other",
             colleges: [],
             note: fields.scope.note + "\n" + scopeText,
           };
-        } else fields.scope = scope;
-        if (
-          unknownCollege ||
-          (/学院/.test(scopeText) &&
-            !collegeIds.length &&
-            !/全校|各学院/.test(scopeText))
-        )
-          warnings.push("资格条款含未知学院名称");
+        } else fields.scope = scopeValue;
+        if (unresolvedCollege) warnings.push("资格条款含未知学院名称");
         // Each sentence keeps its own location and citation.
         for (const part of paragraphs) add("scope", part.text, part.index);
       }
     }
-    const modeText = paragraph.replace(
-      /(?:禁止|不得|不能|不可|不予|不允许|不接受|不准|不|非)(?:以)?(?:个人参赛|个人赛|个人|团队参赛|团队赛|团队|组队)/g,
-      "",
-    );
-    const individual = /个人赛|个人参赛|以个人/.test(modeText),
-      team =
-        /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|(?:须|需|可以|应)组队/.test(
-          modeText,
-        );
-    if (individual || team) {
-      const mode =
-        individual && team ? "mixed" : individual ? "individual" : "team";
-      fields.mode = fields.mode && fields.mode !== mode ? "mixed" : mode;
+    const mode = competitionMode(paragraph);
+    if (mode.mode) {
+      // 原文按段累积，绝不改写措辞；归一结果只在与已确认形式一致时保留。
+      fields.mode = fields.mode ? fields.mode + "\n" + mode.mode : mode.mode;
+      if (mode.conflict) {
+        if (!modeConflict) conflicts.push(mode.conflict);
+        modeConflict = true;
+        fields.modeKind = null;
+      } else if (modeConflict) {
+        // 已判定不可归一：保留原文，不再回填枚举。
+      } else if (fields.modeKind && fields.modeKind !== mode.modeKind) {
+        // 互不覆盖的多种形式不能合并成 mixed；保留原文并交由人工确认。
+        conflicts.push("参赛形式存在互不覆盖的要求，须人工核对");
+        modeConflict = true;
+        fields.modeKind = null;
+      } else fields.modeKind = mode.modeKind;
       add("mode", paragraph, index);
     }
     const members =
@@ -403,7 +717,12 @@ export function parseCandidate(
       for (const name of names) {
         if (fields.tracks.some((track) => track.name === name)) continue;
         const trackIndex = fields.tracks.length;
-        fields.tracks.push({ name, mode: null, members: null, rules: null });
+        fields.tracks.push({
+          name,
+          modeKind: null,
+          members: null,
+          rules: null,
+        });
         add(`tracks.${trackIndex}.name`, paragraph, index);
       }
     }
@@ -506,13 +825,24 @@ export function parseCandidate(
     fields.materialsAt = unknownTime();
     fields.eventAt = unknownTime();
   }
-  if (kind === "award" || kind === "news") {
+  // 通知种类只用来说明「新闻／获奖不能证明报名开放」；它不写入候选字段。
+  // 未由 classifyNotice 传入时按标题保守推断，仅用于这条守卫。
+  const guardKind =
+    notificationKind ??
+    (/获奖|结果公示|名单公示|表彰/.test(article.title)
+      ? "award"
+      : /新闻|回顾|圆满|荣获|喜报/.test(article.title)
+        ? "news"
+        : "registration");
+  if (guardKind === "award" || guardKind === "news") {
     fields.startsAt = unknownTime();
     fields.deadline = unknownTime();
     warnings.push("新闻或获奖信息不能证明报名开放");
   }
-  for (const key of ["edition", "organizer", "mode"] as const)
+  for (const key of ["edition", "organizer"] as const)
     if (!fields[key]) missing.push(key);
+  if (!fields.mode) missing.push("mode");
+  if (!fields.eventKind) missing.push("eventKind");
   if (!fields.stageNames.length) missing.push("stageNames");
   if (!fields.hosts.length) missing.push("hosts（不得按发布网站推断）");
   if (fields.scope.kind === "unknown") missing.push("scope");
@@ -526,6 +856,7 @@ export function parseCandidate(
   if (!fields.members) missing.push("members");
   if (!fields.rules.length) missing.push("rules");
   return {
+    fieldsContract: candidateFieldsContract,
     fields,
     evidence,
     missing: [...new Set(missing)],

@@ -8,7 +8,11 @@ import {
   type AcceptedRequest,
 } from "./console/ingestion-control";
 import type { ReviewService, ReviewInput } from "./console/review";
-import { classificationLabels, kindLabels } from "./console/review";
+import {
+  classificationLabels,
+  kindLabels,
+  type NoticeKind,
+} from "./console/review";
 import { ConsoleError, type PageQuery } from "./console/resource";
 type Transport = Pick<AdminHttp, "request">;
 const ingestion = "/ingestion";
@@ -307,7 +311,14 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          secondary: `${row.sourceId} · ${classificationLabels[row.classification]} · ${kindLabels[row.data.fields.kind]} · ${row.needsReview ? "需复核" : "已核对"}`,
+          // 通知种类读兼容投影（旧形状），回退到分类结果；赛事种类不参与显示。
+          secondary: `${row.sourceId} · ${classificationLabels[row.classification]} · ${
+            kindLabels[
+              (row.data.fields.kind ??
+                row.data.classification?.notificationKind ??
+                "") as NoticeKind
+            ] ?? "未知通知类型"
+          } · ${row.needsReview ? "需复核" : "已核对"}`,
         })),
       };
     },

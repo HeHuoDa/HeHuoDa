@@ -57,6 +57,11 @@ export interface ReviewMaterial {
   candidate: {
     classification?: Schema["AdminRuleClassificationDto"];
     fieldConflicts?: Schema["AdminFieldConflictDto"][];
+    fieldsContract?: "candidate-fields-v2";
+    /**
+     * 旧形状兼容投影：kind 是通知种类、scope 是正式四值、mode 是英文枚举。
+     * 现有视图读这里即可继续工作；新代码改读 fieldsV2。
+     */
     fields: {
       name: string;
       edition: string | null;
@@ -67,11 +72,11 @@ export interface ReviewMaterial {
       deadline: Time;
       materialsAt: Time;
       eventAt: Time;
-      kind: "registration" | "supplement" | "award" | "news";
-      mode: "individual" | "team" | "mixed" | null;
+      kind?: NoticeKind | null;
+      mode?: "individual" | "team" | "mixed" | null;
       tracks: {
         name: string;
-        mode: "individual" | "team" | "mixed" | null;
+        mode?: "individual" | "team" | "mixed" | null;
         members: string | null;
         rules: string | null;
       }[];
@@ -79,6 +84,8 @@ export interface ReviewMaterial {
       rules: string[];
       stageNames: string[];
     };
+    /** 协议契约 v2：事件种类与通知种类分离，mode 原文 + modeKind 归一。 */
+    fieldsV2?: Schema["AdminCandidateFieldsDto"];
     evidence: {
       field: string;
       excerpt: string;

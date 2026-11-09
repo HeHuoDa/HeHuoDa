@@ -3,6 +3,7 @@ import {
   initializeSources,
   persistArticle,
   transaction,
+  hash,
 } from "../src/ingestion/store.js";
 import { refreshExtraction } from "../src/ingestion/extraction-store.js";
 import {
@@ -28,6 +29,82 @@ describe("分类提取修订使用已有快照", () => {
   });
   afterAll(async () => {
     await db?.close();
+  });
+  it("v6 已批准候选使用当前规则重提取，保留旧结果并撤销批准", async () => {
+    const url = `https://${sources[0].host}/info/1043/203.htm`;
+    const text = "个人或团队均可，不得跨学院组队。";
+    const article: Article = {
+      title: "2026年数学竞赛报名通知",
+      publishedAt: null,
+      text,
+      paragraphs: [text, "报名截止：2026年11月1日。"],
+      attachments: [],
+    };
+    const saved = await persistArticle(
+      db.pool,
+      sources[0],
+      url,
+      { url, html: "", body: new Uint8Array(), status: 200, headers: {} },
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    const stored = (
+      await db.pool.query(
+        `SELECT c.data,n.latest_version,n.evidence_revision
+       FROM ingestion_candidates c JOIN ingestion_notices n ON n.id=c.notice_id WHERE c.id=$1`,
+        [saved.candidateId],
+      )
+    ).rows[0];
+    // 固定历史 v6 的错误输出，不调用新解析器冒充旧实现。
+    stored.data.fields.modeKind = "individual";
+    stored.data.classification.ruleVersion = "competition-rules-6";
+    const oldKey = hash({
+      sourceVersion: stored.latest_version,
+      evidenceRevision: stored.evidence_revision,
+      ruleVersion: "competition-rules-6",
+    });
+    await db.pool.query(
+      "UPDATE ingestion_candidates SET data=$2,rule_version=$3,extraction_key=$4 WHERE id=$1",
+      [saved.candidateId, stored.data, "competition-rules-6", oldKey],
+    );
+    await db.pool.query(
+      "UPDATE ingestion_extraction_revisions SET data=$2,rule_version=$3,extraction_key=$4 WHERE candidate_id=$1",
+      [saved.candidateId, stored.data, "competition-rules-6", oldKey],
+    );
+    const review = correctedReview(
+      await exportReview(db.pool, saved.candidateId!),
+    );
+    await approveReview(db.pool, review, "maintainer");
+    await transaction(db.pool, (client) =>
+      refreshExtraction(client, saved.noticeId),
+    );
+    const current = (
+      await db.pool.query(
+        "SELECT data,status,approved_file,rule_version FROM ingestion_candidates WHERE id=$1",
+        [saved.candidateId],
+      )
+    ).rows[0];
+    expect(current.data.fields.modeKind).toBe("mixed");
+    expect(current).toMatchObject({
+      status: "pending",
+      approved_file: null,
+      rule_version: noticeRuleVersion,
+    });
+    const history = (
+      await db.pool.query(
+        "SELECT data FROM ingestion_extraction_revisions WHERE candidate_id=$1 AND rule_version='competition-rules-6'",
+        [saved.candidateId],
+      )
+    ).rows;
+    expect(history).toHaveLength(1);
+    expect(history[0].data.fields.modeKind).toBe("individual");
+    const approval = (
+      await db.pool.query(
+        "SELECT result->'review' AS review FROM ingestion_operations WHERE candidate_id=$1 AND kind='approve'",
+        [saved.candidateId],
+      )
+    ).rows[0].review;
+    expect(approval).toEqual(review);
   });
   it("附件是唯一赛事线索时仍登记附件并沿同一候选链提取", async () => {
     const previous = process.env.INGESTION_ATTACHMENTS_ENABLED;
@@ -83,10 +160,20 @@ describe("分类提取修订使用已有快照", () => {
         body: Buffer.from("rules178"),
       });
       const review = await exportReview(db.pool, saved.candidateId!);
-      expect(review.candidate.fields).toMatchObject({
-        kind: "supplement",
-        deadline: { precision: "date", value: "2026-11-08" },
+      // 通知种类唯一来源是 classification；旧形状投影的 kind 也从这里取。
+      expect(review.candidate.classification?.notificationKind).toBe(
+        "supplement",
+      );
+      expect(review.candidate.fieldsV2).not.toHaveProperty("kind");
+      // 旧形状投影的 kind 取通知种类。
+      expect(
+        (review.candidate.fields as unknown as { kind: string }).kind,
+      ).toBe("supplement");
+      expect(review.candidate.fieldsV2.deadline).toEqual({
+        precision: "date",
+        value: "2026-11-08",
       });
+      expect(review.candidate.fieldsV2.modeKind).toBeNull();
       expect(review.evidenceReferences).toContainEqual(
         expect.objectContaining({ format: "pdf", page: 1, field: "deadline" }),
       );
@@ -244,5 +331,12 @@ describe("分类提取修订使用已有快照", () => {
       )
     ).rows;
     expect(JSON.stringify(operations)).not.toContain("隐私待擦除测试文本");
+    // 候选当前数据与提取历史都不能留下原文（擦除后再提取会写回新的 v2 数据）。
+    const redacted = (
+      await db.pool.query("SELECT data FROM ingestion_candidates WHERE id=$1", [
+        saved.candidateId,
+      ])
+    ).rows[0].data;
+    expect(JSON.stringify(redacted)).not.toContain("隐私待擦除测试文本");
   });
 });

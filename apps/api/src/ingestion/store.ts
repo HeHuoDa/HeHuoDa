@@ -167,7 +167,12 @@ export async function persistArticle(
   if (classification.classification === "non_competition") {
     article = { ...article, text: "", paragraphs: [], attachments: [] };
     response = { ...response, body: new Uint8Array(), html: "", headers: {} };
-    parsed = parseCandidate(article, url, []);
+    // 分类结果必须随候选一起持久化：通知种类唯一来源是 classification，
+    // 这里重新解析正文被裁剪后的文章，但分类仍取自裁剪前的原文。
+    parsed = {
+      ...parseCandidate(article, url, []),
+      classification,
+    };
   }
   return transaction(pool, async (client) => {
     const bodyHash = hash(article);

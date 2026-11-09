@@ -76,7 +76,11 @@ test("构建入口独立完成已注册来源的公开正文抓取与候选解�
     const response = await fetcher.get(source.listUrl);
     const article = extractArticle(response.html, response.url, source);
     const candidate = parseCandidate(article, response.url, []);
-    assert.equal(candidate.fields.kind, "registration");
+    // 通知种类不再写入候选字段；本用例断言契约标记与赛事名剥离结果。
+    // 年份属于赛事区分信息，必须保留；只剥离「关于/举办/的通知」这类套语。
+    assert.equal(candidate.fieldsContract, "candidate-fields-v2");
+    assert.equal(candidate.fields.kind, undefined);
+    assert.equal(candidate.fields.name, "2026年测试竞赛");
     assert.deepEqual(candidate.fields.deadline, {
       precision: "date",
       value: "2026-10-20",

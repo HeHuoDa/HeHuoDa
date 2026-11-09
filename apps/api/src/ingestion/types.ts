@@ -18,6 +18,9 @@ export type ParsedCandidate = Omit<NoticeCandidate, "fields"> & {
   fields: CandidateFields;
 };
 
+/** 历史候选（v1）在读取时显式归一，不猜测缺失字段。 */
+export type CandidateContract = "candidate-fields-v2";
+
 export function digestInput(value: unknown): string {
   return JSON.stringify(canonical(value));
 }

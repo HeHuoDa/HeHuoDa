@@ -1056,4 +1056,149 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(detail.json()).not.toHaveProperty("rawResponse");
     expect(detail.json()).not.toHaveProperty("html");
   });
+
+  it("候选返回 v2 契约与兼容投影，旧 v1 候选显式归一且不串义", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const detail = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+
+    // 旧客户端读的 fields 必须保持旧形状；协议契约在 fieldsV2。
+    expect(detail.candidate.fieldsContract).toBe("candidate-fields-v2");
+    expect(detail.candidate.fields.kind).toBe(
+      detail.candidate.classification.notificationKind,
+    );
+    expect(["all", "colleges", "complex", "unknown"]).toContain(
+      detail.candidate.fields.scope.kind,
+    );
+    expect(detail.candidate.fields).not.toHaveProperty("eventKind");
+    // fieldsV2 是协议契约：赛事种类与原文参赛形式。
+    expect(detail.candidate.fieldsV2).toHaveProperty("eventKind");
+    expect(detail.candidate.fieldsV2).toHaveProperty("modeKind");
+    expect(detail.candidate.fieldsV2).not.toHaveProperty("kind");
+    expect(detail.candidate.fieldsV2.scope.kind).toBe("all");
+    expect(detail.extractionRevisions.length).toBeGreaterThan(0);
+    for (const revision of detail.extractionRevisions) {
+      expect(revision.data.fieldsV2).toHaveProperty("eventKind");
+      expect(revision.data.fieldsV2).toHaveProperty("modeKind");
+      expect(revision.data.fields).not.toHaveProperty("eventKind");
+      expect(revision.data.fields.kind).toBe(
+        revision.data.classification.notificationKind,
+      );
+    }
+
+    // 把同一候选改写成 v1 形状：没有 fieldsContract，fields 是旧枚举。
+    const v1Fields = structuredClone(detail.candidate.fieldsV2);
+    v1Fields.mode = "team";
+    v1Fields.kind = "supplement";
+    v1Fields.scope = { kind: "complex", colleges: [], note: "须通过资格审核" };
+    delete v1Fields.eventKind;
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [
+        id,
+        {
+          fields: v1Fields,
+          classification: detail.candidate.classification,
+          evidence: detail.candidate.evidence,
+          missing: detail.candidate.missing,
+          conflicts: detail.candidate.conflicts,
+          warnings: detail.candidate.warnings,
+        },
+      ],
+    );
+
+    const legacy = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+    // v1 归一：complex→other、英文 mode→modeKind、通知种类不进入赛事种类。
+    expect(legacy.candidate.fieldsContract).toBe("candidate-fields-v2");
+    expect(legacy.candidate.fieldsV2.scope.kind).toBe("other");
+    expect(legacy.candidate.fieldsV2.modeKind).toBe("team");
+    expect(legacy.candidate.fieldsV2.eventKind).toBeNull();
+    expect(legacy.candidate.fieldsV2).not.toHaveProperty("kind");
+    // 旧形状投影把 other 折回 complex，旧读者按正式枚举处理。
+    expect(legacy.candidate.fields.scope.kind).toBe("complex");
+    expect(legacy.candidate.fields.mode).toBe("team");
+    expect(legacy.candidate.fields.kind).toBe(
+      detail.candidate.classification.notificationKind,
+    );
+    // 历史 v1 非赛事候选可能没有 classification，仍须保留旧通知种类。
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [
+        id,
+        {
+          fields: v1Fields,
+          evidence: detail.candidate.evidence,
+          missing: detail.candidate.missing,
+          conflicts: detail.candidate.conflicts,
+          warnings: detail.candidate.warnings,
+        },
+      ],
+    );
+    const withoutClassification = await test.request("GET", path, undefined, {
+      cookie: auth.cookie,
+    });
+    expect(withoutClassification.statusCode).toBe(200);
+    expect(withoutClassification.json().candidate.fields.kind).toBe(
+      "supplement",
+    );
+    expect(
+      withoutClassification.json().candidate.fieldsV2.eventKind,
+    ).toBeNull();
+    const historicalReview = await test.request(
+      "GET",
+      path + "/review",
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(historicalReview.statusCode).toBe(200);
+    expect(historicalReview.json().batch.competitions[0].notices[0].kind).toBe(
+      "supplement",
+    );
+  });
+
+  it("正式通知种类取分类结果，不用候选赛事种类", async () => {
+    const id = await candidateId();
+    const auth = await session();
+    const path = `admin/ingestion/candidates/${id}`;
+    const detail = (
+      await test.request("GET", path, undefined, { cookie: auth.cookie })
+    ).json();
+    const notificationKind = detail.candidate.classification
+      .notificationKind as string;
+    // 把候选的赛事种类改成一个绝不可能是通知种类的值，再看导出材料。
+    const data = structuredClone(detail.candidate.fieldsV2);
+    data.eventKind = "学科竞赛";
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [
+        id,
+        {
+          fields: data,
+          fieldsContract: "candidate-fields-v2",
+          classification: detail.candidate.classification,
+          evidence: detail.candidate.evidence,
+          missing: detail.candidate.missing,
+          conflicts: detail.candidate.conflicts,
+          warnings: detail.candidate.warnings,
+        },
+      ],
+    );
+    const review = (
+      await test.request("GET", path + "/review", undefined, {
+        cookie: auth.cookie,
+      })
+    ).json();
+    // 正式 Notice.kind 是通知种类，与候选赛事种类无关。
+    expect(review.batch.competitions[0].notices[0].kind).toBe(notificationKind);
+    expect(review.batch.competitions[0].notices[0].kind).not.toBe("学科竞赛");
+    // 审核材料同样带兼容投影：旧形状在 fields，协议契约在 fieldsV2。
+    expect(review.candidate.fieldsV2.eventKind).toBe("学科竞赛");
+    expect(review.candidate.fields).not.toHaveProperty("eventKind");
+    expect(review.candidate.fields.kind).toBe(notificationKind);
+  });
 });
