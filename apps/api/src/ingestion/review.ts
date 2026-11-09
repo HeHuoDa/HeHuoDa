@@ -11,6 +11,7 @@ import { publishedDate, type Article } from "@hehuoda/sicau-connectors/notices";
 import { commandHash, hash, transaction, type CandidateRow } from "./store.js";
 import {
   presentCandidate,
+  readCandidate,
   type PresentedCandidate,
 } from "./candidate-contract.js";
 import {
@@ -157,7 +158,7 @@ export async function exportReview(
         : "source-" + candidateId + "-" + hash(id).slice(0, 12);
     const fields = candidate.data.fields;
     // 正式 Notice.kind 是通知种类，唯一来源是分类结果；不是候选赛事种类。
-    const notificationKind = candidate.data.classification?.notificationKind;
+    const { notificationKind } = readCandidate(candidate.data);
     if (!notificationKind)
       throw new Error(
         "候选缺少通知分类，不能生成正式通知种类；请重新提取或先核对分类",

@@ -24,7 +24,10 @@ import {
   type ReviewFile,
 } from "../ingestion/review.js";
 import { commandHash, hash, transaction } from "../ingestion/store.js";
-import { presentCandidate } from "../ingestion/candidate-contract.js";
+import {
+  presentCandidate,
+  readCandidate,
+} from "../ingestion/candidate-contract.js";
 import { AdminIngestionOperation } from "../ingestion/admin-ingestion-operation.js";
 import { DatabaseService } from "../database/database.service.js";
 import type { AdminContext } from "./admin.service.js";
@@ -295,8 +298,7 @@ export class AdminReviewService {
             // 优先级只读通知种类；人工改分类不改变通知种类。
             classificationPriority(
               command.classification,
-              (row.data.classification?.notificationKind ?? "news") as
-                "registration" | "supplement" | "award" | "news",
+              readCandidate(row.data).notificationKind ?? "news",
             ),
             command.reason,
           ],

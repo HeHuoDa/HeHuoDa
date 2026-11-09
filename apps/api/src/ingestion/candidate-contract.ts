@@ -74,6 +74,15 @@ const v1ScopeKinds: Record<string, ScopeKind> = {
 };
 
 const modeKinds: readonly ModeKind[] = ["individual", "team", "mixed"];
+type NotificationKind = NonNullable<
+  ParsedCandidate["classification"]
+>["notificationKind"];
+const notificationKinds: readonly NotificationKind[] = [
+  "registration",
+  "supplement",
+  "award",
+  "news",
+];
 const v1ModeKinds: Record<string, ModeKind> = {
   individual: "individual",
   team: "team",
@@ -159,6 +168,7 @@ export function normalizeCandidateFields(raw: unknown): CandidateFields {
  */
 export function readCandidate(raw: unknown): {
   candidate: ParsedCandidate;
+  notificationKind: NotificationKind | null;
   legacy: { kind: string | null; scope: ScopeRecord; mode: ModeKind | null };
 } {
   const value = (raw ?? {}) as Record<string, unknown>;
@@ -178,11 +188,18 @@ export function readCandidate(raw: unknown): {
     fields,
   };
   const rawScope = (stored.scope ?? {}) as Record<string, unknown>;
+  const legacyKind =
+    !isV2 &&
+    typeof stored.kind === "string" &&
+    notificationKinds.includes(stored.kind as NotificationKind)
+      ? (stored.kind as NotificationKind)
+      : null;
   return {
     candidate,
+    notificationKind: candidate.classification?.notificationKind ?? legacyKind,
     legacy: {
       // v1 的 fields.kind 是通知种类；v2 的通知种类一律由 classification 提供。
-      kind: isV2 ? null : typeof stored.kind === "string" ? stored.kind : null,
+      kind: legacyKind,
       scope: isV2
         ? formalScope(fields.scope)
         : {
@@ -269,11 +286,16 @@ export interface PresentedCandidate extends ParsedCandidate {
  * 投影只存在于响应里，不回写候选、不参与审核基线哈希。
  */
 export function presentCandidate(raw: unknown): PresentedCandidate {
-  const { candidate } = readCandidate(raw);
+  const { candidate, notificationKind } = readCandidate(raw);
+  const fields = legacyCandidateFields(candidate);
   return {
     ...candidate,
     // fields 覆写为兼容投影，保留 v1 的 kind/scope/mode 形状。
-    fields: legacyCandidateFields(candidate) as unknown as CandidateFields,
+    // 只有 v1 的旧字段可回退为通知种类；v2 缺分类时 legacy.kind 为 null。
+    fields: {
+      ...fields,
+      kind: notificationKind,
+    } as unknown as CandidateFields,
     fieldsContract: candidateFieldsContract,
     fieldsV2: candidate.fields,
   };

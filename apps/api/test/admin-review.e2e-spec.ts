@@ -1116,6 +1116,40 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(legacy.candidate.fields.kind).toBe(
       detail.candidate.classification.notificationKind,
     );
+    // 历史 v1 非赛事候选可能没有 classification，仍须保留旧通知种类。
+    await test.pool.query(
+      "UPDATE ingestion_candidates SET data=$2 WHERE id=$1",
+      [
+        id,
+        {
+          fields: v1Fields,
+          evidence: detail.candidate.evidence,
+          missing: detail.candidate.missing,
+          conflicts: detail.candidate.conflicts,
+          warnings: detail.candidate.warnings,
+        },
+      ],
+    );
+    const withoutClassification = await test.request("GET", path, undefined, {
+      cookie: auth.cookie,
+    });
+    expect(withoutClassification.statusCode).toBe(200);
+    expect(withoutClassification.json().candidate.fields.kind).toBe(
+      "supplement",
+    );
+    expect(
+      withoutClassification.json().candidate.fieldsV2.eventKind,
+    ).toBeNull();
+    const historicalReview = await test.request(
+      "GET",
+      path + "/review",
+      undefined,
+      { cookie: auth.cookie },
+    );
+    expect(historicalReview.statusCode).toBe(200);
+    expect(historicalReview.json().batch.competitions[0].notices[0].kind).toBe(
+      "supplement",
+    );
   });
 
   it("正式通知种类取分类结果，不用候选赛事种类", async () => {

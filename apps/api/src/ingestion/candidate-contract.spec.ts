@@ -240,6 +240,7 @@ describe("候选字段契约 v2 的兼容与映射", () => {
         warnings: [],
       });
       const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.kind).toBe("registration");
       expect(legacy.scope.kind).toBe("colleges");
       expect(legacy.mode).toBe("mixed");
       expect(projected.fieldsV2.scope.kind).toBe("specified");
