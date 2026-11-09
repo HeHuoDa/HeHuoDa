@@ -1,0 +1,201 @@
+# ADR 0010：采集候选字段契约 v2（name / eventKind / scope / mode）
+
+## 状态
+
+采用
+
+- 日期：2026-11-09
+- 关联：Issue #203（本 ADR 即其第一阶段交付）、Issue #198（缺陷 1/2/3/5）、Issue #202 / PR #207、ADR 0004（候选与正式比赛分离）、ADR 0009（赛事性质与验收口径分离）、[quality-eval-protocol.md](../quality-eval-protocol.md) 3.3／3.4
+- 基线：`main` `7b7973c34b777d5fcad05891969dcc20845f0818`，规则版本 `competition-rules-5`
+
+## 背景
+
+#198 在独立验证集上确认四处「实现不符合协议」，不是可接受的口径差：
+
+| #   | 缺陷          | 现状                                                  | 协议要求                                  |
+| --- | ------------- | ----------------------------------------------------- | ----------------------------------------- |
+| 1   | `scope.kind`  | `all` / `colleges` / `complex` / `unknown`            | `all` / `specified` / `other` / `unknown` |
+| 2   | `fields.kind` | 写入 `registration/supplement/award/news`（通知种类） | 赛事种类／项目类型                        |
+| 3   | `fields.name` | `name = article.title`（含「关于举办…的通知」套语）   | 比赛名称                                  |
+| 5   | `fields.mode` | 英文枚举 `individual/team/mixed`                      | 字符串：参赛形式（个人／团队等）          |
+
+同时 `fields.kind` 被三处当作通知种类消费：审核队列优先级、管理端标签、正式 `Notice.kind` 的来源。协议侧 `notificationKind` 只出现在 `classification`，而 `store.ts` 的非赛事分支重新调用 `parseCandidate` 时不带分类结果，导致候选缺少 `classification`——通知种类出现第二个隐含来源。
+
+七项决策已确认（2026-11-09，用户在本票会话内逐项确认）：
+
+1. scope 采用协议四值，正式比赛模型不变；
+2. 新契约用 `eventKind` 承载赛事种类，通知种类唯一来源为 `classification.notificationKind`；
+3. eventKind 先定语义，禁止混用学科大类、组别、赛段与选拔层级；不按 gold 命中率选规则；
+4. name 只剥离可确认的通知套语；
+5. mode 保留原文，另存可靠归一的 `modeKind`；
+6. 用 `fieldsContract` 标记契约，规则版本按当时最新 main 递增，HTTP 兼容投影覆盖 kind／scope／mode，兼容层保留至 #204 验证通过。
+
+## 决策
+
+### 1. 候选字段结构（v2）
+
+`ParsedCandidate` 增加 `fieldsContract: "candidate-fields-v2"`；`CandidateFields` 调整为：
+
+```ts
+interface CandidateFields {
+  name: string;                  // 赛事名，已剥离可确认的通知套语
+  edition: string | null;
+  eventKind: string | null;      // 赛事种类／项目类型，原文短语
+  organizer: string | null;
+  hosts: string[];               // 承办学院，仍不得由发布网站推断
+  scope: {
+    kind: "all" | "specified" | "other" | "unknown";
+    colleges: string[];          // 只放允许参赛学院
+    note: string;                // 原文或核对说明
+  };
+  mode: string | null;           // 参赛形式原文短语
+  modeKind: "individual" | "team" | "mixed" | null;  // 可靠归一结果
+  tracks: { name; modeKind; members; rules }[];
+  members: string | null;
+  rules: string[];
+  stageNames: string[];
+  startsAt / deadline / materialsAt / eventAt: TimeValue;
+}
+```
+
+`CandidateFields` 不再有 `kind`。通知种类只从 `ParsedCandidate.classification.notificationKind` 读取。
+
+### 2. scope：四值边界
+
+| 情形                                                                                                                   | kind        | colleges                    | note               |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------- | --------------------------- | ------------------ |
+| 明示全校，且无「仅／限／除／不含／校区」等收窄                                                                         | `all`       | `[]`                        | 原文               |
+| 命中学院目录，且无否定／排除语义                                                                                       | `specified` | 命中的学院 ID（去重、排序） | 原文               |
+| 有明确限制但无法枚举为学院列表（否定／排除、禁入学院、未知学院名、年级／专业／校区／班级等非学院限定、多条款不可合并） | `other`     | **恒为 `[]`**               | 原文，保留全部限制 |
+| 缺乏资格依据：无资格条款、只有小节标题、跨来源不可关联、证据冲突且不可合并                                             | `unknown`   | `[]`                        | 核对说明           |
+
+- 否定／排除、禁入学院、未知学院名**一律不写入 `colleges`**。
+- 年级／专业属于人群口径（ADR 0009 的 `audience` 维度），不因出现年级限定就把已命中的学院降级为 `other`；只有否定／排除和无法枚举的学院表述才降级。
+- `specified` 的 `colleges` 必须非空；空则退回 `other`。
+- 不从发布学院、来源站点或 URL 反推参赛范围（沿用 `GLOSSARY.md`）。
+
+### 3. eventKind：语义先定、只用可解释来源
+
+`eventKind` 表达**赛事种类／项目类型**（学科竞赛、创新创业、职业规划技能、艺术文化、体育等大类，或原文明确的项目类型），**不表达**：
+
+- 阶段与赛段（初赛／复赛／决赛／院赛／校赛）；
+- 选拔层级（院级／校级／省级／国家级选拔赛）；
+- 组别与人群（新生组、研究生组、专业组）；
+- 届次与年份；
+- 通知种类（报名／补充／获奖／新闻）。
+
+提取只允许两类**可核对**来源：
+
+1. 正文显式标注：`赛事种类|竞赛类型|比赛类型|项目类型|赛事类别` 后接冒号的取值；
+2. 无 (1) 时返回 `null`。
+
+暂不启用「从标题派生赛事种类」的宽泛模式：标题里可解释的赛事种类短语与阶段、层级、组别的切分尚无确认规则，派生会把「院级研究生选拔赛」这类选拔层级当成种类。宁可 `null`，也不猜。`null` 表示「未提取」，不等于「非赛事」。
+
+### 4. name：只剥离可确认的通知套语
+
+剥离规则（可重复应用，结果不得为空，空则回退标题原文）：
+
+- 前缀：`关于举办`、`关于开展`、`关于组织参加`、`关于举行`、`关于举办…的`（仅当紧跟引号或赛事词时）
+- 后缀：`的通知`、`的预通知`、`的补充通知`、`的变更通知`、`通知`
+
+保留：
+
+- 发文单位（`食品学院关于举办…` 中的「食品学院」）；
+- 年份与届次（`2026年`、`第十五届`）；
+- 「校内选拔赛」「院级选拔赛」等选拔层级与子赛道（`（创新创业类）`）；
+- 引号内的赛事全名。
+
+理由：删掉「校内选拔赛」会把「X 校内选拔赛」与「X」合并为同一比赛；发文单位是否为赛事名组成部分无法可靠区分时保留。
+
+### 5. mode：原文 + modeKind
+
+- `mode` 保存原文短语（如「团队」「团队形式」「每个小班组成一支队伍」「个人作品或集体作品」「个人或自行组队」），协议 `fields.mode` 比较这一层。
+- `modeKind` 保存可靠归一结果：`individual` / `team` / `mixed` / `null`。
+- 明确否定（「不组队」「不得以个人参赛」）先按否定处理再归一。
+- 同一通知内出现互不覆盖、无法合并的多种形式时，`mode` 保留原文并记冲突，`modeKind = null`；只有同一句同时允许个人与团队（「个人赛及团队赛」）才归 `mixed`。
+- `modeKind = null` 时，正式赛道不得自动生成，导入必须由人工填写 `individual/team/mixed`。
+
+### 6. 版本、兼容与失效
+
+| 项           | 决定                                                                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 契约标记     | 新候选写 `fieldsContract: "candidate-fields-v2"`；缺该键即为 v1                                                                         |
+| 规则版本     | `competition-rules-5` → `competition-rules-6`（按开工时最新 main 递增）；沿现有提取键使旧快照重算                                       |
+| 旧批准       | 规则版本变化使 `approved_file` 失效，候选回 `pending`；历史审核修订与正式数据保留                                                       |
+| 旧候选读取   | 显式 v1 归一：`colleges→specified`、`complex→other`、`all→all`、`unknown→unknown`；v1 `kind` 只进 legacy 视图，**不得**当作 `eventKind` |
+| 旧审核材料   | 继续按现有基线校验；契约或归一结果不一致时返回可行动错误（「审核文件过期…请重新导出」／「只读证据…被改动」），不静默接受                |
+| 正式比赛模型 | 不变。`ScopeRecord` 仍为 `all/colleges/complex/unknown`                                                                                 |
+
+**导入映射（候选 → 正式）**，只允许以下四条：
+
+| 候选 scope  | 正式 scope | 条件                                             |
+| ----------- | ---------- | ------------------------------------------------ |
+| `all`       | `all`      | `colleges` 必须为空                              |
+| `specified` | `colleges` | `colleges` 必须非空                              |
+| `other`     | `complex`  | 必须保留 `note` 原文；信息有损，仅保留原文可追溯 |
+| `unknown`   | `unknown`  | —                                                |
+
+禁止的有损映射：`other → colleges`、`unknown → all`、空 `specified → all`、把否定／排除学院写入 `colleges`。
+
+### 7. HTTP 过渡契约（保留至 #204 验证通过）
+
+`AdminParsedCandidateDto` 同时返回三块，旧管理端不改代码仍可运行：
+
+| 字段             | 内容                                    | 说明                                                                                                 |
+| ---------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `fieldsContract` | `"candidate-fields-v2"`                 | 显式版本；v1 归一后同样标注                                                                          |
+| `fields`         | v2 契约                                 | `name`/`eventKind`/`scope`(四值)/`mode`(原文)/`modeKind`                                             |
+| `fields.kind`    | 通知种类                                | **已弃用别名**，仅供 #204 之前的旧读者；新代码一律读 `classification.notificationKind`，不得读该别名 |
+| `legacyFields`   | `{ kind, scope(正式四值), mode(枚举) }` | 派生只读视图；`other→complex`、`modeKind→mode`，供旧读者按正式枚举处理                               |
+
+`legacyFields` 是投影，不回写候选、不进入正式数据、不参与审核基线哈希以外的字段语义。审核基线仍以归一后的候选数据为准，保证新契约候选可原样往返。
+
+## 后果
+
+**代价**：候选 `fields` 结构变化使 `ingestion_extraction_revisions`、`approved_file` 与历史审核材料的旧字段不可直接复用；规则版本升级会一次性重算全部有快照的候选，旧批准全部失效；`eventKind` 因禁用宽泛派生而大多数为 `null`，该字段短期覆盖率低。
+
+**收益**：通知种类只有一个来源，优先级、筛选、正式 `Notice.kind` 不会再被赛事种类串义；scope 与协议一致，否定与排除不再需要靠读 `note` 猜；`mode` 原文与归一分层，评估按原文比较、导入按枚举约束，两种用途不再争一个字段。
+
+**不做**：不改冻结 gold、不改协议、不重开 #198；不重做正式比赛／赛段模型；不新增来源、OCR 或自动发布。
+
+## 无法自动映射项（须人工或按未知处理）
+
+| 项                                        | 现象                                                                | 处理                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| gold `fields.kind` 混用学科大类与选拔层级 | gold 同时出现「大学生学科竞赛」与「院级研究生选拔赛」「院内选拔赛」 | `eventKind` 只按第 3 节两类来源提取；评估层把「选拔层级类」单列为不可比较项，不计入一致率，也不改 gold |
+| gold `fields.name` 口径不一               | 部分样本剥离套语，部分保留标题原文                                  | 评估层区分「套语差」与「真实抽取差」，套语差不计为值错误，但不据此放宽协议                             |
+| gold `fields.mode` 为任意中文短语         | 「团队形式」「每个小班组成一支队伍」「个人作品或集体作品」          | 候选 `mode` 按原文比较；`modeKind` 不参与 gold 比较，只约束导入                                        |
+| scope 含非学院维度限制                    | 年级、专业、校区、班级                                              | `other` + 原文，不写入 `colleges`                                                                      |
+| scope 只有小节标题                        | 「参赛对象与要求」                                                  | `unknown`，并保留小节标题证据                                                                          |
+| 跨来源资格小节                            | 资格标题与正文分属通知与附件                                        | `unknown`，两侧证据分别保留                                                                            |
+
+## 正反例表
+
+| 输入                                                       | 字段            | 正确输出                                                   | 错误输出（禁止）                       |
+| ---------------------------------------------------------- | --------------- | ---------------------------------------------------------- | -------------------------------------- |
+| 参赛对象：全校本科生。                                     | scope           | `all`，`colleges: []`                                      | `colleges: ["..."]`                    |
+| 参赛对象：理学院本科生。                                   | scope           | `specified`，`colleges: ["science"]`                       | `other`（可枚举却降级）                |
+| 面向全校，但不含毕业年级学生。                             | scope           | `other`，`colleges: []`，note 留原文                       | `all`；`colleges: ["毕业年级"]`        |
+| 除食品学院外均可参加。                                     | scope           | `other`，`colleges: []`                                    | `all`；`specified: ["food-science"]`   |
+| 参赛对象：未知学院学生。                                   | scope           | `other`，`colleges: []`                                    | 猜一个学院 ID                          |
+| 面向全院学生开展作品征集。                                 | scope           | `other`，`colleges: []`                                    | `all`；从来源反推学院                  |
+| 参赛对象与要求（下一段为空）                               | scope           | `unknown`                                                  | `all`                                  |
+| 项目类型：创业计划类                                       | eventKind       | `创业计划类`                                               | —                                      |
+| 关于举办第五届农业机器人大赛决赛的通知                     | eventKind       | `null`（标题不派生）                                       | `大学生学科竞赛`（按 gold 反推）       |
+| 关于举办第四届全国大学生职业规划大赛院级研究生选拔赛的通知 | eventKind       | `null`                                                     | `院级研究生选拔赛`（选拔层级不是种类） |
+| 关于举办“林培新秀，食展风华”…联合运动会的通知              | name            | `“林培新秀，食展风华”食品学院与林学院2026级新生联合运动会` | 原标题全串                             |
+| 食品学院关于举办“…”知识竞赛的通知                          | name            | `食品学院“…”知识竞赛`（保留发文单位）                      | 删掉「食品学院」                       |
+| 关于举办…校内选拔赛的通知                                  | name            | 保留「校内选拔赛」                                         | 删掉「校内选拔赛」后与省级赛事同名     |
+| 竞赛为个人赛，独立参赛，不组队。                           | mode / modeKind | `个人赛`／`individual`                                     | `team`                                 |
+| 个人赛及团队赛均可。                                       | modeKind        | `mixed`                                                    | `individual`                           |
+| 每班组成一支队伍。                                         | mode / modeKind | `每班组成一支队伍`／`team`                                 | `null`（明确团队却未归一）             |
+| 个人作品或集体作品均可。                                   | modeKind        | `mixed`                                                    | `individual`／`team`                   |
+| 同篇既写「必须以团队参赛」又写「仅限个人参赛」             | modeKind        | `null` + 冲突                                              | `mixed`（猜）                          |
+| 通知种类为补充通知、标题写「关于举办 X 的通知」            | 通知种类        | `classification.notificationKind = supplement`             | 读 `fields.eventKind` 得 `supplement`  |
+
+## 评估层口径（不改 gold）
+
+- 协议 `fields.kind` 与候选 `eventKind` 对齐比较；`eventKind = null` 按未知处理，不计正确，也不计错误。
+- 协议 `fields.mode` 与候选 `mode`（原文）比较，`modeKind` 不参与。
+- 协议 `fields.scope` 与候选 `scope` 比较 `kind` 与排序后的 `colleges`；`other` 不因「取值模糊」被自动豁免，仍按 `unknown`↔`supported` 的过度确定规则裁决。
+- 上述「无法自动映射项」单列报告，不允许通过修改 gold 或协议消除。
