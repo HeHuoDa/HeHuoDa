@@ -83,15 +83,20 @@ describe("分类提取修订使用已有快照", () => {
         body: Buffer.from("rules178"),
       });
       const review = await exportReview(db.pool, saved.candidateId!);
-      // 通知种类唯一来源是 classification；候选字段不再有 kind。
+      // 通知种类唯一来源是 classification；旧形状投影的 kind 也从这里取。
       expect(review.candidate.classification?.notificationKind).toBe(
         "supplement",
       );
-      expect(review.candidate.fields).not.toHaveProperty("kind");
-      expect(review.candidate.fields.deadline).toEqual({
+      expect(review.candidate.fieldsV2).not.toHaveProperty("kind");
+      // 旧形状投影的 kind 取通知种类。
+      expect(
+        (review.candidate.fields as unknown as { kind: string }).kind,
+      ).toBe("supplement");
+      expect(review.candidate.fieldsV2.deadline).toEqual({
         precision: "date",
         value: "2026-11-08",
       });
+      expect(review.candidate.fieldsV2.modeKind).toBeNull();
       expect(review.evidenceReferences).toContainEqual(
         expect.objectContaining({ format: "pdf", page: 1, field: "deadline" }),
       );
@@ -249,5 +254,12 @@ describe("分类提取修订使用已有快照", () => {
       )
     ).rows;
     expect(JSON.stringify(operations)).not.toContain("隐私待擦除测试文本");
+    // 候选当前数据与提取历史都不能留下原文（擦除后再提取会写回新的 v2 数据）。
+    const redacted = (
+      await db.pool.query("SELECT data FROM ingestion_candidates WHERE id=$1", [
+        saved.candidateId,
+      ])
+    ).rows[0].data;
+    expect(JSON.stringify(redacted)).not.toContain("隐私待擦除测试文本");
   });
 });

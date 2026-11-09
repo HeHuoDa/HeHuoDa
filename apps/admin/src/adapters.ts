@@ -311,10 +311,10 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          // 通知种类读兼容投影，回退到分类结果；赛事种类（eventKind）不参与显示。
+          // 通知种类读兼容投影（旧形状），回退到分类结果；赛事种类不参与显示。
           secondary: `${row.sourceId} · ${classificationLabels[row.classification]} · ${
             kindLabels[
-              (row.data.legacyFields?.kind ??
+              (row.data.fields.kind ??
                 row.data.classification?.notificationKind ??
                 "") as NoticeKind
             ] ?? "未知通知类型"

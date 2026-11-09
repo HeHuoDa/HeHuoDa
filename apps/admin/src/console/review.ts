@@ -57,34 +57,26 @@ export interface ReviewMaterial {
   candidate: {
     classification?: Schema["AdminRuleClassificationDto"];
     fieldConflicts?: Schema["AdminFieldConflictDto"][];
-    contractVersion?: "candidate-fields-v2";
+    fieldsContract?: "candidate-fields-v2";
     /**
-     * 过渡期兼容投影：kind 是通知种类、scope 折成正式四值、mode 取 modeKind。
-     * 新代码读 fields；此处仅为 #204 前的旧视图保持可用。
+     * 旧形状兼容投影：kind 是通知种类、scope 是正式四值、mode 是英文枚举。
+     * 现有视图读这里即可继续工作；新代码改读 fieldsV2。
      */
-    legacyFields?: {
-      kind: NoticeKind | null;
-      scope: StagePatch["scope"];
-      mode: "individual" | "team" | "mixed" | null;
-    };
     fields: {
       name: string;
       edition: string | null;
       organizer: string | null;
       hosts: string[];
-      // 候选契约 v2 的协议四值；与正式比赛 scope 不是同一枚举，不能互换。
-      scope: Schema["AdminCandidateScopeDto"];
+      scope: StagePatch["scope"];
       startsAt: Time;
       deadline: Time;
       materialsAt: Time;
       eventAt: Time;
-      // 候选契约 v2：事件种类与通知种类分离，mode 保留原文并另存归一值。
-      eventKind?: string | null;
-      mode?: string | null;
-      modeKind?: "individual" | "team" | "mixed" | null;
+      kind?: NoticeKind | null;
+      mode?: "individual" | "team" | "mixed" | null;
       tracks: {
         name: string;
-        modeKind?: "individual" | "team" | "mixed" | null;
+        mode?: "individual" | "team" | "mixed" | null;
         members: string | null;
         rules: string | null;
       }[];
@@ -92,6 +84,8 @@ export interface ReviewMaterial {
       rules: string[];
       stageNames: string[];
     };
+    /** 协议契约 v2：事件种类与通知种类分离，mode 原文 + modeKind 归一。 */
+    fieldsV2?: Schema["AdminCandidateFieldsDto"];
     evidence: {
       field: string;
       excerpt: string;

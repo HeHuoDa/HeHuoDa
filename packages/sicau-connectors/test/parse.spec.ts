@@ -925,7 +925,7 @@ describe("候选领域解析", () => {
       );
       expect(parsed.fields.modeKind).toBeNull();
       expect(parsed.conflicts).toContain(
-        "参赛形式存在多个不一致表述，须人工核对",
+        "参赛形式存在互不覆盖的要求，须人工核对",
       );
     });
     it("明确的个人赛与团队赛并存才归 mixed", () => {
@@ -933,6 +933,97 @@ describe("候选领域解析", () => {
         parseCandidate(article(["个人赛及团队赛均可报名。"]), url, directory)
           .fields.modeKind,
       ).toBe("mixed");
+    });
+    it("mode 始终保留原文，不改写成原文中不存在的措辞", () => {
+      for (const text of [
+        "参赛者不得以个人或团队形式参赛。",
+        "个人赛不接受报名，仅可组队参赛。",
+        "初赛为个人赛，决赛为团队赛。",
+        "参赛形式：团队。",
+      ]) {
+        const parsed = parseCandidate(article([text]), url, directory);
+        expect(parsed.fields.mode).toBe(text);
+      }
+    });
+    it("前置否定整体否定，后置否定只否定它点名的形式", () => {
+      // 「不得以个人或团队形式参赛」两种都被否定：不能归一。
+      const bothDenied = parseCandidate(
+        article(["参赛者不得以个人或团队形式参赛。"]),
+        url,
+        directory,
+      );
+      expect(bothDenied.fields.modeKind).toBeNull();
+      expect(bothDenied.conflicts).toContain(
+        "参赛形式被否定，未形成可归一形式",
+      );
+
+      // 「个人赛不接受报名，仅可组队参赛」个人被否定、团队被要求 → team。
+      const teamOnly = parseCandidate(
+        article(["个人赛不接受报名，仅可组队参赛。"]),
+        url,
+        directory,
+      );
+      expect(teamOnly.fields.modeKind).toBe("team");
+
+      // 后置否定「不组队」只否定团队，不推翻已确认的个人赛。
+      const individual = parseCandidate(
+        article(["竞赛为个人赛，独立参赛，不组队。"]),
+        url,
+        directory,
+      );
+      expect(individual.fields.modeKind).toBe("individual");
+    });
+    it("不同赛段的形式不能合并，互斥要求也不合并成 mixed", () => {
+      const byStage = parseCandidate(
+        article(["初赛为个人赛，决赛为团队赛。"]),
+        url,
+        directory,
+      );
+      expect(byStage.fields.modeKind).toBeNull();
+      expect(byStage.conflicts).toContain(
+        "参赛形式按赛段分别规定，不能合并为单一形式",
+      );
+
+      const contradiction = parseCandidate(
+        article(["参赛必须以个人参赛，参赛必须以团队参赛。"]),
+        url,
+        directory,
+      );
+      expect(contradiction.fields.modeKind).toBeNull();
+      expect(contradiction.conflicts).toContain(
+        "参赛形式存在互不覆盖的要求，须人工核对",
+      );
+    });
+    it("常见参赛形式都能识别并保留原文", () => {
+      const cases = [
+        ["参赛形式：团队。", "team"],
+        ["参赛形式：每班一队。", "team"],
+        ["参赛形式：个人或自行组队。", "mixed"],
+        ["每班组成一支队伍参赛。", "team"],
+        ["个人作品或集体作品均可。", "mixed"],
+      ] as const;
+      for (const [text, expected] of cases) {
+        const parsed = parseCandidate(article([text]), url, directory);
+        expect(parsed.fields.mode).toBe(text);
+        expect(parsed.fields.modeKind).toBe(expected);
+      }
+    });
+    it("eventKind 显式标注也要过语义边界，拒绝选拔层级与组别", () => {
+      const rejected = [
+        ["项目类型：院级研究生选拔赛。", "选拔层级或赛段不是赛事种类"],
+        ["比赛类型：新生组。", "组别或人群不是赛事种类"],
+        ["竞赛类型：决赛。", "选拔层级或赛段不是赛事种类"],
+      ] as const;
+      for (const [text, reason] of rejected) {
+        const parsed = parseCandidate(article([text]), url, directory);
+        expect(parsed.fields.eventKind).toBeNull();
+        expect(parsed.warnings).toContain("赛事种类标注被拒绝：" + reason);
+      }
+      // 真正的种类仍然接受。
+      expect(
+        parseCandidate(article(["项目类型：创业计划类"]), url, directory).fields
+          .eventKind,
+      ).toBe("创业计划类");
     });
   });
 });

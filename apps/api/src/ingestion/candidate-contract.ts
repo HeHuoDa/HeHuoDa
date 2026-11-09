@@ -66,32 +66,6 @@ export function candidateScope(scope: ScopeRecord): CandidateFields["scope"] {
   }
 }
 
-/**
- * HTTP 呈现：把持久化的候选归一为 v2 契约，并附过渡期兼容投影。
- * 投影只存在于响应里，不回写候选、不参与审核基线哈希。
- */
-export function presentCandidate(raw: unknown): ParsedCandidate & {
-  fieldsContract: CandidateFieldsContract;
-  legacyFields: {
-    kind: string | null;
-    scope: ScopeRecord;
-    mode: ModeKind | null;
-  };
-} {
-  const { candidate, legacy } = readCandidate(raw);
-  const notificationKind = candidate.classification?.notificationKind ?? null;
-  return {
-    ...candidate,
-    fieldsContract: candidateFieldsContract,
-    legacyFields: {
-      // 旧的 fields.kind 是通知种类；统一由 classification 供值，不再读赛事种类。
-      kind: notificationKind ?? legacy.kind,
-      scope: legacy.scope,
-      mode: legacy.mode,
-    },
-  };
-}
-
 const v1ScopeKinds: Record<string, ScopeKind> = {
   all: "all",
   colleges: "specified",
@@ -181,15 +155,20 @@ export function normalizeCandidateFields(raw: unknown): CandidateFields {
 
 /**
  * 读取候选数据：v2 原样使用，v1 显式归一。
- * 返回值同时给出契约标记与 v1 的 legacy 字段，供 HTTP 兼容视图使用。
+ * 返回值同时给出兼容投影所需的旧值，供 HTTP 过渡视图使用。
  */
 export function readCandidate(raw: unknown): {
   candidate: ParsedCandidate;
   legacy: { kind: string | null; scope: ScopeRecord; mode: ModeKind | null };
 } {
   const value = (raw ?? {}) as Record<string, unknown>;
+  // 兼容 v1 原始数据与上一版本已落库的 v2 数据（fields 为 v2、无 fieldsV2）。
+  const rawFields = (value.fieldsV2 ?? value.fields ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const stored = (value.fields ?? {}) as Record<string, unknown>;
   const isV2 = value.fieldsContract === candidateFieldsContract;
-  const rawFields = (value.fields ?? {}) as Record<string, unknown>;
   const fields = isV2
     ? (rawFields as unknown as CandidateFields)
     : normalizeCandidateFields(rawFields);
@@ -198,13 +177,12 @@ export function readCandidate(raw: unknown): {
     fieldsContract: candidateFieldsContract,
     fields,
   };
-  const rawScope = (rawFields.scope ?? {}) as Record<string, unknown>;
-  const rawKind = rawFields.kind;
+  const rawScope = (stored.scope ?? {}) as Record<string, unknown>;
   return {
     candidate,
     legacy: {
-      // v1 的 kind 与 v2 的通知种类别名都由 classification 提供；这里只做读取提示。
-      kind: typeof rawKind === "string" ? rawKind : null,
+      // v1 的 fields.kind 是通知种类；v2 的通知种类一律由 classification 提供。
+      kind: isV2 ? null : typeof stored.kind === "string" ? stored.kind : null,
       scope: isV2
         ? formalScope(fields.scope)
         : {
@@ -216,7 +194,87 @@ export function readCandidate(raw: unknown): {
             colleges: fields.scope.colleges,
             note: fields.scope.note,
           },
-      mode: isV2 ? fields.modeKind : normalizeModeKind(rawFields.mode),
+      mode: isV2 ? fields.modeKind : normalizeModeKind(stored.mode),
     },
+  };
+}
+
+/**
+ * 旧客户端读取的兼容投影：保持 v1 的键与取值形状。
+ * - kind：通知种类（来自 classification，不是赛事种类）
+ * - scope：正式四值（specified→colleges、other→complex）
+ * - mode：英文枚举（取自 modeKind）
+ * 故意不含 eventKind：赛事种类是新概念，旧读者没有对应语义。
+ */
+export interface LegacyCandidateFields {
+  name: string;
+  edition: string | null;
+  kind: string | null;
+  organizer: string | null;
+  hosts: string[];
+  scope: ScopeRecord;
+  mode: ModeKind | null;
+  tracks: {
+    name: string;
+    mode: ModeKind | null;
+    members: string | null;
+    rules: string | null;
+  }[];
+  members: string | null;
+  rules: string[];
+  stageNames: string[];
+  startsAt: CandidateFields["startsAt"];
+  deadline: CandidateFields["deadline"];
+  materialsAt: CandidateFields["materialsAt"];
+  eventAt: CandidateFields["eventAt"];
+}
+
+export function legacyCandidateFields(
+  candidate: ParsedCandidate,
+): LegacyCandidateFields {
+  const fields = candidate.fields;
+  return {
+    name: fields.name,
+    edition: fields.edition,
+    kind: candidate.classification?.notificationKind ?? null,
+    organizer: fields.organizer,
+    hosts: fields.hosts,
+    scope: formalScope(fields.scope),
+    mode: fields.modeKind,
+    tracks: fields.tracks.map((track) => ({
+      name: track.name,
+      mode: track.modeKind,
+      members: track.members,
+      rules: track.rules,
+    })),
+    members: fields.members,
+    rules: fields.rules,
+    stageNames: fields.stageNames,
+    startsAt: fields.startsAt,
+    deadline: fields.deadline,
+    materialsAt: fields.materialsAt,
+    eventAt: fields.eventAt,
+  };
+}
+
+export interface PresentedCandidate extends ParsedCandidate {
+  fieldsContract: CandidateFieldsContract;
+  /** 旧形状投影：旧客户端读 fields 即得到 v1 的键与取值。 */
+  fieldsV2: CandidateFields;
+}
+
+/**
+ * HTTP 呈现：`fields` 保持旧客户端认识的结构，协议契约放 `fieldsV2`。
+ * 这样 #204 完成前旧管理端无需改代码；新代码只读 `fieldsV2`。
+ * 投影只存在于响应里，不回写候选、不参与审核基线哈希。
+ */
+export function presentCandidate(raw: unknown): PresentedCandidate {
+  const { candidate } = readCandidate(raw);
+  return {
+    ...candidate,
+    // fields 覆写为兼容投影，保留 v1 的 kind/scope/mode 形状。
+    fields: legacyCandidateFields(candidate) as unknown as CandidateFields,
+    fieldsContract: candidateFieldsContract,
+    fieldsV2: candidate.fields,
   };
 }

@@ -182,53 +182,205 @@ export function competitionName(title: string): string {
   return value.replace(/[\s\p{P}\p{S}]/gu, "").length ? value : original;
 }
 
-/** 赛事种类／项目类型的显式标注；不从此处以外的标题形态派生。 */
+/**
+ * 赛事种类／项目类型的显式标注。显式标注只是来源条件，取值还要过语义边界：
+ * 选拔层级、赛段、组别、届次与通知种类都不是赛事种类。
+ */
 const eventKindLabel =
   /(?:赛事种类|竞赛类型|比赛类型|赛事类别|项目类型|竞赛类别|比赛类别)\s*[：:]\s*([^。；\n]{1,40})/;
+/** 选拔层级与赛段：描述比赛进行到哪一步，不是种类。 */
+const kindLevelOnly =
+  /(?:选拔赛|选拔|初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛|网评|路演)$|(?:院级|校级|省级|国家级|市级|校内|院内)(?:选拔|赛)/;
+/** 组别与人群：描述谁能参加，不是种类。 */
+const kindGroupOnly =
+  /(?:组|组别)$|^(?:新生|老生|研究生|本科生|专科生|教师|教职工|专业|年级|班级)/;
+/** 通知种类词不得混入赛事种类。 */
+const kindNotificationOnly =
+  /^(?:报名|补充|变更|延期|更正|获奖|公示|新闻|回顾)/;
+const kindNoun =
+  /竞赛|比赛|大赛|项目|活动|挑战杯|艺术|体育|创新|创业|职业|技能|学术|科技|学科|征文|设计/;
+/**
+ * 判断一个显式标注值能否作为赛事种类。返回 null 表示可用，否则给出拒绝原因。
+ * 拿不准时不猜：宁可 unknown，也不把层级或组别当成种类。
+ */
+export function eventKindRejection(value: string): string | null {
+  if (kindNotificationOnly.test(value)) return "通知种类不是赛事种类";
+  if (kindLevelOnly.test(value)) return "选拔层级或赛段不是赛事种类";
+  if (kindGroupOnly.test(value)) return "组别或人群不是赛事种类";
+  if (!kindNoun.test(value)) return "无赛事种类依据";
+  return null;
+}
 export function competitionKind(paragraphs: string[]): {
   value: string | null;
   paragraph: number;
+  rejection: string | null;
 } {
   for (let index = 0; index < paragraphs.length; index++) {
     const match = eventKindLabel.exec(paragraphs[index] ?? "");
     const value = match?.[1]?.trim().replace(/[，,、；;]$/, "");
-    if (value) return { value, paragraph: index };
+    if (!value) continue;
+    const rejection = eventKindRejection(value);
+    if (rejection) return { value: null, paragraph: index, rejection };
+    return { value, paragraph: index, rejection: null };
   }
-  return { value: null, paragraph: -1 };
+  return { value: null, paragraph: -1, rejection: null };
 }
 
-/** 否定式先剔除再归一，避免「不组队」被读成团队。 */
-const negationPattern =
-  /(?:禁止|不得|不能|不可|不予|不允许|不接受|不准|不|非)(?:以)?(?:个人参赛|个人赛|个人|团队参赛|团队赛|团队|组队)/g;
-const individualPattern = /个人赛|个人参赛|以个人|个人作品/;
-const teamPattern =
-  /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|(?:须|需|可以|应)组队|组队|团队形式|队伍/;
-/** 并列的两种形式（「个人作品或集体作品」）是可选其一，归 mixed。 */
-const collectivePattern = /集体作品|集体参赛|集体项目/;
+/**
+ * 参赛形式判定。mode 始终是原文片段，不改写措辞；否定与肯定分别判断作用范围，
+ * 同一句里同时允许个人与团队才算 mixed，跨句互不覆盖或相互矛盾时保留冲突。
+ */
+const modeLabel =
+  /^(?:参赛形式|参赛方式|比赛形式|竞赛形式|组队形式)\s*[：:]\s*/;
+/** 可选其一的并列词；只有它们才把「个人 + 团队」解释为两者皆可。 */
+const alternativeMarker = /或|及|和|以及|均可|皆可|任一|任选/;
+/** 否定标记；用于判断与它相邻的形式是否被否定。 */
+const negationMarker = /禁止|不得|不能|不可|不予|不允许|不接受|不准|非|不/;
+/** 肯定标记；出现在形式之前时表明该形式被允许或要求。 */
+const affirmativeMarker =
+  /仅可|仅限|只可|只能|可以|允许|须|需|应|必须|为|可|独立/;
+/** 赛段限定；同一形式出现在不同赛段时不能合并。 */
+const stageMarker = /初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛/g;
+
+interface ModeMention {
+  individual: boolean;
+  team: boolean;
+  negated: boolean;
+  alternative: boolean;
+  stages: string[];
+  /** 该子句里被显式否定的形式；只否定点名的形式，不牵连其他形式。 */
+  deniesIndividual: boolean;
+  deniesTeam: boolean;
+  /** 该子句里存在位于否定之前的肯定表述。 */
+  hasAffirmative: boolean;
+}
+
+const individualForm =
+  /个人赛|个人参赛|以个人|个人作品|个人形式|个人项目|个人身份|个人/;
+const teamForm =
+  /团队赛|以团队|团体赛|以组为单位|每组\s*\d+人|组队|团队形式|队伍|团队|一队|每队|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/;
+
+/**
+ * 判断一条子句中各形式被肯定还是否定。否定作用范围按位置确定：
+ * 前置否定（在全部形式之前）否定整句；后置否定只否定它紧邻点名的形式。
+ */
+function readModeMention(clause: string): ModeMention | null {
+  const individual = individualForm.test(clause);
+  const team = teamForm.test(clause);
+  if (!individual && !team) return null;
+  const negation = clause.search(negationMarker);
+  const affirmative = clause.search(affirmativeMarker);
+  const firstForm = clause.search(
+    new RegExp([individualForm.source, teamForm.source].join("|")),
+  );
+  let deniesIndividual = false;
+  let deniesTeam = false;
+  if (negation >= 0) {
+    // 前置否定：否定出现在任何形式之前，整句按否定处理。
+    if (firstForm < 0 || negation < firstForm) {
+      deniesIndividual = individual;
+      deniesTeam = team;
+    } else {
+      // 后置否定：只否定紧邻点名的形式（「不组队」「个人赛不接受」）。
+      const before = clause.slice(Math.max(0, negation - 4), negation);
+      const after = clause.slice(negation, negation + 8);
+      deniesIndividual =
+        individualForm.test(before) || individualForm.test(after);
+      deniesTeam = teamForm.test(before) || teamForm.test(after);
+      // 后置否定既没点名前项也没点名后项时，退化为限定整句。
+      if (!deniesIndividual && !deniesTeam) {
+        deniesIndividual = individual;
+        deniesTeam = team;
+      }
+    }
+  }
+  const negated = deniesIndividual || deniesTeam;
+  return {
+    individual,
+    team,
+    negated,
+    // 只有整句被否定且没有肯定标记时，才不在「肯定」集合里。
+    alternative: alternativeMarker.test(clause),
+    stages: [...new Set(clause.match(stageMarker) ?? [])],
+    deniesIndividual,
+    deniesTeam,
+    hasAffirmative: affirmative >= 0 && (!negated || affirmative < negation),
+  };
+}
 export function competitionMode(text: string): {
   mode: string | null;
   modeKind: "individual" | "team" | "mixed" | null;
+  /** 无法可靠归一时的人工可读原因；mode 仍保留原文。 */
+  conflict: string | null;
 } {
-  const positive = text
-    .replace(negationPattern, "")
-    // 剔除否定词后会留下悬空的逗号与句末标点，但不重写措辞本身。
-    .replace(/[，,、]{2,}/g, "，")
-    .replace(/^[，,、。；;\s]+|[，,、。；;\s]+$/g, "")
-    .trim();
-  const individual = individualPattern.test(positive);
-  // 「集体作品」在「个人作品或集体作品」里是团队侧的等价表述。
-  const team = teamPattern.test(positive) || collectivePattern.test(positive);
-  // 同一句同时允许个人与团队即 mixed；交替出现（多个条款）由调用方判冲突。
-  const modeKind =
-    individual && team
-      ? "mixed"
-      : individual
-        ? "individual"
-        : team
-          ? "team"
-          : null;
-  if (!modeKind) return { mode: null, modeKind: null };
-  return { mode: positive, modeKind };
+  const original = text.trim();
+  if (!original) return { mode: null, modeKind: null, conflict: null };
+  const body = original.replace(modeLabel, "").trim() || original;
+  // 逐子句判断：句号分号按句拆，逗号两侧各自都能独立判定形式时才拆开，
+  // 否则「独立参赛，不组队」会被切断成互不相关的两截。
+  const clauses = body
+    .split(/[。；;\n]/)
+    .flatMap((sentence) => {
+      const parts = sentence.split(/[，,]/).map((part) => part.trim());
+      if (parts.length < 2) return [sentence.trim()];
+      return parts.every((part) => readModeMention(part))
+        ? parts
+        : [sentence.trim()];
+    })
+    .filter(Boolean);
+  const mentions = clauses
+    .map((clause) => readModeMention(clause))
+    .filter((mention): mention is ModeMention => !!mention);
+  if (!mentions.length) return { mode: null, modeKind: null, conflict: null };
+
+  // 肯定集合：整句未被否定，或该子句含否定之前的肯定表述。
+  const affirmed = mentions.filter(
+    (mention) => !mention.negated || mention.hasAffirmative,
+  );
+  const denied = mentions.filter((mention) => mention.negated);
+  // 后置否定只抵消它点名的形式，不把已确认的形式一并推翻。
+  const deniesIndividual = denied.some((mention) => mention.deniesIndividual);
+  const deniesTeam = denied.some((mention) => mention.deniesTeam);
+  const individualAffirmed =
+    affirmed.some((mention) => mention.individual) && !deniesIndividual;
+  const teamAffirmed = affirmed.some((mention) => mention.team) && !deniesTeam;
+  // 同一子句里用并列词同时给出两种形式，才是可选其一。
+  const mixedInOneClause = affirmed.some(
+    (mention) =>
+      mention.individual &&
+      mention.team &&
+      mention.alternative &&
+      !deniesIndividual &&
+      !deniesTeam,
+  );
+  const stages = new Set(affirmed.flatMap((mention) => mention.stages));
+
+  if (stages.size > 1)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式按赛段分别规定，不能合并为单一形式",
+    };
+  if (!individualAffirmed && !teamAffirmed)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式被否定，未形成可归一形式",
+    };
+  if (mixedInOneClause && individualAffirmed && teamAffirmed)
+    return { mode: original, modeKind: "mixed", conflict: null };
+  // 跨子句同时肯定两种互不覆盖的要求，属矛盾而非可选。
+  if (individualAffirmed && teamAffirmed)
+    return {
+      mode: original,
+      modeKind: null,
+      conflict: "参赛形式存在互不覆盖的要求，须人工核对",
+    };
+  return {
+    mode: original,
+    modeKind: individualAffirmed ? "individual" : "team",
+    conflict: null,
+  };
 }
 
 export function parseCandidate(
@@ -291,6 +443,9 @@ export function parseCandidate(
       paragraph: eventKind.paragraph,
       url,
     });
+  else if (eventKind.rejection)
+    // 显式标注存在但取值不属赛事种类：保留原文与原因，不写入字段。
+    warnings.push("赛事种类标注被拒绝：" + eventKind.rejection);
   if (fields.edition)
     evidence.push({
       field: "edition",
@@ -481,20 +636,21 @@ export function parseCandidate(
       }
     }
     const mode = competitionMode(paragraph);
-    if (mode.modeKind) {
-      if (modeConflict) {
-        // 已判定为不可归一：继续保留原文，不再猜测枚举。
-        fields.mode = fields.mode ? fields.mode + "\n" + mode.mode : mode.mode;
-      } else if (fields.modeKind && fields.modeKind !== mode.modeKind) {
-        // 互不覆盖的多种形式不能合并成 mixed；保留原文并交由人工确认。
-        conflicts.push("参赛形式存在多个不一致表述，须人工核对");
+    if (mode.mode) {
+      // 原文按段累积，绝不改写措辞；归一结果只在与已确认形式一致时保留。
+      fields.mode = fields.mode ? fields.mode + "\n" + mode.mode : mode.mode;
+      if (mode.conflict) {
+        if (!modeConflict) conflicts.push(mode.conflict);
         modeConflict = true;
         fields.modeKind = null;
-        fields.mode = fields.mode ? fields.mode + "\n" + mode.mode : mode.mode;
-      } else {
-        fields.modeKind = mode.modeKind;
-        fields.mode = fields.mode ? fields.mode + "\n" + mode.mode : mode.mode;
-      }
+      } else if (modeConflict) {
+        // 已判定不可归一：保留原文，不再回填枚举。
+      } else if (fields.modeKind && fields.modeKind !== mode.modeKind) {
+        // 互不覆盖的多种形式不能合并成 mixed；保留原文并交由人工确认。
+        conflicts.push("参赛形式存在互不覆盖的要求，须人工核对");
+        modeConflict = true;
+        fields.modeKind = null;
+      } else fields.modeKind = mode.modeKind;
       add("mode", paragraph, index);
     }
     const members =

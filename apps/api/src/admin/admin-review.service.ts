@@ -295,7 +295,7 @@ export class AdminReviewService {
             // 优先级只读通知种类；人工改分类不改变通知种类。
             classificationPriority(
               command.classification,
-              (presentCandidate(row.data).legacyFields.kind ?? "news") as
+              (row.data.classification?.notificationKind ?? "news") as
                 "registration" | "supplement" | "award" | "news",
             ),
             command.reason,

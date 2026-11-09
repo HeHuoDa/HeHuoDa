@@ -33,8 +33,9 @@ it("候选查询分开传递规则分类与审核状态，并保留栏目与附�
         article: { title: "校内选拔通知" },
         data: {
           classification: { notificationKind: "registration" },
-          legacyFields: { kind: "registration" },
-          fields: { eventKind: "学科竞赛" },
+          // 旧形状投影：kind 是通知种类。
+          fields: { kind: "registration" },
+          fieldsV2: { eventKind: "学科竞赛" },
         },
       },
     ],

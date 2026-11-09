@@ -152,23 +152,36 @@ export class AdminLegacyScopeDto {
   @ApiProperty() note!: string;
 }
 
+export class AdminLegacyCandidateTrackDto {
+  @ApiProperty() name!: string;
+  @ApiProperty({ enum: ["individual", "team", "mixed"], nullable: true })
+  mode!: "individual" | "team" | "mixed" | null;
+  @ApiProperty({ type: String, nullable: true }) members!: string | null;
+  @ApiProperty({ type: String, nullable: true }) rules!: string | null;
+}
+
 /**
- * 过渡期只读投影，供 #204 完成前的旧管理端使用。
- * 不回写候选、不进入正式数据，新代码一律读上面的契约字段。
+ * 旧客户端兼容投影：保持 v1 的键与取值形状。
+ * 旧管理端读 `fields.kind`／`fields.scope`／`fields.mode` 即得到可用的旧语义。
+ * 故意不含 eventKind——赛事种类是新概念，旧读者没有对应语义。
  * @deprecated 由 AdminCandidateFieldsDto 取代，将在 #204 验证通过后移除。
  */
 export class AdminLegacyCandidateFieldsDto {
+  @ApiProperty() name!: string;
+  @ApiProperty({ type: String, nullable: true }) edition!: string | null;
   @ApiProperty({
     enum: ["registration", "supplement", "award", "news"],
     nullable: true,
     description:
-      "通知种类的旧别名，取自 classification.notificationKind；不得读作赛事种类",
+      "通知种类，取自 classification.notificationKind；不得读作赛事种类",
   })
   kind!: string | null;
+  @ApiProperty({ type: String, nullable: true }) organizer!: string | null;
+  @ApiProperty({ type: [String] }) hosts!: string[];
   @ApiProperty({
     type: AdminLegacyScopeDto,
     description:
-      "正式比赛范围枚举的投影：specified→colleges、other→complex、all→all、unknown→unknown。仅用于旧读者",
+      "正式比赛范围枚举的投影：specified→colleges、other→complex。仅用于旧读者",
   })
   scope!: AdminLegacyScopeDto;
   @ApiProperty({
@@ -177,6 +190,19 @@ export class AdminLegacyCandidateFieldsDto {
     description: "modeKind 的旧别名；null 表示无法可靠归一",
   })
   mode!: "individual" | "team" | "mixed" | null;
+  @ApiProperty({ type: [AdminLegacyCandidateTrackDto] })
+  tracks!: AdminLegacyCandidateTrackDto[];
+  @ApiProperty({ type: String, nullable: true }) members!: string | null;
+  @ApiProperty({ type: [String] }) rules!: string[];
+  @ApiProperty({ type: [String] }) stageNames!: string[];
+  @ApiProperty({ type: AdminReviewTimeValueDto })
+  startsAt!: AdminReviewTimeValueDto;
+  @ApiProperty({ type: AdminReviewTimeValueDto })
+  deadline!: AdminReviewTimeValueDto;
+  @ApiProperty({ type: AdminReviewTimeValueDto })
+  materialsAt!: AdminReviewTimeValueDto;
+  @ApiProperty({ type: AdminReviewTimeValueDto })
+  eventAt!: AdminReviewTimeValueDto;
 }
 
 export class AdminRuleClassificationDto {
@@ -214,18 +240,18 @@ export class AdminParsedCandidateDto {
   classification?: AdminRuleClassificationDto;
   @ApiPropertyOptional({ type: [AdminFieldConflictDto] })
   fieldConflicts?: AdminFieldConflictDto[];
-  @ApiProperty({ type: AdminCandidateFieldsDto })
-  fields!: AdminCandidateFieldsDto;
-  /**
-   * 过渡期兼容投影：把 v2 契约折回旧读者认识的形状
-   * （kind 取通知种类、scope 折成正式四值、mode 取 modeKind）。
-   * 不回写候选，也不进入正式数据。
-   */
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: AdminLegacyCandidateFieldsDto,
-    description: "过渡期兼容投影，供 #204 完成前的旧管理端读取",
+    description:
+      "旧形状兼容投影：kind=通知种类、scope=正式四值、mode=英文枚举。旧客户端按原路径读取即可，#204 之前保持",
   })
-  legacyFields?: AdminLegacyCandidateFieldsDto;
+  fields!: AdminLegacyCandidateFieldsDto;
+  @ApiProperty({
+    type: AdminCandidateFieldsDto,
+    description:
+      "协议候选契约：eventKind 赛事种类、scope 协议四值、mode 原文 + modeKind。新代码只读这里",
+  })
+  fieldsV2!: AdminCandidateFieldsDto;
   @ApiProperty({ type: [AdminCandidateEvidenceDto] })
   evidence!: AdminCandidateEvidenceDto[];
   @ApiProperty({ type: [String] }) missing!: string[];

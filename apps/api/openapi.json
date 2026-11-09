@@ -8021,6 +8021,188 @@
           "values"
         ]
       },
+      "AdminLegacyScopeDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "colleges",
+              "complex",
+              "unknown"
+            ]
+          },
+          "colleges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "colleges",
+          "note"
+        ]
+      },
+      "AdminLegacyCandidateTrackDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "mode",
+          "members",
+          "rules"
+        ]
+      },
+      "AdminReviewTimeValueDto": {
+        "type": "object",
+        "properties": {
+          "precision": {
+            "type": "string",
+            "enum": [
+              "instant",
+              "date",
+              "unknown"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "precision",
+          "value"
+        ]
+      },
+      "AdminLegacyCandidateFieldsDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "registration",
+              "supplement",
+              "award",
+              "news"
+            ],
+            "nullable": true,
+            "description": "通知种类，取自 classification.notificationKind；不得读作赛事种类"
+          },
+          "organizer": {
+            "type": "string",
+            "nullable": true
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "description": "正式比赛范围枚举的投影：specified→colleges、other→complex。仅用于旧读者",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminLegacyScopeDto"
+              }
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "team",
+              "mixed"
+            ],
+            "nullable": true,
+            "description": "modeKind 的旧别名；null 表示无法可靠归一"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminLegacyCandidateTrackDto"
+            }
+          },
+          "members": {
+            "type": "string",
+            "nullable": true
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stageNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "materialsAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          },
+          "eventAt": {
+            "$ref": "#/components/schemas/AdminReviewTimeValueDto"
+          }
+        },
+        "required": [
+          "name",
+          "edition",
+          "kind",
+          "organizer",
+          "hosts",
+          "scope",
+          "mode",
+          "tracks",
+          "members",
+          "rules",
+          "stageNames",
+          "startsAt",
+          "deadline",
+          "materialsAt",
+          "eventAt"
+        ]
+      },
       "AdminCandidateScopeDto": {
         "type": "object",
         "properties": {
@@ -8081,27 +8263,6 @@
           "modeKind",
           "members",
           "rules"
-        ]
-      },
-      "AdminReviewTimeValueDto": {
-        "type": "object",
-        "properties": {
-          "precision": {
-            "type": "string",
-            "enum": [
-              "instant",
-              "date",
-              "unknown"
-            ]
-          },
-          "value": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "precision",
-          "value"
         ]
       },
       "AdminCandidateFieldsDto": {
@@ -8201,73 +8362,6 @@
           "eventAt"
         ]
       },
-      "AdminLegacyScopeDto": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "all",
-              "colleges",
-              "complex",
-              "unknown"
-            ]
-          },
-          "colleges": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "note": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "colleges",
-          "note"
-        ]
-      },
-      "AdminLegacyCandidateFieldsDto": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "registration",
-              "supplement",
-              "award",
-              "news"
-            ],
-            "nullable": true,
-            "description": "通知种类的旧别名，取自 classification.notificationKind；不得读作赛事种类"
-          },
-          "scope": {
-            "description": "正式比赛范围枚举的投影：specified→colleges、other→complex、all→all、unknown→unknown。仅用于旧读者",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AdminLegacyScopeDto"
-              }
-            ]
-          },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "individual",
-              "team",
-              "mixed"
-            ],
-            "nullable": true,
-            "description": "modeKind 的旧别名；null 表示无法可靠归一"
-          }
-        },
-        "required": [
-          "kind",
-          "scope",
-          "mode"
-        ]
-      },
       "AdminParsedCandidateDto": {
         "type": "object",
         "properties": {
@@ -8291,13 +8385,18 @@
             }
           },
           "fields": {
-            "$ref": "#/components/schemas/AdminCandidateFieldsDto"
-          },
-          "legacyFields": {
-            "description": "过渡期兼容投影，供 #204 完成前的旧管理端读取",
+            "description": "旧形状兼容投影：kind=通知种类、scope=正式四值、mode=英文枚举。旧客户端按原路径读取即可，#204 之前保持",
             "allOf": [
               {
                 "$ref": "#/components/schemas/AdminLegacyCandidateFieldsDto"
+              }
+            ]
+          },
+          "fieldsV2": {
+            "description": "协议候选契约：eventKind 赛事种类、scope 协议四值、mode 原文 + modeKind。新代码只读这里",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminCandidateFieldsDto"
               }
             ]
           },
@@ -8328,6 +8427,7 @@
         },
         "required": [
           "fields",
+          "fieldsV2",
           "evidence",
           "missing",
           "conflicts",

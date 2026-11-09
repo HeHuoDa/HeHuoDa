@@ -2,6 +2,7 @@ import { candidateFieldsContract } from "@hehuoda/sicau-connectors/notices";
 import {
   candidateScope,
   formalScope,
+  legacyCandidateFields,
   normalizeCandidateFields,
   presentCandidate,
   readCandidate,
@@ -21,7 +22,9 @@ const v2Fields = {
   },
   mode: "团队",
   modeKind: "team" as const,
-  tracks: [],
+  tracks: [
+    { name: "算法", modeKind: "team" as const, members: null, rules: null },
+  ],
   members: null,
   rules: [],
   stageNames: [],
@@ -30,6 +33,17 @@ const v2Fields = {
   materialsAt: { precision: "unknown" as const, value: null },
   eventAt: { precision: "unknown" as const, value: null },
 };
+
+const v2Row = (overrides: Record<string, unknown> = {}) => ({
+  fieldsContract: candidateFieldsContract,
+  fieldsV2: v2Fields,
+  classification: { notificationKind: "registration" },
+  evidence: [],
+  missing: [],
+  conflicts: [],
+  warnings: [],
+  ...overrides,
+});
 
 describe("候选字段契约 v2 的兼容与映射", () => {
   describe("候选 scope → 正式 scope", () => {
@@ -138,60 +152,98 @@ describe("候选字段契约 v2 的兼容与映射", () => {
       const { candidate, legacy } = readCandidate(v1);
       expect(candidate.fieldsContract).toBe(candidateFieldsContract);
       expect(legacy.kind).toBe("registration");
-      // v1 的 scope 已是正式枚举，投影原样返回。
       expect(legacy.scope.kind).toBe("colleges");
       expect(legacy.mode).toBe("team");
+    });
+
+    it("同一候选重复读取幂等（v2 行再次归一不丢字段）", () => {
+      const once = readCandidate(v2Row());
+      const twice = readCandidate(once.candidate);
+      expect(twice.candidate.fields).toEqual(once.candidate.fields);
     });
   });
 
   describe("HTTP 兼容投影", () => {
-    it("kind 取通知种类而不是赛事种类", () => {
-      const projected = presentCandidate({
-        fieldsContract: candidateFieldsContract,
-        fields: v2Fields,
-        classification: { notificationKind: "supplement" },
-        evidence: [],
-        missing: [],
-        conflicts: [],
-        warnings: [],
+    type LegacyView = ReturnType<typeof legacyCandidateFields>;
+
+    it("fields 保持旧客户端认识的形状", () => {
+      const projected = presentCandidate(
+        v2Row({ classification: { notificationKind: "supplement" } }),
+      );
+      // 旧客户端读 fields.kind / fields.scope / fields.mode 仍可用。
+      const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.kind).toBe("supplement");
+      expect(legacy.scope).toEqual({
+        kind: "colleges",
+        colleges: ["science"],
+        note: "理学院本科生",
       });
-      expect(projected.legacyFields.kind).toBe("supplement");
-      // 赛事种类不冒充通知种类。
-      expect(projected.legacyFields.kind).not.toBe(v2Fields.eventKind);
-      expect(projected.fields.eventKind).toBe("学科竞赛");
+      expect(legacy.mode).toBe("team");
+      // 旧形状里没有新概念，避免旧读者误读。
+      expect(legacy).not.toHaveProperty("eventKind");
+      expect(legacy).not.toHaveProperty("modeKind");
     });
 
-    it("scope 折成正式四值，mode 取 modeKind", () => {
-      const projected = presentCandidate({
-        fieldsContract: candidateFieldsContract,
-        fields: {
-          ...v2Fields,
-          scope: { kind: "other", colleges: [], note: "不含毕业年级" },
-        },
-        classification: { notificationKind: "registration" },
-        evidence: [],
-        missing: [],
-        conflicts: [],
-        warnings: [],
+    it("协议契约放在 fieldsV2，kind 取通知种类而不是赛事种类", () => {
+      const projected = presentCandidate(
+        v2Row({ classification: { notificationKind: "supplement" } }),
+      );
+      expect(projected.fieldsContract).toBe(candidateFieldsContract);
+      expect(projected.fieldsV2.eventKind).toBe("学科竞赛");
+      expect(projected.fieldsV2.mode).toBe("团队");
+      expect(projected.fieldsV2.modeKind).toBe("team");
+      expect(projected.fieldsV2.scope).toEqual({
+        kind: "specified",
+        colleges: ["science"],
+        note: "理学院本科生",
       });
-      expect(projected.legacyFields.scope).toEqual({
+      const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.kind).not.toBe(projected.fieldsV2.eventKind);
+    });
+
+    it("other 折成 complex，且不写入允许学院", () => {
+      const projected = presentCandidate(
+        v2Row({
+          fieldsV2: {
+            ...v2Fields,
+            scope: { kind: "other", colleges: [], note: "不含毕业年级" },
+          },
+        }),
+      );
+      const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.scope).toEqual({
         kind: "complex",
         colleges: [],
         note: "不含毕业年级",
       });
-      expect(projected.legacyFields.mode).toBe("team");
     });
 
     it("没有分类时不伪造通知种类", () => {
+      const projected = presentCandidate(
+        v2Row({ classification: undefined, fieldsV2: v2Fields }),
+      );
+      const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.kind).toBeNull();
+    });
+
+    it("旧 v1 候选经投影后同样给出旧形状，无需客户端改代码", () => {
       const projected = presentCandidate({
-        fieldsContract: candidateFieldsContract,
-        fields: v2Fields,
+        fields: {
+          ...v2Fields,
+          ...{ kind: "registration" },
+          scope: { kind: "colleges", colleges: ["law"], note: "法学院" },
+          mode: "mixed",
+        },
         evidence: [],
         missing: [],
         conflicts: [],
         warnings: [],
       });
-      expect(projected.legacyFields.kind).toBeNull();
+      const legacy = projected.fields as unknown as LegacyView;
+      expect(legacy.scope.kind).toBe("colleges");
+      expect(legacy.mode).toBe("mixed");
+      expect(projected.fieldsV2.scope.kind).toBe("specified");
+      expect(projected.fieldsV2.modeKind).toBe("mixed");
     });
   });
 });
