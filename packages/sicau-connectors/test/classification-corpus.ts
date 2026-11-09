@@ -88,6 +88,152 @@ export const nonCompetitionTitles = [
   "体育课选课通知",
   "心理讲座报名",
 ];
+/**
+ * #205 的成对边界：同一份 dev 语料里既要有「谁做什么、对象是不是参赛者」的负例，
+ * 也要有只差一个主体的正例，避免把「出现执裁／招募／选拔」当成排除词表。
+ * 期望值按人工判断写死，不由实现计算得出。
+ */
+export interface ClassificationBoundaryCase {
+  /** 这条用例守住的边界，失败时直接指出是哪条判定被破坏。 */
+  boundary: string;
+  title: string;
+  paragraphs: string[];
+  classification: "definite" | "suspected" | "non_competition";
+  notificationKind: "registration" | "supplement" | "award" | "news";
+  priority: number;
+  needsReview: boolean;
+}
+
+export const classificationBoundaryCases: ClassificationBoundaryCase[] = [
+  {
+    boundary: "执裁回顾不是可报名赛事",
+    title: "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+    paragraphs: [
+      "2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。",
+      "体育学院武术队受邀承担本次比赛裁判工作，圆满完成执裁任务。",
+      "比赛设男子长拳、女子南拳等12个项目，共有9支代表队参赛。",
+    ],
+    classification: "non_competition",
+    notificationKind: "news",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "学生组织招新不是赛事报名",
+    title: "校学生会体育部2026年秋季招新通知",
+    paragraphs: [
+      "校学生会体育部拟于2026年9月开展招新工作，面向全校2026级新生。",
+      "体育部负责承办校运动会、篮球比赛等体育活动的组织与服务。",
+      "报名方式：填写报名表并于9月20日前交至学生会办公室。",
+    ],
+    classification: "non_competition",
+    notificationKind: "registration",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "实验室招新提到竞赛方向仍是招新",
+    title: "人工智能应用实验室招新",
+    paragraphs: [
+      "信息工程学院“人工智能应用工作室”拟于2026年11月开展招新工作。",
+      "实验室聚焦深度学习、机器学习等核心领域，鼓励成员参加各类竞赛。",
+    ],
+    classification: "non_competition",
+    notificationKind: "news",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "社会实践团队招募不是赛事报名",
+    title: "关于开展2026年暑期社会实践团队招募的通知",
+    paragraphs: [
+      "学院拟组建暑期社会实践团队，现面向全院招募队员。",
+      "近年学院社会实践团队在“挑战杯”竞赛中多次获奖。",
+      "报名截止：2026年6月10日。",
+    ],
+    classification: "non_competition",
+    notificationKind: "registration",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "假期与离校管理不是赛事报名",
+    title: "关于2026年国庆节假期学生管理工作的通知",
+    paragraphs: [
+      "放假时间为2026年10月1日至7日。",
+      "学生离校前须报备行程，参加竞赛集训的学生按学院安排执行。",
+      "请各班于9月28日前完成离校登记。",
+    ],
+    classification: "non_competition",
+    notificationKind: "news",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "岗位招募不是赛事报名",
+    title: "关于招聘学院实验教学助理的通知",
+    paragraphs: [
+      "学院拟招聘实验教学助理若干名，协助实验课程准备与竞赛资料整理。",
+      "岗位要求：责任心强，每周工作不少于8小时。",
+      "报名截止：2026年9月30日。",
+    ],
+    classification: "non_competition",
+    notificationKind: "registration",
+    priority: 3,
+    needsReview: false,
+  },
+  {
+    boundary: "赛事队伍招募仍是明确赛事",
+    title: "关于招募2026年四川省大学生电子设计竞赛参赛队伍的通知",
+    paragraphs: [
+      "参赛对象为全校本科生，请各学院组织学生报名，报名截止：2026年10月20日。",
+    ],
+    classification: "definite",
+    notificationKind: "registration",
+    priority: 0,
+    needsReview: true,
+  },
+  {
+    boundary: "推荐学生参加具体赛事仍是明确赛事",
+    title: "关于推荐优秀本科生参加2026年全国大学生数学建模竞赛的通知",
+    paragraphs: ["学校将择优推荐学生参赛，报名截止：2026年9月10日。"],
+    classification: "definite",
+    notificationKind: "registration",
+    priority: 0,
+    needsReview: true,
+  },
+  {
+    boundary: "赛事通知提到执裁安排不因此降级",
+    title: "关于举办2026年校园武术套路公开赛的通知",
+    paragraphs: [
+      "报名截止：2026年11月1日，比赛时间：2026年11月15日，地点：体育馆。",
+      "本次比赛设裁判组，由武术队队员协助执裁。",
+    ],
+    classification: "definite",
+    notificationKind: "registration",
+    priority: 0,
+    needsReview: true,
+  },
+  {
+    boundary: "只面向研究生的真赛事仍是明确赛事",
+    title: "关于举办2026年中国研究生智能建造创新大赛校内选拔赛的通知",
+    paragraphs: ["参赛对象：在校研究生。报名截止：2026年10月15日。"],
+    classification: "definite",
+    notificationKind: "registration",
+    priority: 0,
+    needsReview: true,
+  },
+  {
+    boundary: "延期补充仍按赛事进程处理",
+    title: "2026年数学建模竞赛补充通知",
+    paragraphs: ["数学建模竞赛报名延期至2026年11月10日。"],
+    classification: "definite",
+    notificationKind: "supplement",
+    priority: 0,
+    needsReview: true,
+  },
+];
+
 export const ambiguousTitles = [
   "校园征文通知",
   "绘画作品征集",

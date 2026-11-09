@@ -342,6 +342,135 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect((await list("?pageSize=51")).statusCode).toBe(400);
   });
 
+  it("执裁回顾与非赛事业务经 HTTP 落库后不进审核队列，组合筛选仍可追溯", async () => {
+    const auth = await session();
+    const list = async (query = "") =>
+      test.request("GET", "admin/ingestion/candidates" + query, undefined, {
+        cookie: auth.cookie,
+      });
+    const negatives = [
+      [
+        "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
+        [
+          "2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。",
+          "体育学院武术队受邀承担本次比赛裁判工作，圆满完成执裁任务。",
+        ],
+      ],
+      [
+        "关于招聘学院实验教学助理的通知",
+        [
+          "学院拟招聘实验教学助理若干名，协助实验课程准备与竞赛资料整理。",
+          "报名截止：2026年9月30日。",
+        ],
+      ],
+    ] as const;
+    const negativeIds: string[] = [];
+    for (const [index, [title, paragraphs]] of negatives.entries()) {
+      const targetUrl = `https://${source.host}/info/1043/${index + 260}.htm`;
+      const article = {
+        title,
+        publishedAt: null,
+        text: paragraphs.join("\n"),
+        paragraphs: [...paragraphs],
+        attachments: [],
+      };
+      const saved = await persistArticle(
+        test.pool,
+        source,
+        targetUrl,
+        {
+          url: targetUrl,
+          body: new Uint8Array(),
+          html: "",
+          status: 200,
+          headers: {},
+        },
+        article,
+        parseCandidate(article, targetUrl, directory!),
+        source.defaultChannelId,
+      );
+      negativeIds.push(saved.candidateId!);
+    }
+    const positiveUrl = `https://${source.host}/info/1043/270.htm`;
+    const positiveArticle = {
+      title: "关于招募2026年四川省大学生电子设计竞赛参赛队伍的通知",
+      publishedAt: null,
+      text: "参赛对象为全校本科生，报名截止：2026年10月20日。",
+      paragraphs: ["参赛对象为全校本科生，报名截止：2026年10月20日。"],
+      attachments: [],
+    };
+    const positive = await persistArticle(
+      test.pool,
+      source,
+      positiveUrl,
+      {
+        url: positiveUrl,
+        body: new Uint8Array(),
+        html: "",
+        status: 200,
+        headers: {},
+      },
+      positiveArticle,
+      parseCandidate(positiveArticle, positiveUrl, directory!),
+      source.defaultChannelId,
+    );
+    const queue = (await list()).json();
+    // 队列仍保留全部候选以便追溯，但两类误收被判非赛事、优先级 3，
+    // 排在真实参赛通知之后（同类内按抓取时间与 ID 稳定排序）。
+    expect(queue.items[0].candidateId).toBe(positive.candidateId);
+    expect(
+      queue.items
+        .slice(1)
+        .map((item: { candidateId: string }) => item.candidateId)
+        .sort(),
+    ).toEqual([...negativeIds].sort());
+    expect(queue.counts).toEqual({
+      definite: 1,
+      suspected: 0,
+      non_competition: 2,
+    });
+    // 待复核工作面（needsReview=true）只剩真实参赛通知。
+    expect(
+      (await list("?needsReview=true"))
+        .json()
+        .items.map((item: { candidateId: string }) => item.candidateId),
+    ).toEqual([positive.candidateId]);
+    // 非赛事候选仍可按分类与通知种类筛出，审核人员没有失去追溯入口。
+    expect(
+      (await list("?classification=non_competition&needsReview=false"))
+        .json()
+        .items.map((item: { candidateId: string }) => item.candidateId)
+        .sort(),
+    ).toEqual([...negativeIds].sort());
+    const detail = (
+      await test.request(
+        "GET",
+        `admin/ingestion/candidates/${negativeIds[0]}`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json();
+    expect(detail).toMatchObject({
+      classification: "non_competition",
+      needsReview: false,
+      priority: 3,
+      ruleVersion: noticeRuleVersion,
+      candidate: {
+        classification: {
+          classification: "non_competition",
+          notificationKind: "news",
+          needsReview: false,
+        },
+      },
+    });
+    expect(detail.candidate.classification.exclusions).toContainEqual(
+      expect.stringContaining("执裁实践"),
+    );
+    // 队列排序语义不变：明确报名在前（priority 0），非赛事排在最后（priority 3）。
+    expect(
+      queue.items.map((item: { priority: number }) => item.priority),
+    ).toEqual([0, 3, 3]);
+  });
   it("分类独立于审核状态，权限、幂等、旧基线、筛选与数量均有契约", async () => {
     const id = await candidateId();
     const auth = await session();
