@@ -36,6 +36,11 @@ export function errorMessage(error: unknown) {
     return "权限不足，未执行操作，请联系有权限的管理员。";
   if (error instanceof ConsoleError && error.status === 404)
     return "记录不存在或当前不可访问，请返回列表重新查询。";
+  // 400/422 是服务端确定性拒绝，没有执行写入，不能提示成「结果未知」。
+  if (error instanceof ConsoleError && [400, 422].includes(error.status))
+    return "提交内容未通过服务端校验，本次操作未执行；请按提示修正，不会重复写入。";
+  if (error instanceof ConsoleError && error.status === 401)
+    return "会话已失效，本次操作未执行；请重新登录后核对原记录。";
   return "请求失败，未确认执行结果，请重新加载核验；请勿重复提交。";
 }
 export function createResourceController<T, D = T>() {

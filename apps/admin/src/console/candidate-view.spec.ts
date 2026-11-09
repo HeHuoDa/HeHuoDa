@@ -45,14 +45,14 @@ describe("候选字段 v2 展示适配", () => {
         fieldsV2: fields(),
       }),
     ).toBe("supplement");
-    // v2 候选缺分类时不回退旧投影，避免通知种类出现第二个来源。
+    // v2 候选缺分类时读后端兼容投影的 kind，它仍是通知种类而非赛事种类。
     expect(
       resolveNotificationKind({
         fieldsContract: "candidate-fields-v2",
         fields: { kind: "award" },
         fieldsV2: fields(),
       }),
-    ).toBeNull();
+    ).toBe("award");
     expect(notificationKindLabel("radar")).toBe("未知通知类型");
     expect(notificationKindLabel(null)).toBe("未知通知类型");
     expect(notificationKindLabel("registration")).toBe("报名通知");

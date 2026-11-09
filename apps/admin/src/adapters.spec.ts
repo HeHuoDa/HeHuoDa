@@ -111,6 +111,7 @@ it("列表摘要分别显示通知类型与赛事种类，未知枚举不冒充�
     pageSize: 10,
     from: "",
     to: "",
+    status: "",
   });
   expect(result.items[0]!.secondary).toBe(
     "life-sciences · 明确赛事 · 变更补充 · 已核对",

@@ -45,8 +45,9 @@ export const modeKindLabels: Record<
 type CandidateProjection = {
   fieldsContract?: "candidate-fields-v2";
   fieldsV2?: Schema["AdminCandidateFieldsDto"];
+  /** 后端兼容投影：kind 是通知种类，scope 是正式四值，mode 是英文枚举。 */
   fields?: { kind?: string | null };
-  classification?: { notificationKind?: string };
+  classification?: { notificationKind?: string; classification?: string };
 };
 
 /**
@@ -61,19 +62,19 @@ export function candidateFieldsV2(
   return candidate?.fieldsV2 ?? null;
 }
 
-/** 旧材料分支：只有旧投影时，通知种类只从旧 kind 读，赛事种类保持未知。 */
+/**
+ * 旧材料分支的通知种类：只读兼容投影的 kind（后端保证它是通知种类）。
+ * 该值绝不当作赛事种类；没有该投影时返回 null，由界面显示未知。
+ */
 export function legacyNotificationKind(
   candidate: CandidateProjection | null | undefined,
 ): string | null {
-  // v2 候选的通知种类一律来自 classification，不回退旧投影。
-  if (!candidate || candidate.fieldsContract === "candidate-fields-v2")
-    return null;
-  return candidate.fields?.kind ?? null;
+  return candidate?.fields?.kind ?? null;
 }
 
 /**
- * 通知种类唯一来源：新契约读 classification.notificationKind；
- * 仅在材料确实没有 v2 契约时回退旧投影，且不回退赛事种类。
+ * 通知种类：优先 classification.notificationKind；缺失时读后端兼容投影的
+ * kind（仍是通知种类，不是赛事种类）。两者都没有才是真正的未知。
  */
 export function resolveNotificationKind(
   candidate: CandidateProjection | null | undefined,

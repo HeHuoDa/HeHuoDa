@@ -294,6 +294,29 @@ describe("候选审核公开交互", () => {
       }
       wrapper.unmount();
     });
+  it("已导入材料只读仍可生成独立发布预览，发布不要求人工核对日期", async () => {
+    let requested: unknown;
+    const { wrapper } = await setup("example-candidate-7", {
+      ...exampleReview,
+      preview: async (input, action) => {
+        requested = { input, action };
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    // 已导入：人工修正资料整体只读，发布不能依赖其字段通过校验。
+    const fieldset = wrapper.get("fieldset.review-form")
+      .element as HTMLFieldSetElement;
+    expect(fieldset.disabled).toBe(true);
+    const publish = wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成独立发布预览")!;
+    expect(publish.attributes("disabled")).toBeUndefined();
+    await publish.trigger("click");
+    await flushPromises();
+    expect(requested).toMatchObject({ action: "publish" });
+    expect(wrapper.text()).not.toContain("请填写真实有效的人工核对日期");
+    wrapper.unmount();
+  });
   it("真实已有目标局部补丁可编辑，未修改预览保持原始审核文件形状", async () => {
     const material = (
       await exampleReview.detail("candidates", "example-candidate-2")

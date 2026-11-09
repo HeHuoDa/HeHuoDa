@@ -301,8 +301,17 @@ function can(action: ReviewAction) {
     )
   );
 }
+/**
+ * 只有提交审核材料的动作才校验草稿字段；独立发布（publish）与重开（reopen）
+ * 只提交版本、基线与状态命令，不发送 review，因此不能要求填写人工核对日期
+ * （导入后材料只读，否则会永久阻塞发布）。
+ */
+function submitsDraft(action: ReviewAction) {
+  return action === "save" || action === "approve" || action === "import";
+}
 async function makePreview(kind: "import" | "publish") {
-  if (!draft.value || !(await valid()) || !can(kind)) return;
+  if (!draft.value || !can(kind)) return;
+  if (submitsDraft(kind) && !(await valid())) return;
   const material = serializeReviewDraft(
       toRaw(draft.value),
       state.detail!.material,
@@ -336,11 +345,8 @@ let confirmedMaterial: ReviewInput | null = null;
 let confirmedReceipt: PreviewReceipt | undefined;
 async function confirm(next: ReviewAction) {
   if (!draft.value || !can(next)) return;
-  if (
-    ["save", "approve", "import", "publish"].includes(next) &&
-    !(await valid())
-  )
-    return;
+  // save/approve/import 提交完整审核材料，必须校验；publish 只提交版本与基线命令。
+  if (submitsDraft(next) && !(await valid())) return;
   if (
     (next === "import" || next === "publish") &&
     (!previewFresh.value || !acknowledged.value || preview.value?.kind !== next)
