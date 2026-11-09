@@ -164,6 +164,80 @@ describe("候选审核公开交互", () => {
     ).toBeUndefined();
     wrapper.unmount();
   });
+  it("展示 v2 字段不改变只读审核材料与提交内容", async () => {
+    const original = (
+      await exampleReview.detail("candidates", "example-candidate-2")
+    ).material;
+    // 记录只读证据与基线快照，提交后必须逐字不变。
+    const snapshot = JSON.stringify({
+      candidate: original.candidate,
+      baseline: original.baseline,
+      mappingBaseline: original.mappingBaseline,
+      evidenceReferences: original.evidenceReferences,
+    });
+    let received: unknown;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async () => ({
+        ...(await exampleReview.detail("candidates", "example-candidate-2")),
+        material: structuredClone(original),
+      }),
+      preview: async (input) => {
+        received = structuredClone(input);
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    // 页面显示 v2 契约里的参赛形式原文；该候选未提取赛事种类，显式标注而未猜测。
+    expect(wrapper.text()).toContain("个人作品或集体作品均可");
+    expect(wrapper.text()).toContain("未提取");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await flushPromises();
+    expect(
+      JSON.stringify({
+        candidate: (received as { candidate: unknown }).candidate,
+        baseline: (received as { baseline: unknown }).baseline,
+        mappingBaseline: (received as { mappingBaseline: unknown })
+          .mappingBaseline,
+        evidenceReferences: (received as { evidenceReferences: unknown })
+          .evidenceReferences,
+      }),
+    ).toBe(snapshot);
+    // 原材料的 v2 字段本身也没有被展示转换改写。
+    expect(original.candidate.fieldsV2?.mode).toBe("个人作品或集体作品均可");
+    expect(original.candidate.fields.kind).toBe("registration");
+    wrapper.unmount();
+  });
+  it("旧材料无 v2 字段时显式说明，仍按原文件形状提交", async () => {
+    const material = (
+      await exampleReview.detail("candidates", "example-candidate-2")
+    ).material;
+    // 模拟历史 format=1 材料：没有 v2 契约，只剩旧投影。
+    delete (material.candidate as { fieldsV2?: unknown }).fieldsV2;
+    delete (material.candidate as { fieldsContract?: unknown }).fieldsContract;
+    let received: unknown;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async () => ({
+        ...(await exampleReview.detail("candidates", "example-candidate-2")),
+        material,
+      }),
+      preview: async (input) => {
+        received = input;
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    expect(wrapper.text()).toContain("旧版审核材料没有候选 v2 字段");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await flushPromises();
+    expect(received).toEqual(material);
+    wrapper.unmount();
+  });
   it("旧版本材料迟到不覆盖新版本视图", async () => {
     let resolveOld!: (value: ReviewRecord) => void;
     const { wrapper, router } = await setup("example-candidate-2", {
