@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-8";
+export const noticeRuleVersion = "competition-rules-9";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -93,6 +93,27 @@ export function classifyNotice(
       !/遴选的通知|遴选工作/.test(title) &&
       !ambiguousPattern.test(title));
   const explicitRegistration = /报名/.test(title);
+  // #205：标题声明的主体与对象决定通知是不是「面向学生开放的参赛报名」。
+  // 执裁实践的主体是提供执裁服务的师生，对象是已举行的赛事，属实践回顾；
+  // 招新、岗位招募、社会实践组队、假期与离校管理的主体是学院或学生组织，对象是部门、
+  // 岗位或事务，赛事只是成果举例或旁证。两者都不构成本项目要收的报名赛事。
+  // 判定只看标题：标题一旦自己点明赛事（竞赛/比赛/大赛…）就不适用，保证
+  // 「招募…竞赛参赛队伍」「推荐…参加…竞赛」这类真实参赛通知不被一刀切排除。
+  const officiatingPractice =
+    /执裁|担任裁判|裁判工作/.test(title) &&
+    !/报名|参赛|作品|选拔队伍/.test(title) &&
+    !/关于举办|关于组织|组织参加/.test(title);
+  const nonCompetitionBusiness =
+    /招新|纳新|招募|招聘|社会实践|假期|离校|助理/.test(title) &&
+    !competitionPattern.test(title) &&
+    !ambiguousPattern.test(title) &&
+    // 「招募…参赛队伍」「…队员招募」仍是真实参赛通知，不能因「招募」二字排除。
+    !/参赛|队伍|队员|作品/.test(title);
+  const semanticNonCompetition = officiatingPractice || nonCompetitionBusiness;
+  // 附件标题若自己写明赛事名与具体事项（如「数学竞赛延期通知.pdf」），仍是一份
+  // 待核对的赛事依据，不被标题的业务性质吞掉；此时保留疑似，交人工核对。
+  const semanticNonCompetitionDecisive =
+    semanticNonCompetition && attachmentTitles.length === 0;
   const bodyAward =
     !explicitRegistration &&
     /(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示|现将[^。；\n]{0,100}(?:结果|名单)公示/.test(
@@ -118,12 +139,20 @@ export function classifyNotice(
           // 首次发布的助学金、职业规划大赛通知误判成补充通知。
           /补充|延期|延长|更正|调整|规则(?:修改|变更)|变更/.test(title)
           ? "supplement"
-          : /报名|参赛/.test(text) ||
-              (!/评选|评定|评审/.test(title) &&
-                /竞赛.*通知|比赛.*通知/.test(text))
-            ? "registration"
-            : "news";
+          : // 执裁实践是已结束活动的回顾，正文里的「参赛」「报名」指他人已发生的行为，
+            // 不得据此把通知种类记成面向学生的报名通知。其余非赛事业务的报名仍按
+            // 事实记为报名通知：通知种类描述通知本身，与内容是否属于赛事相互独立。
+            officiatingPractice
+            ? "news"
+            : /报名|参赛/.test(text) ||
+                (!/评选|评定|评审/.test(title) &&
+                  /竞赛.*通知|比赛.*通知/.test(text))
+              ? "registration"
+              : "news";
   if (list) exclusions.push("applicant-list");
+  if (officiatingPractice) exclusions.push("执裁实践回顾，不是可报名赛事");
+  if (nonCompetitionBusiness)
+    exclusions.push("非赛事业务通知，正文赛事提及仅作旁证");
   if (excluded) exclusions.push("非报名活动，赛事关联需人工核对");
   if (resultNotice || bodyAward)
     exclusions.push("结果公示或评选通知，不是可报名赛事");
@@ -160,18 +189,22 @@ export function classifyNotice(
   const classification: Classification =
     list || resultNotice || titleRecap || bodyAward || bodyNews
       ? "non_competition"
-      : excluded
-        ? competition || ambiguous || attachmentTitles.length > 0
-          ? "suspected"
-          : "non_competition"
-        : competition && titleDeclaresCompetition && hasCheckableArrangement
-          ? "definite"
-          : competition ||
-              ambiguous ||
-              attachmentTitles.length > 0 ||
-              /补充通知|延期通知|规则变更/.test(title)
+      : // 标题已明确是非赛事业务时，优先按标题判定：正文的赛事提及只作旁证，
+        // 不能被 `excluded` 分支重新提升成疑似。附件写明赛事事项时不走这条。
+        semanticNonCompetitionDecisive
+        ? "non_competition"
+        : excluded
+          ? competition || ambiguous || attachmentTitles.length > 0
             ? "suspected"
-            : "non_competition";
+            : "non_competition"
+          : competition && titleDeclaresCompetition && hasCheckableArrangement
+            ? "definite"
+            : competition ||
+                ambiguous ||
+                attachmentTitles.length > 0 ||
+                /补充通知|延期通知|规则变更/.test(title)
+              ? "suspected"
+              : "non_competition";
   if (attachmentTitles.length)
     reasons.push("附件待核对，不按缺少正文关键字排除");
   if (!reasons.length && !exclusions.length)

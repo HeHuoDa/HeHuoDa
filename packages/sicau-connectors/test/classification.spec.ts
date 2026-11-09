@@ -6,6 +6,7 @@ import {
   positiveGroups,
   nonCompetitionTitles,
   ambiguousTitles,
+  classificationBoundaryCases,
 } from "./classification-corpus.js";
 
 describe("赛事分类独立于审核状态", () => {
@@ -770,13 +771,6 @@ describe("赛事分类独立于审核状态", () => {
         ],
       ],
       [
-        "人工智能应用实验室招新",
-        [
-          "信息工程学院“人工智能应用工作室”拟于2026年11月开展招新工作。",
-          "实验室聚焦深度学习、机器学习等核心领域，鼓励成员参加各类竞赛。",
-        ],
-      ],
-      [
         "四川农业大学社会工作硕士研究生招生宣传资料",
         [
           "本学位点立足四川、面向西部，培养高层次应用型社会工作人才。",
@@ -820,6 +814,73 @@ describe("赛事分类独立于审核状态", () => {
         "二、报名截止 2026年11月20日。",
       ]).classification,
     ).toBe("definite");
+  });
+  it("执裁实践与非赛事业务按主体动作判非赛事，真实参赛不受影响", () => {
+    for (const item of classificationBoundaryCases) {
+      const result = classifyNotice(item.title, item.paragraphs);
+      // 断言真实返回对象的四项可观察结果，不做对象与字符串比较。
+      expect({
+        boundary: item.boundary,
+        classification: result.classification,
+        notificationKind: result.notificationKind,
+        priority: result.priority,
+        needsReview: result.needsReview,
+      }).toEqual({
+        boundary: item.boundary,
+        classification: item.classification,
+        notificationKind: item.notificationKind,
+        priority: item.priority,
+        // 非赛事不进复核；明确赛事一律保留人工复核。
+        needsReview: item.classification !== "non_competition",
+      });
+      // 结论必须有可读理由，便于审核人员判断为什么被排除或保留。
+      expect(result.reasons.length + result.exclusions.length).toBeGreaterThan(
+        0,
+      );
+    }
+    // 排除理由要写明语义边界，而不是只留下一个「被判非赛事」的结果。
+    expect(
+      classifyNotice("体育学院武术队受邀执裁第四届川东北武术套路公开赛", [
+        "2026年10月18日，第四届川东北武术套路公开赛在南充市体育中心举行。",
+        "体育学院武术队受邀承担本次比赛裁判工作，圆满完成执裁任务。",
+      ]).exclusions,
+    ).toContainEqual(expect.stringContaining("执裁实践"));
+    expect(
+      classifyNotice("校学生会体育部2026年秋季招新通知", [
+        "体育部负责承办校运动会、篮球比赛等体育活动的组织与服务。",
+      ]).exclusions,
+    ).toContainEqual(expect.stringContaining("非赛事业务"));
+  });
+  it("非赛事语义边界不是词表：主体换成参赛者或对象换成赛事项仍按赛事处理", () => {
+    // 标题自己点明赛事时，「招募」「执裁」不构成排除依据。
+    for (const title of [
+      "关于招募2026年四川省大学生电子设计竞赛参赛队伍的通知",
+      "关于招募数学建模竞赛队员的通知",
+      "2026年校园武术套路公开赛执裁安排与报名通知",
+      "关于举办2026年程序设计竞赛招新赛的通知",
+    ])
+      expect(
+        classifyNotice(title, [
+          "参赛对象为全校本科生，报名截止：2026年10月20日。",
+        ]),
+      ).toMatchObject({ needsReview: true });
+    // 附件标题自己写明赛事事项时，标题的业务性质不能把它一并判非赛事。
+    expect(
+      classifyNotice(
+        "人工智能应用实验室招新",
+        ["实验室聚焦深度学习等核心领域，鼓励成员参加各类竞赛。"],
+        ["数学竞赛报名通知.pdf"],
+      ),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+    // 名单隐私排除仍优先于语义边界，理由保持可读。
+    expect(
+      classifyNotice("关于招聘学院实验教学助理的通知", [
+        "报名学生名单如下：张三、李四、王五。",
+      ]),
+    ).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
   });
   it("推荐或遴选参赛队伍属赛事选拔，不按评奖排除", () => {
     // 「推荐」既可指评优也可指赛事选拔；标题同时出现参赛/队伍时属赛事进程。
