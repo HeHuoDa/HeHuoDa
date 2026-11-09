@@ -65,9 +65,58 @@ it("候选查询分开传递规则分类与审核状态，并保留栏目与附�
     channelId: "default",
     attachmentStatus: "blocked",
   });
-  // 列表摘要与筛选器使用同一套中文标签，不暴露规则枚举值。
+  // 列表摘要与筛选器使用同一套中文标签，不暴露规则枚举值；赛事种类单独列出。
   expect(result.items[0]!.secondary).toBe(
-    "life-sciences · 明确赛事 · 报名通知 · 需复核",
+    "life-sciences · 明确赛事 · 报名通知 · 赛事种类：学科竞赛 · 需复核",
+  );
+});
+it("列表摘要分别显示通知类型与赛事种类，未知枚举不冒充报名通知", async () => {
+  const request = vi.fn().mockResolvedValue({
+    items: [
+      {
+        candidateId: "candidate-1",
+        status: "pending",
+        fetchedAt: "2026-10-30T06:14:00Z",
+        sourceId: "life-sciences",
+        classification: "definite",
+        needsReview: false,
+        article: { title: "补充通知" },
+        // 通知种类只来自 classification；旧投影的 kind 不再参与。
+        data: {
+          classification: { notificationKind: "supplement" },
+          fields: { kind: "registration" },
+          fieldsV2: { eventKind: null },
+        },
+      },
+      {
+        candidateId: "candidate-2",
+        status: "pending",
+        fetchedAt: "2026-10-30T06:15:00Z",
+        sourceId: "life-sciences",
+        classification: "definite",
+        needsReview: true,
+        article: { title: "未知类型" },
+        data: {
+          classification: { notificationKind: "brand-new-kind" },
+          fields: {},
+          fieldsV2: { eventKind: "体育竞赛" },
+        },
+      },
+    ],
+    total: 2,
+  });
+  const result = await createReviewService({ request }).list("candidates", {
+    q: "",
+    page: 1,
+    pageSize: 10,
+    from: "",
+    to: "",
+  });
+  expect(result.items[0]!.secondary).toBe(
+    "life-sciences · 明确赛事 · 变更补充 · 已核对",
+  );
+  expect(result.items[1]!.secondary).toBe(
+    "life-sciences · 明确赛事 · 未知通知类型 · 赛事种类：体育竞赛 · 需复核",
   );
 });
 it("身份核实后Cookie变化导致403时仍保留原操作恢复线索", async () => {

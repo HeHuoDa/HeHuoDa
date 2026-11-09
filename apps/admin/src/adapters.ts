@@ -9,10 +9,10 @@ import {
 } from "./console/ingestion-control";
 import type { ReviewService, ReviewInput } from "./console/review";
 import {
-  classificationLabels,
-  kindLabels,
-  type NoticeKind,
-} from "./console/review";
+  candidateFieldsV2,
+  candidateSummary,
+  resolveNotificationKind,
+} from "./console/candidate-view";
 import { ConsoleError, type PageQuery } from "./console/resource";
 type Transport = Pick<AdminHttp, "request">;
 const ingestion = "/ingestion";
@@ -311,14 +311,15 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          // 通知种类读兼容投影（旧形状），回退到分类结果；赛事种类不参与显示。
-          secondary: `${row.sourceId} · ${classificationLabels[row.classification]} · ${
-            kindLabels[
-              (row.data.fields.kind ??
-                row.data.classification?.notificationKind ??
-                "") as NoticeKind
-            ] ?? "未知通知类型"
-          } · ${row.needsReview ? "需复核" : "已核对"}`,
+          // 通知种类唯一来源是 classification.notificationKind；赛事种类单独列出，
+          // 不参与通知类型判断。旧投影只在材料确实没有 v2 契约时回退。
+          secondary: candidateSummary({
+            sourceId: row.sourceId,
+            classification: row.classification,
+            notificationKind: resolveNotificationKind(row.data),
+            eventKind: candidateFieldsV2(row.data)?.eventKind ?? null,
+            needsReview: row.needsReview,
+          }),
         })),
       };
     },
