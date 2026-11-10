@@ -133,16 +133,92 @@ export function candidateFieldRows(
     rows.push({ label: "参赛规则", value: fields.rules.join("；") });
   if (fields.stageNames.length)
     rows.push({ label: "赛段", value: fields.stageNames.join("、") });
-  for (const track of fields.tracks)
+  for (const track of fields.tracks) {
+    const name = track.name || "未命名";
     rows.push({
-      label: "赛道：" + (track.name || "未命名"),
+      label: "赛道：" + name,
       value: track.modeKind
         ? modeKindLabels[track.modeKind]
         : "参赛形式无法可靠归一",
       ...(track.members ? { hint: "人数：" + track.members } : {}),
     });
+    // 赛道规则可能含否定与例外条款（如「不得提交已获奖作品」），必须原样保留。
+    if (track.rules?.trim())
+      rows.push({ label: "赛道规则：" + name, value: track.rules });
+  }
   return rows;
 }
+
+/**
+ * 旧材料（无 fieldsV2）的只读展示行：把兼容投影里仍可读的字段全部列出，
+ * 包括参赛规则、各赛道规则与时间；这些字段仍会随材料提交，复核时不能隐藏。
+ * 旧 kind 是通知种类，不在此显示为赛事种类。
+ */
+export function legacyFieldRows(
+  fields: Schema["AdminLegacyCandidateFieldsDto"],
+): CandidateFieldRow[] {
+  const rows: CandidateFieldRow[] = [
+    { label: "赛事名称（旧）", value: fields.name || "未提取" },
+    {
+      label: "竞赛范围（正式四值投影）",
+      value:
+        fields.scope.kind +
+        (fields.scope.kind === "colleges" && fields.scope.colleges.length
+          ? "：" + fields.scope.colleges.join("、")
+          : ""),
+      hint: fields.scope.note || "尚无说明",
+    },
+    {
+      label: "参赛方式（英文枚举）",
+      value: fields.mode
+        ? modeKindLabels[fields.mode]
+        : "未提取（旧材料无原文）",
+    },
+    {
+      label: "承办学院（旧）",
+      value: fields.hosts.length
+        ? fields.hosts.join("、")
+        : "未知，不能由发布单位推断",
+    },
+  ];
+  if (fields.organizer)
+    rows.push({ label: "组织单位（旧）", value: fields.organizer });
+  if (fields.edition) rows.push({ label: "届次（旧）", value: fields.edition });
+  if (fields.members)
+    rows.push({ label: "人数要求（旧）", value: fields.members });
+  if (fields.rules.length)
+    rows.push({ label: "参赛规则（旧）", value: fields.rules.join("；") });
+  if (fields.stageNames.length)
+    rows.push({ label: "赛段（旧）", value: fields.stageNames.join("、") });
+  for (const track of fields.tracks) {
+    const name = track.name || "未命名";
+    rows.push({
+      label: "赛道（旧）：" + name,
+      value: track.mode ? modeKindLabels[track.mode] : "参赛形式无法可靠归一",
+      ...(track.members ? { hint: "人数：" + track.members } : {}),
+    });
+    if (track.rules?.trim())
+      rows.push({ label: "赛道规则（旧）：" + name, value: track.rules });
+  }
+  for (const [key, label] of CANDIDATE_TIME_LABELS)
+    rows.push({
+      label: label + "（旧）",
+      value:
+        fields[key].precision === "unknown"
+          ? "未知"
+          : String(fields[key].value),
+      hint: fields[key].precision,
+    });
+  return rows;
+}
+
+/** 四个时间字段的顺序与标签，v2 与旧材料分支共用，避免两处口径漂移。 */
+export const CANDIDATE_TIME_LABELS = [
+  ["startsAt", "报名开始"],
+  ["deadline", "报名截止"],
+  ["materialsAt", "材料截止"],
+  ["eventAt", "比赛时间"],
+] as const;
 
 /** 复核提示：分开列出冲突、缺失与警告，不把引文形态检查说成依据充分。 */
 export function reviewHints(candidate: {

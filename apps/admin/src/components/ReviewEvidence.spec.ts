@@ -133,4 +133,56 @@ describe("候选证据展示", () => {
     ).toBe(true);
     wrapper.unmount();
   });
+
+  it("渲染后仍可见赛道规则与否定条款，不被展示层吞掉", async () => {
+    const file = toReviewDraft(reviewExamples[0]!.material);
+    file.candidate.fieldsV2 = {
+      ...file.candidate.fieldsV2!,
+      rules: ["须提交原创作品"],
+      tracks: [
+        {
+          name: "综合赛道",
+          modeKind: "team",
+          members: "3 人",
+          rules: "不得提交已获奖作品，仅限未毕业学生。",
+        },
+      ],
+    };
+    const wrapper = await setup(file);
+    const text = wrapper.text();
+    expect(text).toContain("参赛规则");
+    expect(text).toContain("须提交原创作品");
+    expect(text).toContain("赛道规则：综合赛道");
+    expect(text).toContain("不得提交已获奖作品，仅限未毕业学生。");
+    wrapper.unmount();
+  });
+
+  it("旧材料渲染后仍可见已有规则、赛道规则与日期", async () => {
+    const file = toReviewDraft(reviewExamples[11]!.material);
+    expect(file.candidate.fieldsV2).toBeUndefined();
+    file.candidate.fields = {
+      ...file.candidate.fields,
+      kind: "registration",
+      rules: ["不接受跨校组队"],
+      tracks: [
+        {
+          name: "历史赛道",
+          mode: "team",
+          members: "2 人",
+          rules: "往届获奖作品不得重复提交。",
+        },
+      ],
+      deadline: { precision: "date", value: "2026-11-08" },
+    };
+    const wrapper = await setup(file);
+    const text = wrapper.text();
+    expect(text).toContain("旧版审核材料没有候选 v2 字段");
+    expect(text).toContain("参赛规则（旧）");
+    expect(text).toContain("不接受跨校组队");
+    expect(text).toContain("赛道规则（旧）：历史赛道");
+    expect(text).toContain("往届获奖作品不得重复提交。");
+    expect(text).toContain("报名截止（旧）");
+    expect(text).toContain("2026-11-08");
+    wrapper.unmount();
+  });
 });

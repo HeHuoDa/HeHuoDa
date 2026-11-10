@@ -2,10 +2,12 @@
 import { computed } from "vue";
 import { safeSourceUrl, type ReviewInput } from "../console/review";
 import {
+  CANDIDATE_TIME_LABELS,
   candidateFieldRows,
   candidateFieldsV2,
   evidenceLabel,
   evidenceLocation,
+  legacyFieldRows,
   notificationKindLabel,
   resolveNotificationKind,
   reviewHints,
@@ -22,13 +24,12 @@ const legacy = computed(() => props.file.candidate.fields);
 const rows = computed(() =>
   fields.value ? candidateFieldRows(fields.value) : [],
 );
+/** 旧材料同样要能看到已有的规则、赛道规则与时间，避免复核时字段被隐藏。 */
+const legacyRows = computed(() =>
+  fields.value ? [] : legacyFieldRows(legacy.value),
+);
 const hints = computed(() => reviewHints(props.file.candidate));
-const times = [
-  ["startsAt", "报名开始"],
-  ["deadline", "报名截止"],
-  ["materialsAt", "材料截止"],
-  ["eventAt", "比赛时间"],
-] as const;
+const times = CANDIDATE_TIME_LABELS;
 type Located = {
   evidence: EvidenceLike;
   label: string;
@@ -128,19 +129,25 @@ const conflicts = computed(() =>
       </dl>
     </template>
     <p v-else class="field-help" role="status">
-      旧版审核材料没有候选 v2 字段：赛事种类、参赛形式原文与候选范围无法展示。
+      旧版审核材料没有候选 v2 字段：赛事种类与参赛形式原文无法展示。
       通知类型仅按旧材料的 kind
-      显示，不据此推断赛事种类；如需完整字段请重新导出审核材料。
+      显示，不据此推断赛事种类；下列旧投影仍会随材料提交，
+      复核时须逐项核对。如需完整字段请重新导出审核材料。
     </p>
+    <dl v-if="legacyRows.length" class="console-details">
+      <template v-for="row in legacyRows" :key="row.label">
+        <dt>{{ row.label }}</dt>
+        <dd>
+          {{ row.value }}
+          <span v-if="row.hint" class="field-help">{{ row.hint }}</span>
+        </dd>
+      </template>
+    </dl>
     <details v-if="!fields">
-      <summary>旧材料字段投影（只读）</summary>
+      <summary>旧材料范围与承办学院（只读投影）</summary>
       <dl class="console-details">
-        <dt>赛事名称（旧）</dt>
-        <dd>{{ legacy.name || "未提取" }}</dd>
         <dt>竞赛范围（正式四值投影）</dt>
         <dd>{{ legacy.scope.kind }} · {{ legacy.scope.note || "尚无说明" }}</dd>
-        <dt>参赛方式（英文枚举）</dt>
-        <dd>{{ legacy.mode ?? "未提取" }}</dd>
         <dt>承办学院（旧）</dt>
         <dd>{{ legacy.hosts.join("、") || "未知，不能由发布单位推断" }}</dd>
       </dl>

@@ -6,6 +6,7 @@ import {
   candidateScopeLabels,
   evidenceLabel,
   evidenceLocation,
+  legacyFieldRows,
   legacyNotificationKind,
   notificationKindLabel,
   resolveNotificationKind,
@@ -104,6 +105,84 @@ describe("候选字段 v2 展示适配", () => {
       value: "按通知另行确定",
       hint: "无法可靠归一，导入时须人工填写个人／团队／混合",
     });
+  });
+
+  it("赛道规则原文完整保留，否定与例外不得丢失", () => {
+    const rows = candidateFieldRows(
+      fields({
+        tracks: [
+          {
+            name: "综合赛道",
+            modeKind: "team",
+            members: "3 人",
+            rules: "不得提交已获奖作品，仅限未毕业学生。",
+          },
+          {
+            name: "无规则赛道",
+            modeKind: "individual",
+            members: null,
+            rules: null,
+          },
+        ],
+      }),
+    );
+    const rule = rows.find((row) => row.label === "赛道规则：综合赛道");
+    expect(rule?.value).toBe("不得提交已获奖作品，仅限未毕业学生。");
+    // 赛道本身的参赛形式与人数仍单独成行，规则不覆盖它们。
+    expect(rows.find((row) => row.label === "赛道：综合赛道")).toMatchObject({
+      value: "团队",
+      hint: "人数：3 人",
+    });
+    // rules 为 null 的赛道不生成空规则行，也不伪造成「无规则」。
+    expect(rows.some((row) => row.label === "赛道规则：无规则赛道")).toBe(
+      false,
+    );
+  });
+
+  it("旧材料投影保留已有规则、赛道规则与时间", () => {
+    const legacy: Schema["AdminLegacyCandidateFieldsDto"] = {
+      name: "历史竞赛",
+      edition: "2025",
+      kind: "registration",
+      organizer: null,
+      hosts: [],
+      scope: {
+        kind: "colleges" as const,
+        colleges: ["science"],
+        note: "理学院本科生。",
+      },
+      mode: "team" as const,
+      tracks: [
+        {
+          name: "历史赛道",
+          mode: "mixed" as const,
+          members: "2 人",
+          rules: "往届获奖作品不得重复提交。",
+        },
+      ],
+      members: "2 人",
+      rules: ["须提交原创作品", "不接受跨校组队"],
+      stageNames: ["校级选拔"],
+      startsAt: { precision: "unknown" as const, value: null },
+      deadline: { precision: "date" as const, value: "2025-10-30" },
+      materialsAt: { precision: "unknown" as const, value: null },
+      eventAt: { precision: "unknown" as const, value: null },
+    };
+    const rows = legacyFieldRows(legacy);
+    expect(rows.find((row) => row.label === "参赛规则（旧）")?.value).toBe(
+      "须提交原创作品；不接受跨校组队",
+    );
+    expect(
+      rows.find((row) => row.label === "赛道规则（旧）：历史赛道")?.value,
+    ).toBe("往届获奖作品不得重复提交。");
+    expect(rows.find((row) => row.label === "报名截止（旧）")?.value).toBe(
+      "2025-10-30",
+    );
+    expect(rows.find((row) => row.label === "报名开始（旧）")?.value).toBe(
+      "未知",
+    );
+    // 旧 kind 是通知种类，不能出现在赛事种类位置。
+    expect(rows.some((row) => row.label.includes("赛事种类"))).toBe(false);
   });
 
   it("候选范围用协议四值标签，保留 note 与否定说明", () => {

@@ -128,9 +128,16 @@ export const reviewExamples: ReviewRecord[] = Array.from(
             eventAt: unknownTime(),
             kind: "registration",
             mode: null,
-            tracks: [],
+            tracks: [
+              {
+                name: "历史赛道",
+                mode: "team",
+                members: "2 人",
+                rules: "往届获奖作品不得重复提交。",
+              },
+            ],
             members: null,
-            rules: [],
+            rules: ["不接受跨校组队"],
             stageNames: ["校内选拔"],
           },
           // 第 12 条故意保留为没有 v2 契约的旧材料，用于核对 legacy 分支展示。
