@@ -289,9 +289,11 @@ function readModeMention(clause: string, labelled = false): ModeMention | null {
     ) ||
     pairedForms ||
     (labelled &&
-      /^(?:以)?个人(?=或|及|和|均|皆|[，,。；;]|$)/.test(labelledValue));
+      /^(?:以)?个人(?:形式|身份)?(?=或|及|和|均|皆|[，,。；;]|$)/.test(
+        labelledValue,
+      ));
   const team =
-    /团队赛|团体赛|以团队(?:形式)?(?:参赛|参加)|以组为单位|每组\s*\d+人|组队|团队形式|队伍参赛|(?:团队|队伍)人数|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/.test(
+    /团队赛|团体赛|(?:以)?团队(?:形式)?(?:参赛|参加)|以组为单位|每组\s*\d+人|组队|团队形式|队伍参赛|(?:团队|队伍)人数|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/.test(
       clause,
     ) ||
     pairedForms ||

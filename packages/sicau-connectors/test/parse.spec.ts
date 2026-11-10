@@ -57,6 +57,23 @@ describe("候选领域解析", () => {
     );
     expect(sameSentence.fields.modeKind).toBe("team");
   });
+  it("显式形式标签及不带以的团队参赛保留归一和赛段冲突", () => {
+    for (const text of ["参赛形式：个人形式", "参赛形式：个人身份"]) {
+      const parsed = parseCandidate(article([text]), url, directory);
+      expect(parsed.fields.mode).toBe(text);
+      expect(parsed.fields.modeKind).toBe("individual");
+    }
+    const text = "初赛个人参赛，决赛团队参赛";
+    const parsed = parseCandidate(article([text]), url, directory);
+    expect(parsed.fields.mode).toBe(text);
+    expect(parsed.fields.modeKind).toBeNull();
+    expect(parsed.conflicts).toContain(
+      "参赛形式按赛段分别规定，不能合并为单一形式",
+    );
+    expect(
+      parseCandidate(article(["团队参赛"]), url, directory).fields.modeKind,
+    ).toBe("team");
+  });
   it("不组队不误判团队，主办/承办单位与独立资格段落有明确证据", () => {
     const parsed = parseCandidate(
       article([
