@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { createResourceController } from "./resource";
+import {
+  createResourceController,
+  ConsoleError,
+  errorMessage,
+} from "./resource";
 
 describe("管理查询公开边界", () => {
+  it("区分确定性拒绝与结果未知，不把 422 说成未确认", () => {
+    expect(errorMessage(new ConsoleError(422, "x"))).toContain(
+      "未通过服务端校验",
+    );
+    expect(errorMessage(new ConsoleError(400, "x"))).toContain(
+      "本次操作未执行",
+    );
+    expect(errorMessage(new ConsoleError(409, "x"))).toContain("重新审核");
+    expect(errorMessage(new ConsoleError(403, "x"))).toContain("权限不足");
+    expect(errorMessage(new Error("network"))).toContain("未确认执行结果");
+  });
   it("空列表不伪装失败，查询失败清理旧数据并可重新加载", async () => {
     const controller = createResourceController<string>();
     const pending = controller.load(() =>

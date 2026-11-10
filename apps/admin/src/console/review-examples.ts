@@ -45,6 +45,8 @@ const patch = (id: string): CompetitionPatch => ({
     },
   ],
 });
+/** 示例中保留一条没有 v2 契约的旧材料，用于核对 legacy 分支展示。 */
+const LEGACY_EXAMPLE_INDEX = 11;
 export const reviewExamples: ReviewRecord[] = Array.from(
   { length: 12 },
   (_, i) => {
@@ -115,6 +117,8 @@ export const reviewExamples: ReviewRecord[] = Array.from(
           attachments: [],
         },
         candidate: {
+          fieldsContract:
+            i === LEGACY_EXAMPLE_INDEX ? undefined : "candidate-fields-v2",
           fields: {
             name: batch.name,
             edition: null,
@@ -127,11 +131,45 @@ export const reviewExamples: ReviewRecord[] = Array.from(
             eventAt: unknownTime(),
             kind: "registration",
             mode: null,
-            tracks: [],
+            tracks: [
+              {
+                name: "历史赛道",
+                mode: "team",
+                members: "2 人",
+                rules: "往届获奖作品不得重复提交。",
+              },
+            ],
             members: null,
-            rules: [],
+            rules: ["不接受跨校组队"],
             stageNames: ["校内选拔"],
           },
+          // 第 12 条故意保留为没有 v2 契约的旧材料，用于核对 legacy 分支展示。
+          ...(i === LEGACY_EXAMPLE_INDEX
+            ? {}
+            : {
+                fieldsV2: {
+                  name: batch.name,
+                  edition: null,
+                  eventKind: i % 2 === 0 ? "学科竞赛" : null,
+                  organizer: null,
+                  hosts: [],
+                  scope: {
+                    kind: "other" as const,
+                    colleges: [],
+                    note: "面向全校，但毕业年级学生除外。",
+                  },
+                  mode: "个人作品或集体作品均可",
+                  modeKind: "mixed" as const,
+                  tracks: [],
+                  members: null,
+                  rules: [],
+                  stageNames: ["校内选拔"],
+                  startsAt: unknownTime(),
+                  deadline: { precision: "date" as const, value: "2026-11-08" },
+                  materialsAt: unknownTime(),
+                  eventAt: unknownTime(),
+                },
+              }),
           evidence: [
             {
               field: "deadline",
@@ -188,6 +226,11 @@ export const exampleReview: ReviewService = {
         precision: "date",
         value: "2026-11-01",
       };
+      if (row.material.candidate.fieldsV2)
+        row.material.candidate.fieldsV2.deadline = {
+          precision: "date",
+          value: "2026-11-01",
+        };
       row.material.batch.competitions[0]!.stages![0]!.deadline = {
         precision: "date",
         value: "2026-11-01",

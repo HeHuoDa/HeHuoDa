@@ -164,6 +164,80 @@ describe("候选审核公开交互", () => {
     ).toBeUndefined();
     wrapper.unmount();
   });
+  it("展示 v2 字段不改变只读审核材料与提交内容", async () => {
+    const original = (
+      await exampleReview.detail("candidates", "example-candidate-2")
+    ).material;
+    // 记录只读证据与基线快照，提交后必须逐字不变。
+    const snapshot = JSON.stringify({
+      candidate: original.candidate,
+      baseline: original.baseline,
+      mappingBaseline: original.mappingBaseline,
+      evidenceReferences: original.evidenceReferences,
+    });
+    let received: unknown;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async () => ({
+        ...(await exampleReview.detail("candidates", "example-candidate-2")),
+        material: structuredClone(original),
+      }),
+      preview: async (input) => {
+        received = structuredClone(input);
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    // 页面显示 v2 契约里的参赛形式原文；该候选未提取赛事种类，显式标注而未猜测。
+    expect(wrapper.text()).toContain("个人作品或集体作品均可");
+    expect(wrapper.text()).toContain("未提取");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await flushPromises();
+    expect(
+      JSON.stringify({
+        candidate: (received as { candidate: unknown }).candidate,
+        baseline: (received as { baseline: unknown }).baseline,
+        mappingBaseline: (received as { mappingBaseline: unknown })
+          .mappingBaseline,
+        evidenceReferences: (received as { evidenceReferences: unknown })
+          .evidenceReferences,
+      }),
+    ).toBe(snapshot);
+    // 原材料的 v2 字段本身也没有被展示转换改写。
+    expect(original.candidate.fieldsV2?.mode).toBe("个人作品或集体作品均可");
+    expect(original.candidate.fields.kind).toBe("registration");
+    wrapper.unmount();
+  });
+  it("旧材料无 v2 字段时显式说明，仍按原文件形状提交", async () => {
+    const material = (
+      await exampleReview.detail("candidates", "example-candidate-2")
+    ).material;
+    // 模拟历史 format=1 材料：没有 v2 契约，只剩旧投影。
+    delete (material.candidate as { fieldsV2?: unknown }).fieldsV2;
+    delete (material.candidate as { fieldsContract?: unknown }).fieldsContract;
+    let received: unknown;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      detail: async () => ({
+        ...(await exampleReview.detail("candidates", "example-candidate-2")),
+        material,
+      }),
+      preview: async (input) => {
+        received = input;
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    expect(wrapper.text()).toContain("旧版审核材料没有候选 v2 字段");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成导入预览")!
+      .trigger("click");
+    await flushPromises();
+    expect(received).toEqual(material);
+    wrapper.unmount();
+  });
   it("旧版本材料迟到不覆盖新版本视图", async () => {
     let resolveOld!: (value: ReviewRecord) => void;
     const { wrapper, router } = await setup("example-candidate-2", {
@@ -220,6 +294,62 @@ describe("候选审核公开交互", () => {
       }
       wrapper.unmount();
     });
+  it("已导入材料只读仍可生成独立发布预览，发布不要求人工核对日期", async () => {
+    let requested: unknown;
+    const { wrapper } = await setup("example-candidate-7", {
+      ...exampleReview,
+      preview: async (input, action) => {
+        requested = { input, action };
+        return { contentKey: JSON.stringify(input), token: "test-only-token" };
+      },
+    });
+    // 已导入：人工修正资料整体只读，发布不能依赖其字段通过校验。
+    const fieldset = wrapper.get("fieldset.review-form")
+      .element as HTMLFieldSetElement;
+    expect(fieldset.disabled).toBe(true);
+    const publish = wrapper
+      .findAll("button")
+      .find((b) => b.text() === "生成独立发布预览")!;
+    expect(publish.attributes("disabled")).toBeUndefined();
+    await publish.trigger("click");
+    await flushPromises();
+    expect(requested).toMatchObject({ action: "publish" });
+    expect(wrapper.text()).not.toContain("请填写真实有效的人工核对日期");
+    wrapper.unmount();
+  });
+  it("附件证据版本变化导致批准 409 时锁定确认入口且不假成功", async () => {
+    let calls = 0;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      change: async () => {
+        calls++;
+        throw new ConsoleError(409, "attachment evidence changed");
+      },
+    });
+    // 展示层仍显示候选字段与附件证据，但写入被证据版本变化拒绝。
+    expect(wrapper.text()).toContain("个人作品或集体作品均可");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "批准候选 · 确认预览")!
+      .trigger("click");
+    await flushPromises();
+    await wrapper.get("#action-reason").setValue("附件版本变化后的批准尝试");
+    await wrapper.get("form.editor-form").trigger("submit");
+    await flushPromises();
+    expect(wrapper.text()).toContain("本轮确认已失效");
+    // 失败没有把状态写成新的成功结果，仍停在载入时的状态。
+    expect(wrapper.text()).toContain("已批准，未导入");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((b) => b.text() === "生成导入预览")!
+        .attributes("disabled"),
+    ).toBeDefined();
+    await wrapper.get("form.editor-form").trigger("submit");
+    await flushPromises();
+    expect(calls).toBe(1);
+    wrapper.unmount();
+  });
   it("真实已有目标局部补丁可编辑，未修改预览保持原始审核文件形状", async () => {
     const material = (
       await exampleReview.detail("candidates", "example-candidate-2")

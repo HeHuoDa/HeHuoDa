@@ -1,9 +1,5 @@
 import type { InjectionKey } from "vue";
-import type {
-  CompetitionDetail,
-  CompetitionStage,
-  Time,
-} from "@hehuoda/api-types";
+import type { CompetitionDetail, CompetitionStage } from "@hehuoda/api-types";
 import type { PageQuery, PageResult } from "./resource";
 import { ServiceUnavailable } from "../services";
 import type { Schema } from "../http";
@@ -59,44 +55,13 @@ export interface ReviewMaterial {
     fieldConflicts?: Schema["AdminFieldConflictDto"][];
     fieldsContract?: "candidate-fields-v2";
     /**
-     * 旧形状兼容投影：kind 是通知种类、scope 是正式四值、mode 是英文枚举。
-     * 现有视图读这里即可继续工作；新代码改读 fieldsV2。
+     * 旧形状兼容投影，仅在材料没有 fieldsV2 时使用：kind 是通知种类、
+     * scope 是正式四值、mode 是英文枚举。新视图只读 fieldsV2。
      */
-    fields: {
-      name: string;
-      edition: string | null;
-      organizer: string | null;
-      hosts: string[];
-      scope: StagePatch["scope"];
-      startsAt: Time;
-      deadline: Time;
-      materialsAt: Time;
-      eventAt: Time;
-      kind?: NoticeKind | null;
-      mode?: "individual" | "team" | "mixed" | null;
-      tracks: {
-        name: string;
-        mode?: "individual" | "team" | "mixed" | null;
-        members: string | null;
-        rules: string | null;
-      }[];
-      members: string | null;
-      rules: string[];
-      stageNames: string[];
-    };
-    /** 协议契约 v2：事件种类与通知种类分离，mode 原文 + modeKind 归一。 */
+    fields: Schema["AdminLegacyCandidateFieldsDto"];
+    /** 协议契约 v2：赛事种类与通知种类分离，mode 原文 + modeKind 归一。旧材料可能没有。 */
     fieldsV2?: Schema["AdminCandidateFieldsDto"];
-    evidence: {
-      field: string;
-      excerpt: string;
-      paragraph: number;
-      url: string;
-      sourceVersion?: string;
-      format?: "html" | "pdf" | "docx";
-      noticeVersion?: string;
-      attachmentVersion?: string | null;
-      page?: number;
-    }[];
+    evidence: Schema["AdminCandidateEvidenceDto"][];
     missing: string[];
     conflicts: string[];
     warnings: string[];
