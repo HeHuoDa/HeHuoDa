@@ -26,6 +26,37 @@ const article = (
   attachments: [],
 });
 describe("候选领域解析", () => {
+  it("普通个人和团队事务不是参赛形式，赛事通知中的无关段落也不能污染形式", () => {
+    for (const text of [
+      "请同学填写个人银行账户，用于发放助学补贴。",
+      "申请流程：个人提交申请，学院审核。",
+      "请在导师指导下制定个人学习计划。",
+      "本月开展团队建设与个人成长交流活动。",
+      "参赛者请完善个人信息和联系方式。",
+      "请同学自由组队开展课程学习。",
+    ]) {
+      const parsed = parseCandidate(article([text]), url, directory);
+      expect(parsed.fields.mode).toBeNull();
+      expect(parsed.fields.modeKind).toBeNull();
+      expect(parsed.evidence.filter((item) => item.field === "mode")).toEqual(
+        [],
+      );
+    }
+    const parsed = parseEvidenceCandidate(
+      article(["请填写个人银行账户。参赛形式：团队。请提交个人联系方式。"]),
+      url,
+      directory,
+      "dev-mode-context",
+    );
+    expect(parsed.fields.mode).toBe("参赛形式：团队。");
+    expect(parsed.fields.modeKind).toBe("team");
+    const sameSentence = parseCandidate(
+      article(["参赛形式：团队，请完善个人信息。"]),
+      url,
+      directory,
+    );
+    expect(sameSentence.fields.modeKind).toBe("team");
+  });
   it("不组队不误判团队，主办/承办单位与独立资格段落有明确证据", () => {
     const parsed = parseCandidate(
       article([

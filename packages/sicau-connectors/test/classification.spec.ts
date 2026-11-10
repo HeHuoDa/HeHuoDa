@@ -9,6 +9,58 @@ import {
   classificationBoundaryCases,
 } from "./classification-corpus.js";
 
+describe("非赛事业务的条件性赛事提及", () => {
+  it("班团活动的比赛成果条件不提升为赛事通知", () => {
+    expect(
+      classifyNotice("关于开展秋季主题团日活动的通知", [
+        "鼓励分享参加职业规划大赛的经历，请各团支部提交活动记录。",
+      ]),
+    ).toMatchObject({ classification: "non_competition", needsReview: false });
+  });
+  it("培养、导师、入党与文集征稿不因成果要求进入赛事队列", () => {
+    for (const title of [
+      "校企联合培养班招生通知",
+      "关于朋辈导师推选工作的通知",
+      "关于本学期推优入党工作的通知",
+      "校庆文集征文启事",
+    ]) {
+      expect(
+        classifyNotice(title, [
+          "曾在创新创业大赛中取得成绩的同学可介绍相关经历。",
+        ]),
+      ).toMatchObject({
+        classification: "non_competition",
+        needsReview: false,
+      });
+    }
+    for (const title of [
+      "关于主题团日设计大赛报名的通知",
+      "关于校企培养班数学建模竞赛队伍选拔的通知",
+      "校庆征文比赛通知",
+    ]) {
+      expect(
+        classifyNotice(title, ["参赛对象：全校学生，报名截止：11月20日。"]),
+      ).toMatchObject({
+        classification: "definite",
+        needsReview: true,
+      });
+    }
+    expect(
+      classifyNotice("校庆征文启事", ["征集同学们的原创作品。"]),
+    ).toMatchObject({
+      classification: "suspected",
+      needsReview: true,
+    });
+    expect(
+      classifyNotice(
+        "关于主题团日活动的通知",
+        ["请各支部组织交流。"],
+        ["数学竞赛报名安排.pdf"],
+      ),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+  });
+});
+
 /** 只取审核人员可观察的四项结果，避免把实现细节带进断言。 */
 function observableOf(result: ReturnType<typeof classifyNotice>) {
   return {

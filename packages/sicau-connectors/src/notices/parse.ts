@@ -269,9 +269,34 @@ const teamForm =
  * 只把直接禁止参赛形式的表达作为否定依据。人数、教师数量、跨学院等
  * 限制不能因临近「团队」就变成禁止团队；「不限」表达放开而不是否定。
  */
-function readModeMention(clause: string): ModeMention | null {
-  const individual = individualForm.test(clause);
-  const team = teamForm.test(clause);
+function readModeMention(clause: string, labelled = false): ModeMention | null {
+  // 「个人/团队」本身不声明参赛形式。必须有直接的参赛关系、形式标签，
+  // 或能独立表达形式的条款；赛事标题不能给所有普通个人事务提供语境。
+  if (
+    !labelled &&
+    !/参赛|以(?:个人|团队)(?:形式|身份)?参加|个人赛|团队赛|团体赛|(?:团队|队伍)人数|以组为单位|每组\s*\d+人|每班[^。；\n]{0,10}队|个人(?:或|及|和|以及)(?:自行)?(?:团队|组队)|个人作品或集体作品|集体作品或个人作品/.test(
+      clause,
+    )
+  )
+    return null;
+  const labelledValue = clause.replace(modeLabel, "").trim();
+  const pairedForms = /个人(?:或|及|和|以及)(?:自行)?(?:团队|组队)/.test(
+    clause,
+  );
+  const individual =
+    /个人赛|个人参赛|以个人(?:形式|身份)?(?:参赛|参加)|个人(?:形式|身份)(?:报名|参赛)|个人作品|个人项目/.test(
+      clause,
+    ) ||
+    pairedForms ||
+    (labelled &&
+      /^(?:以)?个人(?=或|及|和|均|皆|[，,。；;]|$)/.test(labelledValue));
+  const team =
+    /团队赛|团体赛|以团队(?:形式)?(?:参赛|参加)|以组为单位|每组\s*\d+人|组队|团队形式|队伍参赛|(?:团队|队伍)人数|每班[^。；\n]{0,10}队|集体作品|集体参赛|集体项目|小组参赛/.test(
+      clause,
+    ) ||
+    pairedForms ||
+    (labelled &&
+      /^(?:以)?团队(?=或|及|和|均|皆|[，,。；;]|$)/.test(labelledValue));
   if (!individual && !team) return null;
   const interpretation = clause.replace(/不限(?:于)?|不限制/g, "允许");
   const form = `(?:${individualForm.source}|${teamForm.source})`;
@@ -310,8 +335,15 @@ export function competitionMode(text: string): {
   /** 无法可靠归一时的人工可读原因；mode 仍保留原文。 */
   conflict: string | null;
 } {
-  const original = text.trim();
+  const input = text.trim();
+  if (!input) return { mode: null, modeKind: null, conflict: null };
+  const sentences = input.match(/[^。；;\n]+[。；;\n]*/g) ?? [];
+  const relevant = sentences.filter((sentence) =>
+    readModeMention(sentence, modeLabel.test(sentence.trim())),
+  );
+  const original = relevant.join("").trim();
   if (!original) return { mode: null, modeKind: null, conflict: null };
+  const labelled = modeLabel.test(original);
   const body = original.replace(modeLabel, "").trim() || original;
   // 逐子句判断：句号分号按句拆，逗号两侧各自都能独立判定形式时才拆开，
   // 否则「独立参赛，不组队」会被切断成互不相关的两截。
@@ -320,13 +352,13 @@ export function competitionMode(text: string): {
     .flatMap((sentence) => {
       const parts = sentence.split(/[，,]/).map((part) => part.trim());
       if (parts.length < 2) return [sentence.trim()];
-      return parts.every((part) => readModeMention(part))
+      return parts.every((part) => readModeMention(part, labelled))
         ? parts
         : [sentence.trim()];
     })
     .filter(Boolean);
   const mentions = clauses
-    .map((clause) => readModeMention(clause))
+    .map((clause) => readModeMention(clause, labelled))
     .filter((mention): mention is ModeMention => !!mention);
   if (!mentions.length) return { mode: null, modeKind: null, conflict: null };
 

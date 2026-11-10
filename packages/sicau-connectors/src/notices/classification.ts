@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-9";
+export const noticeRuleVersion = "competition-rules-10";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -135,8 +135,16 @@ export function classifyNotice(
     !/赛/.test(title) &&
     !/参赛|选手|运动员|作品/.test(title) &&
     !/关于举办|关于组织|组织参加/.test(title);
+  // 明确的事务对象优先于正文的比赛经历/成果条件。征文仅在标题明确是
+  // 文集征稿时归入此类，普通征文与作品征集继续保留疑似赛事复核。
+  const administrativeBusiness =
+    /主题团日|班团活动|团支部活动|校企[^。；]{0,12}培养班|朋辈导师[^。；]{0,12}(?:推选|选聘)|推选[^。；]{0,12}朋辈导师|推优入党|(?:校史|校庆)文集[^。；]{0,12}征文/.test(
+      title,
+    ) &&
+    !competitionPattern.test(title) &&
+    !/参赛|选手|运动员|队伍|作品/.test(title);
   const declaresNonCompetitionBusiness =
-    officiatingPractice || nonCompetitionBusiness;
+    officiatingPractice || nonCompetitionBusiness || administrativeBusiness;
   // 只有附件标题自己写明赛事名与具体事项（如「数学竞赛延期通知.pdf」）才构成另一份
   // 待核对的赛事依据；无关附件（报名表、承诺书）不改变标题结论。
   const attachmentDeclaresCompetition = attachmentTitles.some(
