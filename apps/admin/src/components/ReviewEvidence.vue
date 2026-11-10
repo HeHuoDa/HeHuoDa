@@ -71,7 +71,7 @@ const conflicts = computed(() =>
     <dl class="console-details">
       <dt>发布单位</dt>
       <dd>{{ file.source.publisher }}</dd>
-      <dt>通知类型</dt>
+      <dt>通知种类</dt>
       <dd>
         {{ notificationKindLabel(resolveNotificationKind(file.candidate)) }}
         <span class="field-help"
@@ -130,7 +130,7 @@ const conflicts = computed(() =>
     </template>
     <p v-else class="field-help" role="status">
       旧版审核材料没有候选 v2 字段：赛事种类与参赛形式原文无法展示。
-      通知类型仅按旧材料的 kind
+      通知种类仅按旧材料的 kind
       显示，不据此推断赛事种类；下列旧投影仍会随材料提交，
       复核时须逐项核对。如需完整字段请重新导出审核材料。
     </p>
@@ -143,15 +143,6 @@ const conflicts = computed(() =>
         </dd>
       </template>
     </dl>
-    <details v-if="!fields">
-      <summary>旧材料范围与承办学院（只读投影）</summary>
-      <dl class="console-details">
-        <dt>竞赛范围（正式四值投影）</dt>
-        <dd>{{ legacy.scope.kind }} · {{ legacy.scope.note || "尚无说明" }}</dd>
-        <dt>承办学院（旧）</dt>
-        <dd>{{ legacy.hosts.join("、") || "未知，不能由发布单位推断" }}</dd>
-      </dl>
-    </details>
     <div class="evidence-notes">
       <div
         v-for="group in ['conflict', 'missing', 'warning'] as const"

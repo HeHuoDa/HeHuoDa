@@ -317,6 +317,39 @@ describe("候选审核公开交互", () => {
     expect(wrapper.text()).not.toContain("请填写真实有效的人工核对日期");
     wrapper.unmount();
   });
+  it("附件证据版本变化导致批准 409 时锁定确认入口且不假成功", async () => {
+    let calls = 0;
+    const { wrapper } = await setup("example-candidate-2", {
+      ...exampleReview,
+      change: async () => {
+        calls++;
+        throw new ConsoleError(409, "attachment evidence changed");
+      },
+    });
+    // 展示层仍显示候选字段与附件证据，但写入被证据版本变化拒绝。
+    expect(wrapper.text()).toContain("个人作品或集体作品均可");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "批准候选 · 确认预览")!
+      .trigger("click");
+    await flushPromises();
+    await wrapper.get("#action-reason").setValue("附件版本变化后的批准尝试");
+    await wrapper.get("form.editor-form").trigger("submit");
+    await flushPromises();
+    expect(wrapper.text()).toContain("本轮确认已失效");
+    // 失败没有把状态写成新的成功结果，仍停在载入时的状态。
+    expect(wrapper.text()).toContain("已批准，未导入");
+    expect(
+      wrapper
+        .findAll("button")
+        .find((b) => b.text() === "生成导入预览")!
+        .attributes("disabled"),
+    ).toBeDefined();
+    await wrapper.get("form.editor-form").trigger("submit");
+    await flushPromises();
+    expect(calls).toBe(1);
+    wrapper.unmount();
+  });
   it("真实已有目标局部补丁可编辑，未修改预览保持原始审核文件形状", async () => {
     const material = (
       await exampleReview.detail("candidates", "example-candidate-2")

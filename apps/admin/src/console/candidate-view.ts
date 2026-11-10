@@ -8,7 +8,7 @@ export function notificationKindLabel(
 ): string {
   return value && Object.hasOwn(kindLabels, value)
     ? kindLabels[value as NoticeKind]
-    : "未知通知类型";
+    : "未知通知种类";
 }
 
 /**
@@ -25,6 +25,20 @@ export const candidateScopeLabels: Record<
   unknown: "未知",
 };
 
+/**
+ * 旧投影的 scope 是正式四值，显示时仍要给人读的中文；
+ * 它与 candidateScopeLabels 是两套枚举，不能合并成一张表。
+ */
+export const legacyScopeLabels: Record<
+  Schema["AdminLegacyScopeDto"]["kind"],
+  string
+> = {
+  all: "全校",
+  colleges: "指定学院",
+  complex: "复杂规则",
+  unknown: "未知",
+};
+
 export const modeKindLabels: Record<
   NonNullable<Schema["AdminCandidateFieldsDto"]["modeKind"]>,
   string
@@ -34,24 +48,36 @@ export const modeKindLabels: Record<
   mixed: "个人或团队",
 };
 
+/**
+ * 展示层需要的候选投影子集。
+ *
+ * 有意不复用 `Schema["AdminParsedCandidateDto"]`：生成类型把 `fieldsV2` 定为必填，
+ * 但历史 format=1 审核材料（`ReviewMaterial`）确实没有该键，套用生成类型会逼出
+ * 假默认值。这里三者都可选，再由 `candidateFieldsV2` 按 ADR 0010 §6 的
+ * `fieldsContract` 单一判据收窄，调用方拿到明确的 null 而不是伪造对象。
+ */
 type CandidateProjection = {
   fieldsContract?: "candidate-fields-v2";
   fieldsV2?: Schema["AdminCandidateFieldsDto"];
   /** 后端兼容投影：kind 是通知种类，scope 是正式四值，mode 是英文枚举。 */
   fields?: { kind?: string | null };
-  classification?: { notificationKind?: string; classification?: string };
+  classification?: { notificationKind?: string };
 };
 
 /**
  * 取候选 v2 字段。
- * - 新响应与 v1 归一后的候选都带 fieldsV2，直接只读使用。
- * - 旧审核材料（历史导出、旧 CLI format=1）没有 fieldsV2 时返回 null，
- *   由调用方显式走 legacy 分支，不把旧投影伪装成 v2。
+ *
+ * 判据是 ADR 0010 §6 的 `fieldsContract`，与标题显示同一口径：
+ * 标了 v2 契约就必须有 fieldsV2，缺失属于契约错误，显式返回 null 走 legacy
+ * 提示，而不是悄悄读兼容投影把旧形状当成 v2。
+ * 旧审核材料（历史导出、旧 CLI format=1）没有该键，同样返回 null。
  */
 export function candidateFieldsV2(
   candidate: CandidateProjection | null | undefined,
 ): Schema["AdminCandidateFieldsDto"] | null {
-  return candidate?.fieldsV2 ?? null;
+  if (!candidate || candidate.fieldsContract !== "candidate-fields-v2")
+    return null;
+  return candidate.fieldsV2 ?? null;
 }
 
 /**
@@ -65,8 +91,12 @@ export function legacyNotificationKind(
 }
 
 /**
- * 通知种类：优先 classification.notificationKind；缺失时读后端兼容投影的
- * kind（仍是通知种类，不是赛事种类）。两者都没有才是真正的未知。
+ * 通知种类：优先 classification.notificationKind。
+ *
+ * 缺失时读后端兼容投影的 fields.kind——它不是第二个来源：服务端
+ * presentCandidate 已把该键统一写成 notificationKind 的投影（见
+ * apps/api/src/ingestion/candidate-contract.ts），因此这里只是同一来源的
+ * 备用字段，不会读到赛事种类。v1 归一候选没有 classification 时才真正依赖它。
  */
 export function resolveNotificationKind(
   candidate: CandidateProjection | null | undefined,
@@ -126,26 +156,23 @@ export function candidateFieldRows(
         : "未提取（不得由发布单位推断）",
     },
   ];
-  if (fields.organizer)
-    rows.push({ label: "组织单位", value: fields.organizer });
-  if (fields.members) rows.push({ label: "人数要求", value: fields.members });
-  if (fields.rules.length)
-    rows.push({ label: "参赛规则", value: fields.rules.join("；") });
-  if (fields.stageNames.length)
-    rows.push({ label: "赛段", value: fields.stageNames.join("、") });
-  for (const track of fields.tracks) {
-    const name = track.name || "未命名";
-    rows.push({
-      label: "赛道：" + name,
-      value: track.modeKind
-        ? modeKindLabels[track.modeKind]
-        : "参赛形式无法可靠归一",
-      ...(track.members ? { hint: "人数：" + track.members } : {}),
-    });
-    // 赛道规则可能含否定与例外条款（如「不得提交已获奖作品」），必须原样保留。
-    if (track.rules?.trim())
-      rows.push({ label: "赛道规则：" + name, value: track.rules });
-  }
+  pushOptionalRows(
+    rows,
+    {
+      organizer: fields.organizer,
+      edition: fields.edition,
+      members: fields.members,
+      rules: fields.rules,
+      stageNames: fields.stageNames,
+      tracks: fields.tracks.map((track) => ({
+        name: track.name,
+        mode: track.modeKind,
+        members: track.members,
+        rules: track.rules,
+      })),
+    },
+    "",
+  );
   return rows;
 }
 
@@ -162,7 +189,7 @@ export function legacyFieldRows(
     {
       label: "竞赛范围（正式四值投影）",
       value:
-        fields.scope.kind +
+        legacyScopeLabels[fields.scope.kind] +
         (fields.scope.kind === "colleges" && fields.scope.colleges.length
           ? "：" + fields.scope.colleges.join("、")
           : ""),
@@ -181,25 +208,23 @@ export function legacyFieldRows(
         : "未知，不能由发布单位推断",
     },
   ];
-  if (fields.organizer)
-    rows.push({ label: "组织单位（旧）", value: fields.organizer });
-  if (fields.edition) rows.push({ label: "届次（旧）", value: fields.edition });
-  if (fields.members)
-    rows.push({ label: "人数要求（旧）", value: fields.members });
-  if (fields.rules.length)
-    rows.push({ label: "参赛规则（旧）", value: fields.rules.join("；") });
-  if (fields.stageNames.length)
-    rows.push({ label: "赛段（旧）", value: fields.stageNames.join("、") });
-  for (const track of fields.tracks) {
-    const name = track.name || "未命名";
-    rows.push({
-      label: "赛道（旧）：" + name,
-      value: track.mode ? modeKindLabels[track.mode] : "参赛形式无法可靠归一",
-      ...(track.members ? { hint: "人数：" + track.members } : {}),
-    });
-    if (track.rules?.trim())
-      rows.push({ label: "赛道规则（旧）：" + name, value: track.rules });
-  }
+  pushOptionalRows(
+    rows,
+    {
+      organizer: fields.organizer,
+      edition: fields.edition,
+      members: fields.members,
+      rules: fields.rules,
+      stageNames: fields.stageNames,
+      tracks: fields.tracks.map((track) => ({
+        name: track.name,
+        mode: track.mode,
+        members: track.members,
+        rules: track.rules,
+      })),
+    },
+    "（旧）",
+  );
   for (const [key, label] of CANDIDATE_TIME_LABELS)
     rows.push({
       label: label + "（旧）",
@@ -210,6 +235,55 @@ export function legacyFieldRows(
       hint: fields[key].precision,
     });
   return rows;
+}
+
+/**
+ * 可选字段与赛道的共享投影。v2 与旧材料的字段形状只在 mode/modeKind 命名上不同，
+ * 这里参数化这两个差异，避免两条分支各写一遍循环后漂移。
+ */
+function pushOptionalRows(
+  rows: CandidateFieldRow[],
+  source: {
+    organizer?: string | null;
+    edition?: string | null;
+    members?: string | null;
+    rules: string[];
+    stageNames: string[];
+    tracks: {
+      name: string;
+      mode: string | null;
+      members?: string | null;
+      rules?: string | null;
+    }[];
+  },
+  suffix: string,
+): void {
+  if (source.organizer)
+    rows.push({ label: "组织单位" + suffix, value: source.organizer });
+  if (source.edition)
+    rows.push({ label: "届次" + suffix, value: source.edition });
+  if (source.members)
+    rows.push({ label: "人数要求" + suffix, value: source.members });
+  if (source.rules.length)
+    rows.push({ label: "参赛规则" + suffix, value: source.rules.join("；") });
+  if (source.stageNames.length)
+    rows.push({ label: "赛段" + suffix, value: source.stageNames.join("、") });
+  for (const track of source.tracks) {
+    const name = track.name || "未命名";
+    rows.push({
+      label: "赛道" + suffix + "：" + name,
+      value: track.mode
+        ? modeKindLabels[track.mode as keyof typeof modeKindLabels]
+        : "参赛形式无法可靠归一",
+      ...(track.members ? { hint: "人数：" + track.members } : {}),
+    });
+    // 赛道规则可能含否定与例外条款（如「不得提交已获奖作品」），必须原样保留。
+    if (track.rules?.trim())
+      rows.push({
+        label: "赛道规则" + suffix + "：" + name,
+        value: track.rules,
+      });
+  }
 }
 
 /** 四个时间字段的顺序与标签，v2 与旧材料分支共用，避免两处口径漂移。 */
@@ -295,6 +369,12 @@ export type EvidenceLocation = {
 };
 
 /**
+ * 附件正文的每页段数，与 `AttachmentPanel.vue` 的 `:page-size="10"` 一致。
+ * 两者改动必须同步，否则证据定位会落到错误的页。
+ */
+export const ATTACHMENT_SEGMENTS_PER_PAGE = 10;
+
+/**
  * 证据定位：绑定真实通知／附件版本。
  * - HTML 证据定位到通知正文段落，版本取证据自身绑定的版本，缺失时才用材料版本。
  * - PDF／DOCX 证据必须带附件版本；没有绑定版本时返回 null，
@@ -322,7 +402,9 @@ export function evidenceLocation(
         attachmentUrl: evidence.url,
         attachmentVersion: evidence.attachmentVersion,
         segment: String(segment),
-        attachmentPage: String(Math.ceil(segment / 10)),
+        attachmentPage: String(
+          Math.ceil(segment / ATTACHMENT_SEGMENTS_PER_PAGE),
+        ),
       },
     };
   }

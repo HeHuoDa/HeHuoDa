@@ -8,6 +8,7 @@ import {
   evidenceLocation,
   legacyFieldRows,
   legacyNotificationKind,
+  legacyScopeLabels,
   notificationKindLabel,
   resolveNotificationKind,
   reviewHints,
@@ -54,9 +55,31 @@ describe("候选字段 v2 展示适配", () => {
         fieldsV2: fields(),
       }),
     ).toBe("award");
-    expect(notificationKindLabel("radar")).toBe("未知通知类型");
-    expect(notificationKindLabel(null)).toBe("未知通知类型");
+    expect(notificationKindLabel("radar")).toBe("未知通知种类");
+    expect(notificationKindLabel(null)).toBe("未知通知种类");
     expect(notificationKindLabel("registration")).toBe("报名通知");
+  });
+
+  it("契约标记是唯一判据：标了 v2 但缺 fieldsV2 时不静默读旧投影", () => {
+    // ADR 0010 §6 以 fieldsContract 判定契约；缺 fieldsV2 属契约错误，
+    // 应返回 null 走 legacy 提示，而不是把兼容投影当 v2 展示。
+    expect(
+      candidateFieldsV2({
+        fieldsContract: "candidate-fields-v2",
+        fields: { kind: "registration" },
+      }),
+    ).toBeNull();
+    // 反过来，带 fieldsV2 但没有契约标记（历史材料）也不当作 v2。
+    expect(
+      candidateFieldsV2({ fieldsV2: fields({ eventKind: "学科竞赛" }) }),
+    ).toBeNull();
+    // 正常 v2 候选才返回字段。
+    expect(
+      candidateFieldsV2({
+        fieldsContract: "candidate-fields-v2",
+        fieldsV2: fields({ eventKind: "学科竞赛" }),
+      })?.eventKind,
+    ).toBe("学科竞赛");
   });
 
   it("旧材料只在显式 legacy 分支读 kind，且不把它当成赛事种类", () => {
@@ -74,10 +97,13 @@ describe("候选字段 v2 展示适配", () => {
     );
   });
 
-  it("校验旧材料缺失字段时，不把未授权值伪装成已知", () => {
+  it("空输入与缺失字段一律返回 null，不伪装成已知值", () => {
     expect(candidateFieldsV2(null)).toBeNull();
     expect(resolveNotificationKind(null)).toBeNull();
     expect(legacyNotificationKind(undefined)).toBeNull();
+    expect(notificationKindLabel(resolveNotificationKind({}))).toBe(
+      "未知通知种类",
+    );
   });
 
   it("分别展示赛事种类、参赛形式原文与归一结果", () => {
@@ -181,20 +207,33 @@ describe("候选字段 v2 展示适配", () => {
     expect(rows.find((row) => row.label === "报名开始（旧）")?.value).toBe(
       "未知",
     );
+    // 旧投影的 scope 是正式四值，显示中文标签而不是裸枚举。
+    expect(
+      rows.find((row) => row.label === "竞赛范围（正式四值投影）")?.value,
+    ).toBe("指定学院：science");
     // 旧 kind 是通知种类，不能出现在赛事种类位置。
     expect(rows.some((row) => row.label.includes("赛事种类"))).toBe(false);
+  });
+
+  it("旧投影的正式四值 scope 各有中文标签，不与候选四值混用", () => {
+    expect(legacyScopeLabels).toEqual({
+      all: "全校",
+      colleges: "指定学院",
+      complex: "复杂规则",
+      unknown: "未知",
+    });
+    expect(legacyScopeLabels.complex).toBe("复杂规则");
+    // 候选四值里没有 colleges/complex，两张表不能合并。
+    expect(Object.keys(candidateScopeLabels)).not.toContain("complex");
   });
 
   it("候选范围用协议四值标签，保留 note 与否定说明", () => {
     expect(candidateScopeLabels.other).toBe("其他限制（须读原文）");
     expect(candidateScopeLabels.specified).toBe("指定学院");
     // 正式比赛范围是另一套枚举，候选标签里不得出现 complex 之类的正式值。
-    expect(Object.keys(candidateScopeLabels)).toEqual([
-      "all",
-      "specified",
-      "other",
-      "unknown",
-    ]);
+    expect(new Set(Object.keys(candidateScopeLabels))).toEqual(
+      new Set(["all", "specified", "other", "unknown"]),
+    );
     const rows = candidateFieldRows(
       fields({
         scope: {

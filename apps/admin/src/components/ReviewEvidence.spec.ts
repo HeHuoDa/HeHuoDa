@@ -24,7 +24,7 @@ async function setup(file: ReviewInput, noticeId = "notice-1") {
 }
 
 describe("候选证据展示", () => {
-  it("新契约候选分别展示通知类型与赛事种类", async () => {
+  it("新契约候选分别展示通知种类与赛事种类", async () => {
     const file = toReviewDraft(reviewExamples[0]!.material);
     file.candidate.classification = {
       classification: "definite",
@@ -50,7 +50,7 @@ describe("候选证据展示", () => {
     wrapper.unmount();
   });
 
-  it("未知通知类型显示未知，不显示报名通知", async () => {
+  it("未知通知种类显示未知，不显示报名通知", async () => {
     const file = toReviewDraft(reviewExamples[0]!.material);
     file.candidate.classification = {
       classification: "definite",
@@ -62,7 +62,7 @@ describe("候选证据展示", () => {
       priority: 1,
     } as unknown as ReviewInput["candidate"]["classification"];
     const wrapper = await setup(file);
-    expect(wrapper.text()).toContain("未知通知类型");
+    expect(wrapper.text()).toContain("未知通知种类");
     expect(wrapper.text()).not.toContain("报名通知");
     wrapper.unmount();
   });

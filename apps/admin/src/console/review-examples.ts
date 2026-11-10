@@ -45,6 +45,8 @@ const patch = (id: string): CompetitionPatch => ({
     },
   ],
 });
+/** 示例中保留一条没有 v2 契约的旧材料，用于核对 legacy 分支展示。 */
+const LEGACY_EXAMPLE_INDEX = 11;
 export const reviewExamples: ReviewRecord[] = Array.from(
   { length: 12 },
   (_, i) => {
@@ -115,7 +117,8 @@ export const reviewExamples: ReviewRecord[] = Array.from(
           attachments: [],
         },
         candidate: {
-          fieldsContract: i === 11 ? undefined : "candidate-fields-v2",
+          fieldsContract:
+            i === LEGACY_EXAMPLE_INDEX ? undefined : "candidate-fields-v2",
           fields: {
             name: batch.name,
             edition: null,
@@ -141,7 +144,7 @@ export const reviewExamples: ReviewRecord[] = Array.from(
             stageNames: ["校内选拔"],
           },
           // 第 12 条故意保留为没有 v2 契约的旧材料，用于核对 legacy 分支展示。
-          ...(i === 11
+          ...(i === LEGACY_EXAMPLE_INDEX
             ? {}
             : {
                 fieldsV2: {

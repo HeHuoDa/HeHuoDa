@@ -32,6 +32,7 @@ it("候选查询分开传递规则分类与审核状态，并保留栏目与附�
         needsReview: true,
         article: { title: "校内选拔通知" },
         data: {
+          fieldsContract: "candidate-fields-v2",
           classification: { notificationKind: "registration" },
           // 旧形状投影：kind 是通知种类。
           fields: { kind: "registration" },
@@ -83,6 +84,7 @@ it("列表摘要分别显示通知类型与赛事种类，未知枚举不冒充�
         article: { title: "补充通知" },
         // 通知种类只来自 classification；旧投影的 kind 不再参与。
         data: {
+          fieldsContract: "candidate-fields-v2",
           classification: { notificationKind: "supplement" },
           fields: { kind: "registration" },
           fieldsV2: { eventKind: null },
@@ -97,6 +99,7 @@ it("列表摘要分别显示通知类型与赛事种类，未知枚举不冒充�
         needsReview: true,
         article: { title: "未知类型" },
         data: {
+          fieldsContract: "candidate-fields-v2",
           classification: { notificationKind: "brand-new-kind" },
           fields: {},
           fieldsV2: { eventKind: "体育竞赛" },
@@ -117,7 +120,7 @@ it("列表摘要分别显示通知类型与赛事种类，未知枚举不冒充�
     "life-sciences · 明确赛事 · 变更补充 · 已核对",
   );
   expect(result.items[1]!.secondary).toBe(
-    "life-sciences · 明确赛事 · 未知通知类型 · 赛事种类：体育竞赛 · 需复核",
+    "life-sciences · 明确赛事 · 未知通知种类 · 赛事种类：体育竞赛 · 需复核",
   );
 });
 it("身份核实后Cookie变化导致403时仍保留原操作恢复线索", async () => {

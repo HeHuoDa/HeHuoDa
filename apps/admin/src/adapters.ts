@@ -311,8 +311,9 @@ export function createReviewService(http: Transport): ReviewService {
           title: row.article.title,
           status: row.status,
           date: row.fetchedAt,
-          // 通知种类唯一来源是 classification.notificationKind；赛事种类单独列出，
-          // 不参与通知类型判断。旧投影只在材料确实没有 v2 契约时回退。
+          // 通知种类唯一来源是 classification.notificationKind；该值缺失时由
+          // 展示适配层读后端兼容投影（同一来源的投影，不是第二来源）。
+          // 赛事种类单独列出，不参与通知类型判断。
           secondary: candidateSummary({
             sourceId: row.sourceId,
             classification: row.classification,
