@@ -10,6 +10,13 @@ import {
 } from "./classification-corpus.js";
 
 describe("非赛事业务的条件性赛事提及", () => {
+  it("班团活动标题含未收录赛事名时保留复核，不裁剪报名正文", () => {
+    expect(
+      classifyNotice("关于开展主题团日篮球赛报名活动的通知", [
+        "篮球比赛报名截止：11月20日，比赛时间：11月25日，比赛规则请查阅附件。",
+      ]),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+  });
   it("班团活动的比赛成果条件不提升为赛事通知", () => {
     expect(
       classifyNotice("关于开展秋季主题团日活动的通知", [

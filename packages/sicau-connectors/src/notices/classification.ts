@@ -142,6 +142,7 @@ export function classifyNotice(
       title,
     ) &&
     !competitionPattern.test(title) &&
+    !/赛/.test(title) &&
     !/参赛|选手|运动员|队伍|作品/.test(title);
   const declaresNonCompetitionBusiness =
     officiatingPractice || nonCompetitionBusiness || administrativeBusiness;
