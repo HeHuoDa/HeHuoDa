@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-11";
+export const noticeRuleVersion = "competition-rules-12";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -159,11 +159,14 @@ export function classifyNotice(
   const attachmentDeclaresCompetition = attachmentTitles.some(
     (attachmentTitle) => competitionPattern.test(attachmentTitle),
   );
+  // 只有已发出的结果公告才是结果公示。「竞赛结果将在/在官网公示N个工作日」
+  // 是组织方案里的后续流程描述，不是本篇在公布结果，不能据此把可报名赛事排除。
   const bodyAward =
     !explicitRegistration &&
-    /(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示|现将[^。；\n]{0,100}(?:结果|名单)公示/.test(
+    /现将[^。；\n]{0,100}(?:结果|名单)(?:予以)?(?:公示|公布)|(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示(?:如下|名单|[：:]|$|[。；;])/.test(
       text,
-    );
+    ) &&
+    !/(?:将在|拟在|拟于)[^。；\n]{0,10}公示/.test(text);
   const bodyNews =
     !explicitRegistration &&
     /(?:竞赛|比赛|大赛)[^。；\n]{0,40}(?:圆满结束|圆满落幕|成功举办|顺利举办|落下帷幕|隆重举行)|(?:竞赛|比赛)新闻回顾/.test(

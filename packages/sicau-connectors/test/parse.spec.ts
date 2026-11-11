@@ -1361,4 +1361,108 @@ describe("候选领域解析", () => {
       }
     });
   });
+
+  describe("scope 标题变体与明示全校措辞", () => {
+    it.each([
+      "三、参赛对象及资格",
+      "三、参赛人员及资格",
+      "三、参赛对象及组队要求",
+      "三、参赛资格及要求",
+    ])("资格小节标题变体也能读取范围：%s", (heading) => {
+      const parsed = parseEvidenceCandidate(
+        article([heading, "四川农业大学全日制在校本科生。", "四、报名方式"]),
+        url,
+        directory,
+        "scope-heading-variant-v1",
+      );
+      expect(parsed.fields.scope.kind).toBe("all");
+    });
+    it.each([
+      "我校在校本科生、研究生均可参赛。",
+      "四川农业大学全体在校本科生。",
+      "具有四川农业大学正式学籍的全日制在校本科生、专科生均具有资格报名参赛，专业不限。",
+      "我校本科生、研究生均可参加。",
+    ])("明示全校的措辞不被降级：%s", (text) => {
+      const parsed = parseEvidenceCandidate(
+        article(["三、参赛对象", text]),
+        url,
+        directory,
+        "scope-all-phrase-v1",
+      );
+      expect(parsed.fields.scope.kind).toBe("all");
+      expect(parsed.fields.scope.colleges).toEqual([]);
+    });
+    it("身份核验与条件后果不是资格排除", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "三、参赛对象",
+          "参赛运动员必须是理学院在校学生（检录时需携带学生证或校园一卡通等有效证件，身份不明者不可参加比赛）。",
+        ]),
+        url,
+        directory,
+        "scope-identity-check-v1",
+      );
+      expect(parsed.fields.scope).toMatchObject({
+        kind: "specified",
+        colleges: ["science"],
+      });
+    });
+    it("没有资格依据的条款不与已确认范围冲突", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "八、参赛对象：四川农业大学全日制在校本科生。",
+          "1.参赛资格：以团队形式参赛，团队人数3-5人。",
+          "九、报名方式",
+        ]),
+        url,
+        directory,
+        "scope-mode-only-clause-v1",
+      );
+      expect(parsed.fields.scope.kind).toBe("all");
+    });
+  });
+
+  describe("mode 剔除报名、提交与物流子句", () => {
+    it.each([
+      [
+        "3.提交格式：邮件主题命名为“作品类型-作品名称-姓名（团队参赛则写队长）”。",
+        null,
+      ],
+      [
+        "16×60m迎面抱球接力：按照附件2：团体项目分组情况以组为单位进行运动员招募并填写报名表。",
+        null,
+      ],
+    ])("只写提交方式与报名表的子句不进入 mode：%s", (text, expected) => {
+      const parsed = parseEvidenceCandidate(
+        article([text]),
+        url,
+        directory,
+        "mode-submission-v1",
+      );
+      expect(parsed.fields.mode).toBe(expected);
+    });
+    it("报名时间里的组队方式只保留形式短语", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "（一）报名时间：即日起至2026年11月15日上午10时，组队报名，提交参赛队伍名单，每组3人，队长负责本队参赛事宜。允许跨年级、跨专业，但不得跨校区组队。",
+        ]),
+        url,
+        directory,
+        "mode-registration-clause-v1",
+      );
+      expect(parsed.fields.mode).toContain("组队报名");
+      expect(parsed.fields.mode).not.toContain("提交");
+      expect(parsed.fields.mode).not.toContain("队长");
+      expect(parsed.fields.modeKind).toBe("team");
+    });
+    it("以个人名义参赛也能识别为个人形式", () => {
+      const parsed = parseEvidenceCandidate(
+        article(["校内选拔赛以个人名义参赛。"]),
+        url,
+        directory,
+        "mode-individual-name-v1",
+      );
+      expect(parsed.fields.modeKind).toBe("individual");
+    });
+  });
 });

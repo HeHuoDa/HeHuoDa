@@ -14,8 +14,13 @@ const headingPrefix =
 /** A clause carries content; these markers mean the text is a sentence, not a heading. */
 const clauseMarker = /须|应|需|不得|不可|可以|按|每|如|若|未|由|限/;
 // Unnumbered lines are headings only when the whole line is a known section label.
-const sectionLabel =
-  /^(?:参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求|参赛对象(?:及要求)?|参赛范围|参赛资格|报名对象|报名方式|报名时间|报名须知|比赛时间|竞赛时间|时间安排|活动安排|奖项设置|联系方式)$/;
+// 「参赛对象及资格」「参赛人员及资格」「参赛对象及组队要求」等官方常见变体
+// 若不识别，整段资格小节不会被读取，范围恒为未知。
+const scopeLabel =
+  /(?:参赛对象|参赛人员|参赛范围|参赛资格|报名对象)(?:及(?:其)?[^。；，,\n：:]{1,8})?/;
+const sectionLabel = new RegExp(
+  `^(?:参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求|${scopeLabel.source}|报名方式|报名时间|报名须知|比赛时间|竞赛时间|时间安排|活动安排|奖项设置|联系方式)$`,
+);
 const isSectionHeading = (text: string) => {
   const body = text
     .replace(headingPrefix, "")
@@ -43,8 +48,9 @@ const attachmentRuleReference = (text: string) =>
   );
 // 只识别资格标签或资格断言，避免“范围最广”“取消参赛资格”和拼接表头
 // 被当成另一条允许范围，覆盖已明确的全校/学院资格。
-const scopeHeading =
-  /(?:参赛对象(?:及要求)?|参赛范围|参赛资格(?:要求)?|报名对象)(?=\s*(?:[：:]|为|是|包括|包含|面向|仅|只|限|须|需|应|不|$))/;
+const scopeHeading = new RegExp(
+  `${scopeLabel.source}(?=\\s*(?:[：:]|为|是|包括|包含|面向|仅|只|限|须|需|应|不|$))`,
+);
 /** Clauses that describe another field; they must not shape a scope value. */
 const isOtherFieldClause = (text: string) =>
   /个人赛|团队赛|团体赛|组队|赛道|比赛时间|竞赛时间|报名时间|截止|材料|作品提交|联系人|电话|地点/.test(
@@ -275,6 +281,12 @@ const negationMarker =
 /** 赛段限定；同一形式出现在不同赛段时不能合并。 */
 const stageMarker = /初赛|复赛|决赛|预赛|半决赛|院赛|校赛|省赛|国赛/g;
 
+/** 提交、报送、命名与物流说明属于报名或材料字段，不得作为参赛形式原文。 */
+const submissionClause =
+  /报名表|提交|报送|邮箱|发送|上传|交至|交到|递交|命名|填写|邮寄|纸质档|电子档|个工作日/;
+/** 队长、领队与联络职责是组织分工，不是参赛形式。 */
+const dutyClause = /队长|领队|负责人|带队|工作人呡|职责|事宜/;
+
 interface ModeMention {
   individual: boolean;
   team: boolean;
@@ -310,7 +322,7 @@ function readModeMention(clause: string, labelled = false): ModeMention | null {
     clause,
   );
   const individual =
-    /个人赛|个人参赛|以个人(?:形式|身份)?(?:参赛|参加)|个人(?:形式|身份)(?:报名|参赛)|个人作品|个人项目/.test(
+    /个人赛|个人参赛|以个人(?:形式|身份|名义)?(?:参赛|参加)|个人(?:形式|身份)(?:报名|参赛)|个人作品|个人项目|(?:以)?个人名义(?:参赛|参加|报名)/.test(
       clause,
     ) ||
     pairedForms ||
@@ -379,6 +391,10 @@ export function competitionMode(text: string): {
         /报名(?:表|时间|截止|信息)|提交|报送|邮箱|评分|赋分|逾期|截止/.test(
           part,
         );
+      // 硬约束：报名表、提交、命名、交送与队长职责子句无条件剔除，
+      // 即使同一个子句里提到团队/个人（如「团队参赛则写队长」）
+      // 也只能证明报名要求，不能证明参赛形式。
+      if (submissionClause.test(part) || dutyClause.test(part)) return false;
       const form = readModeMention(part, modeLabel.test(part.trim()));
       const formDenial =
         /(?:不|不得|不可|禁止)[^。；]{0,12}(?:个人|团队|组队)/.test(part);
@@ -602,16 +618,32 @@ export function parseCandidate(
     const matched = mentionedColleges(qualification, colleges).map((c) => c.id);
     const unresolvedCollege = hasUnknownCollege(qualification);
     // 「不限」「不受…限制」是放开语义，不构成收窄。
-    const withoutUnlimited = qualification.replace(
+    const qualifiedWithoutUnlimited = qualification.replace(
       /不限|不受[^。；，,]{0,20}限制/g,
       "",
     );
-    const excluded = exclusionMarker.test(withoutUnlimited);
-    const allPhrase =
-      /全校|我校全日制在校本科生|四川农业大学全日制在校本科生/.test(
-        qualification,
-      );
-    const narrowed = /仅|限|除|不含|校区/.test(withoutUnlimited);
+    // 身份核验、材料不全、逐期一类条件后果句不是群体资格排除，先剥掉括注、
+    // 再测排除词；否则「身份不明者不可参加比赛」会把理学院学生降为 other。
+    const identityCondition =
+      /身份不明|资格不符|不符合|材料不全|证件不全|冒名|弄虚作假|舞弊|逐期|逾期|未按时|违反[^。；]{0,10}规定|纪律/;
+    const conditionsStripped = qualifiedWithoutUnlimited.replace(
+      /[（(][^（()）]*[）)]/g,
+      (inner) => (identityCondition.test(inner) ? "" : inner),
+    );
+    const conditionalConsequence =
+      /(?:者|人员|学生|选手|队伍)?(?:不合条件|身份不明|材料不全|资格不符|逐期|逾期)[^。；，,]{0,12}(?:不得|不可|不予|取消)/;
+    const excluded = exclusionMarker.test(
+      conditionsStripped.replace(conditionalConsequence, ""),
+    );
+    // 明示全校的措辞先用子句级短语判，再回退到原来的整体判断；
+    // 含已知学院名的子句（「四川农业大学食品学院本科生」）不当作全校。
+    const allScopePhrase =
+      /全校|全体在校|所有在校|(?:我校|四川农业大学)[^。；，,\n]{0,10}?(?:本科生|专科生|研究生|在校生|学生)|(?:具有|拥有)四川农业大学(?:正式)?学籍/;
+    const collegeNamed = colleges.some((college) =>
+      qualification.includes(college.name),
+    );
+    const allPhrase = !collegeNamed && allScopePhrase.test(qualification);
+    const narrowed = /仅|限|除|不含|校区/.test(conditionsStripped);
     const other = (note: string) => ({
       kind: "other" as const,
       colleges: [],
@@ -744,7 +776,10 @@ export function parseCandidate(
               unresolvedCollege: false,
             };
         const { unresolvedCollege, ...scopeValue } = scope;
-        if (
+        if (scopeValue.kind === "unknown" && fields.scope.kind !== "unknown") {
+          // 写了「参赛资格：」但没有范围依据的条款（如只讲团队人数）
+          // 不构成互相矛盾的资格，不得把已确认的全校/学院降为 other。
+        } else if (
           fields.scope.kind !== "unknown" &&
           JSON.stringify(fields.scope) !== JSON.stringify(scopeValue)
         ) {
@@ -755,7 +790,7 @@ export function parseCandidate(
             colleges: [],
             note: fields.scope.note + "\n" + scopeText,
           };
-        } else fields.scope = scopeValue;
+        } else if (scopeValue.kind !== "unknown") fields.scope = scopeValue;
         if (unresolvedCollege) warnings.push("资格条款含未知学院名称");
         // Each sentence keeps its own location and citation.
         for (const part of paragraphs) add("scope", part.text, part.index);

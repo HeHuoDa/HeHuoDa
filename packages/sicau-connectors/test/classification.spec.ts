@@ -1207,4 +1207,31 @@ describe("赛事分类独立于审核状态", () => {
       ]).classification,
     ).toBe("non_competition");
   });
+  it("组织方案里的公示流程句不是结果公示", () => {
+    const paragraphs = [
+      "一、竞赛目的",
+      "提高教师教学能力。",
+      "二、竞赛安排",
+      "1.报名时间：2026年11月1日至11月10日。",
+      "2.竞赛结果在学院官网公示3个工作日；",
+      "3.评审专家组根据评分标准评定名次。",
+    ];
+    const result = classifyNotice(
+      "动物医学院2026年教师教学竞赛组织方案",
+      paragraphs,
+    );
+    expect(result.classification).toBe("definite");
+    expect(result.exclusions).not.toContain(
+      "结果公示或评选通知，不是可报名赛事",
+    );
+  });
+  it("实发的结果公示与公示期仍然按结果公示排除", () => {
+    for (const body of [
+      "现将数学竞赛获奖结果公示如下。",
+      "现将评审结果予以公示，公示期3天。",
+    ])
+      expect(
+        classifyNotice("2026年数学竞赛结果公示", [body]).classification,
+      ).toBe("non_competition");
+  });
 });
