@@ -1420,6 +1420,39 @@ describe("候选领域解析", () => {
       );
       expect(parsed.fields.scope.kind).toBe("all");
     });
+    it.each([
+      "研究生由学院研管办负责",
+      "该学院负责组织",
+      "参赛学院初赛的同学按时报名",
+      "每个学院每个赛道推荐1-2人",
+      "按学院要求提交电子版材料",
+    ])("泛称「学院」不算未知学院名：%s", (generic) => {
+      const parsed = parseEvidenceCandidate(
+        article(["三、参赛对象", "理学院全体学生。", `${generic}。`]),
+        url,
+        directory,
+        "scope-generic-college-v1",
+      );
+      expect(parsed.fields.scope).toMatchObject({
+        kind: "specified",
+        colleges: ["science"],
+      });
+      expect(parsed.warnings).not.toContain("资格条款含未知学院名称");
+    });
+    it("真正未收录的学院名仍然不猜 ID", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "三、参赛对象",
+          "理学院全体学生。",
+          "草业学院学生可放宽条件。",
+        ]),
+        url,
+        directory,
+        "scope-unknown-college-v1",
+      );
+      expect(parsed.fields.scope.kind).toBe("other");
+      expect(parsed.warnings).toContain("资格条款含未知学院名称");
+    });
   });
 
   describe("mode 剔除报名、提交与物流子句", () => {

@@ -580,12 +580,20 @@ export function parseCandidate(
     if (section.blockedAt !== undefined)
       add(field, article.paragraphs[section.blockedAt], section.blockedAt);
   };
+  // 「学院」本身常用作组织泛称（「由学院研管办负责」「该学院负责组织」「参赛学院初赛」
+  // 「每个学院每个赛道」「按学院要求提交」），这些不是在点名某个未收录的学院。
+  // 只把没有泛称限定词的「X学院」当作未知学院名，避免把已点名的学院降成 other。
+  const genericCollegeQualifier =
+    /(?:各|每|每个|各个|该|本|贵|我|你|其|此|上述|以上|相关|有关|所属|所在|参赛|报名|全院|全校|学院|二级|基层|对口|目标|接收|推荐|录取|报考|招生|申请|在读|跨|多个|其他|其余|同一|不同|由|在|向|至|到|经|按|与|和|得|的|了|是|为|成|进|加|参加|组织|负责|通知|要求|初赛|复赛|决赛|大赛|赛事|活动|培养|上级|下级|兄弟|合作)$/;
   const hasUnknownCollege = (text: string) => {
     for (const college of [...directory].sort(
       (a, b) => b.name.length - a.name.length,
     ))
-      text = text.replaceAll(college.name, "");
-    return /[\p{Script=Han}A-Za-z]+学院/u.test(text.replace(/各学院/g, ""));
+      text = text.replaceAll(college.name, "\u0000");
+    for (const match of text.matchAll(/([\p{Script=Han}A-Za-z]{1,6})学院/gu)) {
+      if (!genericCollegeQualifier.test(match[1])) return true;
+    }
+    return false;
   };
   /**
    * 协议 3.3 的 scope：all / specified / other / unknown。
