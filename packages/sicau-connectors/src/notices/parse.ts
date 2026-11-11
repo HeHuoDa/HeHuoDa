@@ -630,16 +630,16 @@ export function parseCandidate(
       /不限|不受[^。；，,]{0,20}限制/g,
       "",
     );
-    // 身份核验、材料不全、逐期一类条件后果句不是群体资格排除，先剥掉括注、
+    // 身份核验、材料不全、逾期一类条件后果句不是群体资格排除，先剥掉括注、
     // 再测排除词；否则「身份不明者不可参加比赛」会把理学院学生降为 other。
     const identityCondition =
-      /身份不明|资格不符|不符合|材料不全|证件不全|冒名|弄虚作假|舞弊|逐期|逾期|未按时|违反[^。；]{0,10}规定|纪律/;
+      /身份不明|资格不符|不符合|材料不全|证件不全|冒名|弄虚作假|舞弊|逾期|未按时|违反[^。；]{0,10}规定|纪律/;
     const conditionsStripped = qualifiedWithoutUnlimited.replace(
       /[（(][^（()）]*[）)]/g,
       (inner) => (identityCondition.test(inner) ? "" : inner),
     );
     const conditionalConsequence =
-      /(?:者|人员|学生|选手|队伍)?(?:不合条件|身份不明|材料不全|资格不符|逐期|逾期)[^。；，,]{0,12}(?:不得|不可|不予|取消)/;
+      /(?:者|人员|学生|选手|队伍)?(?:不合条件|身份不明|材料不全|资格不符|逾期)[^。；，,]{0,12}(?:不得|不可|不予|取消)/;
     const excluded = exclusionMarker.test(
       conditionsStripped.replace(conditionalConsequence, ""),
     );
