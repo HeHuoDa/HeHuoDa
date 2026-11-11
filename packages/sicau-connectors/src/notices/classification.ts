@@ -1,6 +1,6 @@
 import { containsApplicantList, containsPersonalNameList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-10";
+export const noticeRuleVersion = "competition-rules-11";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -35,8 +35,16 @@ export function classifyNotice(
   const exclusions: string[] = [];
   const reasons: string[] = [];
   // An excluded attachment blocks that attachment, not an otherwise safe parent notice.
+  // 正文里的「报送参赛名单汇总表」是报名流程，不代表页面本身在公布个人名单。
+  // 标题仍按名单隐私边界排除；正文须明确发布名单，不能仅凭提到名单表就整篇误排。
+  const bodyPublishesApplicants = paragraphs.some((paragraph) =>
+    /(?:^|[。；;\n，,])\s*(?:现将[^。；;\n]{0,30})?(?:报名(?:者|人员|学生)?(?:名单|汇总)|参赛(?:者|人员|学生)?名单)\s*(?:如下|公示|[：:])/.test(
+      paragraph,
+    ),
+  );
   const list =
-    containsApplicantList([title, ...paragraphs].join("\n")) ||
+    containsApplicantList(title) ||
+    bodyPublishesApplicants ||
     containsPersonalNameList(title);
   // 赛事词表覆盖官网常见命名；「对抗赛」「辩论赛」「技能赛」等以「赛」结尾的
   // 具体赛事形式此前被漏掉，导致标题显式点明赛事却被当作正文旁证降级。

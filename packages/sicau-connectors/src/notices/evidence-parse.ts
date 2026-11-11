@@ -1,5 +1,6 @@
 import { parseCandidate, extractDates } from "./parse.js";
 import { classifyNotice } from "./classification.js";
+import { candidateFieldsContract } from "./types.js";
 import type {
   Article,
   CandidateFields,
@@ -57,6 +58,40 @@ export function parseEvidenceCandidate(
     locations.map((l) => l.text),
     article.attachments.map((a) => a.title),
   );
+  // 通知标题/发布日期留在原通知元数据中。确定非赛事后，不再把招生、评优等
+  // 业务标题和条件填作比赛名称、届次或参赛资格；字段空值沿用v2契约。
+  if (classification.classification === "non_competition")
+    return {
+      classification,
+      fieldsContract: candidateFieldsContract,
+      fields: {
+        name: "",
+        edition: null,
+        eventKind: null,
+        organizer: null,
+        hosts: [],
+        scope: {
+          kind: "unknown",
+          colleges: [],
+          note: "非赛事通知，不自动提取参赛范围",
+        },
+        mode: null,
+        modeKind: null,
+        tracks: [],
+        members: null,
+        rules: [],
+        stageNames: [],
+        startsAt: { precision: "unknown", value: null },
+        deadline: { precision: "unknown", value: null },
+        materialsAt: { precision: "unknown", value: null },
+        eventAt: { precision: "unknown", value: null },
+      },
+      evidence: [],
+      fieldConflicts: [],
+      missing: [],
+      conflicts: [],
+      warnings: ["非赛事通知不自动生成比赛字段，原文仍可人工核对"],
+    };
   const combined = {
     ...article,
     paragraphs: locations.map((l) => l.text),

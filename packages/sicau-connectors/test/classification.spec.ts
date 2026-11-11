@@ -10,6 +10,16 @@ import {
 } from "./classification-corpus.js";
 
 describe("非赛事业务的条件性赛事提及", () => {
+  it("报名通知收集班级名单表时仍保留真实赛事报名", () => {
+    expect(
+      classifyNotice("关于举办大学生职业规划大赛的通知", [
+        "本科生请报名参赛，并提交参赛作品。班长收齐班级参赛名单汇总表后报送。",
+      ]),
+    ).toMatchObject({
+      classification: "definite",
+      notificationKind: "registration",
+    });
+  });
   it("班团活动标题含未收录赛事名时保留复核，不裁剪报名正文", () => {
     expect(
       classifyNotice("关于开展主题团日篮球赛报名活动的通知", [

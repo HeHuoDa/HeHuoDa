@@ -26,6 +26,33 @@ const article = (
   attachments: [],
 });
 describe("候选领域解析", () => {
+  it("非赛事通知只保留通知元数据，不自动声称比赛字段", () => {
+    const parsed = parseEvidenceCandidate(
+      article(
+        [
+          "主办单位：教务处。",
+          "招生对象：理学院学生，提交个人课程计划后报名。",
+        ],
+        "2026年国际交流项目招生简章",
+      ),
+      url,
+      directory,
+      "dev-non-competition",
+    );
+    expect(parsed.classification?.classification).toBe("non_competition");
+    expect(parsed.fields).toMatchObject({
+      name: "",
+      edition: null,
+      organizer: null,
+      hosts: [],
+      scope: { kind: "unknown", colleges: [] },
+      mode: null,
+      rules: [],
+      stageNames: [],
+      deadline: { precision: "unknown", value: null },
+    });
+    expect(parsed.evidence).toEqual([]);
+  });
   it("普通个人和团队事务不是参赛形式，赛事通知中的无关段落也不能污染形式", () => {
     for (const text of [
       "请同学填写个人银行账户，用于发放助学补贴。",
