@@ -62,16 +62,28 @@ const scopeRestriction =
 const exclusionMarker =
   /除[^。；\n]{0,20}(?:外|以外)|不含|不包括|不面向|禁止|排除|不接受|不招收|(?:不|禁止|不得|不可|不予|非)[^。；，,\n]{0,12}(?:参加|参加|报名|参赛|申报|申请|参与)/;
 
-/** 一个完整学院名只匹配一次，不能把“公共管理学院”的后缀再当作两个学院。 */
-function mentionedColleges(text: string, colleges: Directory): Directory {
+/**
+ * 按名称长度降序掩掉已知学院全名，一个完整学院名只匹配一次，
+ * 避免把「公共管理学院」的后缀再当作两个学院。
+ */
+function maskCollegeNames(
+  text: string,
+  colleges: Directory,
+  mask: string,
+): { masked: string; found: Set<string> } {
   const found = new Set<string>();
   for (const college of [...colleges].sort(
     (a, b) => b.name.length - a.name.length,
   )) {
     if (!text.includes(college.name)) continue;
     found.add(college.id);
-    text = text.replaceAll(college.name, "\0");
+    text = text.replaceAll(college.name, mask);
   }
+  return { masked: text, found };
+}
+
+function mentionedColleges(text: string, colleges: Directory): Directory {
+  const { found } = maskCollegeNames(text, colleges, "\0");
   return colleges.filter((college) => found.has(college.id));
 }
 
@@ -272,7 +284,7 @@ export function competitionKind(paragraphs: string[]): {
  * 同一句里同时允许个人与团队才算 mixed，跨句互不覆盖或相互矛盾时保留冲突。
  */
 const modeLabel =
-  /^(?:参赛形式|参赛方式|比赛形式|竞赛形式|组队形式)\s*[：:]\s*/;
+  /^(?:参赛形式|参赛方式|比赛形式|竞赛形式|组队形式)\s*(?:[：:]|为|是)\s*/;
 /** 可选其一的并列词；只有它们才把「个人 + 团队」解释为两者皆可。 */
 const alternativeMarker = /或|及|和|以及|均可|皆可|任一|任选/;
 /** 否定标记；用于判断与它相邻的形式是否被否定。 */
@@ -286,6 +298,12 @@ const submissionClause =
   /报名表|提交|报送|邮箱|发送|上传|交至|交到|递交|命名|填写|邮寄|纸质档|电子档|个工作日/;
 /** 队长、领队与联络职责是组织分工，不是参赛形式。「负责人」可能是人数括注，不计入。 */
 const dutyClause = /队长|领队|带队|工作人员|职责|事宜/;
+/** 一句里出现报名/提交/职责说明时，其余片段必须自己说明参赛形式才算形式原文。 */
+const participantVocabulary =
+  /个人|团队|队伍|组队|集体|参赛|参加|报名|每组|每队|每人|每班/;
+/** 纪律处分与条件后果句描述的是违规后果，不是参赛形式。 */
+const conditionalModeClause =
+  /否则|违规|违纪|纪律|处分|取消[^。；，,]{0,10}资格|追究|通报批评/;
 
 interface ModeMention {
   individual: boolean;
@@ -378,38 +396,60 @@ export function competitionMode(text: string): {
   const input = text.trim();
   if (!input) return { mode: null, modeKind: null, conflict: null };
   const sentences = input.match(/[^。；;\n]+[。；;\n]*/g) ?? [];
-  const relevant = sentences.filter((sentence) =>
-    readModeMention(sentence, modeLabel.test(sentence.trim())),
+  const relevant = sentences.filter(
+    (sentence) =>
+      readModeMention(sentence, modeLabel.test(sentence.trim())) &&
+      // 小节标题本身含「参赛/组队」字样，但不是形式原文。
+      !isSectionHeading(sentence.trim()) &&
+      // 纪律处分与条件后果句只说明违规后果，不声明参赛形式。
+      !conditionalModeClause.test(sentence),
   );
   const original = relevant.join("").trim();
   if (!original) return { mode: null, modeKind: null, conflict: null };
   let removedOtherField = false;
   const phrases = relevant.map((sentence) => {
     const parts = sentence.split(/[，,]/);
-    const kept = parts.filter((part) => {
-      const otherField =
-        /报名(?:表|时间|截止|信息)|提交|报送|邮箱|评分|赋分|逾期|截止/.test(
-          part,
-        );
-      // 硬约束：报名表、提交、命名、交送与队长职责子句无条件剔除，
-      // 即使同一个子句里提到团队/个人（如「团队参赛则写队长」）
-      // 也只能证明报名要求，不能证明参赛形式。
-      if (submissionClause.test(part) || dutyClause.test(part)) return false;
-      const form = readModeMention(part, modeLabel.test(part.trim()));
-      const formDenial =
-        /(?:不|不得|不可|禁止)[^。；]{0,12}(?:个人|团队|组队)/.test(part);
-      return !otherField || form || formDenial;
-    });
-    if (kept.length === parts.length) return sentence;
+    const kept = parts
+      .map((part) => {
+        // 报名表、提交、命名、交送与队长职责属于报名或材料字段，本身不声明
+        // 参赛形式；同片段里用「并/且/同时」把形式与提交说明连在一起时只
+        // 留下形式那一段（「以团队形式参赛并提交报名表」→「以团队形式参赛」）。
+        if (submissionClause.test(part) || dutyClause.test(part))
+          return part
+            .split(/并|且|同时/)
+            .map((piece) => piece.trim())
+            .find(
+              (piece) =>
+                !!piece &&
+                !!readModeMention(piece, modeLabel.test(piece)) &&
+                !submissionClause.test(piece) &&
+                !dutyClause.test(piece),
+            );
+        const otherField =
+          /报名(?:表|时间|截止|信息)|提交|报送|邮箱|评分|赋分|逾期|截止/.test(
+            part,
+          );
+        const form = readModeMention(part, modeLabel.test(part.trim()));
+        const formDenial =
+          /(?:不|不得|不可|禁止)[^。；]{0,12}(?:个人|团队|组队)/.test(part);
+        return !otherField || form || formDenial ? part : null;
+      })
+      .filter((part): part is string => !!part);
+    const keptText = kept.join("\n").trim();
+    const unchanged =
+      kept.length === parts.length && keptText === parts.join("\n").trim();
+    if (unchanged) return sentence;
     removedOtherField = true;
-    return kept
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join("\n");
+    return keptText;
   });
   // 形式归一仍看完整肯定/否定语境；展示值只移除明确属于其他字段的原文子句。
+  const joined = phrases.filter(Boolean).join("\n").trim();
+  // 过滤把句子削到只剩「。」或不含任何参赛措辞时，说明本句只剩报名说明，
+  // 不能拿残句充当参赛形式原文。
   const displayMode = removedOtherField
-    ? phrases.filter(Boolean).join("\n").trim()
+    ? participantVocabulary.test(joined)
+      ? joined
+      : null
     : original;
   const labelled = modeLabel.test(original);
   const body = original.replace(modeLabel, "").trim() || original;
@@ -490,6 +530,26 @@ export function competitionMode(text: string): {
   };
 }
 
+/** 新候选的空字段基线；非赛事等分支复用同一份字面量，避免多处漂移。 */
+export const emptyCandidateFields = (scopeNote: string): CandidateFields => ({
+  name: "",
+  edition: null,
+  eventKind: null,
+  organizer: null,
+  hosts: [],
+  scope: { kind: "unknown", colleges: [], note: scopeNote },
+  mode: null,
+  modeKind: null,
+  tracks: [],
+  members: null,
+  rules: [],
+  stageNames: [],
+  startsAt: unknownTime(),
+  deadline: unknownTime(),
+  materialsAt: unknownTime(),
+  eventAt: unknownTime(),
+});
+
 export function parseCandidate(
   article: Article,
   url: string,
@@ -526,22 +586,10 @@ export function parseCandidate(
     );
   const eventKind = competitionKind(article.paragraphs);
   const fields: CandidateFields = {
+    ...emptyCandidateFields("参赛范围待核对"),
     name: competitionName(article.title),
     edition: years.length <= 1 ? titleYear : null,
     eventKind: eventKind.value,
-    organizer: null,
-    hosts: [],
-    scope: { kind: "unknown", colleges: [], note: "参赛范围待核对" },
-    mode: null,
-    modeKind: null,
-    tracks: [],
-    members: null,
-    rules: [],
-    stageNames: [],
-    startsAt: unknownTime(),
-    deadline: unknownTime(),
-    materialsAt: unknownTime(),
-    eventAt: unknownTime(),
   };
   if (eventKind.value)
     evidence.push({
@@ -583,15 +631,88 @@ export function parseCandidate(
   // 「学院」本身常用作组织泛称（「由学院研管办负责」「该学院负责组织」「参赛学院初赛」
   // 「每个学院每个赛道」「按学院要求提交」），这些不是在点名某个未收录的学院。
   // 只把没有泛称限定词的「X学院」当作未知学院名，避免把已点名的学院降成 other。
-  const genericCollegeQualifier =
-    /(?:各|每|每个|各个|该|本|贵|我|你|其|此|上述|以上|相关|有关|所属|所在|参赛|报名|全院|全校|学院|二级|基层|对口|目标|接收|推荐|录取|报考|招生|申请|在读|跨|多个|其他|其余|同一|不同|由|在|向|至|到|经|按|与|和|得|的|了|是|为|成|进|加|参加|组织|负责|通知|要求|初赛|复赛|决赛|大赛|赛事|活动|培养|上级|下级|兄弟|合作)$/;
+  // 只写成数组再拼接，避免一条超长正则难以审阅；判定按后缀匹配，所以
+  // 「所在」「参加」这类更长的词已被「在」「加」覆盖，不再重复列出。
+  const genericCollegeQualifiers = [
+    "各",
+    "每",
+    "每个",
+    "各个",
+    "该",
+    "本",
+    "贵",
+    "我",
+    "你",
+    "其",
+    "此",
+    "上述",
+    "以上",
+    "相关",
+    "有关",
+    "所属",
+    "参赛",
+    "报名",
+    "全院",
+    "全校",
+    "学院",
+    "二级",
+    "基层",
+    "对口",
+    "目标",
+    "接收",
+    "推荐",
+    "录取",
+    "报考",
+    "招生",
+    "申请",
+    "在读",
+    "跨",
+    "多个",
+    "其他",
+    "其余",
+    "同一",
+    "不同",
+    "由",
+    "在",
+    "向",
+    "至",
+    "到",
+    "经",
+    "按",
+    "与",
+    "和",
+    "得",
+    "的",
+    "了",
+    "是",
+    "为",
+    "成",
+    "进",
+    "加",
+    "组织",
+    "负责",
+    "通知",
+    "要求",
+    "初赛",
+    "复赛",
+    "决赛",
+    "大赛",
+    "赛事",
+    "活动",
+    "培养",
+    "上级",
+    "下级",
+    "兄弟",
+    "合作",
+  ];
   const hasUnknownCollege = (text: string) => {
-    for (const college of [...directory].sort(
-      (a, b) => b.name.length - a.name.length,
-    ))
-      text = text.replaceAll(college.name, "\u0000");
-    for (const match of text.matchAll(/([\p{Script=Han}A-Za-z]{1,6})学院/gu)) {
-      if (!genericCollegeQualifier.test(match[1])) return true;
+    const masked = maskCollegeNames(text, directory, "\u0000").masked;
+    for (const match of masked.matchAll(
+      /([\p{Script=Han}A-Za-z]{1,6})学院/gu,
+    )) {
+      const qualifier = match[1];
+      if (!genericCollegeQualifiers.some((word) => qualifier.endsWith(word)))
+        return true;
     }
     return false;
   };
@@ -644,13 +765,18 @@ export function parseCandidate(
       conditionsStripped.replace(conditionalConsequence, ""),
     );
     // 明示全校的措辞先用子句级短语判，再回退到原来的整体判断；
-    // 含已知学院名的子句（「四川农业大学食品学院本科生」）不当作全校。
+    // 含已知学院名的子句（「四川农业大学食品学院本科生」）不当作全校，
+    // 相对指代（「我院/本院/该院/本学院」）也不能当作明示全校。
     const allScopePhrase =
       /全校|全体在校|所有在校|(?:我校|四川农业大学)[^。；，,\n]{0,10}?(?:本科生|专科生|研究生|在校生|学生)|(?:具有|拥有)四川农业大学(?:正式)?学籍/;
+    const relativeCollegeReference = /我院|本院|该院|贵院|本学院|全学院/;
     const collegeNamed = colleges.some((college) =>
       qualification.includes(college.name),
     );
-    const allPhrase = !collegeNamed && allScopePhrase.test(qualification);
+    const allPhrase =
+      !collegeNamed &&
+      !relativeCollegeReference.test(qualification) &&
+      allScopePhrase.test(qualification);
     const narrowed = /仅|限|除|不含|校区/.test(conditionsStripped);
     const other = (note: string) => ({
       kind: "other" as const,

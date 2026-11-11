@@ -1221,9 +1221,15 @@ describe("赛事分类独立于审核状态", () => {
       paragraphs,
     );
     expect(result.classification).toBe("definite");
-    expect(result.exclusions).not.toContain(
-      "结果公示或评选通知，不是可报名赛事",
-    );
+    expect(result.notificationKind).not.toBe("award");
+  });
+  it("同篇其他句子的未来公示表述不作废已发出的结果公告", () => {
+    const result = classifyNotice("关于数学建模竞赛后续安排的通知", [
+      "现将本次竞赛评审结果公示如下。",
+      "异议材料将在三日后于学院官网公示处理。",
+    ]);
+    expect(result.classification).toBe("non_competition");
+    expect(result.notificationKind).toBe("award");
   });
   it("实发的结果公示与公示期仍然按结果公示排除", () => {
     for (const body of [

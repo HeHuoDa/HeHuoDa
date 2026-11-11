@@ -1,4 +1,4 @@
-import { parseCandidate, extractDates } from "./parse.js";
+import { parseCandidate, extractDates, emptyCandidateFields } from "./parse.js";
 import { classifyNotice } from "./classification.js";
 import { candidateFieldsContract } from "./types.js";
 import type {
@@ -64,28 +64,7 @@ export function parseEvidenceCandidate(
     return {
       classification,
       fieldsContract: candidateFieldsContract,
-      fields: {
-        name: "",
-        edition: null,
-        eventKind: null,
-        organizer: null,
-        hosts: [],
-        scope: {
-          kind: "unknown",
-          colleges: [],
-          note: "非赛事通知，不自动提取参赛范围",
-        },
-        mode: null,
-        modeKind: null,
-        tracks: [],
-        members: null,
-        rules: [],
-        stageNames: [],
-        startsAt: { precision: "unknown", value: null },
-        deadline: { precision: "unknown", value: null },
-        materialsAt: { precision: "unknown", value: null },
-        eventAt: { precision: "unknown", value: null },
-      },
+      fields: emptyCandidateFields("非赛事通知，不自动提取参赛范围"),
       evidence: [],
       fieldConflicts: [],
       missing: [],

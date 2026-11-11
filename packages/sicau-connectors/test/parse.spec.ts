@@ -1362,6 +1362,7 @@ describe("候选领域解析", () => {
     });
   });
 
+  // 以下用例均为构造的最小文本，不是实站样本；用于锁定已确认真实缺陷的最小形态。
   describe("scope 标题变体与明示全校措辞", () => {
     it.each([
       "三、参赛对象及资格",
@@ -1390,6 +1391,21 @@ describe("候选领域解析", () => {
         "scope-all-phrase-v1",
       );
       expect(parsed.fields.scope.kind).toBe("all");
+      expect(parsed.fields.scope.colleges).toEqual([]);
+    });
+    it.each([
+      "我院全体在校本科生均可参赛。",
+      "本院全体在校本科生均可参赛。",
+      "该院全体在校本科生均可参赛。",
+      "本学院全体在校本科生均可参赛。",
+    ])("相对指代的学院不是明示全校：%s", (text) => {
+      const parsed = parseEvidenceCandidate(
+        article(["三、参赛对象", text]),
+        url,
+        directory,
+        "scope-relative-college-v1",
+      );
+      expect(parsed.fields.scope.kind).not.toBe("all");
       expect(parsed.fields.scope.colleges).toEqual([]);
     });
     it("身份核验与条件后果不是资格排除", () => {
@@ -1455,6 +1471,7 @@ describe("候选领域解析", () => {
     });
   });
 
+  // 同样为构造的最小文本，来源为已核实失败样本的语义形态。
   describe("mode 剔除报名、提交与物流子句", () => {
     it.each([
       [
@@ -1484,9 +1501,61 @@ describe("候选领域解析", () => {
         "mode-registration-clause-v1",
       );
       expect(parsed.fields.mode).toContain("组队报名");
-      expect(parsed.fields.mode).not.toContain("提交");
-      expect(parsed.fields.mode).not.toContain("队长");
+      expect(parsed.fields.mode).not.toContain("提交参赛队伍名单");
+      expect(parsed.fields.mode).not.toContain("队长负责");
       expect(parsed.fields.modeKind).toBe("team");
+    });
+    it.each([
+      ["以团队形式参赛并提交报名表。", "以团队形式参赛"],
+      ["参赛形式为团队，须提交项目书。", "参赛形式为团队"],
+    ])("同一句给出形式又要求提交时保留形式原文：%s", (text, form) => {
+      const parsed = parseEvidenceCandidate(
+        article([text]),
+        url,
+        directory,
+        "mode-form-with-submission-v1",
+      );
+      expect(parsed.fields.mode).toContain(form);
+      expect(parsed.fields.modeKind).toBe("team");
+      expect(parsed.fields.mode).not.toContain("报名表");
+      expect(parsed.fields.mode).not.toContain("项目书");
+    });
+    it("小节标题不是参赛形式原文", () => {
+      const parsed = parseEvidenceCandidate(
+        article(["三、参赛对象及组队要求", "以团队形式参赛。"]),
+        url,
+        directory,
+        "mode-heading-v1",
+      );
+      expect(parsed.fields.mode).not.toContain("参赛对象");
+      expect(parsed.fields.modeKind).toBe("team");
+    });
+    it("条件后果句不构成参赛形式", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "1.参赛资格：以团队形式参赛，团队人数3-5人。",
+          "2.严格遵守活动安排，不得擅自做出违规行为，否则取消个人参赛资格。",
+        ]),
+        url,
+        directory,
+        "mode-conditional-consequence-v1",
+      );
+      expect(parsed.fields.modeKind).toBe("team");
+      expect(parsed.fields.mode).not.toContain("违规行为");
+      expect(parsed.conflicts).not.toContain(
+        "参赛形式存在互不覆盖的要求，须人工核对",
+      );
+    });
+    it("报名阶段的括注碎片不进入 mode", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "（1）正式报名阶段：参赛个人或团队提交作品与参赛报名表（见附件1，请保证信息的准确性，凡是填报信息有误，后果自负。",
+        ]),
+        url,
+        directory,
+        "mode-registration-fragment-v1",
+      );
+      expect(parsed.fields.mode).toBeNull();
     });
     it("以个人名义参赛也能识别为个人形式", () => {
       const parsed = parseEvidenceCandidate(
