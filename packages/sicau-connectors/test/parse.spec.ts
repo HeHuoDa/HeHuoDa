@@ -26,6 +26,80 @@ const article = (
   attachments: [],
 });
 describe("候选领域解析", () => {
+  it("参赛形式不夹带同句的报名材料流程", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["本次竞赛以个人形式参赛，报名表须于五月提交，逾期不予受理。"]),
+      url,
+      directory,
+      "dev-mode-phrase",
+    );
+    expect(parsed.fields.mode).toBe("本次竞赛以个人形式参赛");
+    expect(parsed.fields.modeKind).toBe("individual");
+  });
+  it("年级和长编号不能被截成日期", () => {
+    expect(extractDates("1.2024级、2025级同学可自愿报名。", "2026")).toEqual(
+      [],
+    );
+    expect(extractDates("项目编号12026.11.201234", "2026")).toEqual([]);
+    expect(extractDates("报名截止2026.11.20。", "2026")).toEqual([
+      { precision: "date", value: "2026-11-20" },
+    ]);
+  });
+  it("学籍注册基准日不自动成为报名截止", () => {
+    const parsed = parseEvidenceCandidate(
+      article(["参赛对象：2026年6月1日以前正式注册的全日制本科生可参赛。"]),
+      url,
+      directory,
+      "dev-registration-role",
+    );
+    expect(parsed.fields.deadline).toEqual({
+      precision: "unknown",
+      value: null,
+    });
+    const registration = parseEvidenceCandidate(
+      article(["在校学生请于2026年7月20日前完成赛事平台注册。"]),
+      url,
+      directory,
+      "dev-platform-registration",
+    );
+    expect(registration.fields.deadline).toEqual({
+      precision: "date",
+      value: "2026-07-20",
+    });
+  });
+  it.each([
+    ["公共管理学院", ["public-administration"]],
+    ["公共管理学院、管理学院", ["management", "public-administration"]],
+  ])("完整学院名称不同时匹配其短后缀：%s", (names, expected) => {
+    const parsed = parseEvidenceCandidate(
+      article([`本竞赛由${names}承办。`, `参赛对象：${names}本科生。`]),
+      url,
+      [
+        { id: "science", name: "理学院" },
+        { id: "management", name: "管理学院" },
+        { id: "public-administration", name: "公共管理学院" },
+      ],
+      "dev-college-names",
+    );
+    expect(parsed.fields.hosts).toEqual(expected);
+    expect(parsed.fields.scope).toMatchObject({
+      kind: "specified",
+      colleges: expected,
+    });
+  });
+  it.each([
+    [["参赛对象：全校本科生。", "主体赛道参赛对象参赛材料"], "all"],
+    [["本竞赛参赛范围最广，吸引学生参与。"], "unknown"],
+    [["参赛对象：全校本科生。", "若作品抄袭则取消参赛资格。"], "all"],
+  ])("资格词的表头或旁提不覆盖真实资格：%j", (paragraphs, kind) => {
+    const parsed = parseEvidenceCandidate(
+      article(paragraphs as string[]),
+      url,
+      directory,
+      "dev-scope-context",
+    );
+    expect(parsed.fields.scope.kind).toBe(kind);
+  });
   it("非赛事通知只保留通知元数据，不自动声称比赛字段", () => {
     const parsed = parseEvidenceCandidate(
       article(
