@@ -51,6 +51,21 @@ const attachmentRuleReference = (text: string) =>
 const scopeHeading = new RegExp(
   `${scopeLabel.source}(?=\\s*(?:[：:]|为|是|包括|包含|面向|仅|只|限|须|需|应|不|$))`,
 );
+/** 表格里的列标签：整段只有资格标签，下一段也不是资格表述。 */
+const bareScopeColumnLabel =
+  /^(?:参赛对象|参赛人员|参赛范围|参赛资格|报名对象)$/;
+const eligibilityWording =
+  /学院|学校|全校|全体|学生|本科生|专科生|研究生|年级|专业|班级|校区|学籍|教师|教职工/;
+/**
+ * 表格被拆成单元格后，单独的「参赛对象」只是列标签，不是小节标题；
+ * 若据此读取后续单元格，会把表头碎片当成允许范围。
+ */
+const isScopeColumnLabel = (text: string, next?: string) => {
+  if (headingPrefix.test(text)) return false;
+  if (!bareScopeColumnLabel.test(text.replace(/[：:\s]+$/, "").trim()))
+    return false;
+  return !eligibilityWording.test(next ?? "");
+};
 /** Clauses that describe another field; they must not shape a scope value. */
 const isOtherFieldClause = (text: string) =>
   /个人赛|团队赛|团体赛|组队|赛道|比赛时间|竞赛时间|报名时间|截止|材料|作品提交|联系人|电话|地点/.test(
@@ -854,7 +869,10 @@ export function parseCandidate(
         add("organizer", paragraph, index);
       }
     }
-    if (scopeHeading.test(paragraph)) {
+    if (
+      scopeHeading.test(paragraph) &&
+      !isScopeColumnLabel(paragraph, article.paragraphs[index + 1])
+    ) {
       const heading = isSectionHeading(paragraph);
       // A heading carries no scope text; read the whole section beneath it instead.
       const section = heading

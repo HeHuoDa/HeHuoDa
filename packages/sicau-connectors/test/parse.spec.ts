@@ -1455,6 +1455,25 @@ describe("候选领域解析", () => {
       });
       expect(parsed.warnings).not.toContain("资格条款含未知学院名称");
     });
+    it("表格里单独的列标签不是资格小节标题", () => {
+      const parsed = parseEvidenceCandidate(
+        article([
+          "二、活动对象",
+          "全体本科生、硕士生（博）",
+          "四、大赛内容",
+          "主体赛道参赛对象参赛材料",
+          "参赛对象",
+          "参赛材料",
+          "成长赛道本科2025级、2026级",
+          "说明：就业赛道本科学生应为计划求职学生，不含已通过推免获得录取资格的学生。",
+          "五、大赛流程",
+        ]),
+        url,
+        directory,
+        "scope-bare-header-label-v1",
+      );
+      expect(parsed.fields.scope.kind).toBe("unknown");
+    });
     it("真正未收录的学院名仍然不猜 ID", () => {
       const parsed = parseEvidenceCandidate(
         article([
