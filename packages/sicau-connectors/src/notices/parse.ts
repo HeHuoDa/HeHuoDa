@@ -31,6 +31,16 @@ const isSectionHeading = (text: string) => {
   return true;
 };
 const rulesHeading = /参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求/;
+const attachmentRuleReference = (text: string) =>
+  /^(?:具体(?:规则|要求)?)?(?:详见|参见|参考|见|请查阅|请查看|详细查看)\s*(?:通知附件|附件)[^。；;，,\n]*[。；;]?$/.test(
+    text
+      .replace(headingPrefix, "")
+      .replace(
+        /^(?:参赛规则|竞赛规则|比赛规则|参赛要求|作品要求|组队要求)\s*[：:]?\s*/,
+        "",
+      )
+      .trim(),
+  );
 // 只识别资格标签或资格断言，避免“范围最广”“取消参赛资格”和拼接表头
 // 被当成另一条允许范围，覆盖已明确的全校/学院资格。
 const scopeHeading =
@@ -536,6 +546,14 @@ export function parseCandidate(
     });
   const add = (field: string, excerpt: string, paragraph: number) =>
     evidence.push({ field, excerpt, paragraph, url });
+  const addRule = (text: string, paragraph: number) => {
+    if (attachmentRuleReference(text)) {
+      warnings.push("规则仅指向附件，未作为已提取正文规则");
+      return;
+    }
+    fields.rules.push(text);
+    add("rules", text, paragraph);
+  };
   const addBlockedSectionEvidence = (
     field: "scope" | "rules",
     index: number,
@@ -649,10 +667,17 @@ export function parseCandidate(
       const organizerText =
         /主办(?:单位)?[：:]\s*([^。；]+)/.exec(paragraph)?.[1] ??
         /由([^。；]+?)主办/.exec(paragraph)?.[1];
-      const organizer = organizerText
-        ?.split(
-          /[，,]\s*(?=(?:承办|协办|发布|参赛|报名|比赛时间|竞赛时间)(?:单位|学院|对象|范围|资格)?[：:])/,
-        )[0]
+      const mainOrganizers = organizerText?.replace(
+        /^.*(?:指导|支持|协办)[，,]\s*/,
+        "",
+      );
+      const nextLabel =
+        mainOrganizers?.search(
+          /(?:承办|协办|指导|支持|发布|参赛|报名|比赛时间|竞赛时间|活动目的|活动对象|活动安排)(?:单位|学院|对象|范围|资格)?[：:]/,
+        ) ?? -1;
+      const organizer = mainOrganizers
+        ?.slice(0, nextLabel < 0 ? undefined : nextLabel)
+        .replace(/[，,\s]+$/, "")
         .trim();
       if (organizer) {
         if (fields.organizer && fields.organizer !== organizer.trim()) {
@@ -757,7 +782,10 @@ export function parseCandidate(
     const members =
       /(?:每组|每队|团队人数|队伍人数)[^。；]{0,30}(?:\d+|[一二三四五六七八九十]+)\s*人/.exec(
         paragraph,
-      )?.[0];
+      )?.[0] ??
+      /(?:集体作品|团体作品)[^。；]{0,40}?(?<!报名)(人数(?:限定|限制)?(?:为|在)?\s*(?:\d+|[一二三四五六七八九十]+)(?:\s*[-—~～至到]\s*(?:\d+|[一二三四五六七八九十]+))?\s*人)/.exec(
+        paragraph,
+      )?.[1];
     if (members) {
       if (fields.members && fields.members !== members) {
         conflicts.push("人数要求存在多个表述，须逐赛道核对");
@@ -773,22 +801,32 @@ export function parseCandidate(
         conflicts.push("参赛规则标题与内容分属不同来源，须人工核对");
         warnings.push("规则小节跨来源，未自动拼接");
         addBlockedSectionEvidence("rules", index, section);
-      } else
-        for (const part of section.parts) {
-          fields.rules.push(part.text);
-          add("rules", part.text, part.index);
-        }
+      } else for (const part of section.parts) addRule(part.text, part.index);
     } else if (rulesHeading.test(paragraph) && !isSectionHeading(paragraph)) {
-      fields.rules.push(paragraph);
-      add("rules", paragraph, index);
+      addRule(paragraph, index);
     }
     for (const match of paragraph.matchAll(
-      /赛道(?:[一二三四五六七八九十\d]+)?[：:]\s*([^。；]+)/g,
+      /(赛道(?:[一二三四五六七八九十\d]+)?)[：:]\s*([^。；]+)/g,
     )) {
-      const names = match[1]
-        .split(/[、，,]/)
-        .map((name) => name.trim())
-        .filter(Boolean);
+      const prefix = /([\p{Script=Han}A-Za-z0-9“”"'·+-]+)$/u.exec(
+        paragraph.slice(0, match.index),
+      )?.[1];
+      const named =
+        prefix &&
+        !/^(?:参赛|比赛|竞赛|赛事|本次|本届|设置|分为|包括)/.test(prefix);
+      // “结构化赛道：每组...”左侧才是名称；裸“赛道：算法、应用”才读右侧列表。
+      const names = named
+        ? [prefix + match[1]]
+        : match[2]
+            .split(/[、，,]/)
+            .map((name) => name.trim())
+            .filter(
+              (name) =>
+                name &&
+                !/^(?:请|须|应当|必须|不得|分为|将.{0,20}(?:分为|分成)|每(?:组|队|批)?\s*\d+\s*人|(?:提交|报送|参考)(?:附件|材料|作品))/.test(
+                  name,
+                ),
+            );
       for (const name of names) {
         if (fields.tracks.some((track) => track.name === name)) continue;
         const trackIndex = fields.tracks.length;
@@ -801,11 +839,20 @@ export function parseCandidate(
         add(`tracks.${trackIndex}.name`, paragraph, index);
       }
     }
-    for (const name of paragraph.match(/院赛|校赛|初赛|复赛|决赛/g) ?? [])
-      if (!fields.stageNames.includes(name)) {
-        fields.stageNames.push(name);
-        add("stageNames", paragraph, index);
-      }
+    for (const clause of paragraph.split(/[。；;\n，,]/)) {
+      // 往届获奖限制与学历/学籍基准引用中的“决赛”不证明本届安排该阶段。
+      if (/往年|往届|历届|以往|此前/.test(clause)) continue;
+      if (
+        /学历|学籍|博士资格|入学资格/.test(clause) &&
+        !/赛程|阶段|安排|举行|举办|进行|晋级|进入|入围|评审|推报/.test(clause)
+      )
+        continue;
+      for (const name of clause.match(/院赛|校赛|初赛|复赛|决赛/g) ?? [])
+        if (!fields.stageNames.includes(name)) {
+          fields.stageNames.push(name);
+          add("stageNames", paragraph, index);
+        }
+    }
     const timeClauses = paragraph.split(/[。；;\n]/).flatMap((clause) => {
       const parts = clause.split(/[，,]/);
       // Split only independently dated material duties. Otherwise a comma may

@@ -26,6 +26,87 @@ const article = (
   attachments: [],
 });
 describe("候选领域解析", () => {
+  it("仅指向附件的提示不是已提取规则，也不抢占真实规则证据", () => {
+    const empty = parseEvidenceCandidate(
+      article(["参赛规则：详见附件1。"]),
+      url,
+      directory,
+      "dev-rule-reference",
+    );
+    expect(empty.fields.rules).toEqual([]);
+    const mixed = parseEvidenceCandidate(
+      article(["参赛规则", "详细查看附件1。", "参赛作品必须原创。"]),
+      url,
+      directory,
+      "dev-rule-reference-mixed",
+    );
+    expect(mixed.fields.rules).toEqual(["参赛作品必须原创。"]);
+    expect(
+      mixed.evidence
+        .filter((entry) => entry.field === "rules")
+        .map((entry) => entry.excerpt),
+    ).toEqual(["参赛作品必须原创。"]);
+  });
+  it.each([
+    [
+      ["往年决赛获奖作品不得重复申报。", "本届赛程分为初赛、复赛两个阶段。"],
+      ["初赛", "复赛"],
+    ],
+    [["在竞赛决赛前尚未通过博士资格考试的，可以按硕士学历申报作品。"], []],
+  ])("历史获奖或学历资格中的阶段词不当作本届赛程：%j", (paragraphs, stages) => {
+    const parsed = parseEvidenceCandidate(
+      article(paragraphs),
+      url,
+      directory,
+      "dev-stage-context",
+    );
+    expect(parsed.fields.stageNames).toEqual(stages);
+  });
+  it("不同赛项的集体作品人数与团队人数保留冲突，不自动挑一项", () => {
+    const parsed = parseEvidenceCandidate(
+      article([
+        "赛项一：集体作品作者均为学生，人数限定在3~10人。",
+        "赛项二：以团队形式参赛，每队3-15人。",
+      ]),
+      url,
+      directory,
+      "dev-members-by-event",
+    );
+    expect(parsed.fields.members).toBeNull();
+    expect(
+      parsed.fieldConflicts?.find((conflict) => conflict.field === "members")
+        ?.values,
+    ).toHaveLength(2);
+  });
+  it.each([
+    ["主办单位：教务处 承办单位：理学院 活动目的：提升学生能力。", "教务处"],
+    [
+      "本竞赛由某教育部门指导，某学会和某中心主办，理学院承办。",
+      "某学会和某中心",
+    ],
+  ])("主办单位不串入指导、承办和活动说明：%s", (text, expected) => {
+    const parsed = parseEvidenceCandidate(
+      article([text]),
+      url,
+      directory,
+      "dev-organization-roles",
+    );
+    expect(parsed.fields.organizer).toBe(expected);
+  });
+  it("命名赛道冒号后的组织流程不作为赛道名称", () => {
+    const parsed = parseEvidenceCandidate(
+      article([
+        "①结构化赛道：将考生分为若干组，一对一面试；②无领导小组赛道：每组9人进行讨论。",
+      ]),
+      url,
+      directory,
+      "dev-track-labels",
+    );
+    expect(parsed.fields.tracks.map((track) => track.name)).toEqual([
+      "结构化赛道",
+      "无领导小组赛道",
+    ]);
+  });
   it("参赛形式不夹带同句的报名材料流程", () => {
     const parsed = parseEvidenceCandidate(
       article(["本次竞赛以个人形式参赛，报名表须于五月提交，逾期不予受理。"]),
