@@ -44,7 +44,7 @@ const forbiddenListWords =
 /**
  * 附件正文上下文里的个人资料信号。名单词不能在此按字面拦截：报名说明常写
  * 「报送参赛名单汇总表」，那是要求报名者提交表格，不代表父通知在发布名单。
- * 名单只按**实际发布**（公布动作）或敏感明细列判定，规则型附件才不会被误拦。
+ * 名单只按共享判据（实际发布/表格形态）或敏感明细列判定，规则型附件才不会被误拦。
  */
 const sensitiveContextWords =
   /个人资料|学生明细|人员明细|获奖名单|晋级名单|入围名单|身份证号|联系方式/;
@@ -56,6 +56,7 @@ export function attachmentEligibility(
   if (
     forbiddenListWords.test(title) ||
     sensitiveContextWords.test(contextText) ||
+    // 与分类器、runner、store 共用同一份正文名单判据。
     bodyPublishesApplicantList(contextText)
   )
     return "blocked";

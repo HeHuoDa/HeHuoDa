@@ -1283,6 +1283,29 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(publishesApplicantList(signupTitle, body)).toBe(true);
   });
   it.each([
+    [
+      "表头加序号姓名学号",
+      [
+        "参赛学生名单",
+        "序号 姓名 学号",
+        "1 张三 2023010101",
+        "2 李四 2023010102",
+      ],
+    ],
+    ["表头加逐行姓名", ["参赛学生名单", "张三", "李四"]],
+    ["附件序号的名单标题", ["附件1：参赛人员名单"]],
+    ["名单如下加姓名", ["名单如下：张三、李四"]],
+    ["名单词加冒号加姓名", ["参赛学生名单：张三、李四"]],
+  ])("表格与逐条形态的真实名单仍被拦截：%s", (_label, body) => {
+    // extractArticle 会把表格 tr 拆成独立段落，最常见形态没有公布动词；
+    // 判据放宽后这里如果不拦，runner/store 会把名单正文与逐条姓名入库。
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
     ["报名学生名单", "程序设计竞赛报名人员名单"],
     ["拟评名单公示", "关于2025-2026学年度国家助学金拟评名单的公示"],
     ["参赛学生名单", "2026年数学建模竞赛参赛学生名单"],

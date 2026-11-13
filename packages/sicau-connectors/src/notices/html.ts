@@ -85,22 +85,90 @@ const applicantListObject =
  */
 const listPublishedAfter = new RegExp(
   `(?:${applicantListObject.source})[^。；\\n]{0,10}?(?:如下|公示|公布|公告|见附件|附后|附上)` +
-    `|(?:名单|明细|信息表|汇总表)[：:]\\s*[\\u4e00-\\u9fff]{2,4}(?:[、，,；;\\s]|$)`,
+    `|(?:名单|明细|信息表|汇总表)\\s*(?:如下)?\\s*[：:]\\s*(?:[\\u4e00-\\u9fff]{2,4})(?:[、，,；;\\s]|$)`,
 );
 /** 公布动作在名单对象之前（「现公布参赛名单」）；「现将…名单报送」不属于公布。 */
 const listPublishedBefore = new RegExp(
   `(?:现公布|现公示|现予公布|现予公示|予以公布|予以公示|现对[^。；\\n]{0,8}?(?:名单|明细))[^。；\\n]{0,8}?(?:${applicantListObject.source}|名单)`,
 );
+/** 只有名单对象、没有报名流程动词的整段标题式行（多半是表格拆行后的表头）。 */
+const bareListHeading = new RegExp(
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?(?:${applicantListObject.source})$`,
+);
+/** 「附件1：参赛人员名单」「参赛名单汇总表.xlsx」这类以名单对象结尾的短标题行。 */
+const namedListHeading = new RegExp(
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?[^，,。；;\\n]{0,20}${applicantListObject.source}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
+);
+/** 姓名＋学号／姓名＋序号一类的表格数据行（表格被拆成独立段落时逐行出现）。 */
+const rosterRow =
+  /^\s*(?:\d{1,3}\s*[、.．:：]?\s*)?(?:[\u4e00-\u9fff]{2,4})(?:\s|[\u3000]|\d{6,20})/;
+const identityRow = /(?:学号|学生编号)\s*[:：]?\s*\d{6,20}|\d{8,20}/;
+/** 短姓名行：表格拆行后单独成段的姓名（2–4 个汉字，无其他内容）。 */
+const plainNameLine = /^[\u4e00-\u9fff]{2,4}$/;
+/** 名单表头后紧跟的「如下：」也算发布，即使冒号后没有姓名。 */
+const listHeadingThenColon = new RegExp(
+  `(?:名单|明细|信息表|汇总表)\\s*(?:如下|附后|见附件)?\\s*[：:]\\s*$`,
+);
+/** 名单对象后紧跟冒号（「名单如下：张三」「参赛学生名单：」）。 */
+const listObjectThenColon = new RegExp(
+  `(?:${applicantListObject.source}|名单|明细|信息表|汇总表)\\s*(?:如下|附后|见附件)?\\s*[：:]`,
+);
+/**
+ * 报名流程动词只与名单对象相邻时才算「要求报送」。整段任何位置出现报送都豁免，
+ * 会把「现将名单公布如下：张三…请各班报送材料」这类真名单误放行。
+ */
+const listWorkflowPhrase = new RegExp(
+  `(?:${applicantListObject.source})[^。；\\n]{0,6}?(?:报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至)` +
+    `|(?:报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至)[^。；\\n]{0,6}?(?:${applicantListObject.source})`,
+);
 /**
  * 正文是否在发布真实名单（逐条列人名），而不是在报名说明里要求报送名单表。
- * 判据看公布动作的位置与形态，不看「名单」二字是否出现。
+ * 三种形态都算发布：公布动作句、名单表头后跟姓名，以及表格被拆行后
+ * 「名单表头 + 姓名/学号行」的组合——后者没有公布动词，但确实是名单正文。
  */
 export function bodyPublishesApplicantList(text: string): boolean {
-  return text
+  const clauses = text
     .split(/[。；;\n]/)
-    .some(
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  if (
+    clauses.some(
       (clause) =>
         listPublishedAfter.test(clause) || listPublishedBefore.test(clause),
+    )
+  )
+    return true;
+  // 表格形态：某一行只写名单对象，且同段另有姓名行或学号行；没有任何报名
+  // 流程动词时才成立，避免把「参赛名单汇总表后报送」误判成发布名单。
+  const headingAt = clauses.findIndex(
+    (clause) =>
+      bareListHeading.test(clause) ||
+      namedListHeading.test(clause) ||
+      // 「附件1：参赛人员名单」「名单如下：」这类标题式行同样开启名单段。
+      listHeadingThenColon.test(clause) ||
+      // 名单对象后紧跟冒号，且该句就是整段（表格首行常见形态）。
+      listObjectThenColon.test(clause),
+  );
+  // 正文里单独一行就点名「参赛人员名单」且带附件序号/表格扩展名时，
+  // 本身就是名单材料，不论后面有没有姓名行。
+  const namedListMaterial = clauses.some(
+    (clause) =>
+      namedListHeading.test(clause) &&
+      (/^附件\s*\d*\s*[：:、.]/.test(clause) ||
+        /\.(?:pdf|docx?|xlsx?)$/i.test(clause)),
+  );
+  if (namedListMaterial) return true;
+  if (headingAt < 0) return false;
+  // 表头之后若只写报名流程（「参赛名单汇总表后报送」），不当作发布名单。
+  // 只判与名单对象相邻的流程动词，避免整段其他句子的报送要求造成豁免。
+  if (listWorkflowPhrase.test(text)) return false;
+  return clauses
+    .slice(headingAt + 1)
+    .some(
+      (clause) =>
+        rosterRow.test(clause) ||
+        identityRow.test(clause) ||
+        plainNameLine.test(clause),
     );
 }
 /**
