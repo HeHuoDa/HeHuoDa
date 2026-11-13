@@ -3,6 +3,7 @@ import {
   containsApplicantList,
   bodyPublishesApplicantList,
   parseEvidenceCandidate,
+  parseEvidenceCandidateUnscoped,
   publishesApplicantList,
 } from "../dist/notices/index.js";
 import {
@@ -94,7 +95,7 @@ function observableOf(result: ReturnType<typeof classifyNotice>) {
 describe("赛事分类独立于审核状态", () => {
   it("延期说明后紧接的新绝对截止仍可提取，旧日期在前不能抵消相对变更", () => {
     const parse = (paragraphs: string[]) =>
-      parseEvidenceCandidate(
+      parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛补充通知",
           publishedAt: null,
@@ -119,7 +120,7 @@ describe("赛事分类独立于审核状态", () => {
     "资格否定 %s 保留复杂原文，不列为允许学院",
     (denied) => {
       const text = `参赛对象：仅信息工程学院学生可参加，生命科学学院${denied}。`;
-      const result = parseEvidenceCandidate(
+      const result = parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛报名通知",
           publishedAt: null,
@@ -148,7 +149,7 @@ describe("赛事分类独立于审核状态", () => {
         "原报名截止：2026年11月1日。",
         `现延期至${relative}。`,
       ];
-      const result = parseEvidenceCandidate(
+      const result = parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛补充通知",
           publishedAt: null,
@@ -171,7 +172,7 @@ describe("赛事分类独立于审核状态", () => {
   );
   it("联合主办单位中的逗号不丢失，也不把不同来源的甲乙与甲当成同值", () => {
     const text = "主办单位：甲，乙。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: null,
@@ -202,7 +203,7 @@ describe("赛事分类独立于审核状态", () => {
   it("资格排除、主办承办和否定模式不得自动解释成相反含义", () => {
     const text =
       "主办单位：教务处，承办单位：信息工程学院。参赛对象：仅信息工程学院学生可参加，生命科学学院不得参加。参赛规则：禁止个人参赛，须以团队参加。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: null,
@@ -226,7 +227,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("旧绝对截止后出现未锚定相对延期，不沿用旧截止", () => {
     const paragraphs = ["原报名截止：2026年11月1日。", "现延期至下周一。"];
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛补充通知",
         publishedAt: "2026-10-01",
@@ -260,7 +261,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("顿号连接的多赛段时间仍保留两侧候选证据", () => {
     const text = "院赛报名截止：2026年11月1日、校赛报名截止：2026年11月8日。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -282,7 +283,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("通用标题的通知种类证据必须包含真正支持通知种类的正文", () => {
     const text = "2026年数学竞赛通知已发布。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "相关事项",
         publishedAt: null,
@@ -310,7 +311,7 @@ describe("赛事分类独立于审核状态", () => {
         ["现将数学竞赛获奖结果公示。报名截止曾为2026年10月1日。", "award"],
         ["数学竞赛圆满结束，现回顾比赛。报名截止曾为2026年10月1日。", "news"],
       ]) {
-        const result = parseEvidenceCandidate(
+        const result = parseEvidenceCandidateUnscoped(
           {
             title,
             publishedAt: null,
@@ -338,7 +339,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
     const text = "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月1日。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -371,7 +372,7 @@ describe("赛事分类独立于审核状态", () => {
     ).toMatchObject({ classification: "suspected" });
   });
   it("同句逗号分隔的两个赛段截止保留候选值及定位", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -402,7 +403,7 @@ describe("赛事分类独立于审核状态", () => {
     );
   });
   it("资格标题和下一段分属不同证据时分别定位，不伪造跨来源摘录", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "补充通知",
         publishedAt: null,
@@ -449,7 +450,7 @@ describe("赛事分类独立于审核状态", () => {
         text: "报名截止：2026年11月1日。",
         attachments: [],
       };
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article,
         "https://example.edu/notice",
         [],
@@ -514,7 +515,7 @@ describe("赛事分类独立于审核状态", () => {
     });
   });
   it("正文与PDF截止冲突保留候选值及页码，自动字段不选更新者", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -574,7 +575,7 @@ describe("赛事分类独立于审核状态", () => {
     ["2026年竞赛获奖新闻", ["报名截止：2026年11月1日。"], null],
     ["2026年竞赛报名通知", ["报名截止：2026年11月1日。"], "2026-11-01"],
   ] as const)("%s 的时间不猜测（%s）", (title, paragraphs, deadline) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title,
         publishedAt: null,
@@ -589,7 +590,7 @@ describe("赛事分类独立于审核状态", () => {
     expect(parsed.fields.deadline.value).toBe(deadline);
   });
   it("三个主办表述不能在冲突后静默恢复第三个值，资格与附件保留两侧定位", () => {
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: "2025-12-31",
@@ -1421,3 +1422,4 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
   });
 });
+

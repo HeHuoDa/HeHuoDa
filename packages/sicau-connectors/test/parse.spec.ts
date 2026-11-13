@@ -2,7 +2,9 @@ import {
   classifyNotice,
   competitionName,
   parseCandidate,
+  parseCandidateUnscoped,
   parseEvidenceCandidate,
+  parseEvidenceCandidateUnscoped,
   extractDates,
   extractArticle,
   sources,
@@ -28,14 +30,14 @@ const article = (
 });
 describe("候选领域解析", () => {
   it("仅指向附件的提示不是已提取规则，也不抢占真实规则证据", () => {
-    const empty = parseEvidenceCandidate(
+    const empty = parseEvidenceCandidateUnscoped(
       article(["参赛规则：详见附件1。"]),
       url,
       directory,
       "dev-rule-reference",
     );
     expect(empty.fields.rules).toEqual([]);
-    const mixed = parseEvidenceCandidate(
+    const mixed = parseEvidenceCandidateUnscoped(
       article(["参赛规则", "详细查看附件1。", "参赛作品必须原创。"]),
       url,
       directory,
@@ -55,7 +57,7 @@ describe("候选领域解析", () => {
     ],
     [["在竞赛决赛前尚未通过博士资格考试的，可以按硕士学历申报作品。"], []],
   ])("历史获奖或学历资格中的阶段词不当作本届赛程：%j", (paragraphs, stages) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(paragraphs),
       url,
       directory,
@@ -64,7 +66,7 @@ describe("候选领域解析", () => {
     expect(parsed.fields.stageNames).toEqual(stages);
   });
   it("不同赛项的集体作品人数与团队人数保留冲突，不自动挑一项", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([
         "赛项一：集体作品作者均为学生，人数限定在3~10人。",
         "赛项二：以团队形式参赛，每队3-15人。",
@@ -86,7 +88,7 @@ describe("候选领域解析", () => {
       "某学会和某中心",
     ],
   ])("主办单位不串入指导、承办和活动说明：%s", (text, expected) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([text]),
       url,
       directory,
@@ -95,7 +97,7 @@ describe("候选领域解析", () => {
     expect(parsed.fields.organizer).toBe(expected);
   });
   it("命名赛道冒号后的组织流程不作为赛道名称", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([
         "①结构化赛道：将考生分为若干组，一对一面试；②无领导小组赛道：每组9人进行讨论。",
       ]),
@@ -109,7 +111,7 @@ describe("候选领域解析", () => {
     ]);
   });
   it("参赛形式不夹带同句的报名材料流程", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["本次竞赛以个人形式参赛，报名表须于五月提交，逾期不予受理。"]),
       url,
       directory,
@@ -128,7 +130,7 @@ describe("候选领域解析", () => {
     ]);
   });
   it("学籍注册基准日不自动成为报名截止", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["参赛对象：2026年6月1日以前正式注册的全日制本科生可参赛。"]),
       url,
       directory,
@@ -138,7 +140,7 @@ describe("候选领域解析", () => {
       precision: "unknown",
       value: null,
     });
-    const registration = parseEvidenceCandidate(
+    const registration = parseEvidenceCandidateUnscoped(
       article(["在校学生请于2026年7月20日前完成赛事平台注册。"]),
       url,
       directory,
@@ -153,7 +155,7 @@ describe("候选领域解析", () => {
     ["公共管理学院", ["public-administration"]],
     ["公共管理学院、管理学院", ["management", "public-administration"]],
   ])("完整学院名称不同时匹配其短后缀：%s", (names, expected) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([`本竞赛由${names}承办。`, `参赛对象：${names}本科生。`]),
       url,
       [
@@ -174,7 +176,7 @@ describe("候选领域解析", () => {
     [["本竞赛参赛范围最广，吸引学生参与。"], "unknown"],
     [["参赛对象：全校本科生。", "若作品抄袭则取消参赛资格。"], "all"],
   ])("资格词的表头或旁提不覆盖真实资格：%j", (paragraphs, kind) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(paragraphs as string[]),
       url,
       directory,
@@ -183,7 +185,7 @@ describe("候选领域解析", () => {
     expect(parsed.fields.scope.kind).toBe(kind);
   });
   it("非赛事通知只保留通知元数据，不自动声称比赛字段", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(
         [
           "主办单位：教务处。",
@@ -218,14 +220,14 @@ describe("候选领域解析", () => {
       "参赛者请完善个人信息和联系方式。",
       "请同学自由组队开展课程学习。",
     ]) {
-      const parsed = parseCandidate(article([text]), url, directory);
+      const parsed = parseCandidateUnscoped(article([text]), url, directory);
       expect(parsed.fields.mode).toBeNull();
       expect(parsed.fields.modeKind).toBeNull();
       expect(parsed.evidence.filter((item) => item.field === "mode")).toEqual(
         [],
       );
     }
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["请填写个人银行账户。参赛形式：团队。请提交个人联系方式。"]),
       url,
       directory,
@@ -233,7 +235,7 @@ describe("候选领域解析", () => {
     );
     expect(parsed.fields.mode).toBe("参赛形式：团队。");
     expect(parsed.fields.modeKind).toBe("team");
-    const sameSentence = parseCandidate(
+    const sameSentence = parseCandidateUnscoped(
       article(["参赛形式：团队，请完善个人信息。"]),
       url,
       directory,
@@ -242,23 +244,23 @@ describe("候选领域解析", () => {
   });
   it("显式形式标签及不带以的团队参赛保留归一和赛段冲突", () => {
     for (const text of ["参赛形式：个人形式", "参赛形式：个人身份"]) {
-      const parsed = parseCandidate(article([text]), url, directory);
+      const parsed = parseCandidateUnscoped(article([text]), url, directory);
       expect(parsed.fields.mode).toBe(text);
       expect(parsed.fields.modeKind).toBe("individual");
     }
     const text = "初赛个人参赛，决赛团队参赛";
-    const parsed = parseCandidate(article([text]), url, directory);
+    const parsed = parseCandidateUnscoped(article([text]), url, directory);
     expect(parsed.fields.mode).toBe(text);
     expect(parsed.fields.modeKind).toBeNull();
     expect(parsed.conflicts).toContain(
       "参赛形式按赛段分别规定，不能合并为单一形式",
     );
     expect(
-      parseCandidate(article(["团队参赛"]), url, directory).fields.modeKind,
+      parseCandidateUnscoped(article(["团队参赛"]), url, directory).fields.modeKind,
     ).toBe("team");
   });
   it("不组队不误判团队，主办/承办单位与独立资格段落有明确证据", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article([
         "主办单位：四川农业大学教务处",
         "承办单位：四川农业大学理学院",
@@ -279,7 +281,7 @@ describe("候选领域解析", () => {
     expect(parsed.fields.mode).toContain("个人赛");
   });
   it("发布网站不是承办学院，分开报名/材料/比赛时间和24:00证据", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       extractArticle(informationArticle, url, sources[0]),
       url,
       directory,
@@ -313,7 +315,7 @@ describe("候选领域解析", () => {
       ]),
     );
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["学院转发该比赛通知，请同学们留意。"]),
         url,
         directory,
@@ -322,17 +324,17 @@ describe("候选领域解析", () => {
   });
   it("指定学院、未知学院和复杂资格条款不猜测", () => {
     expect(
-      parseCandidate(article(["参赛对象：理学院学生。"]), url, directory).fields
+      parseCandidateUnscoped(article(["参赛对象：理学院学生。"]), url, directory).fields
         .scope,
     ).toMatchObject({ kind: "specified", colleges: ["science"] });
-    const unknown = parseCandidate(
+    const unknown = parseCandidateUnscoped(
       article(["参赛对象：未知学院学生。"]),
       url,
       directory,
     );
     expect(unknown.fields.scope.kind).toBe("other");
     expect(unknown.warnings).toContain("资格条款含未知学院名称");
-    const mixed = parseCandidate(
+    const mixed = parseCandidateUnscoped(
       article(["由理学院、未知学院承办。", "参赛对象：理学院、未知学院学生。"]),
       url,
       directory,
@@ -341,7 +343,7 @@ describe("候选领域解析", () => {
     expect(mixed.warnings).toContain("资格条款含未知学院名称");
     expect(mixed.warnings).toContain("承办单位尚未匹配学院目录，待核对");
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["参赛对象：全校学生（未知学院除外）。"]),
         url,
         directory,
@@ -349,7 +351,7 @@ describe("候选领域解析", () => {
     ).toContain("资格条款含未知学院名称");
   });
   it("显式赛道、人数和规则保存候选原文证据，不猜测各赛道归属", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article([
         "赛道：算法挑战、应用开发。",
         "组队要求：每组4人。",
@@ -379,13 +381,13 @@ describe("候选领域解析", () => {
     ["团队赛", "team"],
     ["个人赛及团队赛", "mixed"],
   ])("%s 的模式有原文依据", (word, mode) => {
-    const parsed = parseCandidate(article([word]), url, directory);
+    const parsed = parseCandidateUnscoped(article([word]), url, directory);
     expect(parsed.fields.modeKind).toBe(mode);
     // mode 保留原文短语，协议 fields.mode 比较这一层。
     expect(parsed.fields.mode).toBe(word);
   });
   it("年份冲突、多个赛段和相对时间留待核对", () => {
-    const conflict = parseCandidate(
+    const conflict = parseCandidateUnscoped(
       article([
         "2025年举办院赛，2026年举办校赛。报名截止：2026年10月20日24:00。",
       ]),
@@ -400,7 +402,7 @@ describe("候选领域解析", () => {
     expect(conflict.fields.stageNames).toEqual(["院赛", "校赛"]);
     expect(conflict.conflicts.length).toBeGreaterThanOrEqual(2);
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["报名即日起到下周截止，其他事项另行通知。"]),
         url,
         directory,
@@ -410,7 +412,7 @@ describe("候选领域解析", () => {
   it.each(["竞赛获奖名单公示", "竞赛新闻回顾"])(
     "%s 不能证明报名开放",
     (title) => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["报名截止：2026年10月20日24:00。"], title),
         url,
         directory,
@@ -429,7 +431,7 @@ describe("候选领域解析", () => {
   it("院校审核报送阶段不能当作参赛者材料截止", () => {
     // 用赛事标题隔离「材料义务主体」这一条规则；非赛事标题现在由空字段基线处理，
     // 不会再产出比赛材料字段或冲突（见 S4 回归）。
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article([
         "11月5日-11日：报名、准备作品。",
         "11月12日-13日：作品审核、筛选、报送优秀作品参与教育部组织的展示活动。",
@@ -447,14 +449,14 @@ describe("候选领域解析", () => {
   });
   it("参赛者本人的提交截止仍可确定，不被主体校验误伤", () => {
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["参赛者须于2026年11月10日前提交作品。"]),
         url,
         directory,
       ).fields.materialsAt,
     ).toEqual({ precision: "date", value: "2026-11-10" });
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["各参赛队于11月10日前将作品报送至学院。"]),
         url,
         directory,
@@ -472,7 +474,7 @@ describe("候选领域解析", () => {
       "2026-11-10T18:00:00+08:00",
     ],
   ])("明确材料提交窗口取终点且保留原文：%s", (paragraph, precision, value) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([paragraph]),
       url,
       directory,
@@ -502,7 +504,7 @@ describe("候选领域解析", () => {
         "参赛者于2026年11月10日前提交作品。",
       ];
       if (reverse) paragraphs.reverse();
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(paragraphs),
         url,
         directory,
@@ -528,7 +530,7 @@ describe("候选领域解析", () => {
     },
   );
   it("同段逗号分隔的参赛者提交和院校报送分别核对主体", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([
         "参赛者于2026年11月10日前提交作品，学院于2026年11月12日前统一报送。",
       ]),
@@ -556,7 +558,7 @@ describe("候选领域解析", () => {
     );
   });
   it("材料提交截止标签本身不证明义务主体", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["作品提交截止2026年11月10日。"]),
       url,
       directory,
@@ -578,7 +580,7 @@ describe("候选领域解析", () => {
         "参赛者于2026年11月10日前提交作品。",
       ];
       if (reverse) paragraphs.reverse();
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(paragraphs),
         url,
         directory,
@@ -601,7 +603,7 @@ describe("候选领域解析", () => {
     "参赛者于2026年11月5日至2026年11月40日提交作品。",
     "参赛者于2026年11月5日、2026年11月10日提交作品。",
   ])("无法确定的材料窗口保持未知并保留原文：%s", (paragraph) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([paragraph]),
       url,
       directory,
@@ -623,7 +625,7 @@ describe("候选领域解析", () => {
   });
   it("组织方汇总报送的时间不升级为材料截止", () => {
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["学院于11月12日前汇总报送作品。"]),
         url,
         directory,
@@ -634,7 +636,7 @@ describe("候选领域解析", () => {
     "各参赛队须于2026年11月10日前向理学院报送作品。",
     "理学院组织各参赛队于2026年11月10日前提交作品。",
   ])("学院作为接收方或组织方时保留明确的参赛者截止：%s", (paragraph) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([paragraph]),
       url,
       directory,
@@ -652,7 +654,7 @@ describe("候选领域解析", () => {
     "各参赛队的作品由学院于2026年11月12日前统一报送。",
     "学校提交作品截止2026年11月12日。",
   ])("材料时间按实际义务主体保留未知：%s", (paragraph) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([paragraph]),
       url,
       directory,
@@ -682,24 +684,24 @@ describe("候选领域解析", () => {
     ["请于2026年11月12日前报送作品。"],
   ])("「截止」不代替义务主体判断：%s", (paragraph) => {
     expect(
-      parseCandidate(article([paragraph]), url, directory).fields.materialsAt,
+      parseCandidateUnscoped(article([paragraph]), url, directory).fields.materialsAt,
     ).toEqual({ precision: "unknown", value: null });
   });
   it("短的无编号句子是正文而不是标题", () => {
     expect(
-      parseCandidate(article(["二、参赛对象", "理学院本科生"]), url, directory)
+      parseCandidateUnscoped(article(["二、参赛对象", "理学院本科生"]), url, directory)
         .fields.scope,
     ).toMatchObject({ kind: "specified", colleges: ["science"] });
   });
   it("同一段里的规则句不被误判成标题而丢弃", () => {
     expect(
-      parseCandidate(article(["参赛要求为原创作品"]), url, directory).fields
+      parseCandidateUnscoped(article(["参赛要求为原创作品"]), url, directory).fields
         .rules,
     ).toEqual(["参赛要求为原创作品"]);
   });
   it("编号标题冒号后的同段正文保留字段值和原文定位", () => {
     const paragraphs = ["二、参赛对象：理学院本科生", "四、参赛要求：原创作品"];
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(paragraphs),
       url,
       directory,
@@ -729,7 +731,7 @@ describe("候选领域解析", () => {
   });
   it("带冒号的小节标题不进入规则取值", () => {
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["四、参赛要求：", "作品须原创。"]),
         url,
         directory,
@@ -739,7 +741,7 @@ describe("候选领域解析", () => {
   it.each(["参赛要求", "参赛要求：", "四、参赛要求："])(
     "纯标题 %s 读取所属正文并在下一节停止",
     (heading) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([heading, "", "作品须原创。", "报名方式", "在线填写报名表。"]),
         url,
         directory,
@@ -758,7 +760,7 @@ describe("候选领域解析", () => {
     },
   );
   it("末尾无编号纯标题不支撑规则或范围", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article(["参赛要求", "报名对象"]),
       url,
       directory,
@@ -772,7 +774,7 @@ describe("候选领域解析", () => {
     ).toEqual([]);
   });
   it("资格小节读取全部正文，后续限制条款不被截断", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article([
         "二、参赛对象",
         "全校学生。",
@@ -795,7 +797,7 @@ describe("候选领域解析", () => {
     "禁止理学院学生组队报名。",
     "不接受理学院学生组队报名。",
   ])("资格限制同时描述模式时不能被过滤：%s", (restriction) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["二、参赛对象", "全校本科生。", restriction, "三、报名方式"]),
       url,
       directory,
@@ -822,7 +824,7 @@ describe("候选领域解析", () => {
   it.each(["仅以团队赛形式参赛。", "只允许团队赛形式参赛。", "仅限个人赛。"])(
     "纯模式限制不收窄全校范围：%s",
     (mode) => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["二、参赛对象", "全校本科生。", mode, "三、报名方式"]),
         url,
         directory,
@@ -831,7 +833,7 @@ describe("候选领域解析", () => {
     },
   );
   it("资格标题与正文跨来源时保持未知，不加关联", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["二、参赛对象"]),
       url,
       directory,
@@ -856,7 +858,7 @@ describe("候选领域解析", () => {
     );
   });
   it("附件起始空段不能绕过资格来源边界，双方证据分别保留", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["二、参赛对象"]),
       url,
       directory,
@@ -899,7 +901,7 @@ describe("候选领域解析", () => {
     );
   });
   it("规则跨来源时不自动取值，但双方原文仍有独立位置和版本", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["四、参赛要求"]),
       url,
       directory,
@@ -938,7 +940,7 @@ describe("候选领域解析", () => {
     );
   });
   it("小节标题不能单独作为参赛规则证据", () => {
-    const parsed = parseCandidate(
+    const parsed = parseCandidateUnscoped(
       article([
         "四、参赛要求",
         "以班级为单位参赛，每班限参加1个作品，作品须为原创。",
@@ -951,7 +953,7 @@ describe("候选领域解析", () => {
   });
   it("资格小节标题不能单独作为参赛范围证据", () => {
     expect(
-      parseCandidate(
+      parseCandidateUnscoped(
         article(["二、参赛对象及要求", "理学院在校本科生。"]),
         url,
         directory,
@@ -959,7 +961,7 @@ describe("候选领域解析", () => {
     ).toMatchObject({ kind: "specified", colleges: ["science"] });
   });
   it("整篇聚合时证据落到真实段落，不把小节标题当引用", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article([
         "四、参赛要求",
         "以班级为单位参赛，每班限参加1个作品，作品须为原创。",
@@ -996,7 +998,7 @@ describe("候选领域解析", () => {
     ).toHaveLength(0);
   });
   it("只在末尾出现资格小节标题时保留未知并提示，不编造范围", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       article(["二、参赛对象及要求"]),
       url,
       directory,
@@ -1028,7 +1030,7 @@ describe("候选领域解析", () => {
   });
   describe("候选字段契约 v2", () => {
     it("范围只输出契约字段，不泄漏内部学院识别标记", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["参赛对象：理学院学生。"]),
         url,
         directory,
@@ -1049,7 +1051,7 @@ describe("候选领域解析", () => {
           `${owner}为承办单位`,
         ]) {
           const text = `参赛对象：全校本科生均可参加，${clause}。`;
-          const parsed = parseEvidenceCandidate(
+          const parsed = parseEvidenceCandidateUnscoped(
             article([text]),
             url,
             directory,
@@ -1068,7 +1070,7 @@ describe("候选领域解析", () => {
         ["初赛为团队赛，决赛为团队赛。", "team"],
         ["初赛个人或团队均可，决赛个人或团队均可。", "mixed"],
       ] as const) {
-        const parsed = parseEvidenceCandidate(
+        const parsed = parseEvidenceCandidateUnscoped(
           article([text]),
           url,
           directory,
@@ -1095,9 +1097,9 @@ describe("候选领域解析", () => {
         attachments: [],
       };
       const entries = {
-        evidence: parseEvidenceCandidate(admin, url, directory, "v1"),
-        runner: parseCandidate(admin, url, directory),
-        store: parseCandidate(cropped, url, directory),
+        evidence: parseEvidenceCandidateUnscoped(admin, url, directory, "v1"),
+        runner: parseCandidateUnscoped(admin, url, directory),
+        store: parseCandidateUnscoped(cropped, url, directory),
       };
       for (const [entry, parsed] of Object.entries(entries)) {
         expect({ entry, name: parsed.fields.name }).toEqual({
@@ -1137,7 +1139,7 @@ describe("候选领域解析", () => {
       };
       // 空正文时无论是否传分类都不再按标题编赛事名（标题不足以证明是赛事）。
       // 但两者区别仍在：不传分类时结果不带已确认分类，调用方无法据此判定非赛事。
-      const stale = parseCandidate(cropped, url, directory);
+      const stale = parseCandidateUnscoped(cropped, url, directory);
       expect(stale.fields.name).toBe("");
       expect(stale.classification).toBeUndefined();
       // 有正文时 parseCandidate 会自行分类并返回结论；空正文时它分类不出
@@ -1150,9 +1152,9 @@ describe("候选领域解析", () => {
         attachments: [],
       };
       expect(
-        parseCandidate(withBody, url, directory).classification?.classification,
+        parseCandidateUnscoped(withBody, url, directory).classification?.classification,
       ).toBe("non_competition");
-      const reused = parseCandidate(cropped, url, directory, {
+      const reused = parseCandidateUnscoped(cropped, url, directory, {
         classification,
       });
       expect(reused.fields.name).toBe("");
@@ -1176,7 +1178,7 @@ describe("候选领域解析", () => {
         paragraphs: [],
         attachments: [],
       };
-      const parsed = parseCandidate(empty, url, directory);
+      const parsed = parseCandidateUnscoped(empty, url, directory);
       expect(parsed.fields.name).toBe("");
       expect(parsed.fields.edition).toBeNull();
       expect(parsed.fields.scope.kind).toBe("unknown");
@@ -1185,7 +1187,7 @@ describe("候选领域解析", () => {
       );
       // 有正文时标题才参与命名，正常赛事通知不受影响。
       expect(
-        parseCandidate(
+        parseCandidateUnscoped(
           article(["报名截止2026年10月20日。"], "关于举办数学竞赛的通知"),
           url,
           directory,
@@ -1200,7 +1202,7 @@ describe("候选领域解析", () => {
         "2026年数学竞赛补充通知",
       ])
         expect(
-          parseCandidate(
+          parseCandidateUnscoped(
             article(["报名截止2026年10月20日。"], title),
             url,
             directory,
@@ -1208,14 +1210,14 @@ describe("候选领域解析", () => {
         ).not.toBe("");
       // 无赛事依据的标题本身仍按非赛事处理（补充通知需要赛事上下文才成立）。
       expect(
-        parseCandidate(
+        parseCandidateUnscoped(
           article(["报名截止2026年10月20日。"], "2026年补充说明"),
           url,
           directory,
         ).fields.name,
       ).toBe("");
       // 非赛事仍可被人工恢复并保留原文：空字段只影响自动字段，不是删除通知。
-      const admin = parseCandidate(
+      const admin = parseCandidateUnscoped(
         article(["请符合条件的同学提交申请。"], "2026年优秀毕业生推荐通知"),
         url,
         directory,
@@ -1224,7 +1226,7 @@ describe("候选领域解析", () => {
       expect(admin.evidence).toEqual([]);
     });
     it("契约标记存在，且候选不再有 fields.kind", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["参赛对象：全校本科生。"]),
         url,
         directory,
@@ -1233,7 +1235,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields).not.toHaveProperty("kind");
     });
     it("明确但无法枚举的限制用 other，缺乏依据用 unknown", () => {
-      const other = parseCandidate(
+      const other = parseCandidateUnscoped(
         article(["参赛对象：面向全校，但不含毕业年级学生。"]),
         url,
         directory,
@@ -1241,7 +1243,7 @@ describe("候选领域解析", () => {
       expect(other.fields.scope).toMatchObject({ kind: "other", colleges: [] });
       expect(other.fields.scope.note).toContain("不含毕业年级学生");
 
-      const noBasis = parseCandidate(
+      const noBasis = parseCandidateUnscoped(
         article(["一、参赛对象", "二、报名方式", "报名截止：2026年10月20日。"]),
         url,
         directory,
@@ -1254,13 +1256,13 @@ describe("候选领域解析", () => {
         "参赛对象：生命科学学院不可参加。",
         "参赛对象：不符合条件者不得报名。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.scope.kind).toBe("other");
         expect(parsed.fields.scope.colleges).toEqual([]);
       }
     });
     it("未知学院名不猜学院 ID，保留 other 与原文", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["参赛对象：未知学院学生。"]),
         url,
         directory,
@@ -1272,7 +1274,7 @@ describe("候选领域解析", () => {
       expect(parsed.warnings).toContain("资格条款含未知学院名称");
     });
     it("eventKind 只取显式标注，不从标题或阶段派生", () => {
-      const explicit = parseCandidate(
+      const explicit = parseCandidateUnscoped(
         article(["项目类型：创业计划类", "报名截止：2026年10月20日。"]),
         url,
         directory,
@@ -1285,7 +1287,7 @@ describe("候选领域解析", () => {
         "关于举办2026年新生运动会的通知",
       ])
         expect(
-          parseCandidate(
+          parseCandidateUnscoped(
             article(["报名截止：2026年10月20日。"], title),
             url,
             directory,
@@ -1293,7 +1295,7 @@ describe("候选领域解析", () => {
         ).toBeNull();
     });
     it("eventKind 不返回通知种类", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["报名截止：2026年10月20日。"], "2026年补充说明"),
         url,
         directory,
@@ -1339,13 +1341,13 @@ describe("候选领域解析", () => {
           ["个人作品或集体作品均可。", "个人作品或集体作品均可", "mixed"],
         ];
       for (const [text, mode, modeKind] of cases) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.modeKind).toBe(modeKind);
         expect(parsed.fields.mode).toContain(mode);
       }
     });
     it("互不覆盖的参赛形式不合并成 mixed，modeKind 置 null", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["必须以团队参赛。", "本赛项仅限个人参赛。"]),
         url,
         directory,
@@ -1357,7 +1359,7 @@ describe("候选领域解析", () => {
     });
     it("明确的个人赛与团队赛并存才归 mixed", () => {
       expect(
-        parseCandidate(article(["个人赛及团队赛均可报名。"]), url, directory)
+        parseCandidateUnscoped(article(["个人赛及团队赛均可报名。"]), url, directory)
           .fields.modeKind,
       ).toBe("mixed");
     });
@@ -1368,13 +1370,13 @@ describe("候选领域解析", () => {
         "初赛为个人赛，决赛为团队赛。",
         "参赛形式：团队。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.mode).toBe(text);
       }
     });
     it("前置否定整体否定，后置否定只否定它点名的形式", () => {
       // 「不得以个人或团队形式参赛」两种都被否定：不能归一。
-      const bothDenied = parseCandidate(
+      const bothDenied = parseCandidateUnscoped(
         article(["参赛者不得以个人或团队形式参赛。"]),
         url,
         directory,
@@ -1385,7 +1387,7 @@ describe("候选领域解析", () => {
       );
 
       // 「个人赛不接受报名，仅可组队参赛」个人被否定、团队被要求 → team。
-      const teamOnly = parseCandidate(
+      const teamOnly = parseCandidateUnscoped(
         article(["个人赛不接受报名，仅可组队参赛。"]),
         url,
         directory,
@@ -1393,7 +1395,7 @@ describe("候选领域解析", () => {
       expect(teamOnly.fields.modeKind).toBe("team");
 
       // 后置否定「不组队」只否定团队，不推翻已确认的个人赛。
-      const individual = parseCandidate(
+      const individual = parseCandidateUnscoped(
         article(["竞赛为个人赛，独立参赛，不组队。"]),
         url,
         directory,
@@ -1401,7 +1403,7 @@ describe("候选领域解析", () => {
       expect(individual.fields.modeKind).toBe("individual");
     });
     it("不同赛段的形式不能合并，互斥要求也不合并成 mixed", () => {
-      const byStage = parseCandidate(
+      const byStage = parseCandidateUnscoped(
         article(["初赛为个人赛，决赛为团队赛。"]),
         url,
         directory,
@@ -1411,7 +1413,7 @@ describe("候选领域解析", () => {
         "参赛形式按赛段分别规定，不能合并为单一形式",
       );
 
-      const contradiction = parseCandidate(
+      const contradiction = parseCandidateUnscoped(
         article(["参赛必须以个人参赛，参赛必须以团队参赛。"]),
         url,
         directory,
@@ -1430,7 +1432,7 @@ describe("候选领域解析", () => {
         ["个人作品或集体作品均可。", "mixed"],
       ] as const;
       for (const [text, expected] of cases) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.mode).toBe(text);
         expect(parsed.fields.modeKind).toBe(expected);
       }
@@ -1444,13 +1446,13 @@ describe("候选领域解析", () => {
         ["比赛类型：体育类（新生组）。", "组别或人群不是赛事种类"],
       ] as const;
       for (const [text, reason] of rejected) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.eventKind).toBeNull();
         expect(parsed.warnings).toContain("赛事种类标注被拒绝：" + reason);
       }
       // 真正的种类仍然接受。
       expect(
-        parseCandidate(article(["项目类型：创业计划类"]), url, directory).fields
+        parseCandidateUnscoped(article(["项目类型：创业计划类"]), url, directory).fields
           .eventKind,
       ).toBe("创业计划类");
     });
@@ -1471,7 +1473,7 @@ describe("候选领域解析", () => {
         ["以团队参赛，指导教师不得超过2人。", "team"],
       ] as const;
       for (const [text, expected] of cases) {
-        const parsed = parseEvidenceCandidate(
+        const parsed = parseEvidenceCandidateUnscoped(
           article([text]),
           url,
           directory,
@@ -1490,7 +1492,7 @@ describe("候选领域解析", () => {
         "个人或团队均不能报名。",
         "个人和团队均不参赛。",
       ]) {
-        const parsed = parseEvidenceCandidate(
+        const parsed = parseEvidenceCandidateUnscoped(
           article([text]),
           url,
           directory,
@@ -1511,7 +1513,7 @@ describe("候选领域解析", () => {
       "三、参赛对象及组队要求",
       "三、参赛资格及要求",
     ])("资格小节标题变体也能读取范围：%s", (heading) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([heading, "四川农业大学全日制在校本科生。", "四、报名方式"]),
         url,
         directory,
@@ -1525,7 +1527,7 @@ describe("候选领域解析", () => {
       "具有四川农业大学正式学籍的全日制在校本科生、专科生均具有资格报名参赛，专业不限。",
       "我校本科生、研究生均可参加。",
     ])("明示全校的措辞不被降级：%s", (text) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(["三、参赛对象", text]),
         url,
         directory,
@@ -1540,7 +1542,7 @@ describe("候选领域解析", () => {
       "该院全体在校本科生均可参赛。",
       "本学院全体在校本科生均可参赛。",
     ])("相对指代的学院不是明示全校：%s", (text) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(["三、参赛对象", text]),
         url,
         directory,
@@ -1550,7 +1552,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields.scope.colleges).toEqual([]);
     });
     it("身份核验与条件后果不是资格排除", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "三、参赛对象",
           "参赛运动员必须是理学院在校学生（检录时需携带学生证或校园一卡通等有效证件，身份不明者不可参加比赛）。",
@@ -1565,7 +1567,7 @@ describe("候选领域解析", () => {
       });
     });
     it("没有资格依据的条款不与已确认范围冲突", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "八、参赛对象：四川农业大学全日制在校本科生。",
           "1.参赛资格：以团队形式参赛，团队人数3-5人。",
@@ -1584,7 +1586,7 @@ describe("候选领域解析", () => {
       "每个学院每个赛道推荐1-2人",
       "按学院要求提交电子版材料",
     ])("泛称「学院」不算未知学院名：%s", (generic) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(["三、参赛对象", "理学院全体学生。", `${generic}。`]),
         url,
         directory,
@@ -1597,7 +1599,7 @@ describe("候选领域解析", () => {
       expect(parsed.warnings).not.toContain("资格条款含未知学院名称");
     });
     it("表格里单独的列标签不是资格小节标题", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "二、活动对象",
           "全体本科生、硕士生（博）",
@@ -1625,7 +1627,7 @@ describe("候选领域解析", () => {
       "参赛对象：全校学生，理学院负责报名汇总。",
       "参赛对象：全校学生，理学院组织初赛。",
     ])("组织关系不缩小明示全校范围：%s", (text) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([text]),
         url,
         directory,
@@ -1636,7 +1638,7 @@ describe("候选领域解析", () => {
     });
     it("同一输入基线为 other，本次修复后应为 all", () => {
       // 审核快照 d8d3e6c 上该输入返回 other；组织学院被当成允许范围是本轮引入的回归。
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["参赛对象：全校学生，理学院负责组织。"]),
         url,
         directory,
@@ -1645,7 +1647,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields.scope.colleges).toEqual([]);
     });
     it("明示指定学院仍按学院枚举，不被全校措辞以外的组织关系吞掉", () => {
-      const specified = parseCandidate(
+      const specified = parseCandidateUnscoped(
         article(["参赛对象：仅理学院学生，法学院负责组织。"]),
         url,
         directory,
@@ -1654,7 +1656,7 @@ describe("候选领域解析", () => {
         kind: "specified",
         colleges: ["science"],
       });
-      const multiple = parseCandidate(
+      const multiple = parseCandidateUnscoped(
         article(["参赛对象：理学院、法学院学生。"]),
         url,
         directory,
@@ -1665,7 +1667,7 @@ describe("候选领域解析", () => {
       });
     });
     it("同名学院后缀按完整学院名匹配，不重复计学院", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["参赛对象：公共管理学院学生。"]),
         url,
         [
@@ -1685,7 +1687,7 @@ describe("候选领域解析", () => {
         "参赛对象：面向全校，但理学院除外。",
         "参赛对象：除理学院外均可参加。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.scope).toMatchObject({
           kind: "other",
           colleges: [],
@@ -1700,7 +1702,7 @@ describe("候选领域解析", () => {
         "参赛对象：全校学生、泰和学院学生。",
         "参赛对象：全校学生及泰和学院学生。",
       ]) {
-        const parsed = parseEvidenceCandidate(
+        const parsed = parseEvidenceCandidateUnscoped(
           article([text]),
           url,
           directory,
@@ -1716,7 +1718,7 @@ describe("候选领域解析", () => {
         "该学院负责组织",
         "每个学院每个赛道推荐1-2人",
       ]) {
-        const parsed = parseEvidenceCandidate(
+        const parsed = parseEvidenceCandidateUnscoped(
           article(["三、参赛对象", "理学院全体学生。", `${generic}。`]),
           url,
           directory,
@@ -1731,15 +1733,15 @@ describe("候选领域解析", () => {
     });
     it("相对指代与空表头仍保持保守，不因修复抬成全校", () => {
       expect(
-        parseCandidate(article(["参赛对象：我院全体学生。"]), url, directory)
+        parseCandidateUnscoped(article(["参赛对象：我院全体学生。"]), url, directory)
           .fields.scope.kind,
       ).toBe("other");
       expect(
-        parseCandidate(article(["参赛对象："]), url, directory).fields.scope
+        parseCandidateUnscoped(article(["参赛对象："]), url, directory).fields.scope
           .kind,
       ).toBe("unknown");
       expect(
-        parseCandidate(
+        parseCandidateUnscoped(
           article(["参赛对象与要求", "二、报名方式"]),
           url,
           directory,
@@ -1747,7 +1749,7 @@ describe("候选领域解析", () => {
       ).toBe("unknown");
     });
     it("真正未收录的学院名仍然不猜 ID", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "三、参赛对象",
           "理学院全体学生。",
@@ -1774,7 +1776,7 @@ describe("候选领域解析", () => {
         null,
       ],
     ])("只写提交方式与报名表的子句不进入 mode：%s", (text, expected) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([text]),
         url,
         directory,
@@ -1783,7 +1785,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields.mode).toBe(expected);
     });
     it("报名时间里的组队方式只保留形式短语", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "（一）报名时间：即日起至2026年11月15日上午10时，组队报名，提交参赛队伍名单，每组3人，队长负责本队参赛事宜。允许跨年级、跨专业，但不得跨校区组队。",
         ]),
@@ -1800,7 +1802,7 @@ describe("候选领域解析", () => {
       ["以团队形式参赛并提交报名表。", "以团队形式参赛"],
       ["参赛形式为团队，须提交项目书。", "参赛形式为团队"],
     ])("同一句给出形式又要求提交时保留形式原文：%s", (text, form) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([text]),
         url,
         directory,
@@ -1812,7 +1814,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields.mode).not.toContain("项目书");
     });
     it("小节标题不是参赛形式原文", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(["三、参赛对象及组队要求", "以团队形式参赛。"]),
         url,
         directory,
@@ -1829,7 +1831,7 @@ describe("候选领域解析", () => {
       ["参赛形式：以团队形式参赛并提交报名表，否则取消资格。", "team"],
       ["参赛形式：以团队形式参赛，违规将追究责任。", "team"],
     ] as const)("有形式声明时保留形式且不夹带后果：%s", (text, kind) => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([text]),
         url,
         directory,
@@ -1844,7 +1846,7 @@ describe("候选领域解析", () => {
       );
     });
     it("后果在形式之前时保留形式，不因后果词丢弃整句", () => {
-      const parsed = parseCandidate(
+      const parsed = parseCandidateUnscoped(
         article(["违规者取消参赛资格，参赛形式为团队。"]),
         url,
         directory,
@@ -1857,7 +1859,7 @@ describe("候选领域解析", () => {
         "参赛形式：以团队形式参赛；违规者取消参赛资格。",
         "参赛形式：以团队形式参赛，违反纪律者通报批评。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.modeKind).toBe("team");
         expect(parsed.fields.mode).not.toMatch(/[；;]$/);
         expect(parsed.fields.mode).not.toContain("取消");
@@ -1870,7 +1872,7 @@ describe("候选领域解析", () => {
         "参赛对象：全校学生（理学院负责组织学生参赛）。",
         "参赛对象：全校学生，理学院参与组织。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.scope).toMatchObject({
           kind: "all",
           colleges: [],
@@ -1883,20 +1885,20 @@ describe("候选领域解析", () => {
         "逾期取消资格。",
         "严格遵守活动安排，不得擅自做出违规行为，否则取消个人参赛资格。",
       ]) {
-        const parsed = parseCandidate(article([text]), url, directory);
+        const parsed = parseCandidateUnscoped(article([text]), url, directory);
         expect(parsed.fields.mode).toBeNull();
         expect(parsed.fields.modeKind).toBeNull();
       }
     });
     it("形式声明里的否定仍按作用范围生效，不被后果剥离抹掉", () => {
-      const negated = parseCandidate(
+      const negated = parseCandidateUnscoped(
         article(["参赛形式：不得以个人形式参赛，否则取消资格。"]),
         url,
         directory,
       );
       expect(negated.fields.modeKind).toBeNull();
       expect(negated.fields.mode).not.toContain("否则");
-      const frontNegation = parseCandidate(
+      const frontNegation = parseCandidateUnscoped(
         article(["本赛项不接受团队报名，否则视为无效报名。"]),
         url,
         directory,
@@ -1909,7 +1911,7 @@ describe("候选领域解析", () => {
         ["初赛为个人赛，否则取消资格。决赛为团队赛。"],
         ["初赛为个人赛，否则取消资格。", "决赛为团队赛。"],
       ]) {
-        const parsed = parseCandidate(article(paragraphs), url, directory);
+        const parsed = parseCandidateUnscoped(article(paragraphs), url, directory);
         expect(parsed.fields.modeKind).toBeNull();
         expect(parsed.conflicts).toContainEqual(
           expect.stringMatching(/赛段|互不覆盖/),
@@ -1918,7 +1920,7 @@ describe("候选领域解析", () => {
       }
     });
     it("条件后果句不构成参赛形式", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "1.参赛资格：以团队形式参赛，团队人数3-5人。",
           "2.严格遵守活动安排，不得擅自做出违规行为，否则取消个人参赛资格。",
@@ -1934,7 +1936,7 @@ describe("候选领域解析", () => {
       );
     });
     it("报名阶段的括注碎片不进入 mode", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article([
           "（1）正式报名阶段：参赛个人或团队提交作品与参赛报名表（见附件1，请保证信息的准确性，凡是填报信息有误，后果自负。",
         ]),
@@ -1945,7 +1947,7 @@ describe("候选领域解析", () => {
       expect(parsed.fields.mode).toBeNull();
     });
     it("以个人名义参赛也能识别为个人形式", () => {
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article(["校内选拔赛以个人名义参赛。"]),
         url,
         directory,
@@ -1955,3 +1957,118 @@ describe("候选领域解析", () => {
     });
   });
 });
+
+describe("阶段一七字段输出范围", () => {
+  // #206 阶段一：候选只对七个字段给确定值，其余九个字段保持契约空值，
+  // 不产生确定值、也不要求人工先清理。历史候选与正式记录不受影响。
+  const retained = ["name", "edition", "organizer", "members", "scope", "hosts", "tracks"];
+  const retired = ["eventKind", "mode", "modeKind", "rules", "stageNames", "startsAt", "deadline", "materialsAt", "eventAt"];
+  const evidenceArticle = article([
+    "各学院、全体本科生：",
+    "经研究，决定举办2026年校园创新大赛，现将有关事项通知如下。",
+    "一、参赛对象",
+    "全校全日制本科生均可报名参赛，以团队形式参赛，每队3至5人。",
+    "二、赛程安排",
+    "报名时间：2026年10月8日至2026年10月20日。",
+    "材料提交截止：2026年10月25日18:00。",
+    "比赛时间：2026年11月8日。",
+    "三、参赛要求",
+    "参赛作品须为原创作品，不得抄袭。",
+    "四、其他",
+    "赛道：算法挑战、应用开发。",
+  ], "关于举办2026年校园创新大赛的通知");
+
+  const retiredEvidence = (candidate: ReturnType<typeof parseCandidate>) =>
+    candidate.evidence.filter((entry) => retired.includes(entry.field));
+
+  it("主入口不再给出退役字段的确定值", () => {
+    const parsed = parseCandidate(evidenceArticle, url, directory);
+    expect(parsed.fields.eventKind).toBeNull();
+    expect(parsed.fields.mode).toBeNull();
+    expect(parsed.fields.modeKind).toBeNull();
+    expect(parsed.fields.rules).toEqual([]);
+    expect(parsed.fields.stageNames).toEqual([]);
+    for (const key of ["startsAt", "deadline", "materialsAt", "eventAt"] as const)
+      expect(parsed.fields[key]).toEqual({ precision: "unknown", value: null });
+    // 取值清空不等于证据隐藏：退役字段的原文定位仍留给人工填写正式记录。
+    expect(retiredEvidence(parsed).length).toBeGreaterThan(0);
+  });
+
+  it("证据入口与主入口在退役字段上完全一致", () => {
+    const viaMain = parseCandidate(evidenceArticle, url, directory);
+    const viaEvidence = parseEvidenceCandidate(
+      evidenceArticle,
+      url,
+      directory,
+      "scope-seven-fields-v1",
+    );
+    for (const key of retired)
+      expect(JSON.stringify(viaEvidence.fields[key as keyof typeof viaEvidence.fields]))
+        .toBe(JSON.stringify(viaMain.fields[key as keyof typeof viaMain.fields]));
+  });
+
+  it("保留字段照常取确定值", () => {
+    const parsed = parseCandidate(evidenceArticle, url, directory);
+    expect(parsed.fields.name).toContain("校园创新大赛");
+    expect(parsed.fields.edition).toBe("2026");
+    expect(parsed.fields.members).toContain("3");
+    expect(parsed.fields.scope.kind).toBe("all");
+    expect(parsed.fields.modeKind).toBeNull();
+    expect(parsed.fields.tracks.map((track) => track.name)).toEqual([
+      "算法挑战",
+      "应用开发",
+    ]);
+    for (const track of parsed.fields.tracks) {
+      expect(track.modeKind).toBeNull();
+      expect(track.members).toBeNull();
+      expect(track.rules).toBeNull();
+    }
+  });
+
+  it("退役字段不再列为待补缺项，改为一条明确说明", () => {
+    const parsed = parseCandidate(
+      article(["经研究，决定举办校园创新大赛。", "全体本科生均可报名参赛。"], "关于举办校园创新大赛的通知"),
+      url,
+      directory,
+    );
+    // 标题无年份时届次确实缺失，是保留字段的真实缺项。
+    expect(parsed.missing).toEqual(expect.arrayContaining(["organizer"]));
+    for (const key of retired) expect(parsed.missing).not.toContain(key);
+    expect(parsed.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("本期不自动提取")]),
+    );
+  });
+
+  it("退役字段的旧冲突不再混入待人工核对清单", () => {
+    const parsed = parseEvidenceCandidate(
+      article([
+        "经研究，决定举办2026年校园创新大赛。",
+        "全体本科生均可报名参赛。",
+        "报名时间：2026年10月8日至2026年10月20日。",
+        "比赛时间：2026年11月8日。",
+      ]),
+      url,
+      directory,
+      "scope-seven-fields-conflict-v1",
+    );
+    // 时间冲突只可能来自退役字段，不应再要求人工核对。
+    expect(parsed.conflicts.join("\n")).not.toMatch(/startsAt|deadline|materialsAt|eventAt/);
+    expect(parsed.fieldConflicts?.map((item) => item.field)).not.toEqual(
+      expect.arrayContaining(["startsAt", "deadline", "materialsAt", "eventAt"]),
+    );
+  });
+
+  it("非赛事通知的七字段空基线与赛事通知一致", () => {
+    const parsed = parseCandidate(
+      article(["经研究，决定开展教师任免工作。"], "关于2026年教师任免工作的通知"),
+      url,
+      directory,
+    );
+    expect(parsed.classification?.classification).toBe("non_competition");
+    for (const key of retired)
+      expect(JSON.stringify(parsed.fields[key as keyof typeof parsed.fields]))
+        .toBe(JSON.stringify(parseCandidate(evidenceArticle, url, directory).fields[key as keyof typeof parsed.fields]));
+    expect(parsed.fields.tracks).toEqual([]);
+  });
+});
+

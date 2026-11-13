@@ -1,8 +1,10 @@
 import {
   parseCandidate,
+  parseCandidateUnscoped,
   extractDates,
   nonCompetitionCandidate,
 } from "./parse.js";
+import { applyCandidateScope } from "./candidate-scope.js";
 import { classifyNotice } from "./classification.js";
 import type {
   Article,
@@ -20,13 +22,51 @@ export interface RuleEvidenceInput {
   segments: { kind: "page" | "paragraph"; index: number; text: string }[];
 }
 
-/** Locations stay attached to every paragraph throughout rule evaluation. */
+/**
+ * 证据合并解析（本期七字段输出范围）。
+ *
+ * 正文段落与附件分段先合成为一个带定位的文本流，再交给同一份解析规则；
+ * 合并后仍会经过 `applyCandidateScope`，保证附件入口与正文入口结论一致。
+ */
 export function parseEvidenceCandidate(
   article: Article,
   url: string,
   directory: Directory,
   noticeVersion: string,
   attachments: RuleEvidenceInput[] = [],
+): ParsedCandidate {
+  return applyCandidateScope(
+    buildEvidenceCandidate(article, url, directory, noticeVersion, attachments, false),
+  );
+}
+
+/**
+ * 未经七字段收敛的证据解析，只供回归测试与内部复用。不要用在入库链路。
+ */
+export function parseEvidenceCandidateUnscoped(
+  article: Article,
+  url: string,
+  directory: Directory,
+  noticeVersion: string,
+  attachments: RuleEvidenceInput[] = [],
+): ParsedCandidate {
+  return buildEvidenceCandidate(
+    article,
+    url,
+    directory,
+    noticeVersion,
+    attachments,
+    true,
+  );
+}
+
+function buildEvidenceCandidate(
+  article: Article,
+  url: string,
+  directory: Directory,
+  noticeVersion: string,
+  attachments: RuleEvidenceInput[],
+  raw: boolean,
 ): ParsedCandidate {
   const locations: {
     text: string;
@@ -82,13 +122,18 @@ export function parseEvidenceCandidate(
     )
       sourceBarriers.add(index);
   });
-  const result = parseCandidate(combined, url, directory, {
-    notificationKind: classification.notificationKind,
-    sourceBarriers,
-    // 外层已按整篇（含附件分段）判过分类；逐字段解析沿用同一结论，
-    // 不能让单句按自身文本重新分类。
-    classification,
-  });
+  const result = (raw ? parseCandidateUnscoped : parseCandidate)(
+    combined,
+    url,
+    directory,
+    {
+      notificationKind: classification.notificationKind,
+      sourceBarriers,
+      // 外层已按整篇（含附件分段）判过分类；逐字段解析沿用同一结论，
+      // 不能让单句按自身文本重新分类。
+      classification,
+    },
+  );
   const locate = (entry: Evidence): Evidence => {
     const location = locations[entry.paragraph];
     if (!location)
@@ -176,7 +221,9 @@ export function parseEvidenceCandidate(
       for (const clause of location.text
         .split(temporal ? /[。；;\n，,、]/ : /[。；;\n]/)
         .filter(Boolean)) {
-        const local = parseCandidate(
+        // 逐子句只用于抽取备选值，必须读未经七字段收敛的原始结果；
+        // 否则备选值聚合与冲突检测会看不到退役字段的真实取值。
+        const local = (raw ? parseCandidateUnscoped : parseCandidate)(
           { ...article, text: clause, paragraphs: [clause], attachments: [] },
           url,
           directory,

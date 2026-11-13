@@ -4,6 +4,7 @@ import {
   noticeRuleVersion,
   classificationPriority,
   type Classification,
+  applyCandidateScope,
   parseEvidenceCandidate,
   nonCompetitionCandidate,
   type Article,
@@ -85,8 +86,10 @@ export async function refreshExtraction(
     !attachments.length &&
     snapshotClassification?.classification === "non_competition" &&
     snapshotClassification.ruleVersion === ruleVersion;
+  const nonCompetition = (classification: ParsedCandidate["classification"]) =>
+    applyCandidateScope(nonCompetitionCandidate(classification));
   if (keepSnapshotConclusion)
-    Object.assign(data, nonCompetitionCandidate(snapshotClassification));
+    Object.assign(data, nonCompetition(snapshotClassification));
   data.classification!.ruleVersion = ruleVersion;
   const prior = (
     await client.query(

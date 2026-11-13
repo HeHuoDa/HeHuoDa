@@ -84,7 +84,9 @@ describe("分类提取修订使用已有快照", () => {
         [saved.candidateId],
       )
     ).rows[0];
-    expect(current.data.fields.modeKind).toBe("mixed");
+    // 环节校验：七字段范围内的确定值照常重提取；退役字段保持契约空值。
+    expect(current.data.fields.modeKind).toBeNull();
+    expect(current.data.fields.name).toBe("2026年数学竞赛");
     expect(current).toMatchObject({
       status: "pending",
       approved_file: null,
@@ -267,10 +269,17 @@ describe("分类提取修订使用已有快照", () => {
     ).rows[0].article;
     expect(snapshot.paragraphs).toEqual(paragraphs);
     const review = await exportReview(db.pool, saved.candidateId!);
+    // 报名截止属本期退役字段：取值保持未知，但原文定位证据必须保留，
+    // 管理员仍可据以人工填写正式比赛时间。
+    expect(snapshot.paragraphs).toEqual(paragraphs);
     expect(review.candidate.fieldsV2.deadline).toEqual({
-      precision: "date",
-      value: "2026-11-15",
+      precision: "unknown",
+      value: null,
     });
+    expect(review.candidate.fieldsV2.scope).toMatchObject({ kind: "all" });
+    expect(review.evidenceReferences).toContainEqual(
+      expect.objectContaining({ field: "deadline", format: "html" }),
+    );
   });
   it.each([
     {
@@ -455,10 +464,11 @@ describe("分类提取修订使用已有快照", () => {
         (review.candidate.fields as unknown as { kind: string }).kind,
       ).toBe("supplement");
       expect(review.candidate.fieldsV2.deadline).toEqual({
-        precision: "date",
-        value: "2026-11-08",
+        precision: "unknown",
+        value: null,
       });
       expect(review.candidate.fieldsV2.modeKind).toBeNull();
+      // 附件正文仍完整保留以定位延期后的截止。
       expect(review.evidenceReferences).toContainEqual(
         expect.objectContaining({ format: "pdf", page: 1, field: "deadline" }),
       );
@@ -517,7 +527,8 @@ describe("分类提取修订使用已有快照", () => {
       noticeRuleVersion,
       "competition-rules-test-2",
     ]);
-    expect(revisions[0].data.fields.deadline.value).toBe("2026-11-01");
+    expect(revisions[0].data.fields.deadline.value).toBeNull();
+    expect(revisions[0].data.fields.name).toBe("2026年数学竞赛");
     expect(
       (
         await db.pool.query(
@@ -578,10 +589,10 @@ describe("分类提取修订使用已有快照", () => {
       deadline: { precision: "unknown", value: null },
       scope: { kind: "unknown" },
     });
+    // 退役字段不再输出取值，但冲突与附件证据仍要保留给人工核对。
     expect(
-      fresh.candidate.fieldConflicts?.find((c) => c.field === "deadline")
-        ?.values,
-    ).toHaveLength(2);
+      fresh.candidate.fieldConflicts?.find((c) => c.field === "deadline"),
+    ).toBeUndefined();
     expect(fresh.evidenceReferences).toContainEqual(
       expect.objectContaining({
         field: "deadline",

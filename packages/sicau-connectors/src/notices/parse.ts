@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 import { candidateFieldsContract, type TimeValue } from "./types.js";
 import { classifyNotice } from "./classification.js";
+import { applyCandidateScope } from "./candidate-scope.js";
 const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
 
 /** Section numbers carry no content; a heading alone cannot support a value. */
@@ -806,7 +807,27 @@ export interface ParseCandidateOptions {
   classification?: ParsedCandidate["classification"];
 }
 
+/**
+ * 对外提取入口：先按解析规则抽取全部字段，再收敛到本期七字段输出范围。
+ * 入库、重新提取与离线诊断都走这里，保证两条真实链路一致。
+ */
 export function parseCandidate(
+  article: Article,
+  url: string,
+  directory: Directory,
+  options: ParseCandidateOptions = {},
+): ParsedCandidate {
+  return applyCandidateScope(
+    parseCandidateUnscoped(article, url, directory, options),
+  );
+}
+
+/**
+ * 未经七字段收敛的解析结果，只供解析器内部（证据合并、备选值聚合）与
+ * 解析规则回归测试使用。不要把它当作入库或离线入口，否则退役字段会重新
+ * 产生确定值，离线结论与入库结论再次分叉。
+ */
+export function parseCandidateUnscoped(
   article: Article,
   url: string,
   directory: Directory,

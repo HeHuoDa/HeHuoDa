@@ -7,3 +7,4 @@ export * from "./types.js";
 export * from "./attachment.js";
 export * from "./classification.js";
 export * from "./evidence-parse.js";
+export * from "./candidate-scope.js";
