@@ -170,7 +170,7 @@ export async function persistArticle(
     // 传的是裁剪前解析的结果，里面仍带着由标题生成的比赛名与届次。
     // 用裁剪后的文章 + 裁剪前已确认的分类重建，避免按空正文重新分类。
     parsed = {
-      ...parseCandidate(article, url, [], undefined, undefined, classification),
+      ...parseCandidate(article, url, [], { classification }),
       classification,
     };
   }

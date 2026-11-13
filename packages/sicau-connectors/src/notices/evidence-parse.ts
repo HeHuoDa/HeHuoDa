@@ -82,13 +82,13 @@ export function parseEvidenceCandidate(
     )
       sourceBarriers.add(index);
   });
-  const result = parseCandidate(
-    combined,
-    url,
-    directory,
-    classification.notificationKind,
+  const result = parseCandidate(combined, url, directory, {
+    notificationKind: classification.notificationKind,
     sourceBarriers,
-  );
+    // 外层已按整篇（含附件分段）判过分类；逐字段解析沿用同一结论，
+    // 不能让单句按自身文本重新分类。
+    classification,
+  });
   const locate = (entry: Evidence): Evidence => {
     const location = locations[entry.paragraph];
     if (!location)
@@ -180,7 +180,9 @@ export function parseEvidenceCandidate(
           { ...article, text: clause, paragraphs: [clause], attachments: [] },
           url,
           directory,
-          classification.notificationKind,
+          // 逐子句只用于抽取备选值；分类沿用整篇结论，否则不含赛事词的单句
+          // 会被判非赛事并短路成空字段，导致该子句的备选值静默消失。
+          { notificationKind: classification.notificationKind, classification },
         );
         for (const evidence of local.evidence.filter((e) => e.paragraph >= 0)) {
           const field = evidence.field;

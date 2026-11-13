@@ -1138,14 +1138,9 @@ describe("候选领域解析", () => {
       const stale = parseCandidate(cropped, url, directory);
       // 仅凭标题会得到不同结论——这正是必须显式传入已确认分类的原因。
       expect(stale.fields.name).not.toBe("");
-      const reused = parseCandidate(
-        cropped,
-        url,
-        directory,
-        undefined,
-        undefined,
+      const reused = parseCandidate(cropped, url, directory, {
         classification,
-      );
+      });
       expect(reused.fields.name).toBe("");
       expect(reused.fields.edition).toBeNull();
       expect(reused.classification).toEqual(classification);
@@ -1258,7 +1253,7 @@ describe("候选领域解析", () => {
         article(["报名截止：2026年10月20日。"], "2026年补充说明"),
         url,
         directory,
-        "supplement",
+        { notificationKind: "supplement" },
       );
       expect(["registration", "supplement", "award", "news"]).not.toContain(
         parsed.fields.eventKind,
@@ -1805,6 +1800,40 @@ describe("候选领域解析", () => {
       expect(parsed.conflicts).not.toContain(
         "参赛形式存在互不覆盖的要求，须人工核对",
       );
+    });
+    it("后果在形式之前时保留形式，不因后果词丢弃整句", () => {
+      const parsed = parseCandidate(
+        article(["违规者取消参赛资格，参赛形式为团队。"]),
+        url,
+        directory,
+      );
+      expect(parsed.fields.modeKind).toBe("team");
+      expect(parsed.fields.mode).not.toContain("取消");
+    });
+    it("分号切开的后果句不在 mode 里留下残标点", () => {
+      for (const text of [
+        "参赛形式：以团队形式参赛；违规者取消参赛资格。",
+        "参赛形式：以团队形式参赛，违反纪律者通报批评。",
+      ]) {
+        const parsed = parseCandidate(article([text]), url, directory);
+        expect(parsed.fields.modeKind).toBe("team");
+        expect(parsed.fields.mode).not.toMatch(/[；;]$/);
+        expect(parsed.fields.mode).not.toContain("取消");
+        expect(parsed.fields.mode).not.toContain("违规");
+      }
+    });
+    it("组织关系句里出现参赛对象措辞仍不缩小全校范围", () => {
+      for (const text of [
+        "参赛对象：全校学生，理学院负责组织学生参赛。",
+        "参赛对象：全校学生（理学院负责组织学生参赛）。",
+        "参赛对象：全校学生，理学院参与组织。",
+      ]) {
+        const parsed = parseCandidate(article([text]), url, directory);
+        expect(parsed.fields.scope).toMatchObject({
+          kind: "all",
+          colleges: [],
+        });
+      }
     });
     it("只有纪律后果没有形式时不提取", () => {
       for (const text of [

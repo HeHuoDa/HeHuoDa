@@ -103,6 +103,100 @@ function mentionedColleges(text: string, colleges: Directory): Directory {
   return colleges.filter((college) => found.has(college.id));
 }
 
+/**
+ * 「学院」本身常用作组织泛称（「由学院研管办负责」「该学院负责组织」「参赛学院初赛」
+ * 「每个学院每个赛道」「按学院要求提交」），这些不是在点名某个未收录的学院。
+ * 只把没有泛称限定词的「X学院」当作未知学院名，避免把已点名的学院降成 other。
+ * 判定按后缀匹配，所以「所在」「参加」这类更长的词已被「在」「加」覆盖。
+ */
+const genericCollegeQualifiers = [
+  "各",
+  "每",
+  "每个",
+  "各个",
+  "该",
+  "本",
+  "贵",
+  "我",
+  "你",
+  "其",
+  "此",
+  "上述",
+  "以上",
+  "相关",
+  "有关",
+  "所属",
+  "参赛",
+  "报名",
+  "全院",
+  "全校",
+  "学院",
+  "二级",
+  "基层",
+  "对口",
+  "目标",
+  "接收",
+  "推荐",
+  "录取",
+  "报考",
+  "招生",
+  "申请",
+  "在读",
+  "跨",
+  "多个",
+  "其他",
+  "其余",
+  "同一",
+  "不同",
+  "由",
+  "在",
+  "向",
+  "至",
+  "到",
+  "经",
+  "按",
+  "与",
+  "和",
+  "得",
+  "的",
+  "了",
+  "是",
+  "为",
+  "成",
+  "进",
+  "加",
+  "组织",
+  "负责",
+  "通知",
+  "要求",
+  "初赛",
+  "复赛",
+  "决赛",
+  "大赛",
+  "赛事",
+  "活动",
+  "培养",
+  "上级",
+  "下级",
+  "兄弟",
+  "合作",
+];
+/** 学院名从不以连接词结尾；先剥掉紧贴的连接词再判泛称。 */
+const trailingConnector = /[和及与或、]+$/;
+/** 「X学院」是否为未收录的学院名；泛称（各学院、该学院、由学院）不算。 */
+function hasUnknownCollege(text: string, directory: Directory) {
+  const masked = maskCollegeNames(text, directory, "\u0000").masked;
+  for (const match of masked.matchAll(/([\p{Script=Han}A-Za-z]{1,6})学院/gu)) {
+    const qualifier = match[1].replace(trailingConnector, "");
+    if (
+      qualifier &&
+      !genericCollegeQualifiers.some((word) => qualifier.endsWith(word))
+    )
+      return true;
+  }
+  return false;
+}
+
 interface SectionRead {
   parts: { text: string; index: number }[];
   /** Set when the section would continue into another source; the value cannot be trusted. */
@@ -325,24 +419,85 @@ const conditionalModeClause =
  * 「参赛形式：以团队形式参赛，否则取消参赛资格」只有一个句号，整句排除会
  * 丢掉有效形式。后果从「否则／逾期／违规／取消…资格」一类标记处截断，
  * 标记必须在形式片段之后；截断后没有形式依据即返回 null，不虚构形式。
+ *
+ * 后果也可能在前（「违规者取消参赛资格，参赛形式为团队」）：整句不能因为
+ * 后果标记就丢弃，改为按逗号切段、只留能独立表达形式的那几段。
  */
 function stripConditionalConsequence(sentence: string): string | null {
-  const formAt = sentence.search(
-    /参赛|以(?:个人|团队)|个人赛|团队赛|团体赛|组队|集体作品|个人作品|每班/,
+  // 形式声明的位置：优先取「参赛形式／组队形式」标签，其次取第一处形式短语。
+  // 不能用任意「参赛」的位置——「取消参赛资格」里的「参赛」会把起点推到后果词之后。
+  const labelAt = sentence.search(modeLabel);
+  // 「参赛形式」标签可能出现在后半句；substring 搜索要单独做，不能用带 ^ 的 modeLabel。
+  const labelAnywhere = sentence.search(
+    /(?:参赛形式|参赛方式|比赛形式|竞赛形式|组队形式)\s*(?:[：:]|为|是)/,
   );
+  const formAt =
+    labelAt >= 0
+      ? labelAt
+      : labelAnywhere >= 0
+        ? labelAnywhere
+        : sentence.search(
+            /以(?:个人|团队)|个人赛|团队赛|团体赛|组队|集体作品|个人作品|每班/,
+          );
   if (formAt < 0) return null;
   const markers = [
     ...sentence.matchAll(
       /否则|违规|违纪|纪律|处分|追究|通报批评|逾期|取消[^。；，,]{0,10}资格/g,
     ),
   ];
+  // 形式声明在后果之后（「违规者取消参赛资格，参赛形式为团队」）时，前面那段
+  // 后果与形式无关，直接按子句挑出形式段，而不是从后果处截断。
+  const consequenceFirst = markers.some((match) => (match.index ?? 0) < formAt);
+  if (consequenceFirst) {
+    const forms = sentence
+      .split(/[，,；;]/)
+      .map((part) =>
+        part
+          .trim()
+          .replace(/[。；;\n]+$/u, "")
+          .trim(),
+      )
+      .filter(
+        (part) =>
+          part &&
+          !conditionalModeClause.test(part) &&
+          readModeMention(part, modeLabel.test(part)),
+      );
+    return forms.length ? forms.join("，") : null;
+  }
   const cut = markers.find((match) => (match.index ?? 0) > formAt);
-  if (!cut) return null;
-  const kept = sentence
-    .slice(0, cut.index)
-    .replace(/[，,、\s]+$/, "")
-    .trim();
-  return kept && readModeMention(kept, modeLabel.test(kept)) ? kept : null;
+  if (cut) {
+    // 截断点前的原文可能以逗号/分号/冒号结尾；它们不是形式原文的一部分。
+    // 只保留能独立表达形式的前段，避免把半句后果或残留标点写进 mode。
+    const head = sentence.slice(0, cut.index);
+    const pieces = head
+      .split(/[，,；;]/)
+      .map((part) => part.trim())
+      .filter((part) => part && readModeMention(part, modeLabel.test(part)));
+    const candidate = pieces.length ? pieces.join("，") : head.trim();
+    const normalized = candidate.replace(/[\s，,、；;：:]+$/u, "").trim();
+    return normalized && readModeMention(normalized, modeLabel.test(normalized))
+      ? normalized
+      : null;
+  }
+  // 没有「形式在前」的后果：可能是「违规者取消参赛资格，参赛形式为团队」。
+  // 只要整句确属后果句，就按子句挑出能独立表达形式的部分；挑不出才返回 null。
+  if (!conditionalModeClause.test(sentence)) return null;
+  const forms = sentence
+    .split(/[，,；;]/)
+    .map((part) =>
+      part
+        .trim()
+        .replace(/[。；;\n]+$/u, "")
+        .trim(),
+    )
+    .filter(
+      (part) =>
+        part &&
+        !conditionalModeClause.test(part) &&
+        readModeMention(part, modeLabel.test(part)),
+    );
+  return forms.length ? forms.join("，") : null;
 }
 
 interface ModeMention {
@@ -438,15 +593,23 @@ export function competitionMode(text: string): {
   const sentences = input.match(/[^。；;\n]+[。；;\n]*/g) ?? [];
   // 纪律后果只在自己的子句范围内失效：同一句里「形式声明，否则…」先按后果
   // 截断，保留前面的形式原文；整句都不含形式时仍然不提取。
-  const relevant = sentences.flatMap((sentence) => {
+  //
+  // 句末标点策略：句号是原文的一部分，mode 保留（既有契约）；
+  // 分号/换行是「被切开的并列子句」，若它后面还有子句，说明这句只是前半句，
+  // 不能把切句残留的分号写进 mode。
+  const relevant = sentences.flatMap((sentence, index) => {
     const trimmed = sentence.trim();
+    if (!trimmed) return [];
+    const hasFollowingClause = index < sentences.length - 1;
+    const content = (
+      hasFollowingClause ? trimmed.replace(/[；;\n]+$/u, "") : trimmed
+    ).trim();
+    if (!content) return [];
     // 小节标题本身含「参赛/组队」字样，但不是形式原文。
-    if (isSectionHeading(trimmed)) return [];
-    if (!conditionalModeClause.test(sentence))
-      return readModeMention(sentence, modeLabel.test(trimmed))
-        ? [sentence]
-        : [];
-    const kept = stripConditionalConsequence(sentence);
+    if (isSectionHeading(content)) return [];
+    if (!conditionalModeClause.test(content))
+      return readModeMention(content, modeLabel.test(content)) ? [content] : [];
+    const kept = stripConditionalConsequence(content);
     return kept ? [kept] : [];
   });
   const original = relevant.join("").trim();
@@ -626,33 +789,37 @@ export function nonCompetitionCandidate(
   };
 }
 
+export interface ParseCandidateOptions {
+  /**
+   * 通知种类不再写入候选字段；唯一来源是 classifyNotice 返回的
+   * classification.notificationKind。未传入时只在内部按标题推断，用于
+   * 「新闻／获奖不证明报名开放」这一条守卫，不写入 fields。
+   */
+  notificationKind?: string;
+  /** Paragraph gaps where consecutive text belongs to different sources; never joined. */
+  sourceBarriers?: Set<number>;
+  /**
+   * 已知分类结果（来自裁剪前的原文）。store 在非赛事分支会先清空正文再解析，
+   * 只按标题重新分类可能把「…获奖新闻」判回 suspected 并再次生成比赛名，
+   * 因此允许调用方传入已确认的分类，禁止用裁剪后的正文反推。
+   */
+  classification?: ParsedCandidate["classification"];
+}
+
 export function parseCandidate(
   article: Article,
   url: string,
   directory: Directory,
-  /**
-   * 通知种类不再写入候选字段；参数保留以兼容既有调用点，
-   * 通知种类唯一来源是 classifyNotice 返回的 classification.notificationKind。
-   * 未传入时（直接调用 parseCandidate）只在内部按标题推断，用于「新闻／获奖
-   * 不证明报名开放」这一条守卫，不写入 fields。
-   */
-  notificationKind?: string,
-  /** Paragraph gaps where consecutive text belongs to different sources; never joined. */
-  sourceBarriers?: Set<number>,
-  /**
-   * 已知分类结果（来自裁剪前的原文）。store 在非赛事分支会先清空正文再解析，
-   * 只按标题重新分类可能把「…获奖新闻」判回 suspected 并再次生成比赛名，
-   * 因此这里允许调用方传入已确认的分类，禁止用裁剪后的正文反推。
-   */
-  knownClassification?: ParsedCandidate["classification"],
+  options: ParseCandidateOptions = {},
 ): ParsedCandidate {
+  const { notificationKind, sourceBarriers, classification: known } = options;
   // 非赛事通知由标题／年份生成比赛名称或届次，是离线入口与入库入口不一致的根因：
   // runner 调 parseCandidate、store 裁剪正文后再次调它，两条真实路径都拿不到
   // classification。基线判据必须下沉到这里，用同一份分类规则，而不是让调用方
   // 各自记得先分类。标题与发布日期仍由调用方保存在通知元数据里。
   const nonCompetition =
-    knownClassification?.classification === "non_competition"
-      ? knownClassification
+    known?.classification === "non_competition"
+      ? known
       : isNonCompetition(article);
   if (nonCompetition) return nonCompetitionCandidate(nonCompetition);
   const evidence: Evidence[] = [
@@ -719,103 +886,6 @@ export function parseCandidate(
     if (section.blockedAt !== undefined)
       add(field, article.paragraphs[section.blockedAt], section.blockedAt);
   };
-  // 「学院」本身常用作组织泛称（「由学院研管办负责」「该学院负责组织」「参赛学院初赛」
-  // 「每个学院每个赛道」「按学院要求提交」），这些不是在点名某个未收录的学院。
-  // 只把没有泛称限定词的「X学院」当作未知学院名，避免把已点名的学院降成 other。
-  // 只写成数组再拼接，避免一条超长正则难以审阅；判定按后缀匹配，所以
-  // 「所在」「参加」这类更长的词已被「在」「加」覆盖，不再重复列出。
-  const genericCollegeQualifiers = [
-    "各",
-    "每",
-    "每个",
-    "各个",
-    "该",
-    "本",
-    "贵",
-    "我",
-    "你",
-    "其",
-    "此",
-    "上述",
-    "以上",
-    "相关",
-    "有关",
-    "所属",
-    "参赛",
-    "报名",
-    "全院",
-    "全校",
-    "学院",
-    "二级",
-    "基层",
-    "对口",
-    "目标",
-    "接收",
-    "推荐",
-    "录取",
-    "报考",
-    "招生",
-    "申请",
-    "在读",
-    "跨",
-    "多个",
-    "其他",
-    "其余",
-    "同一",
-    "不同",
-    "由",
-    "在",
-    "向",
-    "至",
-    "到",
-    "经",
-    "按",
-    "与",
-    "和",
-    "得",
-    "的",
-    "了",
-    "是",
-    "为",
-    "成",
-    "进",
-    "加",
-    "组织",
-    "负责",
-    "通知",
-    "要求",
-    "初赛",
-    "复赛",
-    "决赛",
-    "大赛",
-    "赛事",
-    "活动",
-    "培养",
-    "上级",
-    "下级",
-    "兄弟",
-    "合作",
-  ];
-  /**
-   * 「X学院」里的 X 是否为泛称（「各学院」「该学院」「由学院」）。
-   * 学院名从不以连接词结尾，所以先剥掉紧贴的连接词再判：「本科生和泰和学院」
-   * 的限定语是「泰和」，不能因为「和」被当作泛称而吞掉真正的未知学院名。
-   */
-  const trailingConnector = /[和及与或、]+$/;
-  const hasUnknownCollege = (text: string) => {
-    const masked = maskCollegeNames(text, directory, "\u0000").masked;
-    for (const match of masked.matchAll(
-      /([\p{Script=Han}A-Za-z]{1,6})学院/gu,
-    )) {
-      const qualifier = match[1].replace(trailingConnector, "");
-      if (
-        qualifier &&
-        !genericCollegeQualifiers.some((word) => qualifier.endsWith(word))
-      )
-        return true;
-    }
-    return false;
-  };
   /**
    * 协议 3.3 的 scope：all / specified / other / unknown。
    * 否定、排除、禁入与未知学院一律不写入 colleges——它们是限制，不是允许范围。
@@ -835,13 +905,21 @@ export function parseCandidate(
     // 明示全校时若把组织学院留在资格子句里，collegeNamed 会关掉全校语义，
     // 把「全校学生，理学院负责组织」错误收窄为 specified。
     const organizerRelation =
-      /^(?:由|经)?[^。；，,\n]{0,20}?(?:学院|系|部|处|办公室|中心|团委|组委会|委员会)(?:负责|具体负责|统一负责)?(?:组织|主办|承办|协办|汇总|安排|开展|实施|落实|推进|负责)[^。；，,\n]{0,12}$/;
+      /^(?:由|经)?[^。；，,\n]{0,20}?(?:学院|系|部|处|办公室|中心|团委|组委会|委员会)(?:负责|具体负责|统一负责|参与)?(?:组织|主办|承办|协办|汇总|安排|开展|实施|落实|推进|负责)[^。；，,\n]{0,12}$/;
+    /**
+     * 组织关系句里允许出现「组织学生参赛」「组织报名」「参与组织」等措辞：
+     * 它们的主语仍是组织方，描述谁去动员，不构成参赛资格。因此先把这些
+     * 组织动词后的对象短语剥掉，再判断是否含资格收窄措辞。
+     */
+    const organizerObjectPhrase =
+      /(?:组织|动员|召集|通知|安排)(?:学生|同学|人员|参赛者|参赛人员|报名)?(?:参赛|参加|报名|参与)?/g;
     // 含参赛/资格措辞的子句可能在说参赛者，不能当纯组织关系剥掉；
     // 含否定或排除的子句更不是组织关系（「生命科学学院不接受报名」）。
     const eligibilityMarker =
-      /仅|只|限|除外|不含|不接受|禁止|排除|不得|不可|不能|不予|除|非|均可|可参加|面向|对象|资格|范围|参赛|参加/;
+      /仅|只|限|除外|不含|不接受|禁止|排除|不得|不可|不能|不予|除|非|均可|可参加|面向|对象|资格|范围/;
     const isOrganizerOnly = (clause: string) =>
-      !eligibilityMarker.test(clause) && organizerRelation.test(clause);
+      !eligibilityMarker.test(clause.replace(organizerObjectPhrase, "")) &&
+      organizerRelation.test(clause);
     const stripOrganizerRelations = (value: string) =>
       value
         .replace(/[（(][^（()）]*[）)]/g, (inner) =>
@@ -861,7 +939,7 @@ export function parseCandidate(
         .join("；");
     const qualification = stripOrganizerRelations(text);
     const matched = mentionedColleges(qualification, colleges).map((c) => c.id);
-    const unresolvedCollege = hasUnknownCollege(qualification);
+    const unresolvedCollege = hasUnknownCollege(qualification, colleges);
     // 「不限」「不受…限制」是放开语义，不构成收窄。
     const qualifiedWithoutUnlimited = qualification.replace(
       /不限|不受[^。；，,]{0,20}限制/g,
@@ -941,7 +1019,7 @@ export function parseCandidate(
     }
     if (
       /承办/.test(paragraph) &&
-      (hasUnknownCollege(paragraph) ||
+      (hasUnknownCollege(paragraph, directory) ||
         !directory.some((c) => paragraph.includes(c.name)))
     )
       warnings.push("承办单位尚未匹配学院目录，待核对");

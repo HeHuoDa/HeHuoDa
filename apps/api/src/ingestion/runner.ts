@@ -885,7 +885,10 @@ export class IngestionRunner {
                   article,
                   item.url,
                   noticeDirectory(catalog.colleges),
-                  classification.notificationKind,
+                  {
+                    notificationKind: classification.notificationKind,
+                    classification,
+                  },
                 ),
                 classification,
               });
