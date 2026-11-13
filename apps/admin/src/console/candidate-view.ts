@@ -118,6 +118,13 @@ export type CandidateFieldRow = {
  * 也不表示原文没有信息；原文证据仍在候选里，可据此人工填写正式记录。
  */
 export const RETIRED_FIELD_HINT = "本期不自动提取，请按原文人工填写";
+/**
+ * 赛道的嵌套字段（形式／人数／规则）本期不自动提取。
+ * 与退役字段分开命名：赛道名称仍会给值，不能说整个赛道字段未提取。
+ */
+export const TRACK_NAME_ONLY_HINT =
+  "本期只自动提取赛道名称，参赛形式、人数与规则请按原文人工填写";
+const TRACK_NAME_ONLY_VALUE = "本期只提取赛道名称";
 const retiredHintRow = (label: string): CandidateFieldRow => ({
   label,
   value: "本期不自动提取",
@@ -183,6 +190,9 @@ export function candidateFieldRows(
       })),
     },
     "",
+    // 本期只自动提取赛道名称，嵌套的 modeKind/members/rules 按契约恒为空。
+    // 旧材料分支仍用旧口径：那里为空是真未提取，不是本期范围。
+    TRACK_NAME_ONLY_VALUE,
   );
   // 只对确实没有取值的情况补说明，已有历史取值已由 pushOptionalRows 展示。
   if (!fields.rules.length) rows.push(retiredHintRow("参赛规则"));
@@ -249,6 +259,7 @@ export function legacyFieldRows(
       })),
     },
     "（旧）",
+    "参赛形式无法可靠归一",
   );
   for (const [key, label] of CANDIDATE_TIME_LABELS)
     rows.push({
@@ -282,6 +293,7 @@ function pushOptionalRows(
     }[];
   },
   suffix: string,
+  trackModeFallback: string,
 ): void {
   if (source.organizer)
     rows.push({ label: "组织单位" + suffix, value: source.organizer });
@@ -299,8 +311,12 @@ function pushOptionalRows(
       label: "赛道" + suffix + "：" + name,
       value: track.mode
         ? modeKindLabels[track.mode as keyof typeof modeKindLabels]
-        : "参赛形式无法可靠归一",
-      ...(track.members ? { hint: "人数：" + track.members } : {}),
+        : trackModeFallback,
+      hint: track.mode
+        ? track.members
+          ? "人数：" + track.members
+          : undefined
+        : TRACK_NAME_ONLY_HINT,
     });
     // 赛道规则可能含否定与例外条款（如「不得提交已获奖作品」），必须原样保留。
     if (track.rules?.trim())

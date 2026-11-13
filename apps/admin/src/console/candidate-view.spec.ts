@@ -212,6 +212,41 @@ describe("候选字段 v2 展示适配", () => {
     );
   });
 
+  it("新契约的赛道只给名称时说明本期范围，不伪装成解析失败", () => {
+    // 本期只自动提取赛道名称，tracks 的 modeKind／members／rules 恒为 null。
+    // 旧文案「参赛形式无法可靠归一」会把契约规定的空值说成解析失败。
+    const rows = candidateFieldRows(
+      fields({
+        tracks: [
+          { name: "综合赛道", modeKind: null, members: null, rules: null },
+        ],
+      }),
+    );
+    const trackRow = rows.find((row) => row.label === "赛道：综合赛道");
+    expect(trackRow?.value).toBe("本期只提取赛道名称");
+    expect(trackRow?.value).not.toContain("无法可靠归一");
+    expect(trackRow?.hint).toContain("按原文人工填写");
+    // 空值不生成空规则行，也不伪造成「无规则」。
+    expect(rows.some((row) => row.label === "赛道规则：综合赛道")).toBe(
+      false,
+    );
+  });
+
+  it("历史赛道已有形式与规则时仍展示真实值", () => {
+    // 本期范围说明不能盖掉历史候选里已经提取到的真实内容。
+    const rows = candidateFieldRows(
+      fields({
+        tracks: [
+          { name: "历史赛道", modeKind: "team", members: "2 人", rules: null },
+        ],
+      }),
+    );
+    expect(rows.find((row) => row.label === "赛道：历史赛道")).toMatchObject({
+      value: "团队",
+      hint: "人数：2 人",
+    });
+  });
+
   it("旧材料投影保留已有规则、赛道规则与时间", () => {
     const legacy: Schema["AdminLegacyCandidateFieldsDto"] = {
       name: "历史竞赛",
