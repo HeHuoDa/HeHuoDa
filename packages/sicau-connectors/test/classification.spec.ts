@@ -1420,4 +1420,56 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     ];
     expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
   });
+
+  // B0 回归（#206 审阅已确认缺陷）：空表／模板说明不是公布动作。
+  // `listPublishedAfter` 允许公布类动作跨括号后，「报名人员信息表（空表如下）」
+  // 里的「如下」被当成了公布动作，报名说明因此被整条拒收。
+  // 放行依据限定为紧邻该名单对象的模板语义（空表／模板／样表／空白表），
+  // 不能退化成「全文出现模板词就豁免」。
+  it.each([
+    ["空表如下", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["空表括注", "报名人员信息表（空表）随本通知下发，请下载填写后提交。"],
+    ["模板括注", "请下载参赛名单汇总表（模板），填写完成后于11月20日前提交。"],
+    ["样表括注", "报名人员信息表（样表）见本通知附件，请按样表填写。"],
+    ["空白表括注", "参赛名单汇总表（空白表）可在通知附件下载。"],
+    ["空表不加括号", "报名人员信息表空表随本通知下发，请下载填写后提交。"],
+  ])("名单对象紧邻的空表／模板说明不构成发布名单：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+    // 共用判据不命中名单排除项；赛事分类本身由正文其他内容决定，不在这里断言。
+    expect(classifyNotice(signupTitle, [body]).exclusions).not.toContainEqual(
+      "applicant-list",
+    );
+  });
+
+  it("下载附件填写本身不是放行依据", () => {
+    // 只有紧邻名单对象的模板语义才抵消公布动作；「下载附件填写」不是模板语义，
+    // 不能因为文里出现下载说明就放行同一句里的真实名单。
+    for (const body of [
+      "报名人员信息表（如下）：张三、李四，请下载附件填写后提交。",
+      "请下载附件填写后提交。报名人员信息表（公布如下）：张三、李四。",
+    ]) {
+      expect(bodyPublishesApplicantList(body)).toBe(true);
+      expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    }
+  });
+
+  it("空表说明之后出现真实姓名仍按名单拦截", () => {
+    // 模板语义只抵消它自己那一处；后文逐条列名依然是名单正文。
+    const bodies = [
+      [
+        "请下载报名人员信息表（空表如下），填写后提交。",
+        "报名人员信息表（如下）：张三、李四。",
+      ],
+      ["请下载报名人员信息表（空表如下），填写后提交。", "张三20260001"],
+      [
+        "参赛名单汇总表（模板）见附件。",
+        "参赛学生名单",
+        "序号 姓名 学号",
+        "1 张三 2023010101",
+      ],
+    ];
+    for (const body of bodies)
+      expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+  });
 });
