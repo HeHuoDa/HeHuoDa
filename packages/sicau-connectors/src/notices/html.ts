@@ -75,16 +75,22 @@ export const containsPersonalNameList = (title: string) =>
   /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|补贴|资助|补助|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
     title,
   );
-/** 名单对象：报名／参赛人员的名单、汇总表、信息表等逐条记录个人资料的材料。 */
-const applicantListObject =
-  /报名(?:者|人员|学生)?(?:名单|汇总表?|信息表?|明细|清单)|参赛(?:者|人员|学生)?(?:名单|明细|清单)/;
 /**
- * 名单对象后紧跟公布动作（如下／公示／公布／见附件），或名单表头冒号后直接给姓名
+ * 名单对象：报名／参赛人员的名单、汇总表、信息表、明细、清单等逐条记录个人资料的材料。
+ * 「表」必须显式出现（写成 `信息表|汇总表`，不能用 `信息表?|汇总表?`）：后者把「表」
+ * 变成可选，会连「提交报名信息」一起命中，让普通报名说明被当成名单表头。
+ */
+const applicantListObject =
+  /报名(?:者|人员|学生)?(?:名单|汇总表|汇总|信息表|明细|清单)|参赛(?:者|人员|学生)?(?:名单|明细|清单)/;
+/**
+ * 名单对象后紧跟公布动作（如下／公示／公布／附后／见附件），或名单表头冒号后直接给姓名
  * （「名单：张三、李四」）。「报送／填写／收齐参赛名单汇总表」只是报名流程，
  * 没有公布动作，不构成发布名单。
+ * 间隔取到括号为止：「参赛名单汇总表（模板见附件）」是在给空表模板，
+ * 不是在发布名单，跨过括号去匹配「见附件」会把报名说明误判成名单。
  */
 const listPublishedAfter = new RegExp(
-  `(?:${applicantListObject.source})[^。；\\n]{0,10}?(?:如下|公示|公布|公告|见附件|附后|附上)` +
+  `(?:${applicantListObject.source})[^。；\\n（）()]{0,10}?(?:如下|公示|公布|公告|见附件|附后|附上)` +
     `|(?:名单|明细|信息表|汇总表)\\s*(?:如下)?\\s*[：:]\\s*(?:[\\u4e00-\\u9fff]{2,4})(?:[、，,；;\\s]|$)`,
 );
 /** 公布动作在名单对象之前（「现公布参赛名单」）；「现将…名单报送」不属于公布。 */
@@ -138,8 +144,8 @@ export function bodyPublishesApplicantList(text: string): boolean {
     )
   )
     return true;
-  // 表格形态：某一行只写名单对象，且同段另有姓名行或学号行；没有任何报名
-  // 流程动词时才成立，避免把「参赛名单汇总表后报送」误判成发布名单。
+  // 表格形态：某一行只写名单对象，且同段另有姓名行或学号行。流程句只在
+  // 它自己那一句里抵消名单对象，不能整段否决后面的逐条记录。
   const headingAt = clauses.findIndex(
     (clause) =>
       bareListHeading.test(clause) ||
@@ -159,17 +165,19 @@ export function bodyPublishesApplicantList(text: string): boolean {
   );
   if (namedListMaterial) return true;
   if (headingAt < 0) return false;
-  // 表头之后若只写报名流程（「参赛名单汇总表后报送」），不当作发布名单。
-  // 只判与名单对象相邻的流程动词，避免整段其他句子的报送要求造成豁免。
-  if (listWorkflowPhrase.test(text)) return false;
-  return clauses
-    .slice(headingAt + 1)
-    .some(
-      (clause) =>
-        rosterRow.test(clause) ||
-        identityRow.test(clause) ||
-        plainNameLine.test(clause),
+  // 流程句只否定它自己点名的那一段，不能覆盖同段或后续的真实姓名／学号证据。
+  // 「请班长报送参赛名单汇总表」与后一段「参赛学生名单」表格可以并存：
+  // 前者是报名流程，后者是已发布的逐条记录，两者不是一个判断对象。
+  return clauses.slice(headingAt + 1).some((clause) => {
+    const evidence = listWorkflowPhrase.test(clause)
+      ? clause.replace(listWorkflowPhrase, "")
+      : clause;
+    return (
+      rosterRow.test(evidence) ||
+      identityRow.test(evidence) ||
+      plainNameLine.test(evidence)
     );
+  });
 }
 /**
  * 名单隐私边界：标题点名名单，或正文实际发布名单。

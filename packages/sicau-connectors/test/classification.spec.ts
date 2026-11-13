@@ -1325,6 +1325,52 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(result.classification).toBe("non_competition");
     expect(result.exclusions).not.toContainEqual("applicant-list");
   });
+  // S1 回归：流程说明只能否定它自己那一句，不能把后面的真实名单表格一并豁免。
+  // 旧实现用 `if (listWorkflowPhrase.test(text)) return false` 全文否决，
+  // 只要正文任何一处出现「报送名单汇总表」，后面的姓名／学号表格就整体放行。
+  it.each([
+    ["流程句在名单表之前", ["请班长报送参赛名单汇总表。"]],
+    ["流程句在名单表之后", []],
+  ])("报送说明与真实名单表格并存时仍拦截：%s", (_label, prefix) => {
+    const body = [
+      ...prefix,
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+      "李四20260002",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it("流程句在名单表之后同样不豁免前面的真实名单", () => {
+    const body = [
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+      "请班长报送参赛名单汇总表。",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+  });
+  it.each([
+    ["只要求报送空表模板", ["请各班报送参赛名单汇总表（模板见附件）。"]],
+    ["名单汇总表后报送", ["参赛名单汇总表后报送至学院。"]],
+    ["报名说明要求报送", ["参赛同学须向班长报送参赛名单汇总表。"]],
+  ])("只要求报送名单表时不误拦：%s", (_label, body) => {
+    // 正向对照：修流程句豁免不能把「要求报送」本身也变成名单。
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(false);
+  });
+  it("提交报名信息不是名单对象", () => {
+    // `信息表?` 曾把「表」写成可选，使「提交报名信息」命中名单对象，
+    // 再配合联系方式段落里的数字被当成学号行，普通报名通知会被误拦。
+    const body = [
+      "全体同学需在平台报名参赛，准确、完整填写报名信息，并上传参赛材料。",
+      "学院党委办公室 张老师 QQ：2813548817",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(false);
+  });
   it("附件名单与普通报名表都不改变父通知的名单边界", () => {
     expect(
       classifyNotice(signupTitle, signupBody, ["参赛名单汇总表.xlsx"]),
