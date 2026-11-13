@@ -8,9 +8,8 @@ import {
   BoundedFetcher,
   defaultLimits,
   classifyNotice,
-  containsApplicantList,
-  containsPersonalNameList,
   parseCandidate,
+  publishesApplicantList,
 } from "@hehuoda/sicau-connectors/notices";
 import type { ParsedCandidate } from "./types.js";
 import { digestInput } from "./types.js";
@@ -159,10 +158,9 @@ export async function persistArticle(
     article.paragraphs,
     article.attachments.map((a) => a.title),
   );
-  if (
-    containsApplicantList([article.title, article.text].join("\n")) ||
-    containsPersonalNameList(article.title)
-  )
+  // 保存前再校验一次名单边界，且与分类器、runner 共用同一判据：
+  // 只拦下标题点名名单或正文实际发布名单的通知，不拦报名说明里的名单表。
+  if (publishesApplicantList(article.title, article.text))
     throw new Error("通知涉及个人名单，禁止保存正文与个人资料");
   if (classification.classification === "non_competition") {
     article = { ...article, text: "", paragraphs: [], attachments: [] };

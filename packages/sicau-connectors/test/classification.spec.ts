@@ -1,6 +1,8 @@
 import {
   classifyNotice,
+  containsApplicantList,
   parseEvidenceCandidate,
+  publishesApplicantList,
 } from "../dist/notices/index.js";
 import {
   positiveGroups,
@@ -1239,5 +1241,73 @@ describe("赛事分类独立于审核状态", () => {
       expect(
         classifyNotice("2026年数学竞赛结果公示", [body]).classification,
       ).toBe("non_competition");
+  });
+});
+
+// S1：分类器与 runner／store 必须共用同一份名单边界，否则报名说明在离线入口通过、
+// 在实际采集或保存入口仍被整条跳过/拒绝。
+describe("名单隐私边界在分类与实际采集保存入口一致", () => {
+  const signupTitle = "2026年数学竞赛报名通知";
+  const signupBody = [
+    "报名截止2026年11月20日。",
+    "参赛同学须向班长报送参赛名单汇总表。",
+  ];
+  it("报名说明里要求报送名单表不触发任何名单拦截", () => {
+    const classification = classifyNotice(signupTitle, signupBody);
+    expect(classification).toMatchObject({
+      classification: "definite",
+      notificationKind: "registration",
+    });
+    expect(classification.exclusions).not.toContainEqual("applicant-list");
+    // 实际入口此前调用全文 containsApplicantList，这里断言新判据不再误拦。
+    expect(publishesApplicantList(signupTitle, signupBody.join("\n"))).toBe(
+      false,
+    );
+    // 反向证明旧全文判据仍会命中，说明不能用「删掉判据」冒充修复。
+    expect(
+      containsApplicantList(signupTitle + "\n" + signupBody.join("\n")),
+    ).toBe(true);
+  });
+  it.each([
+    ["现公布参赛名单", "现公布参赛名单：张三、李四。"],
+    ["参赛名单公布如下", "参赛名单公布如下：张三、李四。"],
+    ["现将报名人员名单公示", "现将报名人员名单公示如下。"],
+    ["现公布报名学生名单", "现公布报名学生名单。"],
+    ["报名人员信息表", "报名人员信息表如下：张三 20230001。"],
+    ["名单表头接姓名", "参赛名单：张三、李四。"],
+  ])("正文真实发布名单仍按隐私排除：%s", (_label, body) => {
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    ["报名学生名单", "程序设计竞赛报名人员名单"],
+    ["拟评名单公示", "关于2025-2026学年度国家助学金拟评名单的公示"],
+    ["参赛学生名单", "2026年数学建模竞赛参赛学生名单"],
+  ])("标题名单仍按隐私排除：%s", (_label, title) => {
+    expect(classifyNotice(title, ["赛程安排见正文。"])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+    expect(publishesApplicantList(title, "赛程安排见正文。")).toBe(true);
+  });
+  it("获奖名单属于结果公示边界，不冒充个人名单拦截", () => {
+    // 输出仍然是 non_competition，但理由是结果公示而非 applicant-list；
+    // 两者不能混用，否则「把结果公示都当名单」会误伤正文留证。
+    const result = classifyNotice("2026年数学建模竞赛获奖名单", [
+      "赛程安排见正文。",
+    ]);
+    expect(result.classification).toBe("non_competition");
+    expect(result.exclusions).not.toContainEqual("applicant-list");
+  });
+  it("附件名单与普通报名表都不改变父通知的名单边界", () => {
+    expect(
+      classifyNotice(signupTitle, signupBody, ["参赛名单汇总表.xlsx"]),
+    ).toMatchObject({ classification: "definite" });
+    expect(
+      classifyNotice(signupTitle, signupBody, ["报名表.docx"]),
+    ).toMatchObject({ classification: "definite" });
   });
 });

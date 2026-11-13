@@ -712,4 +712,70 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         .count,
     ).toBe("1");
   });
+  it("报名说明要求报送名单表时，实际采集与保存入口都不再跳过或拒绝", async () => {
+    // 分类器已判 definite，但 runner 与 persistArticle 曾各自用全文名单判据拦截，
+    // 导致真实报名通知在进入修复入口前就被丢弃。这里走真实采集与保存链。
+    const signupBody = `<p>报名截止2026年11月20日。</p><p>参赛同学须向班长报送参赛名单汇总表。</p>`;
+    const signupHtml = informationArticle.replace(noticeBody, signupBody);
+    expect(
+      await runner([http(404), http(200, signupHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { new: 1, ignored: 0, failed: 0 },
+    });
+    const stored = await candidate();
+    expect(stored).toMatchObject({
+      classification: "definite",
+      status: "pending",
+    });
+    // 正文真实保存：报名通知不再因名单表而留成空正文。
+    const version = (
+      await db.pool.query(
+        "SELECT article,extracted FROM ingestion_versions ORDER BY revision DESC",
+      )
+    ).rows[0];
+    expect(version.article.text).toContain("报送参赛名单汇总表");
+    expect(version.extracted.classification.exclusions).not.toContainEqual(
+      "applicant-list",
+    );
+  });
+  it("正文真实发布名单时实际入口仍不保存正文、附件字节与原始响应", async () => {
+    const listBody = `<p>现将参赛名单公布如下：张三、李四、王五。</p>`;
+    const listHtml = informationArticle.replace(noticeBody, listBody);
+    expect(
+      await runner([http(404), http(200, listHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { ignored: 1, new: 0, failed: 0 },
+      errors: [
+        expect.objectContaining({ code: "applicant-list", kind: "skipped" }),
+      ],
+    });
+    expect(
+      (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
+        .count,
+    ).toBe("0");
+    // 直接调用持久化入口同样必须拒绝，不能只靠 runner 的前置校验。
+    const article = extractArticle(listHtml, url, source);
+    await expect(
+      persistArticle(
+        db.pool,
+        source,
+        url,
+        { ...http(200, listHtml), url, html: listHtml },
+        article,
+        parseCandidate(article, url, directory!),
+      ),
+    ).rejects.toThrow("个人名单");
+    expect(
+      (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
+        .count,
+    ).toBe("0");
+  });
 });

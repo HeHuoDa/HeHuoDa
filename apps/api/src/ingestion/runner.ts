@@ -10,8 +10,8 @@ import {
   extractArticle,
   extractList,
   isCompetitionNotice,
-  containsApplicantList,
   containsPersonalNameList,
+  publishesApplicantList,
   parseCandidate,
   classifyNotice,
   sourceById,
@@ -850,10 +850,9 @@ export class IngestionRunner {
               });
             // 名单类通知只跳过该条：隐私目标由「不保存正文」达成，中断整源会让同栏目
             // 的正常通知长期采不到——恢复会再次命中同一条，形成永久停摆。
-            if (
-              containsApplicantList(article.title + "\n" + article.text) ||
-              containsPersonalNameList(article.title)
-            ) {
+            // 判据与分类器共用 publishesApplicantList：报名说明里「报送参赛名单汇总表」
+            // 不是发布名单，不能让它在这里把真实报名通知整条跳过。
+            if (publishesApplicantList(article.title, article.text)) {
               await refreshSkippedNotice(item.url);
               counts.ignored++;
               errors.push({

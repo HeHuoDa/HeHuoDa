@@ -75,6 +75,45 @@ export const containsPersonalNameList = (title: string) =>
   /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|补贴|资助|补助|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
     title,
   );
+/** 名单对象：报名／参赛人员的名单、汇总表、信息表等逐条记录个人资料的材料。 */
+const applicantListObject =
+  /报名(?:者|人员|学生)?(?:名单|汇总表?|信息表?|明细|清单)|参赛(?:者|人员|学生)?(?:名单|明细|清单)/;
+/**
+ * 名单对象后紧跟公布动作（如下／公示／公布／见附件），或名单表头冒号后直接给姓名
+ * （「名单：张三、李四」）。「报送／填写／收齐参赛名单汇总表」只是报名流程，
+ * 没有公布动作，不构成发布名单。
+ */
+const listPublishedAfter = new RegExp(
+  `(?:${applicantListObject.source})[^。；\\n]{0,10}?(?:如下|公示|公布|公告|见附件|附后|附上)` +
+    `|(?:名单|明细|信息表|汇总表)[：:]\\s*[\\u4e00-\\u9fff]{2,4}(?:[、，,；;\\s]|$)`,
+);
+/** 公布动作在名单对象之前（「现公布参赛名单」）；「现将…名单报送」不属于公布。 */
+const listPublishedBefore = new RegExp(
+  `(?:现公布|现公示|现予公布|现予公示|予以公布|予以公示|现对[^。；\\n]{0,8}?(?:名单|明细))[^。；\\n]{0,8}?(?:${applicantListObject.source}|名单)`,
+);
+/**
+ * 正文是否在发布真实名单（逐条列人名），而不是在报名说明里要求报送名单表。
+ * 判据看公布动作的位置与形态，不看「名单」二字是否出现。
+ */
+export function bodyPublishesApplicantList(text: string): boolean {
+  return text
+    .split(/[。；;\n]/)
+    .some(
+      (clause) =>
+        listPublishedAfter.test(clause) || listPublishedBefore.test(clause),
+    );
+}
+/**
+ * 名单隐私边界：标题点名名单，或正文实际发布名单。
+ * 分类、采集与保存都使用这一份判据，避免只修其中一处导致离线与入库结论不一致。
+ */
+export function publishesApplicantList(title: string, body: string): boolean {
+  return (
+    containsApplicantList(title) ||
+    containsPersonalNameList(title) ||
+    bodyPublishesApplicantList(body)
+  );
+}
 export function extractList(
   html: string,
   url: string,
