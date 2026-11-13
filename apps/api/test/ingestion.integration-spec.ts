@@ -789,6 +789,47 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     expect(previews?.[0]?.candidate.fieldsV2?.name).toBe("");
     expect(previews?.[0]?.candidate.fieldsV2?.edition).toBeNull();
   });
+  it("非赛事通知裁剪正文后保存的候选仍不含比赛名称与届次", async () => {
+    // store 在非赛事分支会清空正文后再解析一次。只按标题重新分类时，
+    // 「…获奖新闻」这类标题会判回 suspected，比赛名与届次又被写进候选。
+    // runner 对这类标题有自己的跳过规则，因此这里直接验证持久化入口。
+    const title = "2026年程序设计竞赛获奖新闻";
+    const paragraphs = ["竞赛圆满结束，获奖名单见附件。"];
+    const article = {
+      title,
+      publishedAt: "2026-11-12",
+      text: paragraphs.join("\n"),
+      paragraphs,
+      attachments: [],
+    };
+    // 用独立 URL，避免读到同文件其他用例留下的候选行。
+    const noticeUrl = `https://${source.host}/info/1043/901.htm`;
+    const saved = await persistArticle(
+      db.pool,
+      source,
+      noticeUrl,
+      {
+        url: noticeUrl,
+        html: "",
+        body: new Uint8Array(),
+        status: 200,
+        headers: {},
+      },
+      article,
+      parseCandidate(article, noticeUrl, directory!),
+    );
+    expect(saved.action).toBe("new");
+    const stored = (
+      await db.pool.query("SELECT * FROM ingestion_candidates WHERE id=$1", [
+        saved.candidateId,
+      ])
+    ).rows[0];
+    expect(stored).toMatchObject({ classification: "non_competition" });
+    expect(stored.data.fields.name).toBe("");
+    expect(stored.data.fields.edition).toBeNull();
+    // 分类仍取自裁剪前的原文，不是裁剪后按标题重判的结果。
+    expect(stored.data.classification.classification).toBe("non_competition");
+  });
   it("正文真实发布名单时实际入口仍不保存正文、附件字节与原始响应", async () => {
     const listBody = `<p>现将参赛名单公布如下：张三、李四、王五。</p>`;
     const listHtml = informationArticle.replace(noticeBody, listBody);

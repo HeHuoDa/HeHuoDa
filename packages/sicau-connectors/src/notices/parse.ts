@@ -607,6 +607,25 @@ function isNonCompetition(article: Article) {
     : null;
 }
 
+/**
+ * 非赛事通知的候选基线：空比赛字段 + 说明，供各入口复用。
+ * `classification` 必须来自裁剪前的原文，不能由已裁剪的空正文重新推断。
+ */
+export function nonCompetitionCandidate(
+  classification: ParsedCandidate["classification"],
+): ParsedCandidate {
+  return {
+    classification,
+    fieldsContract: candidateFieldsContract,
+    fields: emptyCandidateFields("非赛事通知，不自动提取参赛范围"),
+    evidence: [],
+    fieldConflicts: [],
+    missing: [],
+    conflicts: [],
+    warnings: ["非赛事通知不自动生成比赛字段，原文仍可人工核对"],
+  };
+}
+
 export function parseCandidate(
   article: Article,
   url: string,
@@ -620,23 +639,22 @@ export function parseCandidate(
   notificationKind?: string,
   /** Paragraph gaps where consecutive text belongs to different sources; never joined. */
   sourceBarriers?: Set<number>,
+  /**
+   * 已知分类结果（来自裁剪前的原文）。store 在非赛事分支会先清空正文再解析，
+   * 只按标题重新分类可能把「…获奖新闻」判回 suspected 并再次生成比赛名，
+   * 因此这里允许调用方传入已确认的分类，禁止用裁剪后的正文反推。
+   */
+  knownClassification?: ParsedCandidate["classification"],
 ): ParsedCandidate {
   // 非赛事通知由标题／年份生成比赛名称或届次，是离线入口与入库入口不一致的根因：
   // runner 调 parseCandidate、store 裁剪正文后再次调它，两条真实路径都拿不到
   // classification。基线判据必须下沉到这里，用同一份分类规则，而不是让调用方
   // 各自记得先分类。标题与发布日期仍由调用方保存在通知元数据里。
-  const nonCompetition = isNonCompetition(article);
-  if (nonCompetition)
-    return {
-      classification: nonCompetition,
-      fieldsContract: candidateFieldsContract,
-      fields: emptyCandidateFields("非赛事通知，不自动提取参赛范围"),
-      evidence: [],
-      fieldConflicts: [],
-      missing: [],
-      conflicts: [],
-      warnings: ["非赛事通知不自动生成比赛字段，原文仍可人工核对"],
-    };
+  const nonCompetition =
+    knownClassification?.classification === "non_competition"
+      ? knownClassification
+      : isNonCompetition(article);
+  if (nonCompetition) return nonCompetitionCandidate(nonCompetition);
   const evidence: Evidence[] = [
     { field: "name", excerpt: article.title, paragraph: -1, url },
   ];

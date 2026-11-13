@@ -162,13 +162,15 @@ export async function persistArticle(
   // 只拦下标题点名名单或正文实际发布名单的通知，不拦报名说明里的名单表。
   if (publishesApplicantList(article.title, article.text))
     throw new Error("通知涉及个人名单，禁止保存正文与个人资料");
-  if (classification.classification === "non_competition") {
+  const nonCompetition = classification.classification === "non_competition";
+  if (nonCompetition) {
     article = { ...article, text: "", paragraphs: [], attachments: [] };
     response = { ...response, body: new Uint8Array(), html: "", headers: {} };
-    // 分类结果必须随候选一起持久化：通知种类唯一来源是 classification，
-    // 这里重新解析正文被裁剪后的文章，但分类仍取自裁剪前的原文。
+    // 非赛事候选必须走空比赛字段基线。不能相信调用方传入的 parsed：runner
+    // 传的是裁剪前解析的结果，里面仍带着由标题生成的比赛名与届次。
+    // 用裁剪后的文章 + 裁剪前已确认的分类重建，避免按空正文重新分类。
     parsed = {
-      ...parseCandidate(article, url, []),
+      ...parseCandidate(article, url, [], undefined, undefined, classification),
       classification,
     };
   }

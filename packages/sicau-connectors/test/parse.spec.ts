@@ -1121,6 +1121,38 @@ describe("候选领域解析", () => {
       // 原始标题与发布日期仍属于通知元数据，不被清空。
       expect(entries.runner.warnings.length).toBeGreaterThan(0);
     });
+    it("裁剪正文后再解析仍沿用裁剪前已确认的非赛事结论", () => {
+      // store 的非赛事分支先清空正文，再解析一次以写入候选。只按标题重新分类时
+      // 「…获奖新闻」会判回 suspected，于是又生成比赛名称与届次。
+      const title = "2026年程序设计竞赛获奖新闻";
+      const paragraphs = ["竞赛圆满结束，获奖名单见附件。"];
+      const classification = classifyNotice(title, paragraphs);
+      expect(classification.classification).toBe("non_competition");
+      const cropped: Article = {
+        title,
+        publishedAt: "2026-11-12",
+        text: "",
+        paragraphs: [],
+        attachments: [],
+      };
+      const stale = parseCandidate(cropped, url, directory);
+      // 仅凭标题会得到不同结论——这正是必须显式传入已确认分类的原因。
+      expect(stale.fields.name).not.toBe("");
+      const reused = parseCandidate(
+        cropped,
+        url,
+        directory,
+        undefined,
+        undefined,
+        classification,
+      );
+      expect(reused.fields.name).toBe("");
+      expect(reused.fields.edition).toBeNull();
+      expect(reused.classification).toEqual(classification);
+      expect(reused.warnings).toContain(
+        "非赛事通知不自动生成比赛字段，原文仍可人工核对",
+      );
+    });
     it("非赛事判定不吞掉正式赛事与非赛事项的保留语义", () => {
       for (const title of [
         "2026年数学竞赛报名通知",

@@ -5,6 +5,7 @@ import {
   classificationPriority,
   type Classification,
   parseEvidenceCandidate,
+  nonCompetitionCandidate,
   type Article,
   type ParsedCandidate,
   type RuleEvidenceInput,
@@ -74,16 +75,18 @@ export async function refreshExtraction(
   const snapshotClassification = (notice.extracted as ParsedCandidate | null)
     ?.classification;
   // 非赛事正文在首次入库前已裁剪；空快照不是一份推翻原判的新证据。
-  // 只在规则未变且没有附件新依据时保留同一来源版本的安全分类结果。
-  if (
+  // 该结论必须同时用于字段数据，而不只是覆盖 classification：parseEvidenceCandidate
+  // 拿到的是已裁剪的空正文，只能按标题重判，「…获奖新闻」会判回 suspected，
+  // 于是空比赛字段又退回带标题名称与届次的数据。
+  const keepSnapshotConclusion =
     !article.text &&
     !article.paragraphs.length &&
     !article.attachments.length &&
     !attachments.length &&
     snapshotClassification?.classification === "non_competition" &&
-    snapshotClassification.ruleVersion === ruleVersion
-  )
-    data.classification = snapshotClassification;
+    snapshotClassification.ruleVersion === ruleVersion;
+  if (keepSnapshotConclusion)
+    Object.assign(data, nonCompetitionCandidate(snapshotClassification));
   data.classification!.ruleVersion = ruleVersion;
   const prior = (
     await client.query(
