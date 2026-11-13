@@ -1333,6 +1333,30 @@ describe("候选领域解析", () => {
       expect(competitionName("关于举办的通知")).toBe("关于举办的通知");
       expect(competitionName("关于举办比赛的通知")).toBe("比赛");
     });
+    it("name 剥净裸关于前缀、报名的通知与副标题前的通知", () => {
+      // #206 阶段一：这三类标题在冻结诊断集中被判 unsupported——赛事名仍带
+      // 「关于」或「的通知」，看上去不像一个名字。剥离后余下部分必须仍含赛事词，
+      // 否则保留原文，避免把「关于做好…工作」削成事务残句。
+      const cases: [string, string][] = [
+        [
+          "关于第十六届食品学科专业技能大赛——“米+N”饮料产品创意设计大赛的通知",
+          "第十六届食品学科专业技能大赛——“米+N”饮料产品创意设计大赛",
+        ],
+        [
+          "关于食品学院第十五届食品学科专业竞赛决赛的通知 ——“米+N”饮料创意设计大赛",
+          "食品学院第十五届食品学科专业竞赛决赛——“米+N”饮料创意设计大赛",
+        ],
+        [
+          "关于第十七届蓝桥杯全国大学生软件和信息技术大赛报名的通知",
+          "第十七届蓝桥杯全国大学生软件和信息技术大赛",
+        ],
+        // 无赛事词的事务标题仍按纯剥离函数回退原文（由 parseCandidate 决定
+        // 是否拿它当赛事名预填）。
+        ["关于做好2027年导师选聘工作的通知", "关于做好2027年导师选聘工作的通知"],
+      ];
+      for (const [title, expected] of cases)
+        expect(competitionName(title)).toBe(expected);
+    });
     it("mode 保留原文，modeKind 只给可靠归一值", () => {
       const cases: [string, string, "individual" | "team" | "mixed" | null][] =
         [
@@ -1961,7 +1985,6 @@ describe("候选领域解析", () => {
 describe("阶段一七字段输出范围", () => {
   // #206 阶段一：候选只对七个字段给确定值，其余九个字段保持契约空值，
   // 不产生确定值、也不要求人工先清理。历史候选与正式记录不受影响。
-  const retained = ["name", "edition", "organizer", "members", "scope", "hosts", "tracks"];
   const retired = ["eventKind", "mode", "modeKind", "rules", "stageNames", "startsAt", "deadline", "materialsAt", "eventAt"];
   const evidenceArticle = article([
     "各学院、全体本科生：",
@@ -2025,6 +2048,30 @@ describe("阶段一七字段输出范围", () => {
     }
   });
 
+  it("标题没有赛事依据时不给赛事名与届次", () => {
+    // 冻结诊断集：疑似但标题只是事务、团务、评选或讲座的通知，gold 的 name
+    // 为 null；按标题切片预填会把「任免／转正公示／讲座」伪装成赛事名。
+    // 反向对照：标题含赛事词时照常预填，不能靠清空 name 通过。
+    const noEvidence: [string, string[]][] = [
+      ["关于做好2027年导师选聘工作的通知", ["经研究，现将有关事项通知如下。"]],
+      ["关于做好学院2026年下半年团员发展的通知", ["现将有关工作通知如下。"]],
+      ["农学院开展创新创业赛事专题讲座", ["讲座于2026年11月20日举行。"]],
+      ["关于开展管理学院2026-2027年度（上）团校精进班的通知", ["报名截止：2026年11月1日。"]],
+    ];
+    for (const [title, paragraphs] of noEvidence) {
+      const parsed = parseCandidate(article(paragraphs, title), url, directory);
+      expect(parsed.fields.name).toBe("");
+      expect(parsed.fields.edition).toBeNull();
+    }
+    const withEvidence = parseCandidate(
+      article(["经研究，现将有关事项通知如下：报名截止2026年11月1日。"], "关于举办2026年校园创新大赛的通知"),
+      url,
+      directory,
+    );
+    expect(withEvidence.fields.name).toBe("2026年校园创新大赛");
+    expect(withEvidence.fields.edition).toBe("2026");
+  });
+
   it("退役字段不再列为待补缺项，改为一条明确说明", () => {
     const parsed = parseCandidate(
       article(["经研究，决定举办校园创新大赛。", "全体本科生均可报名参赛。"], "关于举办校园创新大赛的通知"),
@@ -2071,4 +2118,5 @@ describe("阶段一七字段输出范围", () => {
     expect(parsed.fields.tracks).toEqual([]);
   });
 });
+
 

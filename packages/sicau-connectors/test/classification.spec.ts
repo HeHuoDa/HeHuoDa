@@ -2,7 +2,6 @@ import {
   classifyNotice,
   containsApplicantList,
   bodyPublishesApplicantList,
-  parseEvidenceCandidate,
   parseEvidenceCandidateUnscoped,
   publishesApplicantList,
 } from "../dist/notices/index.js";
@@ -1422,4 +1421,3 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
   });
 });
-

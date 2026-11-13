@@ -310,29 +310,78 @@ export function extractDates(text: string, year: string | null): TimeValue[] {
  * 「的通知／预通知」）。保留发文单位、年份届次、校内选拔赛与子赛道，避免把
  * 不同比赛合并成同名。剥离后为空或只剩套语时回退标题原文。
  */
-const noticeTitlePrefix = /^关于(?:举办|举行|开展|组织参加)/;
+const noticeTitlePrefix =
+  /^关于(?:举办|举行|开展|组织参加|组织)/;
+const bareAboutPrefix =
+  /^关于(?!(?:印发|转发|做好|报送|征求|评选|选聘|处理))/;
+/**
+ * 赛事词：只有标题自己点明赛事时，才从标题派生赛事名与届次。标题命中的是发布方
+ * 对通知性质的声明；「关于做好某工作」这类事务通知即使能剥出短句也不是赛事名。
+ */
+const competitionWordInName =
+  /竞赛|比赛|大赛|挑战杯|挑战赛|运动会|锦标赛|联赛|对抗赛|辩论赛|演讲比赛|技能赛|选拔赛|邀请赛|公开赛|擂台赛|互联网\s*\+/;
 /**
  * 发文单位前缀（「食品学院关于举办…」）只去掉「关于举办」，单位本身保留：
  * 单位是否为赛事名组成部分无法可靠区分，删掉可能把不同单位的同名赛事合并。
  */
 const issuingUnitPrefix = /^(.{2,30}?)关于(?:举办|举行|开展|组织参加)/;
 const noticeTitleSuffix =
-  /(?:的)?(?:报名通知|参赛通知|预通知|补充通知|变更通知|更正通知|通知)$/;
-export function competitionName(title: string): string {
-  const original = title.trim();
-  let value = original;
+  /(?:的)?(?:(?:报名|参赛)的?)?(?:预通知|补充通知|变更通知|更正通知|通知)$/;
+/**
+ * 副标题分隔符：标题形如「…决赛的通知 ——“米+N”…」时，「的通知」不在末尾，
+ * 上面的后缀正则碰不到。先按分隔符拆开，逐段剥套语，再用无分隔符拼接。
+ */
+const subtitleSeparator = /\s*(?:——|—|–|--)\s*/;
+
+/**
+ * 逐段剥离可确认的通知套语。allowBareAbout 由整个标题是否为
+ * 「关于{主题}的通知」框架决定：只有那时裸「关于」才确实属于套语，{主题}
+ * 就是赛事名；「关于印发数学竞赛规则」没有该框架，剥「关于」只会把动作主语
+ * 变成名字。
+ */
+function stripNoticeWording(segment: string, allowBareAbout: boolean): string {
+  let value = segment.trim();
+  value = value.replace(noticeTitleSuffix, "").trim();
   for (let round = 0; round < 3; round++) {
     const next = value
       // 有发文单位时只剥掉「关于举办」，单位保留。
       .replace(issuingUnitPrefix, "$1")
       .replace(noticeTitlePrefix, "")
-      .replace(noticeTitleSuffix, "")
       .trim();
     if (next === value) break;
     value = next;
   }
-  // 只剩套语或标点时不能用被清空的名称。
-  return value.replace(/[\s\p{P}\p{S}]/gu, "").length ? value : original;
+  if (allowBareAbout) value = value.replace(bareAboutPrefix, "").trim();
+  return value;
+}
+
+export function competitionName(title: string): string {
+  const original = title.trim();
+  // 整个标题是「关于…的通知」框架时才允许剥裸「关于」。副标题标题也可能以
+  // 「…决赛的通知 ——…」结尾，因此先按整个原文判定框架，再逐段剥离。
+  const aboutFrame =
+    /^关于/.test(original) && /(?:的)?(?:通知|报名)$/.test(original);
+  const segments = original
+    .split(subtitleSeparator)
+    .map((segment) =>
+      stripNoticeWording(
+        segment,
+        aboutFrame ||
+          (/^关于/.test(segment.trim()) &&
+            /(?:的)?(?:通知|报名)$/.test(segment.trim())),
+      ),
+    )
+    .filter((segment) => segment.replace(/[\s\p{P}\p{S}]/gu, "").length);
+  // 副标题用规范分隔符拼接，避免保留原文里通配的空格与破折号变体。
+  const value = segments.length
+    ? segments.length > 1
+      ? segments.join("——")
+      : segments[0]
+    : original;
+  // 剥完不含赛事词时回退原文：宁保留完整通知标题，也不让事务标题变成
+  // 看起来像赛事名的残句。
+  if (!competitionWordInName.test(value)) return original;
+  return value;
 }
 
 /**
@@ -869,14 +918,24 @@ export function parseCandidateUnscoped(
   // 「疑似」，此时按标题切片编出赛事名会把非赛事通知伪装成已抽取结果。
   // 届次同理——年份来自标题而正文为空时不足以确定届次。
   const titleOnly = article.text.trim().length === 0;
+  // 标题必须自己点明赛事，才从标题派生赛事名与届次。只有套语（「关于做好…工作」
+  // 「关于开展…培训」）时，切片结果不是赛事名；分类只能给「疑似」的通知会被
+  // 伪造成已抽取的赛事。正文可核对安排与 scope 等仍按正文照常提取。
+  const titleDeclaresCompetition = competitionWordInName.test(article.title);
   const fields: CandidateFields = {
     ...emptyCandidateFields(
       titleOnly ? "正文为空，仅凭标题不足以确定参赛范围" : "参赛范围待核对",
     ),
-    // 契约里 name 是非空字符串；空正文时留空串表示「未提取」，而不是回退标题
+    // 契约里 name 是非空字符串；无依据时留空串表示「未提取」，而不是回退标题
     // 原文——后者会让任免、转正公示、开题报告这类通知看起来已有赛事名。
-    name: titleOnly ? "" : competitionName(article.title),
-    edition: titleOnly ? null : years.length <= 1 ? titleYear : null,
+    name:
+      titleOnly || !titleDeclaresCompetition
+        ? ""
+        : competitionName(article.title),
+    edition:
+      titleOnly || !titleDeclaresCompetition || years.length > 1
+        ? null
+        : titleYear,
     eventKind: eventKind.value,
   };
   if (titleOnly)
@@ -1394,3 +1453,7 @@ export function parseCandidateUnscoped(
     warnings: [...new Set(warnings)],
   };
 }
+
+
+
+

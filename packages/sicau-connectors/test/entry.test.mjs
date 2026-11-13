@@ -81,9 +81,10 @@ test("构建入口独立完成已注册来源的公开正文抓取与候选解�
     assert.equal(candidate.fieldsContract, "candidate-fields-v2");
     assert.equal(candidate.fields.kind, undefined);
     assert.equal(candidate.fields.name, "2026年测试竞赛");
+    // #206 阶段一：报名截止属退役字段，取值保持未知，但正文与定位证据不隐藏。
     assert.deepEqual(candidate.fields.deadline, {
-      precision: "date",
-      value: "2026-10-20",
+      precision: "unknown",
+      value: null,
     });
     assert.equal(candidate.fields.scope.kind, "all");
     assert.ok(candidate.evidence.some((entry) => entry.field === "deadline"));
