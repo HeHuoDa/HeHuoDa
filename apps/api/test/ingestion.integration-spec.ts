@@ -742,6 +742,53 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
       "applicant-list",
     );
   });
+  it("非赛事通知在实际采集与保存链路都不生成比赛名称与届次", async () => {
+    // 证据入口早已返回空比赛字段，但 runner 调 parseCandidate、store 裁剪正文后
+    // 再次调它，两条实际路径仍会把标题当年比赛名称、把年份当届次。
+    // 正文须满足最小长度，否则会先按空正文拒绝，测不到分类分支。
+    const adminBody = `<p>请符合条件的同学于2026年11月20日前提交申请材料，学院统一汇总后报学生处。</p>`;
+    const adminTitle = "2026年优秀毕业生推荐通知";
+    const adminHtml = informationArticle
+      .replace("2026年测试竞赛报名通知", adminTitle)
+      .replace(noticeBody, adminBody);
+    expect(
+      await runner([http(404), http(200, adminHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({ status: "succeeded", counts: { new: 1, failed: 0 } });
+    const stored = await candidate();
+    expect(stored).toMatchObject({ classification: "non_competition" });
+    expect(stored.data.fields.name).toBe("");
+    expect(stored.data.fields.edition).toBeNull();
+    expect(stored.data.fields.scope).toMatchObject({
+      kind: "unknown",
+      colleges: [],
+    });
+    // 通知元数据保留：标题与发布日期仍在来源版本里，不被清空掩盖问题。
+    const version = (
+      await db.pool.query("SELECT article FROM ingestion_versions")
+    ).rows[0];
+    expect(version.article.title).toBe(adminTitle);
+    expect(version.article.publishedAt).toBe("2026-10-08");
+    // 正文按现行规则裁剪，原始响应不落库。
+    expect(version.article.text).toBe("");
+    // 预览路径与保存路径一致。
+    await db.pool.query("TRUNCATE ingestion_sources CASCADE");
+    await initializeSources(db.pool);
+    const preview = await runner([http(404), http(200, adminHtml)]).scan({
+      sourceId: source.id,
+      url,
+      preview: true,
+    });
+    expect(preview).toMatchObject({ status: "succeeded" });
+    // scan 的 previews 是 unknown[]（不导出内部预览类型）；这里按 HTTP 呈现形状读取。
+    const previews = preview.previews as
+      | { candidate: { fieldsV2?: { name: string; edition: string | null } } }[]
+      | undefined;
+    expect(previews?.[0]?.candidate.fieldsV2?.name).toBe("");
+    expect(previews?.[0]?.candidate.fieldsV2?.edition).toBeNull();
+  });
   it("正文真实发布名单时实际入口仍不保存正文、附件字节与原始响应", async () => {
     const listBody = `<p>现将参赛名单公布如下：张三、李四、王五。</p>`;
     const listHtml = informationArticle.replace(noticeBody, listBody);
