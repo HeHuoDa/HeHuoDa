@@ -114,6 +114,17 @@ export type CandidateFieldRow = {
 };
 
 /**
+ * 退役字段在管理端的统一说明。取值之所以是空，是本期范围决定，不是解析失败，
+ * 也不表示原文没有信息；原文证据仍在候选里，可据此人工填写正式记录。
+ */
+export const RETIRED_FIELD_HINT = "本期不自动提取，请按原文人工填写";
+const retiredHintRow = (label: string): CandidateFieldRow => ({
+  label,
+  value: "本期不自动提取",
+  hint: RETIRED_FIELD_HINT,
+});
+
+/**
  * 只读展示行：保留原文与归一说明，未知显式标注，不猜测、不补齐。
  * 返回值只用于展示，不回写审核材料，也不参与提交。
  */
@@ -126,20 +137,20 @@ export function candidateFieldRows(
       value: fields.name || "未提取",
       ...(fields.edition ? { hint: "届次：" + fields.edition } : {}),
     },
-    {
-      label: "赛事种类",
-      value: fields.eventKind ?? "未提取",
-      ...(fields.eventKind === null
-        ? { hint: "正文未显式标注赛事种类／项目类型，不以标题推断" }
-        : {}),
-    },
-    {
-      label: "参赛形式原文",
-      value: fields.mode ?? "未提取",
-      hint: fields.modeKind
-        ? "归一结果：" + modeKindLabels[fields.modeKind]
-        : "无法可靠归一，导入时须人工填写个人／团队／混合",
-    },
+    // 退役字段只要能读出值就照旧展示（历史候选、旧材料），否则用一条说明
+    // 告知本期不自动提取，而不伪装成「正文未提供」。
+    fields.eventKind
+      ? { label: "赛事种类", value: fields.eventKind }
+      : retiredHintRow("赛事种类"),
+    fields.mode
+      ? {
+          label: "参赛形式原文",
+          value: fields.mode,
+          ...(fields.modeKind
+            ? { hint: "归一结果：" + modeKindLabels[fields.modeKind] }
+            : { hint: "无法可靠归一，导入时须人工填写个人／团队／混合" }),
+        }
+      : retiredHintRow("参赛形式"),
     {
       label: "参赛范围",
       value:
@@ -173,6 +184,20 @@ export function candidateFieldRows(
     },
     "",
   );
+  // 只对确实没有取值的情况补说明，已有历史取值已由 pushOptionalRows 展示。
+  if (!fields.rules.length) rows.push(retiredHintRow("参赛规则"));
+  if (!fields.stageNames.length) rows.push(retiredHintRow("赛段名称"));
+  const knownTimes = CANDIDATE_TIME_LABELS.filter(
+    ([key]) => fields[key]?.precision !== "unknown",
+  );
+  if (!knownTimes.length) rows.push(retiredHintRow("报名／材料／比赛时间"));
+  else
+    for (const [key, label] of knownTimes)
+      rows.push({
+        label,
+        value: String(fields[key].value),
+        hint: fields[key].precision,
+      });
   return rows;
 }
 

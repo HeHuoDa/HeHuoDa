@@ -116,6 +116,12 @@ const conflicts = computed(() =>
         候选范围四值（all/specified/other/unknown）与正式比赛范围
         （all/colleges/complex/unknown）是不同枚举；导入映射由后端完成，界面不猜测。
       </p>
+      <p class="field-help" role="status">
+        #206
+        阶段一：赛事种类、参赛形式、规则、赛段名称与四类时间本期不自动提取，
+        候选里对应取值为空是范围定义，不是正文缺信息或解析失败。原文与附件定位证据
+        仍保留在上方，请据此在下方正式记录里人工填写。
+      </p>
       <dl class="console-details">
         <template v-for="[key, label] in times" :key="key">
           <dt>{{ label }}</dt>

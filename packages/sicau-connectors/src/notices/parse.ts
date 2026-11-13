@@ -310,10 +310,8 @@ export function extractDates(text: string, year: string | null): TimeValue[] {
  * 「的通知／预通知」）。保留发文单位、年份届次、校内选拔赛与子赛道，避免把
  * 不同比赛合并成同名。剥离后为空或只剩套语时回退标题原文。
  */
-const noticeTitlePrefix =
-  /^关于(?:举办|举行|开展|组织参加|组织)/;
-const bareAboutPrefix =
-  /^关于(?!(?:印发|转发|做好|报送|征求|评选|选聘|处理))/;
+const noticeTitlePrefix = /^关于(?:举办|举行|开展|组织参加|组织)/;
+const bareAboutPrefix = /^关于(?!(?:印发|转发|做好|报送|征求|评选|选聘|处理))/;
 /**
  * 赛事词：只有标题自己点明赛事时，才从标题派生赛事名与届次。标题命中的是发布方
  * 对通知性质的声明；「关于做好某工作」这类事务通知即使能剥出短句也不是赛事名。
@@ -1453,7 +1451,3 @@ export function parseCandidateUnscoped(
     warnings: [...new Set(warnings)],
   };
 }
-
-
-
-

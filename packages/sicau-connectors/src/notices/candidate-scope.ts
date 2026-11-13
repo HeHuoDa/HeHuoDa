@@ -68,7 +68,10 @@ const evidenceFieldRoot = (field: string) => field.split(".")[0] ?? field;
 const retiredSet = new Set<string>(retiredCandidateFields);
 
 /** 契约统一的「未知时间」值；候选收敛与解析共用同一份字面量。 */
-export const unknownTime = (): TimeValue => ({ precision: "unknown", value: null });
+export const unknownTime = (): TimeValue => ({
+  precision: "unknown",
+  value: null,
+});
 
 export function isRetiredCandidateField(field: string): boolean {
   return retiredSet.has(evidenceFieldRoot(field));

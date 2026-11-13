@@ -24,6 +24,25 @@ async function setup(file: ReviewInput, noticeId = "notice-1") {
 }
 
 describe("候选证据展示", () => {
+  it("退役字段在候选里为空时说明本期不自动提取", async () => {
+    const file = toReviewDraft(reviewExamples[0]!.material);
+    file.candidate.fieldsV2 = {
+      ...file.candidate.fieldsV2!,
+      eventKind: null,
+      mode: null,
+      modeKind: null,
+      rules: [],
+      stageNames: [],
+    };
+    const wrapper = await setup(file);
+    const text = wrapper.text();
+    // 退役字段不能读作「正文没有」或「解析失败」，也不能要求逐项清理。
+    expect(text).toContain("本期不自动提取");
+    expect(text).toContain("#206 阶段一");
+    expect(text).toContain("原文与附件定位证据");
+    wrapper.unmount();
+  });
+
   it("新契约候选分别展示通知种类与赛事种类", async () => {
     const file = toReviewDraft(reviewExamples[0]!.material);
     file.candidate.classification = {

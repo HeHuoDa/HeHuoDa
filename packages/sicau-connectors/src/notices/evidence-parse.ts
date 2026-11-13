@@ -36,7 +36,14 @@ export function parseEvidenceCandidate(
   attachments: RuleEvidenceInput[] = [],
 ): ParsedCandidate {
   return applyCandidateScope(
-    buildEvidenceCandidate(article, url, directory, noticeVersion, attachments, false),
+    buildEvidenceCandidate(
+      article,
+      url,
+      directory,
+      noticeVersion,
+      attachments,
+      false,
+    ),
   );
 }
 
