@@ -1,6 +1,7 @@
 import {
   classifyNotice,
   containsApplicantList,
+  bodyPublishesApplicantList,
   parseEvidenceCandidate,
   publishesApplicantList,
 } from "../dist/notices/index.js";
@@ -1378,5 +1379,45 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(
       classifyNotice(signupTitle, signupBody, ["报名表.docx"]),
     ).toMatchObject({ classification: "definite" });
+  });
+
+  // S2 回归（#206 新阶段一已确认缺陷）：括注里的公布动作同样是公布。
+  // `listPublishedAfter` 曾用 `[^。；\n（）()]{0,10}?` 把括号整体排除在间隔外，
+  // 于是「参赛名单（公布如下）：张三、李四」里名单对象与公布动作之间隔着左括号，
+  // 名单段永远不会开启，真实名单会被当作普通报名说明放行。
+  it.each([
+    ["参赛名单（公布如下）", "参赛名单（公布如下）：张三、李四。"],
+    ["报名人员信息表（如下）", "报名人员信息表（如下）：张三、李四。"],
+    ["参赛名单汇总表（公示）", "参赛名单汇总表（公示）：张三、李四。"],
+  ])("括号里的公布动作同样拦截真实名单：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+
+  it("空表模板引用不因允许括号公布而误拦", () => {
+    // 正向对照：允许跨过括号读公布动作，不等于把「模板见附件」当成公布。
+    for (const body of [
+      "请各班报送参赛名单汇总表（模板见附件）。",
+      "请各班报送参赛名单汇总表（见附件模板）。",
+      "参赛名单汇总表（空表）随本通知下发，请于11月20日前报送。",
+    ]) {
+      expect(bodyPublishesApplicantList(body)).toBe(false);
+      expect(publishesApplicantList(signupTitle, body)).toBe(false);
+    }
+  });
+
+  it("报送空表后又列出真实姓名时仍按名单拦截", () => {
+    // 流程句只抵消它自己那一句；同一篇后文列出姓名／学号仍构成名单正文。
+    const body = [
+      "请各班报送参赛名单汇总表（模板见附件）。",
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
   });
 });
