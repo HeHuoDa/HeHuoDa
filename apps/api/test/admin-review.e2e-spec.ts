@@ -1087,12 +1087,17 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(detail.candidate.fields).toMatchObject({
       materialsAt: { precision: "unknown", value: null },
     });
-    // 置未知的同时必须说明原因，便于人工复核。
+    // 材料时间本期退役：不再要求按字段清理，只留一条统一的未提取说明。
     expect(
       detail.candidate.conflicts.filter((conflict: string) =>
         conflict.startsWith("materialsAt"),
       ).length,
-    ).toBeGreaterThan(0);
+    ).toBe(0);
+    expect(
+      detail.candidate.warnings.some((warning: string) =>
+        warning.includes("本期不自动提取"),
+      ),
+    ).toBe(true);
     // 原文仍可核对，不因置未知而丢失证据。
     expect(
       detail.candidate.evidence
