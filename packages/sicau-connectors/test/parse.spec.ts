@@ -1135,9 +1135,23 @@ describe("候选领域解析", () => {
         paragraphs: [],
         attachments: [],
       };
+      // 空正文时无论是否传分类都不再按标题编赛事名（标题不足以证明是赛事）。
+      // 但两者区别仍在：不传分类时结果不带已确认分类，调用方无法据此判定非赛事。
       const stale = parseCandidate(cropped, url, directory);
-      // 仅凭标题会得到不同结论——这正是必须显式传入已确认分类的原因。
-      expect(stale.fields.name).not.toBe("");
+      expect(stale.fields.name).toBe("");
+      expect(stale.classification).toBeUndefined();
+      // 有正文时 parseCandidate 会自行分类并返回结论；空正文时它分类不出
+      // non_competition，这正是 store 必须把裁剪前的分类显式传下来的原因。
+      const withBody: Article = {
+        title,
+        publishedAt: "2026-11-12",
+        text: paragraphs.join("\n"),
+        paragraphs,
+        attachments: [],
+      };
+      expect(
+        parseCandidate(withBody, url, directory).classification?.classification,
+      ).toBe("non_competition");
       const reused = parseCandidate(cropped, url, directory, {
         classification,
       });
@@ -1147,6 +1161,36 @@ describe("候选领域解析", () => {
       expect(reused.warnings).toContain(
         "非赛事通知不自动生成比赛字段，原文仍可人工核对",
       );
+    });
+    it("正文为空时不按标题生成赛事名与届次", () => {
+      // 离线证据包可能只有标题（正文抽取为空）。此时标题里的「关于…的通知」
+      // 既可能是赛事，也可能是任免、转正公示、开题报告；分类只能给「疑似」，
+      // 按标题切片编出赛事名会把非赛事通知伪装成已抽取结果。
+      // 换一个仅凭标题只能判「疑似」的教务通知：真正非赛事的标题已被分类
+      // 阶段拦下并走 nonCompetitionCandidate，这条覆盖分类未拦住的空正文路径。
+      const empty: Article = {
+        title:
+          "生命科学学院关于开展2026年全日制本科生创新创业实践成果替代毕业论文（设计）工作的通知",
+        publishedAt: "2026-10-20",
+        text: "",
+        paragraphs: [],
+        attachments: [],
+      };
+      const parsed = parseCandidate(empty, url, directory);
+      expect(parsed.fields.name).toBe("");
+      expect(parsed.fields.edition).toBeNull();
+      expect(parsed.fields.scope.kind).toBe("unknown");
+      expect(parsed.warnings).toContain(
+        "正文为空，只有标题：不按标题生成赛事名与届次，原文仍可人工核对",
+      );
+      // 有正文时标题才参与命名，正常赛事通知不受影响。
+      expect(
+        parseCandidate(
+          article(["报名截止2026年10月20日。"], "关于举办数学竞赛的通知"),
+          url,
+          directory,
+        ).fields.name,
+      ).toBe("数学竞赛");
     });
     it("非赛事判定不吞掉正式赛事与非赛事项的保留语义", () => {
       for (const title of [
@@ -1277,9 +1321,9 @@ describe("候选领域解析", () => {
         ],
       ];
       for (const [title, expected] of cases)
-        expect(
-          parseCandidate(article([], title), url, directory).fields.name,
-        ).toBe(expected);
+        // 剥离规则本身直接验证 competitionName：空正文时 parseCandidate 不再
+        // 按标题生成赛事名（仅有标题不足以证明是赛事），经它验证会混淆两件事。
+        expect(competitionName(title)).toBe(expected);
     });
     it("name 剥离后为空回退标题原文", () => {
       // 纯解析层验证套语剥离的回退，不经分类：无赛事依据的标题现在按非赛事
@@ -1415,11 +1459,9 @@ describe("候选领域解析", () => {
         ["关于印发数学竞赛规则的通知", "关于印发数学竞赛规则"],
         ["理学院就举办数学竞赛的通知", "理学院就举办数学竞赛"],
         ["关于举办数学竞赛遴选通知", "数学竞赛遴选"],
-      ]) {
-        expect(
-          parseCandidate(article([], title), url, directory).fields.name,
-        ).toBe(expected);
-      }
+      ])
+        // 同上：只验证剥离边界，不依赖空正文时是否产出 name。
+        expect(competitionName(title)).toBe(expected);
     });
     it("人数、教师和组队范围限制不否定已允许的参赛形式", () => {
       const cases = [

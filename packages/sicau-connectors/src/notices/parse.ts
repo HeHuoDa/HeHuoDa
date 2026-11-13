@@ -843,12 +843,25 @@ export function parseCandidate(
       "年份冲突：" + years.join("、") + "；须区分届次、赛段和引用年份",
     );
   const eventKind = competitionKind(article.paragraphs);
+  // 只有标题、没有可读正文时，标题不构成赛事名依据：标题里「关于…的通知」
+  // 这类套语既可能是赛事也可能是任免、转正公示、开题报告。分类只能给出
+  // 「疑似」，此时按标题切片编出赛事名会把非赛事通知伪装成已抽取结果。
+  // 届次同理——年份来自标题而正文为空时不足以确定届次。
+  const titleOnly = article.text.trim().length === 0;
   const fields: CandidateFields = {
-    ...emptyCandidateFields("参赛范围待核对"),
-    name: competitionName(article.title),
-    edition: years.length <= 1 ? titleYear : null,
+    ...emptyCandidateFields(
+      titleOnly ? "正文为空，仅凭标题不足以确定参赛范围" : "参赛范围待核对",
+    ),
+    // 契约里 name 是非空字符串；空正文时留空串表示「未提取」，而不是回退标题
+    // 原文——后者会让任免、转正公示、开题报告这类通知看起来已有赛事名。
+    name: titleOnly ? "" : competitionName(article.title),
+    edition: titleOnly ? null : years.length <= 1 ? titleYear : null,
     eventKind: eventKind.value,
   };
+  if (titleOnly)
+    warnings.push(
+      "正文为空，只有标题：不按标题生成赛事名与届次，原文仍可人工核对",
+    );
   if (eventKind.value)
     evidence.push({
       field: "eventKind",
