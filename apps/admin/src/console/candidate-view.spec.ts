@@ -227,9 +227,7 @@ describe("候选字段 v2 展示适配", () => {
     expect(trackRow?.value).not.toContain("无法可靠归一");
     expect(trackRow?.hint).toContain("按原文人工填写");
     // 空值不生成空规则行，也不伪造成「无规则」。
-    expect(rows.some((row) => row.label === "赛道规则：综合赛道")).toBe(
-      false,
-    );
+    expect(rows.some((row) => row.label === "赛道规则：综合赛道")).toBe(false);
   });
 
   it("历史赛道已有形式与规则时仍展示真实值", () => {
