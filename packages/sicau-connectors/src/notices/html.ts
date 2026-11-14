@@ -145,8 +145,11 @@ const inlineExplanationWords = `比赛说明|填表说明|详情`;
 const inlineExplanation = `(?:${inlineExplanationWords})\\s*[）)]`;
 const listInlineInParentheses = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
-    `(?:${listInlineAttachmentReference}` +
-    `|(?!(?:${inlineNonNameWords}|${inlineExplanation}))(?:${listInlineNames}))\\s*[）)]`,
+    `(?!(?:${inlineNonNameWords}|${inlineExplanation}))(?:${listInlineNames})\\s*[）)]`,
+);
+const listInlineAttachmentInParentheses = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*${listInlineAttachmentReference}\\s*[）)]`,
+  "g",
 );
 /**
  * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
@@ -200,10 +203,26 @@ const listObjectThenColon = new RegExp(
  * 报名流程动词只与名单对象相邻时才算「要求报送」。整段任何位置出现报送都豁免，
  * 会把「现将名单公布如下：张三…请各班报送材料」这类真名单误放行。
  */
+const listWorkflowAction = `报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至`;
 const listWorkflowPhrase = new RegExp(
-  `(?:${applicantListObject.source})[^。；\\n]{0,6}?(?:报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至)` +
-    `|(?:报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至)[^。；\\n]{0,6}?(?:${applicantListObject.source})`,
+  `(?:${applicantListObject.source})[^。；\\n]{0,6}?(?:${listWorkflowAction})` +
+    `|(?:${listWorkflowAction})[^。；\\n]{0,6}?(?:${applicantListObject.source})`,
 );
+const listWorkflowBefore = new RegExp(
+  `(?:${listWorkflowAction})[^。；\\n]{0,6}$`,
+);
+function publishesInlineAttachment(part: string): boolean {
+  return [...part.matchAll(listInlineAttachmentInParentheses)].some((match) => {
+    const before = part.slice(0, match.index);
+    const after = part.slice(match.index + match[0].length);
+    if (listWorkflowBefore.test(before)) return false;
+    // 后置动作只有在后文没有另一个名单对象时才可能属于当前对象。
+    return (
+      applicantListObject.test(after) ||
+      !listWorkflowPhrase.test(match[0] + after)
+    );
+  });
+}
 /**
  * 正文是否在发布真实名单（逐条列人名），而不是在报名说明里要求报送名单表。
  * 三种形态都算发布：公布动作句、名单表头后跟姓名，以及表格被拆行后
@@ -219,12 +238,13 @@ export function bodyPublishesApplicantList(text: string): boolean {
       (clause) =>
         listPublishedAfter.test(clause) ||
         listPublishedBefore.test(clause) ||
-        // 括注里直接列名或指向名单附件也是发布；但「报送…汇总表（见附件）」
-        // 这类报名流程句只是在要求提交表样，不能在这里拦截。
-        ((listInlineInParentheses.test(clause) ||
-          listExplanationThenName.test(clause) ||
-          listTemplateThenNames.test(clause)) &&
-          !listWorkflowPhrase.test(clause)),
+        // 已列姓名不能被同句其他名单对象的报送动作豁免。
+        listInlineInParentheses.test(clause) ||
+        listExplanationThenName.test(clause) ||
+        listTemplateThenNames.test(clause) ||
+        // 只有附件引用需要区别“公布名单”与“要求提交表样”；流程词只作用于
+        // 当前逗号分句，不能让后面另一份报名表豁免前面的名单引用。
+        clause.split(/[，,]/).some(publishesInlineAttachment),
     )
   )
     return true;

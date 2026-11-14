@@ -1,6 +1,6 @@
 import { publishesApplicantList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-22";
+export const noticeRuleVersion = "competition-rules-23";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;

@@ -830,8 +830,12 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
     // 分类仍取自裁剪前的原文，不是裁剪后按标题重判的结果。
     expect(stored.data.classification.classification).toBe("non_competition");
   });
-  it("正文真实发布名单时实际入口仍不保存正文、附件字节与原始响应", async () => {
-    const listBody = `<p>现将参赛名单公布如下：张三、李四、王五。</p>`;
+  it.each([
+    "现将参赛名单公布如下：张三、李四、王五。",
+    "参赛名单（张三、李四），请提交报名人员信息表。",
+    "参赛名单（张三），请提交报名人员信息表。",
+  ])("真实名单不因后续流程说明被保存：%s", async (body) => {
+    const listBody = `<p>${body}</p>`;
     const listHtml = informationArticle.replace(noticeBody, listBody);
     expect(
       await runner([http(404), http(200, listHtml)]).scan({
