@@ -2261,4 +2261,24 @@ describe("阶段一七字段输出范围", () => {
     // 反向对照：没有并列子类时，普通人数写明照常提取。
     expect(picks(["本次比赛以团队形式参赛，每队3至5人。"])).toContain("3");
   });
+
+  it("限定词修饰的承办单位（校赛／院赛／校内）仍识别为承办单位", () => {
+    // 已确认缺陷：「校赛承办单位：艺术与传媒学院」比比赛本身窄一层，
+    // 但仍是该通知的承办单位，不能因为多了「校赛」限定就丢掉。
+    for (const label of ["校赛承办单位", "院赛承办单位", "校内承办单位"]) {
+      const parsed = parseCandidate(
+        article(["参赛对象：全校研究生均可参加。", `${label}：理学院`]),
+        url,
+        directory,
+      );
+      expect(parsed.fields.hosts).toContain("science");
+    }
+    // 反向对照：指导单位不是承办单位，不得计入 hosts。
+    const guided = parseCandidate(
+      article(["参赛对象：全校研究生均可参加。", "校赛指导单位：研究生院"]),
+      url,
+      directory,
+    );
+    expect(guided.fields.hosts).toEqual([]);
+  });
 });

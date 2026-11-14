@@ -1150,7 +1150,10 @@ export function parseCandidateUnscoped(
         paragraph.includes(college.name) &&
         (new RegExp(college.name + "[^。；]{0,20}承办").test(paragraph) ||
           new RegExp(
-            "承办(?:单位)?[：:]\\s*(?:四川农业大学)?" + college.name,
+            // 「校赛承办单位：…」「院内承办单位：…」比比赛本身窄一层，
+            // 仍是该通知的承办单位；限定词不得让承办标签失效。
+            "(?:[^。；：:，,]{0,6})?承办(?:单位)?[：:]\\s*(?:四川农业大学)?" +
+              college.name,
           ).test(paragraph))
       ) {
         if (!fields.hosts.includes(college.id)) fields.hosts.push(college.id);
