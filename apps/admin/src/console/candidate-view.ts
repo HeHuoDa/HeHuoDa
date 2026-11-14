@@ -296,6 +296,9 @@ function pushOptionalRows(
   suffix: string,
   trackModeFallback: string,
 ): void {
+  // 赛道形式的回退值随契约变化：本期只提取名称，旧材料为空是真未提取。
+  // 回退值与提示必须同源，否则会出现「本期只提取名称」配「无法可靠归一」这种自相矛盾的展示。
+  const isScopedFallback = trackModeFallback === TRACK_NAME_ONLY_VALUE;
   if (source.organizer)
     rows.push({ label: "组织单位" + suffix, value: source.organizer });
   if (source.edition)
@@ -317,7 +320,9 @@ function pushOptionalRows(
         ? track.members
           ? "人数：" + track.members
           : undefined
-        : TRACK_NAME_ONLY_HINT,
+        : isScopedFallback
+          ? TRACK_NAME_ONLY_HINT
+          : "旧材料未给出参赛形式，请按原文人工核对",
     });
     // 赛道规则可能含否定与例外条款（如「不得提交已获奖作品」），必须原样保留。
     if (track.rules?.trim())
