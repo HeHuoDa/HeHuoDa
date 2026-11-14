@@ -125,9 +125,10 @@ export const RETIRED_FIELD_HINT = "本期不自动提取，请按原文人工填
 export const TRACK_NAME_ONLY_HINT =
   "本期只自动提取赛道名称，参赛形式、人数与规则请按原文人工填写";
 const TRACK_NAME_ONLY_VALUE = "本期只提取赛道名称";
+// 值列留空占位：本期范围决定没有自动取值，说明只写一次，避免与提示列重复。
 const retiredHintRow = (label: string): CandidateFieldRow => ({
   label,
-  value: "本期不自动提取",
+  value: "—",
   hint: RETIRED_FIELD_HINT,
 });
 

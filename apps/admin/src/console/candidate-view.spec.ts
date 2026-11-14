@@ -95,7 +95,7 @@ describe("候选字段 v2 展示适配", () => {
       expect.arrayContaining([
         expect.objectContaining({
           label: "赛事种类",
-          value: "本期不自动提取",
+          value: "—",
         }),
       ]),
     );
@@ -110,7 +110,7 @@ describe("候选字段 v2 展示适配", () => {
         expect.arrayContaining([
           expect.objectContaining({
             label,
-            value: "本期不自动提取",
+            value: "—",
             hint: "本期不自动提取，请按原文人工填写",
           }),
         ]),
@@ -140,7 +140,7 @@ describe("候选字段 v2 展示适配", () => {
         .filter((row) =>
           ["参赛规则", "赛段名称", "报名／材料／比赛时间"].includes(row.label),
         )
-        .some((row) => row.value === "本期不自动提取"),
+        .some((row) => row.value === "—"),
     ).toBe(false);
   });
 
