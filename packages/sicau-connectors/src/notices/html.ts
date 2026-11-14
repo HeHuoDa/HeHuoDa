@@ -119,18 +119,31 @@ const listPublishedBefore = new RegExp(
  */
 // 「（见附件）」的序号形式（「见附件1」）也是指向名单附件，不能只认紧贴右括号的写法。
 const listInlineAttachmentReference = `(?:见附件|附后|附上)\\s*\\d*`;
-/** 「1 张三 2 李四」里的「序号 + 姓名」单项；序号可有可无，姓名间允许空格。 */
-const serializedName = `(?:\\d{1,3}\\s*[、.．:：]?\\s*)?[\\u4e00-\\u9fff]{2,4}`;
 /**
- * 括注里的姓名串：至少两个姓名，用顿号／逗号／分号分隔，或「序号 + 姓名」空格并列。
- * 只接受列举形态，否则「（如需下载）」「（材料具体要求）」这类普通括注会被误当名单。
+ * 括注里的姓名串：用顿号／逗号／分号分隔的姓名列举，或「序号 + 姓名」空格并列。
+ * 单个姓名（「（张三）」）也算把名字写在了名单对象旁边，必须拦截：
+ * 漏掉它等于公开了真实姓名，收紧侧的成本远高于「（如需下载）」这类误拦。
+ * 普通括注由「2–4 个汉字整段且不含列举分隔符」无法区分，因此改用下列否定清单：
+ * 以说明词开头或结尾的括注是材料说明、下载说明或表样说明，不是姓名。
  */
-const listInlineNames =
-  `${serializedName}(?:\\s*[、，,；;]\\s*(?:\\d{1,3}\\s*[、.．:：]?\\s*)?[\\u4e00-\\u9fff]{2,4})+` +
-  `|${serializedName}(?:\\s+\\d{1,3}\\s*[、.．:：]?\\s+[\\u4e00-\\u9fff]{2,4})+`;
+const inlineOrdinal = `(?:\\d{1,3}\\s*[、.．:：]?\\s*)?`;
+const inlineName = `[\\u4e00-\\u9fff]{2,4}`;
+/** 分隔符列举：`张三、李四` / `1、张三、2、李四`。 */
+const inlineDelimitedNames = `${inlineOrdinal}${inlineName}(?:\\s*[、，,；;]\\s*${inlineOrdinal}${inlineName})+`;
+/** 空格并列：`1 张三 2 李四`。 */
+const inlineSpacedNames = `${inlineOrdinal}${inlineName}(?:\\s+${inlineOrdinal}${inlineName})+`;
+/** 单个姓名：`（张三）`。单独一个名字写在名单对象旁边同样是发布。 */
+const inlineSingleName = `${inlineOrdinal}${inlineName}`;
+const listInlineNames = `${inlineDelimitedNames}|${inlineSpacedNames}|${inlineSingleName}`;
+/**
+ * 不算姓名的括注：以说明词开头／结尾，或本身是表样／附件引用。
+ * 用否定清单而不是「必须两个以上姓名」，否则单名名单会被放行。
+ */
+const inlineNonNameWords = `如需|下载|见附件|附后|附上|已附|材料|要求|具体|详见|请联系|联系电话|咨询|注意|说明|填空|填写|格式|样式|排版|命名|清单如下|如下|另见|另附|参见|点击|扫码|附件`;
 const listInlineInParentheses = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
-    `(?:${listInlineAttachmentReference}|${listInlineNames})\\s*[）)]`,
+    `(?:${listInlineAttachmentReference}` +
+    `|(?!(?:${inlineNonNameWords}))(?:${listInlineNames}))\\s*[）)]`,
 );
 /**
  * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
@@ -142,22 +155,29 @@ const listTemplateThenNames = new RegExp(
     `[\\u4e00-\\u9fff]{2,4}(?:\\s*[、，,]\\s*[\\u4e00-\\u9fff]{2,4})+`,
 );
 /**
- * 表头尾注（「参赛名单（共2人）」「参赛名单（排名不分先后）」）不改变它仍是表头，
- * 但尾注必须是明确的名单说明。「（附件4）」这类纯附件号不是尾注，否则
- * 「班级参赛名单汇总表（附件4）」会被当成表头，再把后面的邮箱数字误读成学号。
+ * 表头尾注（「参赛名单（共2人）」「参赛名单（排名不分先后）」）不改变它仍是表头。
+ * 括注里出现附件号（「班级参赛名单汇总表（附件4）」）同样只是指向附件，仍是表头；
+ * 真正的排队项列举（「参赛材料：报告、名单汇总表（附件4）」）由下面两处保证不误判：
+ * 名单对象前后不得有顿号串接同类材料，尾注本身也不得包含枚举分隔符。
  */
-const listHeadingTrailer = `(?:\\s*[（(](?:共\\s*\\d+\\s*[人名]|排名不分先后|见附件\\s*\\d*|如下|附后)[）)])?`;
+const listHeadingTrailer = `(?:\\s*[（(][^，,。；;）)\\n]{0,16}[）)])?`;
+const listHeadingPrefix = `[^，,。；;、\\n]{0,20}`;
 const bareListHeading = new RegExp(
   `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?(?:${applicantListObject.source})${listHeadingTrailer}$`,
 );
 /** 「附件1：参赛人员名单」「参赛名单汇总表.xlsx」这类以名单对象结尾的短标题行。 */
 const namedListHeading = new RegExp(
-  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?[^，,。；;\\n]{0,20}${applicantListObject.source}${listHeadingTrailer}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?${listHeadingPrefix}${applicantListObject.source}${listHeadingTrailer}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
 );
 /** 姓名＋学号／姓名＋序号一类的表格数据行（表格被拆成独立段落时逐行出现）。 */
 const rosterRow =
   /^\s*(?:\d{1,3}\s*[、.．:：]?\s*)?(?:[\u4e00-\u9fff]{2,4})(?:\s|[\u3000]|\d{6,20})/;
-const identityRow = /(?:学号|学生编号)\s*[:：]?\s*\d{6,20}|\d{8,20}/;
+/**
+ * 纯数字学号行。邮箱是报名流程里最常见的联系方式，`3972960514@qq.com`
+ * 里的数字串不能当成学号，否则「收齐后发至邮箱」的模板说明会被误拦成名单。
+ */
+const identityRow =
+  /(?:学号|学生编号)\s*[:：]?\s*\d{6,20}|(?<![@\w.])\d{8,20}(?![@\w])/;
 /** 短姓名行：表格拆行后单独成段的姓名（2–4 个汉字，无其他内容）。 */
 const plainNameLine = /^[\u4e00-\u9fff]{2,4}$/;
 /** 名单表头后紧跟的「如下：」也算发布，即使冒号后没有姓名。 */

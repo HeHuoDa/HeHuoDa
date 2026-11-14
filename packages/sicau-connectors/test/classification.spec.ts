@@ -1569,4 +1569,40 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(bodyPublishesApplicantList(text)).toBe(false);
     expect(publishesApplicantList(signupTitle, text)).toBe(false);
   });
+
+  // R4 回归：R3 收紧把判据收得过紧，两个方向都出现了真实漏拦。
+  // 一是括注里只写一个姓名（「名单（王小明）」）被当成普通说明放行——直接公开真名；
+  // 二是表头尾注只认少数几个固定词，「（附件4）」这类附件号尾注使整段名单不再成立。
+  // 邮箱数字被当学号是同一处放宽的连带风险，一并锁定。
+  it.each([
+    ["括注单个姓名", "报名人员名单（王小明）"],
+    ["括注单个姓名-参赛", "参赛名单（张三）"],
+    [
+      "附件号尾注+姓名学号行",
+      ["班级参赛名单汇总表（附件4）", "张三 20230001"].join("\n"),
+    ],
+    [
+      "附件号尾注+纯姓名行",
+      ["班级参赛名单汇总表（附件4）", "张三", "李四"].join("\n"),
+    ],
+  ])("括注与附件号尾注形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    ["材料说明括注", "参赛名单（材料具体要求）"],
+    ["下载说明括注", "参赛名单（如需下载）"],
+    ["模板见附件", "参赛名单（模板见附件）"],
+  ])("说明性括注不因放宽单名判据被误拦：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
+  it("报名邮箱里的数字串不被当成学号行", () => {
+    const text = [
+      "班级参赛名单汇总表（附件4）",
+      "班长收齐后发送至邮箱3972960514@qq.com",
+    ].join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(false);
+    expect(publishesApplicantList(signupTitle, text)).toBe(false);
+  });
 });
