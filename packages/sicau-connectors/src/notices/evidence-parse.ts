@@ -228,8 +228,9 @@ function buildEvidenceCandidate(
       for (const clause of location.text
         .split(temporal ? /[。；;\n，,、]/ : /[。；;\n]/)
         .filter(Boolean)) {
-        // 逐子句只用于抽取备选值，必须读未经七字段收敛的原始结果；
-        // 否则备选值聚合与冲突检测会看不到退役字段的真实取值。
+        // 逐子句只用于抽取备选值：对外入口（raw=false）沿用同一七字段口径，
+        // 备选值聚合只对保留字段有意义；只有内部回归入口（raw=true）才读
+        // 未经收敛的结果，用来保留退役字段的备选值与冲突检测能力。
         const local = (raw ? parseCandidateUnscoped : parseCandidate)(
           { ...article, text: clause, paragraphs: [clause], attachments: [] },
           url,

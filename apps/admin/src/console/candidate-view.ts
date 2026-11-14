@@ -199,14 +199,14 @@ export function candidateFieldRows(
   if (!fields.rules.length) rows.push(retiredHintRow("参赛规则"));
   if (!fields.stageNames.length) rows.push(retiredHintRow("赛段名称"));
   const knownTimes = CANDIDATE_TIME_LABELS.filter(
-    ([key]) => fields[key]?.precision !== "unknown",
+    ([key]) => fields[key]?.precision && fields[key].precision !== "unknown",
   );
   if (!knownTimes.length) rows.push(retiredHintRow("报名／材料／比赛时间"));
   else
     for (const [key, label] of knownTimes)
       rows.push({
         label,
-        value: String(fields[key].value),
+        value: String(fields[key]?.value ?? ""),
         hint: fields[key].precision,
       });
   return rows;
@@ -266,10 +266,10 @@ export function legacyFieldRows(
     rows.push({
       label: label + "（旧）",
       value:
-        fields[key].precision === "unknown"
+        !fields[key]?.precision || fields[key].precision === "unknown"
           ? "未知"
           : String(fields[key].value),
-      hint: fields[key].precision,
+      hint: fields[key]?.precision ?? "unknown",
     });
   return rows;
 }

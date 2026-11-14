@@ -52,9 +52,10 @@ const retiredNoticePatterns: RegExp[] = [
   /^参赛形式存在互不覆盖的要求/,
   /^报名时间含义待核对：/,
   /^相对或待定时间不自动推算：/,
-  /^新闻或获奖信息不能证明报名开放/,
   /^含多个赛段，时间归属须逐段人工确认$/,
-  /^赛道人数、模式与规则归属须人工核对/,
+  // 「比赛时间范围需人工核对」不带字段名前缀，但确实只与本期不自动提取的
+  // 比赛时间相关，需单独列出。
+  /^比赛时间范围需人工核对/,
   /时间归属须逐段人工确认/,
   /时间与资格归属须分别核对/,
 ];
@@ -66,6 +67,16 @@ const isRetiredNotice = (value: string) =>
 const evidenceFieldRoot = (field: string) => field.split(".")[0] ?? field;
 
 const retiredSet = new Set<string>(retiredCandidateFields);
+
+/**
+ * 赛道内只有名称是本期字段；`tracks.0.modeKind` 这类子路径同样属于退役范围。
+ * 根字段 `tracks` 本身是保留字段，不能只用根判断。
+ */
+const retiredTrackSubFields = new Set(["modeKind", "members", "rules"]);
+const isRetiredTrackSubField = (field: string) => {
+  const [, , sub] = field.split(".");
+  return Boolean(sub && retiredTrackSubFields.has(sub));
+};
 
 /** 契约统一的「未知时间」值；候选收敛与解析共用同一份字面量。 */
 export const unknownTime = (): TimeValue => ({
@@ -128,7 +139,9 @@ export function applyCandidateScope(
     ...(candidate.fieldConflicts
       ? {
           fieldConflicts: candidate.fieldConflicts.filter(
-            (entry) => !isRetiredCandidateField(entry.field),
+            (entry) =>
+              !isRetiredCandidateField(entry.field) &&
+              !isRetiredTrackSubField(entry.field),
           ),
         }
       : {}),

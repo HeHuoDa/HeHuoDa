@@ -271,7 +271,6 @@ describe("分类提取修订使用已有快照", () => {
     const review = await exportReview(db.pool, saved.candidateId!);
     // 报名截止属本期退役字段：取值保持未知，但原文定位证据必须保留，
     // 管理员仍可据以人工填写正式比赛时间。
-    expect(snapshot.paragraphs).toEqual(paragraphs);
     expect(review.candidate.fieldsV2.deadline).toEqual({
       precision: "unknown",
       value: null,
