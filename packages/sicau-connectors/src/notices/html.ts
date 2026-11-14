@@ -124,7 +124,7 @@ const listInlineAttachmentReference = `(?:见附件|附后|附上)\\s*\\d*`;
  * 单个姓名（「（张三）」）也算把名字写在了名单对象旁边，必须拦截：
  * 漏掉它等于公开了真实姓名，收紧侧的成本远高于「（如需下载）」这类误拦。
  * 普通括注由「2–4 个汉字整段且不含列举分隔符」无法区分，因此改用下列否定清单：
- * 以说明词开头或结尾的括注是材料说明、下载说明或表样说明，不是姓名。
+ * 以说明词开头或完整匹配明确说明短语的括注不是姓名。
  */
 const inlineOrdinal = `(?:\\d{1,3}\\s*[、.．:：]?\\s*)?`;
 const inlineName = `[\\u4e00-\\u9fff]{2,4}`;
@@ -136,14 +136,17 @@ const inlineSpacedNames = `${inlineOrdinal}${inlineName}(?:\\s+${inlineOrdinal}$
 const inlineSingleName = `${inlineOrdinal}${inlineName}`;
 const listInlineNames = `${inlineDelimitedNames}|${inlineSpacedNames}|${inlineSingleName}`;
 /**
- * 不算姓名的括注：以说明词开头／结尾，或本身是表样／附件引用。
+ * 不算姓名的括注：以说明词开头、完整说明短语，或表样／附件引用。
  * 用否定清单而不是「必须两个以上姓名」，否则单名名单会被放行。
  */
 const inlineNonNameWords = `如需|下载|见附件|附后|附上|已附|材料|要求|具体|详见|请联系|联系电话|咨询|注意|说明|填空|填写|格式|样式|排版|命名|清单如下|如下|另见|另附|参见|点击|扫码|附件`;
+// 只排除完整的说明短语，不能因某个姓名以「明」等字结尾就放行。
+const inlineExplanationWords = `比赛说明|填表说明|详情`;
+const inlineExplanation = `(?:${inlineExplanationWords})\\s*[）)]`;
 const listInlineInParentheses = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
     `(?:${listInlineAttachmentReference}` +
-    `|(?!(?:${inlineNonNameWords}))(?:${listInlineNames}))\\s*[）)]`,
+    `|(?!(?:${inlineNonNameWords}|${inlineExplanation}))(?:${listInlineNames}))\\s*[）)]`,
 );
 /**
  * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
@@ -153,6 +156,11 @@ const listInlineInParentheses = new RegExp(
 const listTemplateThenNames = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(][^）)]{0,24}[）)]\\s*(?:如下)?\\s*[：:]\\s*` +
     `[\\u4e00-\\u9fff]{2,4}(?:\\s*[、，,]\\s*[\\u4e00-\\u9fff]{2,4})+`,
+);
+// 说明括注只能排除自身；紧随其后的单人名单仍是已发布身份。
+const listExplanationThenName = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*${inlineExplanation}\\s*[：:]\\s*` +
+    `(?!(?:${inlineNonNameWords}))(?:${inlineSingleName})\\s*$`,
 );
 /**
  * 表头尾注（「参赛名单（共2人）」「参赛名单（排名不分先后）」）不改变它仍是表头。
@@ -214,6 +222,7 @@ export function bodyPublishesApplicantList(text: string): boolean {
         // 括注里直接列名或指向名单附件也是发布；但「报送…汇总表（见附件）」
         // 这类报名流程句只是在要求提交表样，不能在这里拦截。
         ((listInlineInParentheses.test(clause) ||
+          listExplanationThenName.test(clause) ||
           listTemplateThenNames.test(clause)) &&
           !listWorkflowPhrase.test(clause)),
     )
