@@ -423,7 +423,9 @@ function buildEvidenceCandidate(
       (w) => w !== "附件仅记录链接，未解析或核实附件规则",
     );
   if (result.fields.tracks.length > 1) {
-    result.conflicts.push("含多个赛道，时间与资格归属须分别核对");
+    // 资格（scope）是本期保留字段，多赛道的资格归属必须留给人工核对；
+    // 时间部分随四类时间一同退役，不写成退役提示以免连资格信息一起被过滤。
+    result.conflicts.push("含多个赛道，参赛资格归属须分别核对");
     for (const field of [
       "startsAt",
       "deadline",

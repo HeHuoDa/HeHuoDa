@@ -335,7 +335,7 @@ describe("分类提取修订使用已有快照", () => {
     expect(snapshot.paragraphs).toEqual(article.paragraphs);
     expect(snapshot.attachments).toEqual(article.attachments);
   });
-  it("执裁回顾裁剪正文后仍保留同版本分类，重复提取不抬回疑似", async () => {
+  it("执裁回顾裁剪正文后保留非赛事结论，规则版本变化也不抬回疑似", async () => {
     const url = `https://${sources[0].host}/info/1043/205e.htm`;
     const article: Article = {
       title: "体育学院武术队受邀执裁第四届川东北武术套路公开赛",
@@ -386,7 +386,9 @@ describe("分类提取修订使用已有快照", () => {
       refreshExtraction(client, saved.noticeId),
     );
     await assertRecap();
-    // 规则发生变化时不能沿用旧版本的排除结论，缺少正文则重新进入复核。
+    // 规则版本变化不能推翻已确认的非赛事结论：正文与附件都已裁剪为空，没有新证据可重判；
+    // 按标题重判会把这类通知批量抬回疑似（队列分组、优先级与附件闸门随之漂移）。
+    // 规则版本仍要重新打戳，旧批准照样因 revision 变化而失效。
     await transaction(db.pool, (client) =>
       refreshExtraction(client, saved.noticeId, "competition-rules-next"),
     );
@@ -394,8 +396,9 @@ describe("分类提取修订使用已有快照", () => {
       (await exportReview(db.pool, saved.candidateId!)).candidate
         .classification,
     ).toMatchObject({
-      classification: "suspected",
-      needsReview: true,
+      classification: "non_competition",
+      notificationKind: "news",
+      needsReview: false,
       ruleVersion: "competition-rules-next",
     });
   });

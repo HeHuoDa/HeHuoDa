@@ -57,7 +57,6 @@ const retiredNoticePatterns: RegExp[] = [
   // 比赛时间相关，需单独列出。
   /^比赛时间范围需人工核对/,
   /时间归属须逐段人工确认/,
-  /时间与资格归属须分别核对/,
 ];
 
 const isRetiredNotice = (value: string) =>

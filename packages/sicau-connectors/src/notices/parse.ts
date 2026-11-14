@@ -1498,7 +1498,7 @@ export function parseCandidateUnscoped(
   if (article.attachments.length)
     warnings.push("附件仅记录链接，未解析或核实附件规则");
   if (fields.tracks.length)
-    warnings.push("赛道人数、模式与规则归属须人工核对，候选不自动生成正式赛道");
+    warnings.push("赛道名称之外的人数、形式与规则须人工核对，候选不自动生成正式赛道");
   else missing.push("tracks");
   if (!fields.members) missing.push("members");
   if (!fields.rules.length) missing.push("rules");

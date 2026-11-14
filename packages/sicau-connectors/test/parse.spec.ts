@@ -377,7 +377,9 @@ describe("候选领域解析", () => {
       url,
     });
     expect(
-      parsed.warnings.some((warning) => warning.includes("赛道人数")),
+      parsed.warnings.some((warning) =>
+        warning.includes("赛道名称之外的人数"),
+      ),
     ).toBe(true);
   });
   it.each([
