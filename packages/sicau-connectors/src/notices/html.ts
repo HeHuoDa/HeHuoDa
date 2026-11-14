@@ -81,7 +81,7 @@ export const containsPersonalNameList = (title: string) =>
  * 变成可选，会连「提交报名信息」一起命中，让普通报名说明被当成名单表头。
  */
 const applicantListObject =
-  /报名(?:者|人员|学生)?(?:名单|汇总表|汇总|信息表|明细|清单)|参赛(?:者|人员|学生)?(?:名单|明细|清单)/;
+  /(?:报名|参赛)(?:者|人员|学生)?(?:名单(?:汇总表?|信息表)?|汇总表|汇总|信息表|明细|清单)/;
 /**
  * 空表／模板语义：名单对象紧接这些词时，后面的「如下」修饰的是表样，不是公布动作。
  * 「报名人员信息表（空表如下）」是在下发表样，不是发布了名单。
@@ -110,6 +110,26 @@ const listPublishedAfter = new RegExp(
 /** 公布动作在名单对象之前（「现公布参赛名单」）；「现将…名单报送」不属于公布。 */
 const listPublishedBefore = new RegExp(
   `(?:现公布|现公示|现予公布|现予公示|予以公布|予以公示|现对[^。；\\n]{0,8}?(?:名单|明细))[^。；\\n]{0,8}?(?:${applicantListObject.source}|名单)`,
+);
+/**
+ * 名单对象紧接的括注里直接给姓名（「参赛名单（张三、李四）」）或指向名单附件
+ * （「报名人员名单（见附件）」）。这类写法没有公布动词，旧实现靠全文名单词兜底，
+ * 判据收窄为「标题名单词 + 正文发布形态」后必须显式覆盖。
+ * 括注以空表／模板／样表／空白表开头时修饰的是表样，不算发布。
+ */
+const listInlineInParentheses = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
+    `(?:(?:见附件|附后|附上)|(?:[\\u4e00-\\u9fff]{2,4})(?:\\s*[、，,；;]\\s*[\\u4e00-\\u9fff]{2,4})*)` +
+    `\\s*[）)]`,
+);
+/**
+ * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
+ * 表样语义只能抵消它自己那一处，不能覆盖同一句冒号后的真实姓名。
+ * 要求至少两个以顿号／逗号分隔的姓名，避免把「：请填写」当成名单。
+ */
+const listTemplateThenNames = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(][^）)]{0,24}[）)]\\s*(?:如下)?\\s*[：:]\\s*` +
+    `[\\u4e00-\\u9fff]{2,4}(?:\\s*[、，,]\\s*[\\u4e00-\\u9fff]{2,4})+`,
 );
 /** 只有名单对象、没有报名流程动词的整段标题式行（多半是表格拆行后的表头）。 */
 const bareListHeading = new RegExp(
@@ -154,7 +174,13 @@ export function bodyPublishesApplicantList(text: string): boolean {
   if (
     clauses.some(
       (clause) =>
-        listPublishedAfter.test(clause) || listPublishedBefore.test(clause),
+        listPublishedAfter.test(clause) ||
+        listPublishedBefore.test(clause) ||
+        // 括注里直接列名或指向名单附件也是发布；但「报送…汇总表（见附件）」
+        // 这类报名流程句只是在要求提交表样，不能在这里拦截。
+        ((listInlineInParentheses.test(clause) ||
+          listTemplateThenNames.test(clause)) &&
+          !listWorkflowPhrase.test(clause)),
     )
   )
     return true;
@@ -164,6 +190,9 @@ export function bodyPublishesApplicantList(text: string): boolean {
     (clause) =>
       bareListHeading.test(clause) ||
       namedListHeading.test(clause) ||
+      // 「请下载报名人员信息表（空表如下）」虽然是在下发表样，但它点名了名单对象；
+      // 这种句子之后一旦出现姓名／学号行，仍是真实名单，模板语义不能覆盖后文。
+      (templateSampleWords.test(clause) && applicantListObject.test(clause)) ||
       // 「附件1：参赛人员名单」「名单如下：」这类标题式行同样开启名单段。
       listHeadingThenColon.test(clause) ||
       // 名单对象后紧跟冒号，且该句就是整段（表格首行常见形态）。

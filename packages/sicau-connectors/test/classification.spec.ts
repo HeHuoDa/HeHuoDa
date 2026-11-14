@@ -1472,4 +1472,42 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     for (const body of bodies)
       expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
   });
+
+  // R1 回归（#206 两轴评审已确认缺陷）：判据改用「标题名单词 + 正文发布形态」后，
+  // 正文里没有公布动词、只在括注里直接点名、或表头写作「参赛名单汇总表」的真实名单
+  // 会整体放行。主分支旧实现用全文 containsApplicantList 能拦住，说明这是收窄过度，
+  // 不是判据变严。修复方向是补齐名单对象与括注形态，不能退回全文豁免。
+  it.each([
+    ["括注里直接列名", "参赛人员名单（张三、李四）"],
+    ["括注里列三名", "参赛名单（张三、李四、王五）"],
+    ["括注指向附件名单", "报名人员名单（见附件）"],
+    ["句中括注列名", "经审核，参赛名单（张三、李四）确定"],
+  ])("括注形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it("参赛名单汇总表这类同义名单对象同样开启名单段", () => {
+    // 名单对象此前只覆盖「参赛名单／明细／清单」，漏掉「参赛名单汇总表」；
+    // 表头因此不被识别，后面的姓名学号行被当成普通正文入库。
+    const body = ["参赛名单汇总表", "姓名 学号", "张三 20230101001"];
+    expect(bodyPublishesApplicantList(body.join("\n"))).toBe(true);
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
+    ["空表括注", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["模板见附件括注", "请各班报送参赛名单汇总表（模板见附件）。"],
+    ["报送名单表", "参赛同学须向班长报送参赛名单汇总表。"],
+    ["报送并指向附件", "请各班报送参赛名单汇总表（见附件）。"],
+  ])("补齐括注判据后仍不误拦报名说明：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
 });
