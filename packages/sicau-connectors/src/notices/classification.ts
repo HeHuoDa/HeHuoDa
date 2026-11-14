@@ -1,6 +1,6 @@
-import { containsApplicantList, containsPersonalNameList } from "./html.js";
+import { publishesApplicantList } from "./html.js";
 
-export const noticeRuleVersion = "competition-rules-9";
+export const noticeRuleVersion = "competition-rules-23";
 export type Classification = "definite" | "suspected" | "non_competition";
 export interface NoticeClassification {
   classification: Classification;
@@ -35,9 +35,10 @@ export function classifyNotice(
   const exclusions: string[] = [];
   const reasons: string[] = [];
   // An excluded attachment blocks that attachment, not an otherwise safe parent notice.
-  const list =
-    containsApplicantList([title, ...paragraphs].join("\n")) ||
-    containsPersonalNameList(title);
+  // 正文里的「报送参赛名单汇总表」是报名流程，不代表页面本身在公布个人名单。
+  // 标题仍按名单隐私边界排除；正文须明确发布名单，不能仅凭提到名单表就整篇误排。
+  // 判据与 runner/store 共用 publishesApplicantList，避免离线与入库结论不一致。
+  const list = publishesApplicantList(title, paragraphs.join("\n"));
   // 赛事词表覆盖官网常见命名；「对抗赛」「辩论赛」「技能赛」等以「赛」结尾的
   // 具体赛事形式此前被漏掉，导致标题显式点明赛事却被当作正文旁证降级。
   const competitionPattern =
@@ -135,17 +136,35 @@ export function classifyNotice(
     !/赛/.test(title) &&
     !/参赛|选手|运动员|作品/.test(title) &&
     !/关于举办|关于组织|组织参加/.test(title);
+  // 明确的事务对象优先于正文的比赛经历/成果条件。征文仅在标题明确是
+  // 文集征稿时归入此类，普通征文与作品征集继续保留疑似赛事复核。
+  const administrativeBusiness =
+    /主题团日|班团活动|团支部活动|校企[^。；]{0,12}培养班|朋辈导师[^。；]{0,12}(?:推选|选聘)|推选[^。；]{0,12}朋辈导师|推优入党|(?:校史|校庆)文集[^。；]{0,12}征文/.test(
+      title,
+    ) &&
+    !competitionPattern.test(title) &&
+    !/赛/.test(title) &&
+    !/参赛|选手|运动员|队伍|作品/.test(title);
   const declaresNonCompetitionBusiness =
-    officiatingPractice || nonCompetitionBusiness;
+    officiatingPractice || nonCompetitionBusiness || administrativeBusiness;
   // 只有附件标题自己写明赛事名与具体事项（如「数学竞赛延期通知.pdf」）才构成另一份
   // 待核对的赛事依据；无关附件（报名表、承诺书）不改变标题结论。
   const attachmentDeclaresCompetition = attachmentTitles.some(
     (attachmentTitle) => competitionPattern.test(attachmentTitle),
   );
+  // 只有已发出的结果公告才是结果公示。「竞赛结果将在/在官网公示N个工作日」
+  // 是组织方案里的后续流程描述，不是本篇在公布结果；按句判定，避免同文其他句的
+  // 未来时表述作废整篇已发出的公示。
+  const declaredText = text
+    .split(/[。；;\n]/)
+    .filter(
+      (sentence) => !/(?:将在|拟在|拟于)[^。；\n]{0,10}公示/.test(sentence),
+    )
+    .join("；");
   const bodyAward =
     !explicitRegistration &&
-    /(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示|现将[^。；\n]{0,100}(?:结果|名单)公示/.test(
-      text,
+    /现将[^。；\n]{0,100}(?:结果|名单)(?:予以)?(?:公示|公布)|(?:获奖|评审|竞赛|比赛)(?:结果|名单)[^。；\n]{0,12}公示(?:如下|名单|[：:]|$|[。；;])/.test(
+      declaredText,
     );
   const bodyNews =
     !explicitRegistration &&

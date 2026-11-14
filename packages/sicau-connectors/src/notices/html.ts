@@ -75,6 +75,228 @@ export const containsPersonalNameList = (title: string) =>
   /(?:拟发展|拟推荐|拟推|拟评|拟聘|拟表彰|发展对象|发展团员|入团积极分子|入党积极分子|评优|评奖|奖学金|助学金|奖助学金|补贴|资助|补助|优秀学生|优秀学生干部|优秀班集体|先进个人|标兵)[^。；\n]{0,12}(?:名单|公示|结果)/.test(
     title,
   );
+/**
+ * 名单对象：报名／参赛人员的名单、汇总表、信息表、明细、清单等逐条记录个人资料的材料。
+ * 「表」必须显式出现（写成 `信息表|汇总表`，不能用 `信息表?|汇总表?`）：后者把「表」
+ * 变成可选，会连「提交报名信息」一起命中，让普通报名说明被当成名单表头。
+ */
+const applicantListObject =
+  /(?:报名|参赛)(?:者|人员|学生)?(?:名单(?:汇总表?|信息表)?|汇总表|汇总|信息表|明细|清单)/;
+/**
+ * 空表／模板语义：名单对象紧接这些词时，后面的「如下」修饰的是表样，不是公布动作。
+ * 「报名人员信息表（空表如下）」是在下发表样，不是发布了名单。
+ * 只在该名单对象自己的间隔内生效，不做全文豁免；后文逐条列名仍照旧拦截。
+ */
+const templateSampleWords = /空表|模板|样表|空白表/;
+/**
+ * 名单对象后紧跟公布动作（如下／公示／公布／附后／见附件），或名单表头冒号后直接给姓名
+ * （「名单：张三、李四」）。「报送／填写／收齐参赛名单汇总表」只是报名流程，
+ * 没有公布动作，不构成发布名单。
+ *
+ * 公布类动作（如下／公示／公布／公告）允许跨过括号：官方常写成
+ * 「参赛名单（公布如下）：张三、李四」「报名人员信息表（如下）：…」，
+ * 把括号整体排除在间隔外会漏拦这类真实名单。
+ * 但间隔内出现空表／模板／样表／空白表时，该动作修饰表样而非公布，不拦截。
+ * 附件引用类动作（见附件／附后／附上）仍不跨括号：「参赛名单汇总表（模板见附件）」
+ * 是在下发表样，跨过括号去匹配「见附件」会把报名说明误判成名单。
+ */
+const listPublishedAfter = new RegExp(
+  `(?:${applicantListObject.source})` +
+    `(?:(?!(?:${templateSampleWords.source}))[^。；\\n]){0,10}?` +
+    `(?:如下|公示|公布|公告)` +
+    `|(?:${applicantListObject.source})[^。；\\n（）()]{0,10}?(?:见附件|附后|附上)` +
+    `|(?:名单|明细|信息表|汇总表)\\s*(?:如下)?\\s*[：:]\\s*(?:[\\u4e00-\\u9fff]{2,4})(?:[、，,；;\\s]|$)`,
+);
+/** 公布动作在名单对象之前（「现公布参赛名单」）；「现将…名单报送」不属于公布。 */
+const listPublishedBefore = new RegExp(
+  `(?:现公布|现公示|现予公布|现予公示|予以公布|予以公示|现对[^。；\\n]{0,8}?(?:名单|明细))[^。；\\n]{0,8}?(?:${applicantListObject.source}|名单)`,
+);
+/**
+ * 名单对象紧接的括注里直接给姓名（「参赛名单（张三、李四）」）或指向名单附件
+ * （「报名人员名单（见附件）」）。这类写法没有公布动词，旧实现靠全文名单词兜底，
+ * 判据收窄为「标题名单词 + 正文发布形态」后必须显式覆盖。
+ * 括注以空表／模板／样表／空白表开头时修饰的是表样，不算发布。
+ */
+// 「（见附件）」的序号形式（「见附件1」）也是指向名单附件，不能只认紧贴右括号的写法。
+const listInlineAttachmentReference = `(?:见附件|附后|附上)\\s*\\d*`;
+/**
+ * 括注里的姓名串：用顿号／逗号／分号分隔的姓名列举，或「序号 + 姓名」空格并列。
+ * 单个姓名（「（张三）」）也算把名字写在了名单对象旁边，必须拦截：
+ * 漏掉它等于公开了真实姓名，收紧侧的成本远高于「（如需下载）」这类误拦。
+ * 普通括注由「2–4 个汉字整段且不含列举分隔符」无法区分，因此改用下列否定清单：
+ * 以说明词开头或完整匹配明确说明短语的括注不是姓名。
+ */
+const inlineOrdinal = `(?:\\d{1,3}\\s*[、.．:：]?\\s*)?`;
+const inlineName = `[\\u4e00-\\u9fff]{2,4}`;
+/** 分隔符列举：`张三、李四` / `1、张三、2、李四`。 */
+const inlineDelimitedNames = `${inlineOrdinal}${inlineName}(?:\\s*[、，,；;]\\s*${inlineOrdinal}${inlineName})+`;
+/** 空格并列：`1 张三 2 李四`。 */
+const inlineSpacedNames = `${inlineOrdinal}${inlineName}(?:\\s+${inlineOrdinal}${inlineName})+`;
+/** 单个姓名：`（张三）`。单独一个名字写在名单对象旁边同样是发布。 */
+const inlineSingleName = `${inlineOrdinal}${inlineName}`;
+const listInlineNames = `${inlineDelimitedNames}|${inlineSpacedNames}|${inlineSingleName}`;
+/**
+ * 不算姓名的括注：以说明词开头、完整说明短语，或表样／附件引用。
+ * 用否定清单而不是「必须两个以上姓名」，否则单名名单会被放行。
+ */
+const inlineNonNameWords = `如需|下载|见附件|附后|附上|已附|材料|要求|具体|详见|请联系|联系电话|咨询|注意|说明|填空|填写|格式|样式|排版|命名|清单如下|如下|另见|另附|参见|点击|扫码|附件`;
+// 只排除完整的说明短语，不能因某个姓名以「明」等字结尾就放行。
+const inlineExplanationWords = `比赛说明|填表说明|详情`;
+const inlineExplanation = `(?:${inlineExplanationWords})\\s*[）)]`;
+const listInlineInParentheses = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
+    `(?!(?:${inlineNonNameWords}|${inlineExplanation}))(?:${listInlineNames})\\s*[）)]`,
+);
+const listInlineAttachmentInParentheses = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*${listInlineAttachmentReference}\\s*[）)]`,
+  "g",
+);
+/**
+ * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
+ * 表样语义只能抵消它自己那一处，不能覆盖同一句冒号后的真实姓名。
+ * 要求至少两个以顿号／逗号分隔的姓名，避免把「：请填写」当成名单。
+ */
+const listTemplateThenNames = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(][^）)]{0,24}[）)]\\s*(?:如下)?\\s*[：:]\\s*` +
+    `[\\u4e00-\\u9fff]{2,4}(?:\\s*[、，,]\\s*[\\u4e00-\\u9fff]{2,4})+`,
+);
+// 说明括注只能排除自身；紧随其后的单人名单仍是已发布身份。
+const listExplanationThenName = new RegExp(
+  `(?:${applicantListObject.source})\\s*[（(]\\s*${inlineExplanation}\\s*[：:]\\s*` +
+    `(?!(?:${inlineNonNameWords}))(?:${inlineSingleName})\\s*$`,
+);
+/**
+ * 表头尾注（「参赛名单（共2人）」「参赛名单（排名不分先后）」）不改变它仍是表头。
+ * 括注里出现附件号（「班级参赛名单汇总表（附件4）」）同样只是指向附件，仍是表头；
+ * 真正的排队项列举（「参赛材料：报告、名单汇总表（附件4）」）由下面两处保证不误判：
+ * 名单对象前后不得有顿号串接同类材料，尾注本身也不得包含枚举分隔符。
+ */
+const listHeadingTrailer = `(?:\\s*[（(][^，,。；;）)\\n]{0,16}[）)])?`;
+const listHeadingPrefix = `[^，,。；;、\\n]{0,20}`;
+const bareListHeading = new RegExp(
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?(?:${applicantListObject.source})${listHeadingTrailer}$`,
+);
+/** 「附件1：参赛人员名单」「参赛名单汇总表.xlsx」这类以名单对象结尾的短标题行。 */
+const namedListHeading = new RegExp(
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?${listHeadingPrefix}${applicantListObject.source}${listHeadingTrailer}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
+);
+/** 姓名＋学号／姓名＋序号一类的表格数据行（表格被拆成独立段落时逐行出现）。 */
+const rosterRow =
+  /^\s*(?:\d{1,3}\s*[、.．:：]?\s*)?(?:[\u4e00-\u9fff]{2,4})(?:\s|[\u3000]|\d{6,20})/;
+/**
+ * 纯数字学号行。邮箱是报名流程里最常见的联系方式，`3972960514@qq.com`
+ * 里的数字串不能当成学号，否则「收齐后发至邮箱」的模板说明会被误拦成名单。
+ */
+const identityRow =
+  /(?:学号|学生编号)\s*[:：]?\s*\d{6,20}|(?<![@\w.])\d{8,20}(?![@\w])/;
+/** 短姓名行：表格拆行后单独成段的姓名（2–4 个汉字，无其他内容）。 */
+const plainNameLine = /^[\u4e00-\u9fff]{2,4}$/;
+/** 名单表头后紧跟的「如下：」也算发布，即使冒号后没有姓名。 */
+const listHeadingThenColon = new RegExp(
+  `(?:名单|明细|信息表|汇总表)\\s*(?:如下|附后|见附件)?\\s*[：:]\\s*$`,
+);
+/** 名单对象后紧跟冒号（「名单如下：张三」「参赛学生名单：」）。 */
+const listObjectThenColon = new RegExp(
+  `(?:${applicantListObject.source}|名单|明细|信息表|汇总表)\\s*(?:如下|附后|见附件)?\\s*[：:]`,
+);
+/**
+ * 报名流程动词只与名单对象相邻时才算「要求报送」。整段任何位置出现报送都豁免，
+ * 会把「现将名单公布如下：张三…请各班报送材料」这类真名单误放行。
+ */
+const listWorkflowAction = `报送|提交|上交|填写|收齐|收集|统计|上报|递交|交给|发至|发到|传至`;
+const listWorkflowPhrase = new RegExp(
+  `(?:${applicantListObject.source})[^。；\\n]{0,6}?(?:${listWorkflowAction})` +
+    `|(?:${listWorkflowAction})[^。；\\n]{0,6}?(?:${applicantListObject.source})`,
+);
+const listWorkflowBefore = new RegExp(
+  `(?:${listWorkflowAction})[^。；\\n]{0,6}$`,
+);
+function publishesInlineAttachment(part: string): boolean {
+  return [...part.matchAll(listInlineAttachmentInParentheses)].some((match) => {
+    const before = part.slice(0, match.index);
+    const after = part.slice(match.index + match[0].length);
+    if (listWorkflowBefore.test(before)) return false;
+    // 后置动作只有在后文没有另一个名单对象时才可能属于当前对象。
+    return (
+      applicantListObject.test(after) ||
+      !listWorkflowPhrase.test(match[0] + after)
+    );
+  });
+}
+/**
+ * 正文是否在发布真实名单（逐条列人名），而不是在报名说明里要求报送名单表。
+ * 三种形态都算发布：公布动作句、名单表头后跟姓名，以及表格被拆行后
+ * 「名单表头 + 姓名/学号行」的组合——后者没有公布动词，但确实是名单正文。
+ */
+export function bodyPublishesApplicantList(text: string): boolean {
+  const clauses = text
+    .split(/[。；;\n]/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  if (
+    clauses.some(
+      (clause) =>
+        listPublishedAfter.test(clause) ||
+        listPublishedBefore.test(clause) ||
+        // 已列姓名不能被同句其他名单对象的报送动作豁免。
+        listInlineInParentheses.test(clause) ||
+        listExplanationThenName.test(clause) ||
+        listTemplateThenNames.test(clause) ||
+        // 只有附件引用需要区别“公布名单”与“要求提交表样”；流程词只作用于
+        // 当前逗号分句，不能让后面另一份报名表豁免前面的名单引用。
+        clause.split(/[，,]/).some(publishesInlineAttachment),
+    )
+  )
+    return true;
+  // 表格形态：某一行只写名单对象，且同段另有姓名行或学号行。流程句只在
+  // 它自己那一句里抵消名单对象，不能整段否决后面的逐条记录。
+  const headingAt = clauses.findIndex(
+    (clause) =>
+      bareListHeading.test(clause) ||
+      namedListHeading.test(clause) ||
+      // 「请下载报名人员信息表（空表如下）」虽然是在下发表样，但它点名了名单对象；
+      // 这种句子之后一旦出现姓名／学号行，仍是真实名单，模板语义不能覆盖后文。
+      (templateSampleWords.test(clause) && applicantListObject.test(clause)) ||
+      // 「附件1：参赛人员名单」「名单如下：」这类标题式行同样开启名单段。
+      listHeadingThenColon.test(clause) ||
+      // 名单对象后紧跟冒号，且该句就是整段（表格首行常见形态）。
+      listObjectThenColon.test(clause),
+  );
+  // 正文里单独一行就点名「参赛人员名单」且带附件序号/表格扩展名时，
+  // 本身就是名单材料，不论后面有没有姓名行。
+  const namedListMaterial = clauses.some(
+    (clause) =>
+      namedListHeading.test(clause) &&
+      (/^附件\s*\d*\s*[：:、.]/.test(clause) ||
+        /\.(?:pdf|docx?|xlsx?)$/i.test(clause)),
+  );
+  if (namedListMaterial) return true;
+  if (headingAt < 0) return false;
+  // 流程句只否定它自己点名的那一段，不能覆盖同段或后续的真实姓名／学号证据。
+  // 「请班长报送参赛名单汇总表」与后一段「参赛学生名单」表格可以并存：
+  // 前者是报名流程，后者是已发布的逐条记录，两者不是一个判断对象。
+  return clauses.slice(headingAt + 1).some((clause) => {
+    const evidence = listWorkflowPhrase.test(clause)
+      ? clause.replace(listWorkflowPhrase, "")
+      : clause;
+    return (
+      rosterRow.test(evidence) ||
+      identityRow.test(evidence) ||
+      plainNameLine.test(evidence)
+    );
+  });
+}
+/**
+ * 名单隐私边界：标题点名名单，或正文实际发布名单。
+ * 分类、采集与保存都使用这一份判据，避免只修其中一处导致离线与入库结论不一致。
+ */
+export function publishesApplicantList(title: string, body: string): boolean {
+  return (
+    containsApplicantList(title) ||
+    containsPersonalNameList(title) ||
+    bodyPublishesApplicantList(body)
+  );
+}
 export function extractList(
   html: string,
   url: string,

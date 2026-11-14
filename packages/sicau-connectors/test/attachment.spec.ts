@@ -171,6 +171,29 @@ describe("官方通知附件识别与文本提取", () => {
     expect(attachmentEligibility("通知附件.pdf", "其他内容")).toBe("manual");
   });
 
+  it("报名说明要求报送名单表时不拦截规则附件", () => {
+    // 父通知写「参赛同学须向班长报送参赛名单汇总表」是报名流程；
+    // 按字面拦上下文会把同一通知的规则型附件一并拒绝下载。
+    const signupContext =
+      "报名截止2026年11月20日。\n参赛同学须向班长报送参赛名单汇总表。";
+    expect(attachmentEligibility("数学竞赛规则.pdf", signupContext)).toBe(
+      "eligible",
+    );
+    expect(attachmentEligibility("报名表.docx", signupContext)).toBe("manual");
+    // 附件标题自己点名名单时仍拒绝下载。
+    expect(attachmentEligibility("参赛名单汇总表.xlsx", signupContext)).toBe(
+      "blocked",
+    );
+    // 父通知实际发布名单时，附件上下文仍按隐私拦截。
+    expect(
+      attachmentEligibility("规则.pdf", "现将参赛名单公布如下：张三、李四。"),
+    ).toBe("blocked");
+    // 敏感明细列仍按上下文拦截，不因放宽名单词而漏掉。
+    expect(
+      attachmentEligibility("附件1.pdf", "名单含身份证号与联系方式。"),
+    ).toBe("blocked");
+  });
+
   it("无效、加密与扫描PDF不会作为完整文字证据", async () => {
     await expect(
       extractAttachmentText(Buffer.from("nope"), "application/pdf"),

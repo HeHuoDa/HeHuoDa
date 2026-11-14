@@ -1,4 +1,10 @@
-import { parseCandidate, extractDates } from "./parse.js";
+import {
+  parseCandidate,
+  parseCandidateUnscoped,
+  extractDates,
+  nonCompetitionCandidate,
+} from "./parse.js";
+import { applyCandidateScope } from "./candidate-scope.js";
 import { classifyNotice } from "./classification.js";
 import type {
   Article,
@@ -16,13 +22,58 @@ export interface RuleEvidenceInput {
   segments: { kind: "page" | "paragraph"; index: number; text: string }[];
 }
 
-/** Locations stay attached to every paragraph throughout rule evaluation. */
+/**
+ * 证据合并解析（本期七字段输出范围）。
+ *
+ * 正文段落与附件分段先合成为一个带定位的文本流，再交给同一份解析规则；
+ * 合并后仍会经过 `applyCandidateScope`，保证附件入口与正文入口结论一致。
+ */
 export function parseEvidenceCandidate(
   article: Article,
   url: string,
   directory: Directory,
   noticeVersion: string,
   attachments: RuleEvidenceInput[] = [],
+): ParsedCandidate {
+  return applyCandidateScope(
+    buildEvidenceCandidate(
+      article,
+      url,
+      directory,
+      noticeVersion,
+      attachments,
+      false,
+    ),
+  );
+}
+
+/**
+ * 未经七字段收敛的证据解析，只供回归测试与内部复用。不要用在入库链路。
+ */
+export function parseEvidenceCandidateUnscoped(
+  article: Article,
+  url: string,
+  directory: Directory,
+  noticeVersion: string,
+  attachments: RuleEvidenceInput[] = [],
+): ParsedCandidate {
+  return buildEvidenceCandidate(
+    article,
+    url,
+    directory,
+    noticeVersion,
+    attachments,
+    true,
+  );
+}
+
+function buildEvidenceCandidate(
+  article: Article,
+  url: string,
+  directory: Directory,
+  noticeVersion: string,
+  attachments: RuleEvidenceInput[],
+  raw: boolean,
 ): ParsedCandidate {
   const locations: {
     text: string;
@@ -57,6 +108,10 @@ export function parseEvidenceCandidate(
     locations.map((l) => l.text),
     article.attachments.map((a) => a.title),
   );
+  // 通知标题/发布日期留在原通知元数据中。确定非赛事后，不再把招生、评优等
+  // 业务标题和条件填作比赛名称、届次或参赛资格；字段空值沿用v2契约。
+  if (classification.classification === "non_competition")
+    return nonCompetitionCandidate(classification);
   const combined = {
     ...article,
     paragraphs: locations.map((l) => l.text),
@@ -74,12 +129,17 @@ export function parseEvidenceCandidate(
     )
       sourceBarriers.add(index);
   });
-  const result = parseCandidate(
+  const result = (raw ? parseCandidateUnscoped : parseCandidate)(
     combined,
     url,
     directory,
-    classification.notificationKind,
-    sourceBarriers,
+    {
+      notificationKind: classification.notificationKind,
+      sourceBarriers,
+      // 外层已按整篇（含附件分段）判过分类；逐字段解析沿用同一结论，
+      // 不能让单句按自身文本重新分类。
+      classification,
+    },
   );
   const locate = (entry: Evidence): Evidence => {
     const location = locations[entry.paragraph];
@@ -168,11 +228,16 @@ export function parseEvidenceCandidate(
       for (const clause of location.text
         .split(temporal ? /[。；;\n，,、]/ : /[。；;\n]/)
         .filter(Boolean)) {
-        const local = parseCandidate(
+        // 逐子句只用于抽取备选值：对外入口（raw=false）沿用同一七字段口径，
+        // 备选值聚合只对保留字段有意义；只有内部回归入口（raw=true）才读
+        // 未经收敛的结果，用来保留退役字段的备选值与冲突检测能力。
+        const local = (raw ? parseCandidateUnscoped : parseCandidate)(
           { ...article, text: clause, paragraphs: [clause], attachments: [] },
           url,
           directory,
-          classification.notificationKind,
+          // 逐子句只用于抽取备选值；分类沿用整篇结论，否则不含赛事词的单句
+          // 会被判非赛事并短路成空字段，导致该子句的备选值静默消失。
+          { notificationKind: classification.notificationKind, classification },
         );
         for (const evidence of local.evidence.filter((e) => e.paragraph >= 0)) {
           const field = evidence.field;
@@ -358,7 +423,9 @@ export function parseEvidenceCandidate(
       (w) => w !== "附件仅记录链接，未解析或核实附件规则",
     );
   if (result.fields.tracks.length > 1) {
-    result.conflicts.push("含多个赛道，时间与资格归属须分别核对");
+    // 资格（scope）是本期保留字段，多赛道的资格归属必须留给人工核对；
+    // 时间部分随四类时间一同退役，不写成退役提示以免连资格信息一起被过滤。
+    result.conflicts.push("含多个赛道，参赛资格归属须分别核对");
     for (const field of [
       "startsAt",
       "deadline",

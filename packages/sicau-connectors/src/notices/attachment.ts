@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { Entry } from "yauzl";
+import { bodyPublishesApplicantList } from "./html.js";
 
 const require = createRequire(import.meta.url);
 const yauzl = require("yauzl") as typeof import("yauzl");
@@ -40,12 +41,24 @@ export class AttachmentParseError extends Error {
 
 const forbiddenListWords =
   /报名(?:者|人员|学生)?(?:信息|名单|清单|汇总)|参赛(?:者|人员|学生)?(?:名单|清单|明细)|个人资料|学生明细|人员明细|获奖名单|晋级名单|入围名单|身份证号|联系方式/;
+/**
+ * 附件正文上下文里的个人资料信号。名单词不能在此按字面拦截：报名说明常写
+ * 「报送参赛名单汇总表」，那是要求报名者提交表格，不代表父通知在发布名单。
+ * 名单只按共享判据（实际发布/表格形态）或敏感明细列判定，规则型附件才不会被误拦。
+ */
+const sensitiveContextWords =
+  /个人资料|学生明细|人员明细|获奖名单|晋级名单|入围名单|身份证号|联系方式/;
 export type AttachmentEligibility = "eligible" | "blocked" | "manual";
 export function attachmentEligibility(
   title: string,
   contextText: string,
 ): AttachmentEligibility {
-  if (forbiddenListWords.test(title) || forbiddenListWords.test(contextText))
+  if (
+    forbiddenListWords.test(title) ||
+    sensitiveContextWords.test(contextText) ||
+    // 与分类器、runner、store 共用同一份正文名单判据。
+    bodyPublishesApplicantList(contextText)
+  )
     return "blocked";
   if (
     /竞赛|比赛|大赛|挑战杯|创新创业|互联网\s*\+/.test(

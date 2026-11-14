@@ -712,4 +712,162 @@ describe("通知候选与正式导入的 PostgreSQL 事务", () => {
         .count,
     ).toBe("1");
   });
+  it("报名说明要求报送名单表时，实际采集与保存入口都不再跳过或拒绝", async () => {
+    // 分类器已判 definite，但 runner 与 persistArticle 曾各自用全文名单判据拦截，
+    // 导致真实报名通知在进入修复入口前就被丢弃。这里走真实采集与保存链。
+    const signupBody = `<p>报名截止2026年11月20日。</p><p>参赛同学须向班长报送参赛名单汇总表。</p>`;
+    const signupHtml = informationArticle.replace(noticeBody, signupBody);
+    expect(
+      await runner([http(404), http(200, signupHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { new: 1, ignored: 0, failed: 0 },
+    });
+    const stored = await candidate();
+    expect(stored).toMatchObject({
+      classification: "definite",
+      status: "pending",
+    });
+    // 正文真实保存：报名通知不再因名单表而留成空正文。
+    const version = (
+      await db.pool.query(
+        "SELECT article,extracted FROM ingestion_versions ORDER BY revision DESC",
+      )
+    ).rows[0];
+    expect(version.article.text).toContain("报送参赛名单汇总表");
+    expect(version.extracted.classification.exclusions).not.toContainEqual(
+      "applicant-list",
+    );
+  });
+  it("非赛事通知在实际采集与保存链路都不生成比赛名称与届次", async () => {
+    // 证据入口早已返回空比赛字段，但 runner 调 parseCandidate、store 裁剪正文后
+    // 再次调它，两条实际路径仍会把标题当年比赛名称、把年份当届次。
+    // 正文须满足最小长度，否则会先按空正文拒绝，测不到分类分支。
+    const adminBody = `<p>请符合条件的同学于2026年11月20日前提交申请材料，学院统一汇总后报学生处。</p>`;
+    const adminTitle = "2026年优秀毕业生推荐通知";
+    const adminHtml = informationArticle
+      .replace("2026年测试竞赛报名通知", adminTitle)
+      .replace(noticeBody, adminBody);
+    expect(
+      await runner([http(404), http(200, adminHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({ status: "succeeded", counts: { new: 1, failed: 0 } });
+    const stored = await candidate();
+    expect(stored).toMatchObject({ classification: "non_competition" });
+    expect(stored.data.fields.name).toBe("");
+    expect(stored.data.fields.edition).toBeNull();
+    expect(stored.data.fields.scope).toMatchObject({
+      kind: "unknown",
+      colleges: [],
+    });
+    // 通知元数据保留：标题与发布日期仍在来源版本里，不被清空掩盖问题。
+    const version = (
+      await db.pool.query("SELECT article FROM ingestion_versions")
+    ).rows[0];
+    expect(version.article.title).toBe(adminTitle);
+    expect(version.article.publishedAt).toBe("2026-10-08");
+    // 正文按现行规则裁剪，原始响应不落库。
+    expect(version.article.text).toBe("");
+    // 预览路径与保存路径一致。
+    await db.pool.query("TRUNCATE ingestion_sources CASCADE");
+    await initializeSources(db.pool);
+    const preview = await runner([http(404), http(200, adminHtml)]).scan({
+      sourceId: source.id,
+      url,
+      preview: true,
+    });
+    expect(preview).toMatchObject({ status: "succeeded" });
+    // scan 的 previews 是 unknown[]（不导出内部预览类型）；这里按 HTTP 呈现形状读取。
+    const previews = preview.previews as
+      | { candidate: { fieldsV2?: { name: string; edition: string | null } } }[]
+      | undefined;
+    expect(previews?.[0]?.candidate.fieldsV2?.name).toBe("");
+    expect(previews?.[0]?.candidate.fieldsV2?.edition).toBeNull();
+  });
+  it("非赛事通知裁剪正文后保存的候选仍不含比赛名称与届次", async () => {
+    // store 在非赛事分支会清空正文后再解析一次。只按标题重新分类时，
+    // 「…获奖新闻」这类标题会判回 suspected，比赛名与届次又被写进候选。
+    // runner 对这类标题有自己的跳过规则，因此这里直接验证持久化入口。
+    const title = "2026年程序设计竞赛获奖新闻";
+    const paragraphs = ["竞赛圆满结束，获奖名单见附件。"];
+    const article = {
+      title,
+      publishedAt: "2026-11-12",
+      text: paragraphs.join("\n"),
+      paragraphs,
+      attachments: [],
+    };
+    // 用独立 URL，避免读到同文件其他用例留下的候选行。
+    const noticeUrl = `https://${source.host}/info/1043/901.htm`;
+    const saved = await persistArticle(
+      db.pool,
+      source,
+      noticeUrl,
+      {
+        url: noticeUrl,
+        html: "",
+        body: new Uint8Array(),
+        status: 200,
+        headers: {},
+      },
+      article,
+      parseCandidate(article, noticeUrl, directory!),
+    );
+    expect(saved.action).toBe("new");
+    const stored = (
+      await db.pool.query("SELECT * FROM ingestion_candidates WHERE id=$1", [
+        saved.candidateId,
+      ])
+    ).rows[0];
+    expect(stored).toMatchObject({ classification: "non_competition" });
+    expect(stored.data.fields.name).toBe("");
+    expect(stored.data.fields.edition).toBeNull();
+    // 分类仍取自裁剪前的原文，不是裁剪后按标题重判的结果。
+    expect(stored.data.classification.classification).toBe("non_competition");
+  });
+  it.each([
+    "现将参赛名单公布如下：张三、李四、王五。",
+    "参赛名单（张三、李四），请提交报名人员信息表。",
+    "参赛名单（张三），请提交报名人员信息表。",
+  ])("真实名单不因后续流程说明被保存：%s", async (body) => {
+    const listBody = `<p>${body}</p>`;
+    const listHtml = informationArticle.replace(noticeBody, listBody);
+    expect(
+      await runner([http(404), http(200, listHtml)]).scan({
+        sourceId: source.id,
+        url,
+      }),
+    ).toMatchObject({
+      status: "succeeded",
+      counts: { ignored: 1, new: 0, failed: 0 },
+      errors: [
+        expect.objectContaining({ code: "applicant-list", kind: "skipped" }),
+      ],
+    });
+    expect(
+      (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
+        .count,
+    ).toBe("0");
+    // 直接调用持久化入口同样必须拒绝，不能只靠 runner 的前置校验。
+    const article = extractArticle(listHtml, url, source);
+    await expect(
+      persistArticle(
+        db.pool,
+        source,
+        url,
+        { ...http(200, listHtml), url, html: listHtml },
+        article,
+        parseCandidate(article, url, directory!),
+      ),
+    ).rejects.toThrow("个人名单");
+    expect(
+      (await db.pool.query("SELECT count(*) FROM ingestion_versions")).rows[0]
+        .count,
+    ).toBe("0");
+  });
 });

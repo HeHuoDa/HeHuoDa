@@ -30,6 +30,18 @@ const legacyRows = computed(() =>
 );
 const hints = computed(() => reviewHints(props.file.candidate));
 const times = CANDIDATE_TIME_LABELS;
+/**
+ * 退役字段的四类时间在本期恒为未知，上方已有「本期不自动提取」说明；
+ * 再逐行列出「未知 · unknown」既重复又把范围定义误读成解析失败。
+ * 只展示仍有确定取值的历史时间（旧材料或手工补齐）。
+ */
+const knownTimes = computed(() =>
+  times.filter(
+    ([key]) =>
+      fields.value?.[key]?.precision &&
+      fields.value[key].precision !== "unknown",
+  ),
+);
 type Located = {
   evidence: EvidenceLike;
   label: string;
@@ -116,15 +128,16 @@ const conflicts = computed(() =>
         候选范围四值（all/specified/other/unknown）与正式比赛范围
         （all/colleges/complex/unknown）是不同枚举；导入映射由后端完成，界面不猜测。
       </p>
-      <dl class="console-details">
-        <template v-for="[key, label] in times" :key="key">
+      <p class="field-help" role="status">
+        #206
+        阶段一：赛事种类、参赛形式、规则、赛段名称与四类时间本期不自动提取，赛道只提取名称；
+        候选里对应取值为空是范围定义，不是正文缺信息或解析失败。原文与附件定位证据
+        仍保留在上方，请据此在下方正式记录里人工填写。
+      </p>
+      <dl v-if="knownTimes.length" class="console-details">
+        <template v-for="[key, label] in knownTimes" :key="key">
           <dt>{{ label }}</dt>
-          <dd>
-            {{
-              fields[key].precision === "unknown" ? "未知" : fields[key].value
-            }}
-            · {{ fields[key].precision }}
-          </dd>
+          <dd>{{ fields[key]?.value }} · {{ fields[key]?.precision }}</dd>
         </template>
       </dl>
     </template>

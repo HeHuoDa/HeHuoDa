@@ -4,7 +4,9 @@ import {
   noticeRuleVersion,
   classificationPriority,
   type Classification,
+  applyCandidateScope,
   parseEvidenceCandidate,
+  nonCompetitionCandidate,
   type Article,
   type ParsedCandidate,
   type RuleEvidenceInput,
@@ -74,16 +76,32 @@ export async function refreshExtraction(
   const snapshotClassification = (notice.extracted as ParsedCandidate | null)
     ?.classification;
   // 非赛事正文在首次入库前已裁剪；空快照不是一份推翻原判的新证据。
-  // 只在规则未变且没有附件新依据时保留同一来源版本的安全分类结果。
-  if (
+  // 该结论必须同时用于字段数据，而不只是覆盖 classification：parseEvidenceCandidate
+  // 拿到的是已裁剪的空正文，只能按标题重判，「…获奖新闻」会判回 suspected，
+  // 于是空比赛字段又退回带标题名称与届次的数据。
+  // 规则版本变化不能作为推翻依据：正文已被裁剪且没有附件时没有任何新证据可供重判，
+  // 按标题重判只会把已确认的非赛事批量抬回疑似（队列分组、优先级与附件闸门都会随之漂移）。
+  const keepSnapshotConclusion =
     !article.text &&
     !article.paragraphs.length &&
     !article.attachments.length &&
     !attachments.length &&
-    snapshotClassification?.classification === "non_competition" &&
-    snapshotClassification.ruleVersion === ruleVersion
-  )
-    data.classification = snapshotClassification;
+    snapshotClassification?.classification === "non_competition";
+  const nonCompetition = (classification: ParsedCandidate["classification"]) =>
+    applyCandidateScope(nonCompetitionCandidate(classification));
+  if (keepSnapshotConclusion) {
+    // 保留快照结论，但不能因此丢掉重提取得到的原文定位证据（非赛事基线证据为空）。
+    const snapshotData = nonCompetition(snapshotClassification);
+    const evidence = [
+      ...new Map(
+        [...snapshotData.evidence, ...data.evidence].map((item) => [
+          JSON.stringify(item),
+          item,
+        ]),
+      ).values(),
+    ];
+    Object.assign(data, snapshotData, { evidence });
+  }
   data.classification!.ruleVersion = ruleVersion;
   const prior = (
     await client.query(

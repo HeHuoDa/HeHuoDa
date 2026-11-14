@@ -90,7 +90,9 @@ try {
       title: '2026年测试竞赛报名通知', publishedAt: null,
       text: paragraph, paragraphs: [paragraph], attachments: [],
     }, sourceById('information-engineering').listUrl, []);
-    assert.deepEqual(candidate.fields.deadline, {precision: 'date', value: '2026-10-20'});
+    // 七字段辅助录入仍保留有据名称，时间由管理员核对，不再自动预填。
+    assert.equal(candidate.fields.name, '2026年测试竞赛');
+    assert.deepEqual(candidate.fields.deadline, {precision: 'unknown', value: null});
     assert.equal(sourceById('life-sciences').version, '1');
   `,
   ]);

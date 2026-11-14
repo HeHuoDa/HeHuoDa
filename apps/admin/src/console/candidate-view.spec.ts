@@ -89,12 +89,59 @@ describe("候选字段 v2 展示适配", () => {
     expect(notificationKindLabel(resolveNotificationKind(legacy))).toBe(
       "获奖公示",
     );
-    // 旧材料没有 v2 契约，赛事种类无从展示，不得由 kind 反推。
+    // 旧材料没有 v2 契约，赛事种类无从展示，不得由 kind 反推；本期该项退出一期
+    // 自动提取，因此以「本期不自动提取」告知，而不是声称正文未提供。
     expect(candidateFieldRows(fields())).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "赛事种类", value: "未提取" }),
+        expect.objectContaining({
+          label: "赛事种类",
+          value: "—",
+        }),
       ]),
     );
+  });
+
+  it("退役字段没有取值时说明本期不自动提取，不伪装成正文缺失", () => {
+    // #206 阶段一：九个字段退出自动提取，但原文证据仍在候选里。展示层不能把它们
+    // 显示成「未提取」（读作正文没有）或逐条要求人工清理，也不得隐藏历史取值。
+    const empty = candidateFieldRows(fields());
+    for (const label of ["赛事种类", "参赛形式", "参赛规则", "赛段名称"]) {
+      expect(empty).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label,
+            value: "—",
+            hint: "本期不自动提取，请按原文人工填写",
+          }),
+        ]),
+      );
+    }
+    expect(empty.some((row) => row.label === "报名／材料／比赛时间")).toBe(
+      true,
+    );
+    // 历史候选已有取值时照旧展示，不用说明行盖掉真实数据。eventKind／mode
+    // 在该 fixture 里本就没有值，仍按说明行处理；规则、赛段与时间必须显示真值。
+    const legacyValues = candidateFieldRows(
+      fields({
+        rules: ["作品须原创。"],
+        stageNames: ["初赛", "决赛"],
+        deadline: { precision: "date", value: "2026-11-01" },
+      }),
+    );
+    expect(legacyValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "参赛规则", value: "作品须原创。" }),
+        expect.objectContaining({ label: "赛段", value: "初赛、决赛" }),
+        expect.objectContaining({ label: "报名截止", value: "2026-11-01" }),
+      ]),
+    );
+    expect(
+      legacyValues
+        .filter((row) =>
+          ["参赛规则", "赛段名称", "报名／材料／比赛时间"].includes(row.label),
+        )
+        .some((row) => row.value === "—"),
+    ).toBe(false);
   });
 
   it("空输入与缺失字段一律返回 null，不伪装成已知值", () => {
@@ -163,6 +210,39 @@ describe("候选字段 v2 展示适配", () => {
     expect(rows.some((row) => row.label === "赛道规则：无规则赛道")).toBe(
       false,
     );
+  });
+
+  it("新契约的赛道只给名称时说明本期范围，不伪装成解析失败", () => {
+    // 本期只自动提取赛道名称，tracks 的 modeKind／members／rules 恒为 null。
+    // 旧文案「参赛形式无法可靠归一」会把契约规定的空值说成解析失败。
+    const rows = candidateFieldRows(
+      fields({
+        tracks: [
+          { name: "综合赛道", modeKind: null, members: null, rules: null },
+        ],
+      }),
+    );
+    const trackRow = rows.find((row) => row.label === "赛道：综合赛道");
+    expect(trackRow?.value).toBe("本期只提取赛道名称");
+    expect(trackRow?.value).not.toContain("无法可靠归一");
+    expect(trackRow?.hint).toContain("按原文人工填写");
+    // 空值不生成空规则行，也不伪造成「无规则」。
+    expect(rows.some((row) => row.label === "赛道规则：综合赛道")).toBe(false);
+  });
+
+  it("历史赛道已有形式与规则时仍展示真实值", () => {
+    // 本期范围说明不能盖掉历史候选里已经提取到的真实内容。
+    const rows = candidateFieldRows(
+      fields({
+        tracks: [
+          { name: "历史赛道", modeKind: "team", members: "2 人", rules: null },
+        ],
+      }),
+    );
+    expect(rows.find((row) => row.label === "赛道：历史赛道")).toMatchObject({
+      value: "团队",
+      hint: "人数：2 人",
+    });
   });
 
   it("旧材料投影保留已有规则、赛道规则与时间", () => {

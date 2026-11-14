@@ -1087,12 +1087,17 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(detail.candidate.fields).toMatchObject({
       materialsAt: { precision: "unknown", value: null },
     });
-    // 置未知的同时必须说明原因，便于人工复核。
+    // 材料时间本期退役：不再要求按字段清理，只留一条统一的未提取说明。
     expect(
       detail.candidate.conflicts.filter((conflict: string) =>
         conflict.startsWith("materialsAt"),
       ).length,
-    ).toBeGreaterThan(0);
+    ).toBe(0);
+    expect(
+      detail.candidate.warnings.some((warning: string) =>
+        warning.includes("本期不自动提取"),
+      ),
+    ).toBe(true);
     // 原文仍可核对，不因置未知而丢失证据。
     expect(
       detail.candidate.evidence
@@ -1329,5 +1334,187 @@ describe("管理员采集审核 HTTP 与 PostgreSQL 事务", () => {
     expect(review.candidate.fieldsV2.eventKind).toBe("学科竞赛");
     expect(review.candidate.fields).not.toHaveProperty("eventKind");
     expect(review.candidate.fields.kind).toBe(notificationKind);
+  });
+  it("七字段辅助录入闭环：采集到独立发布全程只自动给出七字段", async () => {
+    const article = extractArticle(informationArticle, url, source);
+    const result: FetchResult = {
+      url,
+      status: 200,
+      headers: {},
+      body: new TextEncoder().encode(informationArticle),
+      html: informationArticle,
+    };
+    // 1. 采集落库：候选只带七字段确定值，退役字段同步写兼容空值。
+    const parsed = parseCandidate(article, url, directory!);
+    const saved = await persistArticle(
+      test.pool,
+      source,
+      url,
+      result,
+      article,
+      parsed,
+    );
+    const id = saved.candidateId!;
+    const auth = await session();
+    const detail = (
+      await test.request("GET", `admin/ingestion/candidates/${id}`, undefined, {
+        cookie: auth.cookie,
+      })
+    ).json();
+    expect(detail.candidate.fieldsV2).toMatchObject({
+      eventKind: null,
+      mode: null,
+      modeKind: null,
+      rules: [],
+      stageNames: [],
+      startsAt: { precision: "unknown", value: null },
+      deadline: { precision: "unknown", value: null },
+      materialsAt: { precision: "unknown", value: null },
+      eventAt: { precision: "unknown", value: null },
+    });
+    expect(detail.candidate.fieldsV2.name).toBeTruthy();
+    // 退役字段不作为待补缺项，也不谎称正文缺信息。
+    expect(detail.candidate.missing.join(" ")).not.toMatch(
+      /赛事种类|参赛形式|参赛规则|赛段/,
+    );
+    expect(detail.candidate.warnings.join(" ")).toContain("本期不自动提取");
+    // 证据不因收敛被隐藏：正文证据仍可定位。
+    expect(detail.candidate.evidence.length).toBeGreaterThan(0);
+
+    // 2. 显式重提取：规则版本不变时修订不漂移。
+    const before = detail.candidateRevision;
+    const again = await persistArticle(
+      test.pool,
+      source,
+      url,
+      result,
+      article,
+      parseCandidate(article, url, directory!),
+    );
+    // 同版重复保存不改写候选（store 以 candidateId=null 表示未变更）。
+    expect(again.candidateId).toBeNull();
+    expect(
+      (
+        await test.request(
+          "GET",
+          `admin/ingestion/candidates/${id}`,
+          undefined,
+          {
+            cookie: auth.cookie,
+          },
+        )
+      ).json().candidateRevision,
+    ).toBe(before);
+
+    // 3. 人工复核：审核材料带兼容投影与协议契约。
+    const review = (
+      await test.request(
+        "GET",
+        `admin/ingestion/candidates/${id}/review`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json();
+    expect(review.candidate.fieldsV2.modeKind).toBeNull();
+    // 4. 批准 → 预览 → 导入 → 独立发布。
+    const corrected = correctedReview(review);
+    const reviewSaved = await test.request(
+      "PUT",
+      `admin/ingestion/candidates/${id}/review`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：核对原文与证据",
+        review: corrected,
+      },
+      auth.headers,
+    );
+    expect(reviewSaved.statusCode).toBe(200);
+    const approved = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/approve`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：批准已核对材料",
+        review: reviewSaved.json().review,
+      },
+      auth.headers,
+    );
+    expect(approved.statusCode).toBe(200);
+    const preview = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/import-preview`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：检查导入差异",
+        review: reviewSaved.json().review,
+      },
+      auth.headers,
+    );
+    expect(preview.statusCode).toBe(200);
+    const imported = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/import`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：写入正式草稿",
+        previewId: preview.json().previewId,
+        review: reviewSaved.json().review,
+      },
+      auth.headers,
+    );
+    expect(imported.statusCode).toBe(200);
+    const targetId = reviewSaved.json().review.targetId;
+    // 导入只写草稿，学生可见数据仍需独立发布。
+    const draft = await test.request("GET", `competitions/${targetId}`);
+    expect(draft.statusCode).toBe(404);
+    const publishReview = (
+      await test.request(
+        "GET",
+        `admin/ingestion/candidates/${id}/review`,
+        undefined,
+        { cookie: auth.cookie },
+      )
+    ).json();
+    const publishPreview = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/publish-preview`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：核对发布目标",
+        sourceVersion: publishReview.sourceVersion,
+        candidateRevision: publishReview.candidateRevision,
+        baseline: publishReview.baseline,
+      },
+      auth.headers,
+    );
+    expect(publishPreview.statusCode).toBe(200);
+    const published = await test.request(
+      "POST",
+      `admin/ingestion/candidates/${id}/publish`,
+      {
+        operationId: randomUUID(),
+        reason: "七字段闭环验收：发布到学生可见数据",
+        sourceVersion: publishReview.sourceVersion,
+        candidateRevision: publishReview.candidateRevision,
+        baseline: publishReview.baseline,
+        previewId: publishPreview.json().previewId,
+        confirm: true,
+      },
+      auth.headers,
+    );
+    expect(published.statusCode).toBe(200);
+    const publicRecord = await test.request("GET", `competitions/${targetId}`);
+    expect(publicRecord.statusCode).toBe(200);
+    expect(publicRecord.json().name).toBeTruthy();
+    // 操作用户可见的候选在发布后仍保留七字段契约。
+    const final = (
+      await test.request("GET", `admin/ingestion/candidates/${id}`, undefined, {
+        cookie: auth.cookie,
+      })
+    ).json();
+    expect(final.candidate.fieldsV2.modeKind).toBeNull();
+    expect(final.candidate.fieldsV2.ruleVersion ?? final.ruleVersion).toBe(
+      noticeRuleVersion,
+    );
   });
 });

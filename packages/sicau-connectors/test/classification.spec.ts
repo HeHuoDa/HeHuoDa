@@ -1,6 +1,9 @@
 import {
   classifyNotice,
-  parseEvidenceCandidate,
+  containsApplicantList,
+  bodyPublishesApplicantList,
+  parseEvidenceCandidateUnscoped,
+  publishesApplicantList,
 } from "../dist/notices/index.js";
 import {
   positiveGroups,
@@ -8,6 +11,75 @@ import {
   ambiguousTitles,
   classificationBoundaryCases,
 } from "./classification-corpus.js";
+
+describe("非赛事业务的条件性赛事提及", () => {
+  it("报名通知收集班级名单表时仍保留真实赛事报名", () => {
+    expect(
+      classifyNotice("关于举办大学生职业规划大赛的通知", [
+        "本科生请报名参赛，并提交参赛作品。班长收齐班级参赛名单汇总表后报送。",
+      ]),
+    ).toMatchObject({
+      classification: "definite",
+      notificationKind: "registration",
+    });
+  });
+  it("班团活动标题含未收录赛事名时保留复核，不裁剪报名正文", () => {
+    expect(
+      classifyNotice("关于开展主题团日篮球赛报名活动的通知", [
+        "篮球比赛报名截止：11月20日，比赛时间：11月25日，比赛规则请查阅附件。",
+      ]),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+  });
+  it("班团活动的比赛成果条件不提升为赛事通知", () => {
+    expect(
+      classifyNotice("关于开展秋季主题团日活动的通知", [
+        "鼓励分享参加职业规划大赛的经历，请各团支部提交活动记录。",
+      ]),
+    ).toMatchObject({ classification: "non_competition", needsReview: false });
+  });
+  it("培养、导师、入党与文集征稿不因成果要求进入赛事队列", () => {
+    for (const title of [
+      "校企联合培养班招生通知",
+      "关于朋辈导师推选工作的通知",
+      "关于本学期推优入党工作的通知",
+      "校庆文集征文启事",
+    ]) {
+      expect(
+        classifyNotice(title, [
+          "曾在创新创业大赛中取得成绩的同学可介绍相关经历。",
+        ]),
+      ).toMatchObject({
+        classification: "non_competition",
+        needsReview: false,
+      });
+    }
+    for (const title of [
+      "关于主题团日设计大赛报名的通知",
+      "关于校企培养班数学建模竞赛队伍选拔的通知",
+      "校庆征文比赛通知",
+    ]) {
+      expect(
+        classifyNotice(title, ["参赛对象：全校学生，报名截止：11月20日。"]),
+      ).toMatchObject({
+        classification: "definite",
+        needsReview: true,
+      });
+    }
+    expect(
+      classifyNotice("校庆征文启事", ["征集同学们的原创作品。"]),
+    ).toMatchObject({
+      classification: "suspected",
+      needsReview: true,
+    });
+    expect(
+      classifyNotice(
+        "关于主题团日活动的通知",
+        ["请各支部组织交流。"],
+        ["数学竞赛报名安排.pdf"],
+      ),
+    ).toMatchObject({ classification: "suspected", needsReview: true });
+  });
+});
 
 /** 只取审核人员可观察的四项结果，避免把实现细节带进断言。 */
 function observableOf(result: ReturnType<typeof classifyNotice>) {
@@ -22,7 +94,7 @@ function observableOf(result: ReturnType<typeof classifyNotice>) {
 describe("赛事分类独立于审核状态", () => {
   it("延期说明后紧接的新绝对截止仍可提取，旧日期在前不能抵消相对变更", () => {
     const parse = (paragraphs: string[]) =>
-      parseEvidenceCandidate(
+      parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛补充通知",
           publishedAt: null,
@@ -47,7 +119,7 @@ describe("赛事分类独立于审核状态", () => {
     "资格否定 %s 保留复杂原文，不列为允许学院",
     (denied) => {
       const text = `参赛对象：仅信息工程学院学生可参加，生命科学学院${denied}。`;
-      const result = parseEvidenceCandidate(
+      const result = parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛报名通知",
           publishedAt: null,
@@ -76,7 +148,7 @@ describe("赛事分类独立于审核状态", () => {
         "原报名截止：2026年11月1日。",
         `现延期至${relative}。`,
       ];
-      const result = parseEvidenceCandidate(
+      const result = parseEvidenceCandidateUnscoped(
         {
           title: "2026年数学竞赛补充通知",
           publishedAt: null,
@@ -99,7 +171,7 @@ describe("赛事分类独立于审核状态", () => {
   );
   it("联合主办单位中的逗号不丢失，也不把不同来源的甲乙与甲当成同值", () => {
     const text = "主办单位：甲，乙。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: null,
@@ -130,7 +202,7 @@ describe("赛事分类独立于审核状态", () => {
   it("资格排除、主办承办和否定模式不得自动解释成相反含义", () => {
     const text =
       "主办单位：教务处，承办单位：信息工程学院。参赛对象：仅信息工程学院学生可参加，生命科学学院不得参加。参赛规则：禁止个人参赛，须以团队参加。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: null,
@@ -154,7 +226,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("旧绝对截止后出现未锚定相对延期，不沿用旧截止", () => {
     const paragraphs = ["原报名截止：2026年11月1日。", "现延期至下周一。"];
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛补充通知",
         publishedAt: "2026-10-01",
@@ -188,7 +260,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("顿号连接的多赛段时间仍保留两侧候选证据", () => {
     const text = "院赛报名截止：2026年11月1日、校赛报名截止：2026年11月8日。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -210,7 +282,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("通用标题的通知种类证据必须包含真正支持通知种类的正文", () => {
     const text = "2026年数学竞赛通知已发布。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "相关事项",
         publishedAt: null,
@@ -238,7 +310,7 @@ describe("赛事分类独立于审核状态", () => {
         ["现将数学竞赛获奖结果公示。报名截止曾为2026年10月1日。", "award"],
         ["数学竞赛圆满结束，现回顾比赛。报名截止曾为2026年10月1日。", "news"],
       ]) {
-        const result = parseEvidenceCandidate(
+        const result = parseEvidenceCandidateUnscoped(
           {
             title,
             publishedAt: null,
@@ -266,7 +338,7 @@ describe("赛事分类独立于审核状态", () => {
   });
   it("同值多赛段截止也聚合两侧证据，整体归属仍未知", () => {
     const text = "院赛报名截止：2026年11月1日，校赛报名截止：2026年11月1日。";
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -299,7 +371,7 @@ describe("赛事分类独立于审核状态", () => {
     ).toMatchObject({ classification: "suspected" });
   });
   it("同句逗号分隔的两个赛段截止保留候选值及定位", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -330,7 +402,7 @@ describe("赛事分类独立于审核状态", () => {
     );
   });
   it("资格标题和下一段分属不同证据时分别定位，不伪造跨来源摘录", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "补充通知",
         publishedAt: null,
@@ -377,7 +449,7 @@ describe("赛事分类独立于审核状态", () => {
         text: "报名截止：2026年11月1日。",
         attachments: [],
       };
-      const parsed = parseEvidenceCandidate(
+      const parsed = parseEvidenceCandidateUnscoped(
         article,
         "https://example.edu/notice",
         [],
@@ -442,7 +514,7 @@ describe("赛事分类独立于审核状态", () => {
     });
   });
   it("正文与PDF截止冲突保留候选值及页码，自动字段不选更新者", () => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title: "2026年数学竞赛报名通知",
         publishedAt: null,
@@ -502,7 +574,7 @@ describe("赛事分类独立于审核状态", () => {
     ["2026年竞赛获奖新闻", ["报名截止：2026年11月1日。"], null],
     ["2026年竞赛报名通知", ["报名截止：2026年11月1日。"], "2026-11-01"],
   ] as const)("%s 的时间不猜测（%s）", (title, paragraphs, deadline) => {
-    const parsed = parseEvidenceCandidate(
+    const parsed = parseEvidenceCandidateUnscoped(
       {
         title,
         publishedAt: null,
@@ -517,7 +589,7 @@ describe("赛事分类独立于审核状态", () => {
     expect(parsed.fields.deadline.value).toBe(deadline);
   });
   it("三个主办表述不能在冲突后静默恢复第三个值，资格与附件保留两侧定位", () => {
-    const result = parseEvidenceCandidate(
+    const result = parseEvidenceCandidateUnscoped(
       {
         title: "2026年竞赛报名通知",
         publishedAt: "2025-12-31",
@@ -1137,5 +1209,421 @@ describe("赛事分类独立于审核状态", () => {
         "活动时间为2026年11月1日。",
       ]).classification,
     ).toBe("non_competition");
+  });
+  it("组织方案里的公示流程句不是结果公示", () => {
+    const paragraphs = [
+      "一、竞赛目的",
+      "提高教师教学能力。",
+      "二、竞赛安排",
+      "1.报名时间：2026年11月1日至11月10日。",
+      "2.竞赛结果在学院官网公示3个工作日；",
+      "3.评审专家组根据评分标准评定名次。",
+    ];
+    const result = classifyNotice(
+      "动物医学院2026年教师教学竞赛组织方案",
+      paragraphs,
+    );
+    expect(result.classification).toBe("definite");
+    expect(result.notificationKind).not.toBe("award");
+  });
+  it("同篇其他句子的未来公示表述不作废已发出的结果公告", () => {
+    const result = classifyNotice("关于数学建模竞赛后续安排的通知", [
+      "现将本次竞赛评审结果公示如下。",
+      "异议材料将在三日后于学院官网公示处理。",
+    ]);
+    expect(result.classification).toBe("non_competition");
+    expect(result.notificationKind).toBe("award");
+  });
+  it("实发的结果公示与公示期仍然按结果公示排除", () => {
+    for (const body of [
+      "现将数学竞赛获奖结果公示如下。",
+      "现将评审结果予以公示，公示期3天。",
+    ])
+      expect(
+        classifyNotice("2026年数学竞赛结果公示", [body]).classification,
+      ).toBe("non_competition");
+  });
+});
+
+// S1：分类器与 runner／store 必须共用同一份名单边界，否则报名说明在离线入口通过、
+// 在实际采集或保存入口仍被整条跳过/拒绝。
+describe("名单隐私边界在分类与实际采集保存入口一致", () => {
+  const signupTitle = "2026年数学竞赛报名通知";
+  const signupBody = [
+    "报名截止2026年11月20日。",
+    "参赛同学须向班长报送参赛名单汇总表。",
+  ];
+  it("报名说明里要求报送名单表不触发任何名单拦截", () => {
+    const classification = classifyNotice(signupTitle, signupBody);
+    expect(classification).toMatchObject({
+      classification: "definite",
+      notificationKind: "registration",
+    });
+    expect(classification.exclusions).not.toContainEqual("applicant-list");
+    // 实际入口此前调用全文 containsApplicantList，这里断言新判据不再误拦。
+    expect(publishesApplicantList(signupTitle, signupBody.join("\n"))).toBe(
+      false,
+    );
+    // 反向证明旧全文判据仍会命中，说明不能用「删掉判据」冒充修复。
+    expect(
+      containsApplicantList(signupTitle + "\n" + signupBody.join("\n")),
+    ).toBe(true);
+  });
+  it.each([
+    ["现公布参赛名单", "现公布参赛名单：张三、李四。"],
+    ["参赛名单公布如下", "参赛名单公布如下：张三、李四。"],
+    ["现将报名人员名单公示", "现将报名人员名单公示如下。"],
+    ["现公布报名学生名单", "现公布报名学生名单。"],
+    ["报名人员信息表", "报名人员信息表如下：张三 20230001。"],
+    ["名单表头接姓名", "参赛名单：张三、李四。"],
+  ])("正文真实发布名单仍按隐私排除：%s", (_label, body) => {
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    [
+      "表头加序号姓名学号",
+      [
+        "参赛学生名单",
+        "序号 姓名 学号",
+        "1 张三 2023010101",
+        "2 李四 2023010102",
+      ],
+    ],
+    ["表头加逐行姓名", ["参赛学生名单", "张三", "李四"]],
+    ["附件序号的名单标题", ["附件1：参赛人员名单"]],
+    ["名单如下加姓名", ["名单如下：张三、李四"]],
+    ["名单词加冒号加姓名", ["参赛学生名单：张三、李四"]],
+  ])("表格与逐条形态的真实名单仍被拦截：%s", (_label, body) => {
+    // extractArticle 会把表格 tr 拆成独立段落，最常见形态没有公布动词；
+    // 判据放宽后这里如果不拦，runner/store 会把名单正文与逐条姓名入库。
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
+    ["报名学生名单", "程序设计竞赛报名人员名单"],
+    ["拟评名单公示", "关于2025-2026学年度国家助学金拟评名单的公示"],
+    ["参赛学生名单", "2026年数学建模竞赛参赛学生名单"],
+  ])("标题名单仍按隐私排除：%s", (_label, title) => {
+    expect(classifyNotice(title, ["赛程安排见正文。"])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+    expect(publishesApplicantList(title, "赛程安排见正文。")).toBe(true);
+  });
+  it("获奖名单属于结果公示边界，不冒充个人名单拦截", () => {
+    // 输出仍然是 non_competition，但理由是结果公示而非 applicant-list；
+    // 两者不能混用，否则「把结果公示都当名单」会误伤正文留证。
+    const result = classifyNotice("2026年数学建模竞赛获奖名单", [
+      "赛程安排见正文。",
+    ]);
+    expect(result.classification).toBe("non_competition");
+    expect(result.exclusions).not.toContainEqual("applicant-list");
+  });
+  // S1 回归：流程说明只能否定它自己那一句，不能把后面的真实名单表格一并豁免。
+  // 旧实现用 `if (listWorkflowPhrase.test(text)) return false` 全文否决，
+  // 只要正文任何一处出现「报送名单汇总表」，后面的姓名／学号表格就整体放行。
+  it.each([
+    ["流程句在名单表之前", ["请班长报送参赛名单汇总表。"]],
+    ["流程句在名单表之后", []],
+  ])("报送说明与真实名单表格并存时仍拦截：%s", (_label, prefix) => {
+    const body = [
+      ...prefix,
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+      "李四20260002",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it("流程句在名单表之后同样不豁免前面的真实名单", () => {
+    const body = [
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+      "请班长报送参赛名单汇总表。",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+  });
+  it.each([
+    ["只要求报送空表模板", ["请各班报送参赛名单汇总表（模板见附件）。"]],
+    ["名单汇总表后报送", ["参赛名单汇总表后报送至学院。"]],
+    ["报名说明要求报送", ["参赛同学须向班长报送参赛名单汇总表。"]],
+  ])("只要求报送名单表时不误拦：%s", (_label, body) => {
+    // 正向对照：修流程句豁免不能把「要求报送」本身也变成名单。
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(false);
+  });
+  it("提交报名信息不是名单对象", () => {
+    // `信息表?` 曾把「表」写成可选，使「提交报名信息」命中名单对象，
+    // 再配合联系方式段落里的数字被当成学号行，普通报名通知会被误拦。
+    const body = [
+      "全体同学需在平台报名参赛，准确、完整填写报名信息，并上传参赛材料。",
+      "学院党委办公室 张老师 QQ：2813548817",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(false);
+  });
+  it("附件名单与普通报名表都不改变父通知的名单边界", () => {
+    expect(
+      classifyNotice(signupTitle, signupBody, ["参赛名单汇总表.xlsx"]),
+    ).toMatchObject({ classification: "definite" });
+    expect(
+      classifyNotice(signupTitle, signupBody, ["报名表.docx"]),
+    ).toMatchObject({ classification: "definite" });
+  });
+
+  // S2 回归（#206 新阶段一已确认缺陷）：括注里的公布动作同样是公布。
+  // `listPublishedAfter` 曾用 `[^。；\n（）()]{0,10}?` 把括号整体排除在间隔外，
+  // 于是「参赛名单（公布如下）：张三、李四」里名单对象与公布动作之间隔着左括号，
+  // 名单段永远不会开启，真实名单会被当作普通报名说明放行。
+  it.each([
+    ["参赛名单（公布如下）", "参赛名单（公布如下）：张三、李四。"],
+    ["报名人员信息表（如下）", "报名人员信息表（如下）：张三、李四。"],
+    ["参赛名单汇总表（公示）", "参赛名单汇总表（公示）：张三、李四。"],
+  ])("括号里的公布动作同样拦截真实名单：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+
+  it("空表模板引用不因允许括号公布而误拦", () => {
+    // 正向对照：允许跨过括号读公布动作，不等于把「模板见附件」当成公布。
+    for (const body of [
+      "请各班报送参赛名单汇总表（模板见附件）。",
+      "请各班报送参赛名单汇总表（见附件模板）。",
+      "参赛名单汇总表（空表）随本通知下发，请于11月20日前报送。",
+    ]) {
+      expect(bodyPublishesApplicantList(body)).toBe(false);
+      expect(publishesApplicantList(signupTitle, body)).toBe(false);
+    }
+  });
+
+  it("报送空表后又列出真实姓名时仍按名单拦截", () => {
+    // 流程句只抵消它自己那一句；同一篇后文列出姓名／学号仍构成名单正文。
+    const body = [
+      "请各班报送参赛名单汇总表（模板见附件）。",
+      "参赛学生名单",
+      "姓名学号",
+      "张三20260001",
+    ];
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+  });
+
+  // B0 回归（#206 审阅已确认缺陷）：空表／模板说明不是公布动作。
+  // `listPublishedAfter` 允许公布类动作跨括号后，「报名人员信息表（空表如下）」
+  // 里的「如下」被当成了公布动作，报名说明因此被整条拒收。
+  // 放行依据限定为紧邻该名单对象的模板语义（空表／模板／样表／空白表），
+  // 不能退化成「全文出现模板词就豁免」。
+  it.each([
+    ["空表如下", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["空表括注", "报名人员信息表（空表）随本通知下发，请下载填写后提交。"],
+    ["模板括注", "请下载参赛名单汇总表（模板），填写完成后于11月20日前提交。"],
+    ["样表括注", "报名人员信息表（样表）见本通知附件，请按样表填写。"],
+    ["空白表括注", "参赛名单汇总表（空白表）可在通知附件下载。"],
+    ["空表不加括号", "报名人员信息表空表随本通知下发，请下载填写后提交。"],
+  ])("名单对象紧邻的空表／模板说明不构成发布名单：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+    // 共用判据不命中名单排除项；赛事分类本身由正文其他内容决定，不在这里断言。
+    expect(classifyNotice(signupTitle, [body]).exclusions).not.toContainEqual(
+      "applicant-list",
+    );
+  });
+
+  it("下载附件填写本身不是放行依据", () => {
+    // 只有紧邻名单对象的模板语义才抵消公布动作；「下载附件填写」不是模板语义，
+    // 不能因为文里出现下载说明就放行同一句里的真实名单。
+    for (const body of [
+      "报名人员信息表（如下）：张三、李四，请下载附件填写后提交。",
+      "请下载附件填写后提交。报名人员信息表（公布如下）：张三、李四。",
+    ]) {
+      expect(bodyPublishesApplicantList(body)).toBe(true);
+      expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    }
+  });
+
+  it("空表说明之后出现真实姓名仍按名单拦截", () => {
+    // 模板语义只抵消它自己那一处；后文逐条列名依然是名单正文。
+    const bodies = [
+      [
+        "请下载报名人员信息表（空表如下），填写后提交。",
+        "报名人员信息表（如下）：张三、李四。",
+      ],
+      ["请下载报名人员信息表（空表如下），填写后提交。", "张三20260001"],
+      [
+        "参赛名单汇总表（模板）见附件。",
+        "参赛学生名单",
+        "序号 姓名 学号",
+        "1 张三 2023010101",
+      ],
+    ];
+    for (const body of bodies)
+      expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+  });
+
+  // R1 回归（#206 两轴评审已确认缺陷）：判据改用「标题名单词 + 正文发布形态」后，
+  // 正文里没有公布动词、只在括注里直接点名、或表头写作「参赛名单汇总表」的真实名单
+  // 会整体放行。主分支旧实现用全文 containsApplicantList 能拦住，说明这是收窄过度，
+  // 不是判据变严。修复方向是补齐名单对象与括注形态，不能退回全文豁免。
+  it.each([
+    ["括注里直接列名", "参赛人员名单（张三、李四）"],
+    ["括注里列三名", "参赛名单（张三、李四、王五）"],
+    ["括注指向附件名单", "报名人员名单（见附件）"],
+    ["句中括注列名", "经审核，参赛名单（张三、李四）确定"],
+  ])("括注形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+    expect(classifyNotice(signupTitle, [body])).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it("参赛名单汇总表这类同义名单对象同样开启名单段", () => {
+    // 名单对象此前只覆盖「参赛名单／明细／清单」，漏掉「参赛名单汇总表」；
+    // 表头因此不被识别，后面的姓名学号行被当成普通正文入库。
+    const body = ["参赛名单汇总表", "姓名 学号", "张三 20230101001"];
+    expect(bodyPublishesApplicantList(body.join("\n"))).toBe(true);
+    expect(publishesApplicantList(signupTitle, body.join("\n"))).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
+    ["空表括注", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["模板见附件括注", "请各班报送参赛名单汇总表（模板见附件）。"],
+    ["报送名单表", "参赛同学须向班长报送参赛名单汇总表。"],
+    ["报送并指向附件", "请各班报送参赛名单汇总表（见附件）。"],
+  ])("补齐括注判据后仍不误拦报名说明：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
+
+  // R2 回归（#206 两轴评审已确认缺陷）：R1 只补齐了「顿号列名」和「见附件」两种括注，
+  // 仍漏掉三类真实名单——括注指向带序号的附件（见附件1）、括注里用序号分隔姓名
+  // （1 张三 2 李四）、以及表头带尾注（共2人／排名不分先后）后逐行列出姓名。
+  // 这三类在主分支旧判据下都会被 containsApplicantList 全文拦下，属收窄过度。
+  it.each([
+    ["括注指向序号附件", "报名人员名单（见附件1）"],
+    ["括注序号分隔姓名", "参赛名单（1 张三 2 李四）"],
+    ["括注公布动作无冒号", "参赛名单（公布如下）张三、李四"],
+    ["括注尾注共几人", "参赛名单（共2人）：张三、李四"],
+    ["括注尾注排名不分先后", "参赛名单（排名不分先后）：张三、李四"],
+  ])("括注尾注与序号形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    ["尾注共几人", ["参赛名单（共2人）", "序号 姓名 学号", "1 张三 20260001"]],
+    ["尾注排名不分先后", ["参赛名单（排名不分先后）", "张三", "李四"]],
+    ["尾注见附件1", ["报名人员名单（见附件1）", "张三", "李四"]],
+    ["说明后仍有名单", ["参赛名单（比赛说明）", "张三", "李四"]],
+  ])("表头带尾注的名单段仍按名单拦截：%s", (_label, body) => {
+    const text = body.join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(true);
+    expect(publishesApplicantList(signupTitle, text)).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
+    ["下载空表", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["报送模板", "请各班报送参赛名单汇总表（模板见附件）。"],
+    ["报送见附件模板", "请各班报送参赛名单汇总表（见附件模板）。"],
+    ["下载样表", "报名人员信息表（样表）见本通知附件，请按样表填写。"],
+  ])("尾注与序号判据放宽后仍不误拦表样说明：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
+
+  // R3 回归：放宽表头尾注与括注姓名串后必须同时收紧两侧——
+  // 尾注只能是明确的名单说明，括注姓名串必须真的在列举姓名。
+  // 否则「班级参赛名单汇总表（附件4）」会被当成表头，把后面的邮箱号码
+  // 误读成学号行；「参赛名单（如需下载）」会被当成写了两个姓名。
+  it.each([
+    [
+      "附件编号尾注不是表头尾注",
+      [
+        "参赛材料：生涯发展报告、班级参赛名单汇总表（附件4）",
+        "班长收齐后发送至邮箱3972960514@qq.com",
+      ],
+    ],
+    [
+      "普通说明括注不是姓名串",
+      ["参赛名单（如需下载）", "材料具体要求详见附件2。"],
+    ],
+  ])("收紧两侧后仍不误拦非名单段：%s", (_label, body) => {
+    const text = body.join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(false);
+    expect(publishesApplicantList(signupTitle, text)).toBe(false);
+  });
+
+  // R4 回归：R3 收紧把判据收得过紧，两个方向都出现了真实漏拦。
+  // 一是括注里只写一个姓名（「名单（王小明）」）被当成普通说明放行——直接公开真名；
+  // 二是表头尾注只认少数几个固定词，「（附件4）」这类附件号尾注使整段名单不再成立。
+  // 邮箱数字被当学号是同一处放宽的连带风险，一并锁定。
+  it.each([
+    ["括注单个姓名", "报名人员名单（王小明）"],
+    ["括注单个姓名-参赛", "参赛名单（张三）"],
+    [
+      "无逗号的后续报名表也不豁免前面的名单引用",
+      "参赛名单（见附件）请提交报名人员信息表。",
+    ],
+    [
+      "后续报名表流程不豁免前面的名单附件引用",
+      "参赛名单（见附件），请提交报名人员信息表。",
+    ],
+    [
+      "后续报名表流程不豁免前面的姓名",
+      "参赛名单（张三、李四），请提交报名人员信息表。",
+    ],
+    [
+      "后续报名表流程不豁免前面的单名",
+      "参赛名单（张三），请提交报名人员信息表。",
+    ],
+    ["说明括注后单个姓名", "报名人员名单（详情）：王小明"],
+    [
+      "附件号尾注+姓名学号行",
+      ["班级参赛名单汇总表（附件4）", "张三 20230001"].join("\n"),
+    ],
+    [
+      "附件号尾注+纯姓名行",
+      ["班级参赛名单汇总表（附件4）", "张三", "李四"].join("\n"),
+    ],
+  ])("括注与附件号尾注形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    ["材料说明括注", "参赛名单（材料具体要求）"],
+    ["比赛说明括注", "参赛名单（比赛说明）"],
+    ["填表说明括注", "参赛名单（填表说明）"],
+    ["详情括注", "参赛名单（详情）"],
+    ["下载说明括注", "参赛名单（如需下载）"],
+    ["模板见附件", "参赛名单（模板见附件）"],
+  ])("说明性括注不因放宽单名判据被误拦：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
+  it("报名邮箱里的数字串不被当成学号行", () => {
+    const text = [
+      "班级参赛名单汇总表（附件4）",
+      "班长收齐后发送至邮箱3972960514@qq.com",
+    ].join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(false);
+    expect(publishesApplicantList(signupTitle, text)).toBe(false);
   });
 });
