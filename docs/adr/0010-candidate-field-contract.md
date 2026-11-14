@@ -7,7 +7,7 @@
 - 日期：2026-11-09
 - 关联：Issue #203（本 ADR 即其第一阶段交付）、Issue #198（缺陷 1/2/3/5）、Issue #202 / PR #207、ADR 0004（候选与正式比赛分离）、ADR 0009（赛事性质与验收口径分离）、[quality-eval-protocol.md](../quality-eval-protocol.md) 3.3／3.4
 - 基线：`main` `7b7973c34b777d5fcad05891969dcc20845f0818`，规则版本 `competition-rules-5`
-- 后续修订：Issue #206 阶段一把自动提取范围收敛到七个字段（见下方「2026-11-13 修订」），规则版本先升到 `competition-rules-17`；随后修正空表误拦与赛事名、人数、承办单位取值，版本升到 `competition-rules-18`
+- 后续修订：Issue #206 阶段一把自动提取范围收敛到七个字段（见下方「2026-11-13 修订」），规则版本先升到 `competition-rules-17`；随后修正空表误拦与赛事名、人数、承办单位取值，版本升到 `competition-rules-18`；再补齐名单判据的括注列名与同名名单对象漏拦，版本升到 `competition-rules-19`
 
 ## 2026-11-13 修订：七字段辅助录入范围（#206）
 
