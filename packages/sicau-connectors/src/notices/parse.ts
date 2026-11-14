@@ -309,8 +309,19 @@ export function extractDates(text: string, year: string | null): TimeValue[] {
  * 赛事名：只剥离可确认的通知套语（前缀「关于举办／开展／组织参加」与后缀
  * 「的通知／预通知」）。保留发文单位、年份届次、校内选拔赛与子赛道，避免把
  * 不同比赛合并成同名。剥离后为空或只剩套语时回退标题原文。
+ *
+ * 「启动」「公布」「公示」也是通知动作（「关于启动…网报工作的通知」「…关于公布…
+ * 结果的通知」），与「举办」同层剥离；不是赛事名的一部分。
  */
-const noticeTitlePrefix = /^关于(?:举办|举行|开展|组织参加|组织)/;
+const noticeTitlePrefix =
+  /^关于(?:举办|举行|开展|组织开展|组织参加|组织|启动|公布|公示)/;
+/**
+ * 发文方泛指 + 通知动作。「学院推荐参加…」里的「学院」是泛指（正文写「学院将进行
+ * 组织推选工作」），不是可保留的发文单位名；「推荐参加」是通知动作。
+ * 必须放在 unitAboutAction 之前：后者会把「学院推荐参加…」当发文单位保留下来。
+ */
+const genericUnitActionPrefix =
+  /^(?:学院|学校|校|我院|我校)(?:推荐参加|组织参加|组织开展|组织推选)/;
 const bareAboutPrefix = /^关于(?!(?:印发|转发|做好|报送|征求|评选|选聘|处理))/;
 /**
  * 赛事词：只有标题自己点明赛事时，才从标题派生赛事名与届次。标题命中的是发布方
@@ -319,12 +330,27 @@ const bareAboutPrefix = /^关于(?!(?:印发|转发|做好|报送|征求|评选|
 const competitionWordInName =
   /竞赛|比赛|大赛|挑战杯|挑战赛|运动会|锦标赛|联赛|对抗赛|辩论赛|演讲比赛|技能赛|选拔赛|邀请赛|公开赛|擂台赛|互联网\s*\+/;
 /**
- * 发文单位前缀（「食品学院关于举办…」）只去掉「关于举办」，单位本身保留：
- * 单位是否为赛事名组成部分无法可靠区分，删掉可能把不同单位的同名赛事合并。
+ * 发文单位 + 通知动作前缀（「食品学院关于举办…」「水产学院关于公布…」）：
+ * 单位本身保留（是否为赛事名组成部分无法可靠区分，删掉可能把不同单位的
+ * 同名赛事合并），只剥掉其后的「关于+动作」套语。
  */
-const issuingUnitPrefix = /^(.{2,30}?)关于(?:举办|举行|开展|组织参加)/;
+const unitAboutAction =
+  /^(.{2,30}?)关于(?:举办|举行|开展|组织开展|组织参加|组织|启动|公布|公示)/;
 const noticeTitleSuffix =
   /(?:的)?(?:(?:报名|参赛)的?)?(?:预通知|补充通知|变更通知|更正通知|通知)$/;
+/**
+ * 通知的工作事项尾巴（「…网报工作」「…申报工作」）：描述发文方要办的事，
+ * 不是赛事名的组成部分。只在剥完仍含赛事词时才生效。
+ */
+const noticeTaskSuffix = /(?:网报|报名|申报|参赛|组织|遴选)工作$/;
+/**
+ * 通知事项尾巴（「…决赛测评」「…决赛安排」「…决赛结果」里的「测评／安排／结果」）：
+ * 这些是发文方要办的事项，不是赛事名。**只剥事项词，不剥赛段词**——ADR 0010 §4
+ * 只要求保留选拔层级与子赛道，并未说赛段不进入 name；既有正例还明确要求
+ * 「关于举办第五届农业机器人大赛决赛的通知」保留「决赛」。「遴选」也不剥
+ * （ADR §4 明确不吞遴选／组织／评选的区别）。
+ */
+const noticeItemSuffix = /(?:测评|安排|结果)$/;
 /**
  * 副标题分隔符：标题形如「…决赛的通知 ——“米+N”…」时，「的通知」不在末尾，
  * 上面的后缀正则碰不到。先按分隔符拆开，逐段剥套语，再用无分隔符拼接。
@@ -339,17 +365,34 @@ const subtitleSeparator = /\s*(?:——|—|–|--)\s*/;
  */
 function stripNoticeWording(segment: string, allowBareAbout: boolean): string {
   let value = segment.trim();
-  value = value.replace(noticeTitleSuffix, "").trim();
+  // 通知套语与工作事项尾巴可能叠着出现（「…报名的通知」「…网报工作的通知」），
+  // 剥完一层再看下一层，避免只去掉「的通知」留下工作事项。
   for (let round = 0; round < 3; round++) {
     const next = value
-      // 有发文单位时只剥掉「关于举办」，单位保留。
-      .replace(issuingUnitPrefix, "$1")
-      .replace(noticeTitlePrefix, "")
+      .replace(noticeTitleSuffix, "")
+      .replace(noticeTaskSuffix, "")
       .trim();
     if (next === value) break;
     value = next;
   }
-  if (allowBareAbout) value = value.replace(bareAboutPrefix, "").trim();
+  // 先剥「关于+动作」套语；裸「关于」放在中段，既能处理「关于学院推荐参加…」
+  // 这种泛指单位，又不会把「关于举办数学竞赛」剥成「举办数学竞赛」。
+  const stripPrefixes = (input: string): string => {
+    let current = input;
+    for (let round = 0; round < 3; round++) {
+      const next = current
+        .replace(unitAboutAction, "$1")
+        .replace(noticeTitlePrefix, "")
+        .replace(genericUnitActionPrefix, "")
+        .trim();
+      if (next === current) break;
+      current = next;
+    }
+    return current;
+  };
+  value = stripPrefixes(value);
+  if (allowBareAbout)
+    value = stripPrefixes(value.replace(bareAboutPrefix, "").trim());
   return value;
 }
 
@@ -370,6 +413,12 @@ export function competitionName(title: string): string {
       ),
     )
     .filter((segment) => segment.replace(/[\s\p{P}\p{S}]/gu, "").length);
+  // 只在**唯一**段落的末尾剥通知事项词（「…决赛测评」→「…决赛」）。
+  // 赛段词（决赛／初赛／选拔赛等级）按 ADR 0010 §4 保留；多段副标题不剥。
+  if (segments.length === 1) {
+    const trimmed = segments[0]!.replace(noticeItemSuffix, "").trim();
+    if (trimmed && competitionWordInName.test(trimmed)) segments[0] = trimmed;
+  }
   // 副标题用规范分隔符拼接，避免保留原文里通配的空格与破折号变体。
   const value = segments.length
     ? segments.length > 1
@@ -1236,13 +1285,21 @@ export function parseCandidateUnscoped(
       } else fields.modeKind = mode.modeKind;
       add("mode", paragraph, index);
     }
-    const members =
+    const membersPhrase =
       /(?:每组|每队|团队人数|队伍人数)[^。；]{0,30}(?:\d+|[一二三四五六七八九十]+)\s*人/.exec(
         paragraph,
-      )?.[0] ??
-      /(?:集体作品|团体作品)[^。；]{0,40}?(?<!报名)(人数(?:限定|限制)?(?:为|在)?\s*(?:\d+|[一二三四五六七八九十]+)(?:\s*[-—~～至到]\s*(?:\d+|[一二三四五六七八九十]+))?\s*人)/.exec(
+      )?.[0];
+    const groupOnly =
+      /(集体作品|团体作品)[^。；]{0,40}?(?<!报名)(人数(?:限定|限制)?(?:为|在)?\s*(?:\d+|[一二三四五六七八九十]+)(?:\s*[-—~～至到]\s*(?:\d+|[一二三四五六七八九十]+))?\s*人)/.exec(
         paragraph,
-      )?.[1];
+      );
+    /**
+     * 「集体作品」「团体作品」是并列子类，人数要求只约束自己。只取到「人数限定
+     * 3-10 人」而丢掉「集体作品」前提，会被读成全体人数要求（同一段的个人作品
+     * 往往写着「不得超过 2 人」）。限定词属于人数要求的含义，必须一起保留。
+     */
+    const groupOnlyPhrase = groupOnly ? groupOnly[1] + groupOnly[2] : undefined;
+    const members = membersPhrase ?? groupOnlyPhrase;
     if (members) {
       if (fields.members && fields.members !== members) {
         conflicts.push("人数要求存在多个表述，须逐赛道核对");
