@@ -117,10 +117,20 @@ const listPublishedBefore = new RegExp(
  * 判据收窄为「标题名单词 + 正文发布形态」后必须显式覆盖。
  * 括注以空表／模板／样表／空白表开头时修饰的是表样，不算发布。
  */
+// 「（见附件）」的序号形式（「见附件1」）也是指向名单附件，不能只认紧贴右括号的写法。
+const listInlineAttachmentReference = `(?:见附件|附后|附上)\\s*\\d*`;
+/** 「1 张三 2 李四」里的「序号 + 姓名」单项；序号可有可无，姓名间允许空格。 */
+const serializedName = `(?:\\d{1,3}\\s*[、.．:：]?\\s*)?[\\u4e00-\\u9fff]{2,4}`;
+/**
+ * 括注里的姓名串：至少两个姓名，用顿号／逗号／分号分隔，或「序号 + 姓名」空格并列。
+ * 只接受列举形态，否则「（如需下载）」「（材料具体要求）」这类普通括注会被误当名单。
+ */
+const listInlineNames =
+  `${serializedName}(?:\\s*[、，,；;]\\s*(?:\\d{1,3}\\s*[、.．:：]?\\s*)?[\\u4e00-\\u9fff]{2,4})+` +
+  `|${serializedName}(?:\\s+\\d{1,3}\\s*[、.．:：]?\\s+[\\u4e00-\\u9fff]{2,4})+`;
 const listInlineInParentheses = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(]\\s*(?!(?:${templateSampleWords.source}))` +
-    `(?:(?:见附件|附后|附上)|(?:[\\u4e00-\\u9fff]{2,4})(?:\\s*[、，,；;]\\s*[\\u4e00-\\u9fff]{2,4})*)` +
-    `\\s*[）)]`,
+    `(?:${listInlineAttachmentReference}|${listInlineNames})\\s*[）)]`,
 );
 /**
  * 名单对象后面跟着空表／模板括注、再跟冒号列举姓名（「报名人员信息表（空表如下）：张三、李四」）。
@@ -131,13 +141,18 @@ const listTemplateThenNames = new RegExp(
   `(?:${applicantListObject.source})\\s*[（(][^）)]{0,24}[）)]\\s*(?:如下)?\\s*[：:]\\s*` +
     `[\\u4e00-\\u9fff]{2,4}(?:\\s*[、，,]\\s*[\\u4e00-\\u9fff]{2,4})+`,
 );
-/** 只有名单对象、没有报名流程动词的整段标题式行（多半是表格拆行后的表头）。 */
+/**
+ * 表头尾注（「参赛名单（共2人）」「参赛名单（排名不分先后）」）不改变它仍是表头，
+ * 但尾注必须是明确的名单说明。「（附件4）」这类纯附件号不是尾注，否则
+ * 「班级参赛名单汇总表（附件4）」会被当成表头，再把后面的邮箱数字误读成学号。
+ */
+const listHeadingTrailer = `(?:\\s*[（(](?:共\\s*\\d+\\s*[人名]|排名不分先后|见附件\\s*\\d*|如下|附后)[）)])?`;
 const bareListHeading = new RegExp(
-  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?(?:${applicantListObject.source})$`,
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?(?:${applicantListObject.source})${listHeadingTrailer}$`,
 );
 /** 「附件1：参赛人员名单」「参赛名单汇总表.xlsx」这类以名单对象结尾的短标题行。 */
 const namedListHeading = new RegExp(
-  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?[^，,。；;\\n]{0,20}${applicantListObject.source}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
+  `^(?:附件\\s*\\d*\\s*[：:、.]?\\s*)?[^，,。；;\\n]{0,20}${applicantListObject.source}${listHeadingTrailer}\\s*(?:\\.(?:pdf|docx?|xlsx?))?$`,
 );
 /** 姓名＋学号／姓名＋序号一类的表格数据行（表格被拆成独立段落时逐行出现）。 */
 const rosterRow =

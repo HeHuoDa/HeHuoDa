@@ -1510,4 +1510,63 @@ describe("名单隐私边界在分类与实际采集保存入口一致", () => {
     expect(bodyPublishesApplicantList(body)).toBe(false);
     expect(publishesApplicantList(signupTitle, body)).toBe(false);
   });
+
+  // R2 回归（#206 两轴评审已确认缺陷）：R1 只补齐了「顿号列名」和「见附件」两种括注，
+  // 仍漏掉三类真实名单——括注指向带序号的附件（见附件1）、括注里用序号分隔姓名
+  // （1 张三 2 李四）、以及表头带尾注（共2人／排名不分先后）后逐行列出姓名。
+  // 这三类在主分支旧判据下都会被 containsApplicantList 全文拦下，属收窄过度。
+  it.each([
+    ["括注指向序号附件", "报名人员名单（见附件1）"],
+    ["括注序号分隔姓名", "参赛名单（1 张三 2 李四）"],
+    ["括注公布动作无冒号", "参赛名单（公布如下）张三、李四"],
+    ["括注尾注共几人", "参赛名单（共2人）：张三、李四"],
+    ["括注尾注排名不分先后", "参赛名单（排名不分先后）：张三、李四"],
+  ])("括注尾注与序号形态的真实名单仍被拦截：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(true);
+    expect(publishesApplicantList(signupTitle, body)).toBe(true);
+  });
+  it.each([
+    ["尾注共几人", ["参赛名单（共2人）", "序号 姓名 学号", "1 张三 20260001"]],
+    ["尾注排名不分先后", ["参赛名单（排名不分先后）", "张三", "李四"]],
+    ["尾注见附件1", ["报名人员名单（见附件1）", "张三", "李四"]],
+  ])("表头带尾注的名单段仍按名单拦截：%s", (_label, body) => {
+    const text = body.join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(true);
+    expect(publishesApplicantList(signupTitle, text)).toBe(true);
+    expect(classifyNotice(signupTitle, body)).toMatchObject({
+      classification: "non_competition",
+      exclusions: expect.arrayContaining(["applicant-list"]),
+    });
+  });
+  it.each([
+    ["下载空表", "请下载报名人员信息表（空表如下），填写后提交。"],
+    ["报送模板", "请各班报送参赛名单汇总表（模板见附件）。"],
+    ["报送见附件模板", "请各班报送参赛名单汇总表（见附件模板）。"],
+    ["下载样表", "报名人员信息表（样表）见本通知附件，请按样表填写。"],
+  ])("尾注与序号判据放宽后仍不误拦表样说明：%s", (_label, body) => {
+    expect(bodyPublishesApplicantList(body)).toBe(false);
+    expect(publishesApplicantList(signupTitle, body)).toBe(false);
+  });
+
+  // R3 回归：放宽表头尾注与括注姓名串后必须同时收紧两侧——
+  // 尾注只能是明确的名单说明，括注姓名串必须真的在列举姓名。
+  // 否则「班级参赛名单汇总表（附件4）」会被当成表头，把后面的邮箱号码
+  // 误读成学号行；「参赛名单（如需下载）」会被当成写了两个姓名。
+  it.each([
+    [
+      "附件编号尾注不是表头尾注",
+      [
+        "参赛材料：生涯发展报告、班级参赛名单汇总表（附件4）",
+        "班长收齐后发送至邮箱3972960514@qq.com",
+      ],
+    ],
+    [
+      "普通说明括注不是姓名串",
+      ["参赛名单（如需下载）", "材料具体要求详见附件2。"],
+    ],
+  ])("收紧两侧后仍不误拦非名单段：%s", (_label, body) => {
+    const text = body.join("\n");
+    expect(bodyPublishesApplicantList(text)).toBe(false);
+    expect(publishesApplicantList(signupTitle, text)).toBe(false);
+  });
 });
