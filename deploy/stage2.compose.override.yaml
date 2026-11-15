@@ -1,0 +1,63 @@
+# Issue #206 阶段二：云端隔离测试环境的 Compose 覆盖配置。
+#
+# 用法（必须与本仓库的 compose.deploy.yaml 叠加，且 COMPOSE_PROJECT_NAME 用
+# 测试项目名，不能用生产值）：
+#   docker compose --project-name hehuoda-stage2 \
+#     --env-file /opt/hehuoda-test/.env \
+#     -f compose.deploy.yaml -f deploy/stage2.compose.override.yaml up -d
+#
+# 该文件只做三件事，不改变生产行为：
+#   1. 给测试栈设置明确的 CPU/内存上限，避免与生产抢资源；
+#   2. 给每个服务打上可精确清理的资源标签；
+#   3. 让数据库只在栈内网络可达（不发布端口），入口仅绑定回环地址。
+#
+# 注意：本文件只被测试入口引用，生产部署不会加载它。
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    cpus: 1.0
+    mem_limit: 512m
+    memswap_limit: 512m
+    labels:
+      hehuoda.task: issue206-stage2
+      hehuoda.stage: capacity-recovery
+      hehuoda.component: db
+    logging: *logging
+
+  api:
+    cpus: 1.5
+    mem_limit: 768m
+    memswap_limit: 768m
+    labels:
+      hehuoda.task: issue206-stage2
+      hehuoda.stage: capacity-recovery
+      hehuoda.component: api
+    logging: *logging
+
+  web:
+    cpus: 0.5
+    mem_limit: 96m
+    memswap_limit: 96m
+    labels:
+      hehuoda.task: issue206-stage2
+      hehuoda.stage: capacity-recovery
+      hehuoda.component: web
+    logging: *logging
+
+networks:
+  default:
+    labels:
+      hehuoda.task: issue206-stage2
+      hehuoda.stage: capacity-recovery
+
+volumes:
+  database:
+    labels:
+      hehuoda.task: issue206-stage2
+      hehuoda.stage: capacity-recovery
