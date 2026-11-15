@@ -24,6 +24,8 @@ export interface EnvironmentVariables {
   DATABASE_URL?: string;
   INGESTION_ENABLED: boolean;
   INGESTION_RAW_DAYS: number;
+  DISK_CRITICAL_MIB: number;
+  DISK_WARNING_MIB: number;
   INGESTION_DNS_OVERRIDES: string;
   WECHAT_LOGIN_ENABLED: boolean;
   SENSITIVE_BUSINESS_ENABLED: boolean;
@@ -102,6 +104,14 @@ const environmentSchema = Joi.object({
   }),
   INGESTION_ENABLED: Joi.boolean().default(true),
   INGESTION_RAW_DAYS: Joi.number().integer().min(1).max(365).default(30),
+  // 磁盘余量告警门槛（MiB）。用绝对量而非百分比：小盘剩 10% 可能还很宽裕，
+  // 大盘剩 10% 往往远超实际需要，百分比阈值在两种规模下都不安全。
+  DISK_CRITICAL_MIB: Joi.number().integer().min(128).default(1024),
+  DISK_WARNING_MIB: Joi.number()
+    .integer()
+    .min(256)
+    .default(5120)
+    .min(Joi.ref("DISK_CRITICAL_MIB")),
   INGESTION_DNS_OVERRIDES: Joi.string()
     .allow("")
     .default("")

@@ -8,8 +8,11 @@ import { ConfigService } from "@nestjs/config";
 import { Cron, ScheduleModule } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
 import { ChannelRoundRunner } from "./channel-scheduler.js";
-import { cleanupResponses } from "./store.js";
-import { cleanupAttachmentBodies } from "./attachment-store.js";
+import { runRetentionCleanup } from "./retention-cleanup.js";
+import {
+  assessDirectoryDisk,
+  describeDiskAssessment,
+} from "../health/disk-space.js";
 
 @Injectable()
 export class IngestionScheduler implements BeforeApplicationShutdown {
@@ -46,17 +49,33 @@ export class IngestionScheduler implements BeforeApplicationShutdown {
         this.stop.signal,
       );
       this.logger.log(JSON.stringify(result));
-      await cleanupResponses(
-        this.database.pool,
-        this.config.get<number>("INGESTION_RAW_DAYS", 30),
-      );
-      await cleanupAttachmentBodies(
-        this.database.pool,
-        this.config.get<number>("INGESTION_RAW_DAYS", 30),
-      );
+      await this.cleanupWithDiskReport();
     } catch {
       this.logger.error("通知采集失败；查看运行记录，正式数据保持原状");
     }
+  }
+
+  /**
+   * 清理前先看一眼磁盘余量，再执行两个清理。
+   *
+   * 两个清理各自独立记录结果：之前包在同一个 try 里，
+   * 附件清理抛错会让原始响应清理的结果被当成整体失败，
+   * 而实际上只有后者失败了（或反之）。
+   */
+  private async cleanupWithDiskReport() {
+    this.reportDisk("清理前");
+    const days = this.config.get<number>("INGESTION_RAW_DAYS", 30);
+    await runRetentionCleanup(this.database.pool, days, {
+      logger: this.logger,
+    });
+    this.reportDisk("清理后");
+  }
+
+  private reportDisk(stage: string): void {
+    const assessment = assessDirectoryDisk(process.cwd());
+    if (!assessment) return;
+    const message = describeDiskAssessment(assessment, process.cwd());
+    if (message) this.logger.warn(`${stage} ${message}`);
   }
   async beforeApplicationShutdown() {
     this.stop.abort();

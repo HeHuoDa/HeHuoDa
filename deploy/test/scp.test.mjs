@@ -10,17 +10,30 @@ const helper = fileURLToPath(new URL("../scp.sh", import.meta.url)).replaceAll(
   "\\",
   "/",
 );
-const bash =
-  process.platform === "win32"
-    ? resolve(
-        dirname(
-          execFileSync("where.exe", ["git"], { encoding: "utf8" })
-            .trim()
-            .split(/\r?\n/)[0],
-        ),
-        "../bin/bash.exe",
-      )
-    : "bash";
+const bash = process.platform === "win32" ? bashForWindows() : "bash";
+
+/**
+ * Git for Windows 的 bash 位置随安装方式不同：mingw64/bin/git.exe 的兄弟目录没有
+ * bash.exe，实际在安装根的 bin/ 下。直接拼 `../bin/bash.exe` 会得到不存在的路径，
+ * 导致整组 fixture 以 ENOENT 失败。这里按候选路径顺序取第一个真实存在的。
+ */
+function bashForWindows() {
+  const git = execFileSync("where.exe", ["git"], { encoding: "utf8" })
+    .trim()
+    .split(/\r?\n/)[0];
+  const root = resolve(dirname(git));
+  const candidates = [
+    resolve(root, "../bin/bash.exe"),
+    resolve(root, "../../bin/bash.exe"),
+    resolve(root, "bash.exe"),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found)
+    throw new Error(
+      "Cannot locate Git for Windows bash.exe; set it on PATH or install Git for Windows",
+    );
+  return found;
+}
 
 function fixture(t, body, extra = {}) {
   const directory = mkdtempSync(join(tmpdir(), "hehuoda-scp-"));

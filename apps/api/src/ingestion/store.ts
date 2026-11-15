@@ -279,12 +279,21 @@ export async function persistArticle(
     };
   });
 }
-export async function cleanupResponses(pool: Pool, days = 30) {
+// 保留期内原始响应可由运维显式传入参照时间，使 30 天边界可被确定性验证。
+// 不传 now 时仍以数据库时钟计算到期，与调度器原有行为一致（应用与库时钟可能不同）。
+export async function cleanupResponses(pool: Pool, days = 30, now?: Date) {
   if (!Number.isInteger(days) || days < 1 || days > 365)
     throw new Error("原始响应保留天数须为 1–365");
+  if (
+    now !== undefined &&
+    (!(now instanceof Date) || Number.isNaN(now.getTime()))
+  )
+    throw new Error("清理参照时间无效");
   const result = await pool.query(
-    "UPDATE ingestion_versions SET raw_response=NULL WHERE raw_response IS NOT NULL AND fetched_at < now()-($1 * interval '1 day')",
-    [days],
+    now
+      ? "UPDATE ingestion_versions SET raw_response=NULL WHERE raw_response IS NOT NULL AND fetched_at < $2::timestamptz - ($1 * interval '1 day')"
+      : "UPDATE ingestion_versions SET raw_response=NULL WHERE raw_response IS NOT NULL AND fetched_at < now() - ($1 * interval '1 day')",
+    now ? [days, now] : [days],
   );
   return { removed: result.rowCount };
 }

@@ -8,7 +8,11 @@ import {
   applyReview,
   exportReview,
 } from "../src/ingestion/review.js";
-import { initializeSources, persistArticle } from "../src/ingestion/store.js";
+import {
+  cleanupResponses,
+  initializeSources,
+  persistArticle,
+} from "../src/ingestion/store.js";
 import {
   cleanupAttachmentBodies,
   getAttachmentVersion,
@@ -708,6 +712,37 @@ describe("附件迁移兼容旧通知", () => {
         ).rows[0],
       ).toMatchObject({ status: "approved", revision: 4 });
       expect(await listAttachments(legacyDb.pool, saved.noticeId)).toEqual([]);
+      // 升级后旧签名（数据库时钟）与新签名（显式参照时间）都能工作；
+      // 参照时间取比当前晚得多，才能让刚写入的行也成为「已到期」，
+      // 从而证明新签名确实生效而不是被忽略。
+      expect(await cleanupResponses(legacyDb.pool, 30)).toEqual({ removed: 0 });
+      expect(
+        await cleanupResponses(
+          legacyDb.pool,
+          30,
+          new Date(Date.now() + 400 * 24 * 3600_000),
+        ),
+      ).toEqual({ removed: 1 });
+      expect(await cleanupAttachmentBodies(legacyDb.pool, 30)).toEqual({
+        removed: 0,
+      });
+      // 回退到旧应用时读取的列与行仍完整：版本、候选状态与审核结论都不受影响。
+      expect(
+        (
+          await legacyDb.pool.query(
+            "SELECT count(*)::int AS total FROM ingestion_versions WHERE notice_id=$1",
+            [saved.noticeId],
+          )
+        ).rows[0].total,
+      ).toBe(1);
+      expect(
+        (
+          await legacyDb.pool.query(
+            "SELECT status FROM ingestion_candidates WHERE id=$1",
+            [saved.candidateId],
+          )
+        ).rows[0].status,
+      ).toBe("approved");
     } finally {
       await legacyDb.close();
       await rm(legacyDirectory, { recursive: true, force: true });
