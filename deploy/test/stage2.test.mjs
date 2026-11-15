@@ -11,7 +11,6 @@ import {
   listTaskResources,
   parseEnv,
   readLabel,
-  readTaskLabel,
 } from "../stage2.mjs";
 
 const valid = {
@@ -261,8 +260,9 @@ test("resource listing carries the project name for the report", () => {
     volumes: [],
     images: [],
   });
+  // 标签值读取会 trim：docker 输出带换行/空格，直接比较会永远不匹配。
   assert.equal(
-    readTaskLabel("x", "container", () => "  issue206-stage2  "),
+    readLabel("x", "container", STAGE_TASK_LABEL, () => "  issue206-stage2  "),
     STAGE2_TASK,
   );
 });

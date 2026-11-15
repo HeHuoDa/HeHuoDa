@@ -140,11 +140,6 @@ export function checkStage2Env(env) {
   return { ok: failures.length === 0, failures, warnings };
 }
 
-/** 读取资源标签；读不到就视为不可清理。 */
-export function readTaskLabel(id, kind, run = docker) {
-  return readLabel(id, kind, STAGE_TASK_LABEL, run);
-}
-
 /** 读取任意标签；用于同时核对 Compose 项目归属。 */
 export function readLabel(id, kind, label, run = docker) {
   // 容器与镜像的标签都在 .Config.Labels（镜像 inspect 没有顶层 .Labels，

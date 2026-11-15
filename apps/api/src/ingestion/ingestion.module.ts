@@ -8,14 +8,10 @@ import { ConfigService } from "@nestjs/config";
 import { Cron, ScheduleModule } from "@nestjs/schedule";
 import { DatabaseService } from "../database/database.service.js";
 import { ChannelRoundRunner } from "./channel-scheduler.js";
-import { cleanupResponses } from "./store.js";
-import { cleanupAttachmentBodies } from "./attachment-store.js";
+import { runRetentionCleanup } from "./retention-cleanup.js";
 import {
-  assessDiskSpace,
+  assessDirectoryDisk,
   describeDiskAssessment,
-  DISK_CRITICAL_BYTES_DEFAULT,
-  DISK_WARNING_BYTES_DEFAULT,
-  readDiskSpace,
 } from "../health/disk-space.js";
 
 @Injectable()
@@ -69,41 +65,17 @@ export class IngestionScheduler implements BeforeApplicationShutdown {
   private async cleanupWithDiskReport() {
     this.reportDisk("清理前");
     const days = this.config.get<number>("INGESTION_RAW_DAYS", 30);
-    for (const [label, run] of [
-      ["原始响应", () => cleanupResponses(this.database.pool, days)],
-      ["附件字节", () => cleanupAttachmentBodies(this.database.pool, days)],
-    ] as const) {
-      try {
-        const { removed } = await run();
-        this.logger.log(`清理${label}：removed=${removed}`);
-      } catch (error) {
-        // 清理失败不静默：removed=0 与实际失败必须可区分，
-        // 否则会读成「没有过期数据」。
-        this.logger.error(
-          `清理${label}失败：${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
+    await runRetentionCleanup(this.database.pool, days, {
+      logger: this.logger,
+    });
     this.reportDisk("清理后");
   }
 
   private reportDisk(stage: string): void {
-    try {
-      const level = assessDiskSpace(readDiskSpace(process.cwd()), {
-        criticalBytes:
-          Number(process.env.DISK_CRITICAL_MIB ?? 0) * 1024 ** 2 ||
-          DISK_CRITICAL_BYTES_DEFAULT,
-        warningBytes:
-          Number(process.env.DISK_WARNING_MIB ?? 0) * 1024 ** 2 ||
-          DISK_WARNING_BYTES_DEFAULT,
-      });
-      const message = describeDiskAssessment(level, process.cwd());
-      if (message) this.logger.warn(`${stage} ${message}`);
-    } catch {
-      // 读不到磁盘信息不阻断清理：清理本身就是为了腾空间。
-    }
+    const assessment = assessDirectoryDisk(process.cwd());
+    if (!assessment) return;
+    const message = describeDiskAssessment(assessment, process.cwd());
+    if (message) this.logger.warn(`${stage} ${message}`);
   }
   async beforeApplicationShutdown() {
     this.stop.abort();

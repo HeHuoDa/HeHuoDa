@@ -3,12 +3,9 @@ import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { DatabaseService } from "../database/database.service.js";
 import {
-  assessDiskSpace,
+  assessDirectoryDisk,
   type DiskAssessment,
   describeDiskAssessment,
-  DISK_CRITICAL_BYTES_DEFAULT,
-  DISK_WARNING_BYTES_DEFAULT,
-  readDiskSpace,
 } from "./disk-space.js";
 import { HealthResponseDto } from "./health-response.dto.js";
 import { ReadinessResponseDto } from "./readiness-response.dto.js";
@@ -16,8 +13,13 @@ import { ReadinessResponseDto } from "./readiness-response.dto.js";
 @Injectable()
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
-  /** 上次写入磁盘告警日志的时间；避免健康检查每 10 秒重复写一行。 */
-  private lastDiskWarnAt = 0;
+  /**
+   * 按等级分别记录上次告警时间。
+   *
+   * 只用单个时间戳会让等级升级被吞掉：磁盘从 warning 恶化到 critical 时，
+   * 恰恰是最需要看到告警的时刻，反而会因为刚刚报过 warning 而被节流。
+   */
+  private readonly lastDiskWarnAt = new Map<string, number>();
 
   constructor(private readonly database: DatabaseService) {}
 
@@ -31,33 +33,16 @@ export class HealthService {
    */
   private warnDiskOnce(disk: DiskAssessment): void {
     const now = Date.now();
-    if (now - this.lastDiskWarnAt < 10 * 60_000) return;
-    this.lastDiskWarnAt = now;
+    const last = this.lastDiskWarnAt.get(disk.level) ?? 0;
+    if (now - last < 10 * 60_000) return;
+    this.lastDiskWarnAt.set(disk.level, now);
     this.logger.warn(describeDiskAssessment(disk, `工作目录 ${process.cwd()}`));
   }
 
-  /**
-   * 数据库所在文件系统的余量评估。
-   *
-   * 读不到空间信息时返回 undefined 而不是判失败：容器内若挂载异常，
-   * 已有一堆检查会先把问题暴露出来，不应把「测不出磁盘」当成磁盘耗尽。
-   */
-  private diskAssessment(): DiskAssessment | undefined {
-    try {
-      return assessDiskSpace(readDiskSpace(process.cwd()), {
-        criticalBytes:
-          Number(process.env.DISK_CRITICAL_MIB ?? 0) * 1024 ** 2 ||
-          DISK_CRITICAL_BYTES_DEFAULT,
-        warningBytes:
-          Number(process.env.DISK_WARNING_MIB ?? 0) * 1024 ** 2 ||
-          DISK_WARNING_BYTES_DEFAULT,
-      });
-    } catch {
-      return undefined;
-    }
-  }
-
   async getReadiness(requestId: string): Promise<ReadinessResponseDto> {
+    // 磁盘余量只写日志告警，不参与就绪判定。
+    const disk = assessDirectoryDisk(process.cwd());
+    if (disk) this.warnDiskOnce(disk);
     try {
       const expected = (await readdir(resolve("migrations"))).filter((name) =>
         name.endsWith(".sql"),
@@ -99,9 +84,8 @@ export class HealthService {
       await this.database.pool.query(structureQuery);
       // 磁盘余量只告警、不阻断就绪：磁盘已满时把容器判为不健康会触发重启，
       // 而重启不会凭空变出空间，只会让已经在写的请求失败得更彻底。
-      // 故这里记录日志并在 /health 上报等级，但不影响 ready 判定。
-      const disk = this.diskAssessment();
-      if (disk && disk.level !== "ok") this.warnDiskOnce(disk);
+      // 等级不进入响应体：/health 与 /health/ready 都是公开端点，
+      // 暴露剩余磁盘属信息泄露。
       return { status: "ready", requestId };
     } catch {
       return { status: "unavailable", requestId };

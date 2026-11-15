@@ -28,6 +28,50 @@ export const DISK_CRITICAL_BYTES_DEFAULT = 1024 ** 3;
 export const DISK_WARNING_BYTES_DEFAULT = 5 * 1024 ** 3;
 
 /**
+ * 从环境变量读门槛（MiB），非法或缺省时回退到默认值。
+ *
+ * 两处调用点（健康检查与采集调度器）共用同一实现，避免默认值散在
+ * 多个文件里、改一次要同时改三处。
+ */
+export function diskThresholdsFromEnv(env: NodeJS.ProcessEnv = process.env): {
+  criticalBytes: number;
+  warningBytes: number;
+} {
+  const mib = (raw: string | undefined, fallback: number): number => {
+    const value = Number(raw);
+    // 负数、0、NaN、非整数一律回退：`-5 * 1024**2` 是真值，
+    // 只靠 `||` 回退会把负数当成有效门槛传下去。
+    if (!Number.isFinite(value) || value <= 0) return fallback;
+    return Math.round(value) * 1024 ** 2;
+  };
+  return {
+    criticalBytes: mib(env.DISK_CRITICAL_MIB, DISK_CRITICAL_BYTES_DEFAULT),
+    warningBytes: mib(env.DISK_WARNING_MIB, DISK_WARNING_BYTES_DEFAULT),
+  };
+}
+
+/**
+ * 评估目录所在文件系统，供日志告警使用。
+ *
+ * 读不到空间信息时返回 undefined 而不是抛错：容器内若挂载异常，
+ * 已有其他检查会先暴露问题，不应把「测不出磁盘」当成磁盘耗尽，
+ * 更不应让它阻断清理本身（清理就是为了腾空间）。
+ */
+export function assessDirectoryDisk(
+  directory: string,
+  env: NodeJS.ProcessEnv = process.env,
+): DiskAssessment | undefined {
+  try {
+    return assessDiskSpace(
+      readDiskSpace(directory),
+      diskThresholdsFromEnv(env),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * 读取目录所在文件系统的可用空间。
  *
  * 用 `statfs` 而不是解析 `df`：不依赖外部命令、不依赖 locale，

@@ -104,6 +104,29 @@ ssh -N -L 18080:127.0.0.1:18080 <已核实SSH目标>
    只代表本机本镜像本样本。
 3. **清理边界**：见下节。
 
+### 附件样本分类分母
+
+验收要求「支持/扫描/超限/受阻/人工格式分别列出」。下表是在该 SHA 镜像内
+用真实 `parseAttachmentIsolated` 跑出的分类分母（6 个样本 / 5 类）：
+
+| 类别                         | 样本 | 成功 | 失败 | 错误码             |
+| ---------------------------- | ---- | ---- | ---- | ------------------ |
+| 支持（文本层 PDF、DOCX）     | 2    | 2    | 0    | —                  |
+| 扫描（无文本层 PDF）         | 1    | 0    | 1    | `invalid-pdf`      |
+| 超限（>5MiB 输入）           | 1    | 0    | 1    | `input-size-limit` |
+| 受阻（验证码 HTML 冒充 PDF） | 1    | 0    | 1    | `type-mismatch`    |
+| 人工（未知媒体类型）         | 1    | 0    | 1    | `type-mismatch`    |
+
+如实说明两点限制，不靠表格掩盖：
+
+- 「受阻」与「人工」两类都以 `type-mismatch` 结束。前者是**内容与声明类型不符**
+  （验证码 HTML 声明为 PDF）被挡下，后者是**媒体类型本身无法识别**，
+  两者在采集链路上最终都会归为 `unsupported-attachment-type` 方向的失败，
+  但入口判据不同。这份样本集没有分别验证到它们各自的完整错误码，
+  所以只能声明「两类均被拒绝」，不能声称区分准确。
+- 样本是合成最小文件，不能外推真实扫描件 OCR 需求与真实 PDF 的耗时分布。
+  它给的是**分母与分类路径**，不是真实栏目内容的分类准确率。
+
 容量数字的定位：这是**合成样本的诊断结果**，可用于判断增长由哪一项主导、
 量级是否在服务器余量内；它不包括候选/审核/审计行增长与备份累积，
 不是完整容量准入结论。
@@ -161,12 +184,19 @@ ssh -N -L 18080:127.0.0.1:18080 <已核实SSH目标>
 
 `verifyBackup(file, { integrity })` 需要时可按摘要对照；省略时保持原有四类计数门禁，
 不改变发布流水线既有判断。注意 `deploy/integrity.mjs` **没有命令行入口**，
-它只导出函数；要生成摘要并在校验时使用，需在运维脚本里显式调用：
+它只导出函数；要生成摘要并在校验时使用，需在运维脚本里显式调用。
+
+`readBusinessIntegrity` 的 `docker` 参数要传 **`deploy/runtime.mjs` 导出的 `docker`
+函数本身**：它会自己传 `input` 与 `stdio`（psql 脚本走 stdin）。
+不要自己再包一层只转发 args 的包装函数，那会丢掉 `stdio` 设置，
+使查询静默无输出、最后报「业务完整性查询缺少结果」。
 
 ```js
+import { docker } from "./deploy/runtime.mjs";
 import { readBusinessIntegrity } from "./deploy/integrity.mjs";
 import { verifyBackup } from "./deploy/backup.mjs";
 
+// 从采集源（测试栈）读摘要，用该库自身的角色与库名。
 const expected = readBusinessIntegrity("hehuoda-stage2-db-1", {
   docker,
   user: "stage2",
@@ -174,6 +204,10 @@ const expected = readBusinessIntegrity("hehuoda-stage2-db-1", {
 });
 verifyBackup("/opt/hehuoda-test/backups/x.dump", { integrity: expected });
 ```
+
+从测试目录运行该脚本时，除 `stage2.mjs`、`integrity.mjs` 外，还必须有
+`backup.mjs` 与 `runtime.mjs`（`backup.mjs` 依赖后者）；这四个 `.mjs` 都在仓库
+`deploy/` 下，需一并复制到测试目录的 `deploy/` 子目录。
 
 `node deploy/backup.mjs verify <dump>` 只做四类计数，不接受摘要参数。
 
@@ -222,6 +256,31 @@ verifyBackup("/opt/hehuoda-test/backups/x.dump", { integrity: expected });
 
 清理失败不再静默：两个清理各自独立记录 `removed` 或错误，
 避免把实际失败读成「没有过期数据」。
+
+### 磁盘不足时的真实行为（实测）
+
+验收要求「磁盘不足不会产生虚假成功」。这不是靠读告警日志能证明的，
+于是在隔离容器里把 `pg_tblspc` 放到 64 MiB 的 tmpfs 上，真实填满后观测：
+
+| 阶段                        | 观测结果                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 填满到 100%                 | `df` 可用 0；PostgreSQL 仍在运行，写入报 `could not extend file ... No space left on device`（SQLSTATE 53100） |
+| 执行 DELETE                 | **仍然成功**，返回 `DELETE 5`；`cleanup*` 会报 `removed=N`                                                     |
+| 删掉全部 71 MB 数据后       | `pg_database_size` **仍显示 71 MB**；`df` 可用 **仍为 0**                                                      |
+| 极端情形（PGDATA 在 tmpfs） | WAL 写失败升级为 `PANIC`，实例直接停服                                                                         |
+
+结论必须直说：**`removed` 只代表逻辑上标记为已清理，不代表磁盘空间已归还**。
+DELETE 只把行标为死元组，空间由后续 VACUUM 回收，而 VACUUM 同样需要写盘。
+因此：
+
+- 「磁盘不足不产生虚假成功」在**数据正确性**层面成立：清理不会假装删掉
+  本不该删的长期文本、审计或人工结果（已有集成测试锁定）；
+- 但在**腾出空间**层面，`removed>0` 不能当作磁盘已缓解的证据。
+  运维必须看 `df`，不能看清理日志的 `removed`。
+- 这也是磁盘告警阈值用**绝对可用字节**而非「清理是否报成功」的原因。
+
+上述实测是本机 Docker 上的一次性验证（tmpfs 造满），不在 CI 门禁内；
+集成测试锁定的是「引用不失效」与「失败可区分」两个可稳定复现的语义。
 
 ## 停止与精确清理
 

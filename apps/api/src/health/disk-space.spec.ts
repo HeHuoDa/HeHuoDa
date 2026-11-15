@@ -1,6 +1,8 @@
 import {
+  assessDirectoryDisk,
   assessDiskSpace,
   describeDiskAssessment,
+  diskThresholdsFromEnv,
   DISK_CRITICAL_BYTES_DEFAULT,
   DISK_WARNING_BYTES_DEFAULT,
   readDiskSpace,
@@ -122,5 +124,42 @@ describe("磁盘余量评估", () => {
 
   it("目录不存在时抛出，交由调用方决定降级", () => {
     expect(() => readDiskSpace("/nonexistent-path-for-disk-space")).toThrow();
+  });
+
+  it("从环境变量读门槛并换算 MiB，非法值回退默认", () => {
+    expect(diskThresholdsFromEnv({})).toEqual({
+      criticalBytes: DISK_CRITICAL_BYTES_DEFAULT,
+      warningBytes: DISK_WARNING_BYTES_DEFAULT,
+    });
+    expect(
+      diskThresholdsFromEnv({
+        DISK_CRITICAL_MIB: "256",
+        DISK_WARNING_MIB: "2048",
+      }),
+    ).toEqual({
+      criticalBytes: 256 * 1024 ** 2,
+      warningBytes: 2048 * 1024 ** 2,
+    });
+    // 非数字、负数、0 都不能被当成有效门槛。
+    expect(
+      diskThresholdsFromEnv({
+        DISK_CRITICAL_MIB: "abc",
+        DISK_WARNING_MIB: "-5",
+      }),
+    ).toEqual({
+      criticalBytes: DISK_CRITICAL_BYTES_DEFAULT,
+      warningBytes: DISK_WARNING_BYTES_DEFAULT,
+    });
+  });
+
+  it("读取目录时读不到空间就返回 undefined，而不是抛错或误判为耗尽", () => {
+    // 容器挂载异常时不应让清理停工，也不应谎称磁盘已满。
+    expect(
+      assessDirectoryDisk("/nonexistent-path-for-disk-space"),
+    ).toBeUndefined();
+    // 正常目录必然给出结论。
+    const real = assessDirectoryDisk(process.cwd());
+    expect(real).toBeDefined();
+    expect(["ok", "warning", "critical"]).toContain(real!.level);
   });
 });
