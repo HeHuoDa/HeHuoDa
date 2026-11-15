@@ -206,8 +206,10 @@ verifyBackup("/opt/hehuoda-test/backups/x.dump", { integrity: expected });
 ```
 
 从测试目录运行该脚本时，除 `stage2.mjs`、`integrity.mjs` 外，还必须有
-`backup.mjs` 与 `runtime.mjs`（`backup.mjs` 依赖后者）；这四个 `.mjs` 都在仓库
-`deploy/` 下，需一并复制到测试目录的 `deploy/` 子目录。
+`backup.mjs`、`runtime.mjs` 与 `manifest.mjs`——`backup.mjs` 依赖 `runtime.mjs`，
+而 `runtime.mjs` 又 `import { readManifest } from "./manifest.mjs"`。
+这五个 `.mjs` 都在仓库 `deploy/` 下，需一并复制到测试目录的 `deploy/` 子目录；
+漏掉 `manifest.mjs` 会在 `import` 阶段直接报 `ERR_MODULE_NOT_FOUND`。
 
 `node deploy/backup.mjs verify <dump>` 只做四类计数，不接受摘要参数。
 

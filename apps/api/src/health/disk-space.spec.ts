@@ -152,6 +152,26 @@ describe("磁盘余量评估", () => {
     });
   });
 
+  it("门槛过小取整后为 0 时回退默认，否则永远不触发告警", () => {
+    // 0.4 MiB 取整为 0，门槛 0 会让 availableBytes < 0 永不成立。
+    for (const raw of ["0.4", "1e-9", "0.0001"]) {
+      expect(diskThresholdsFromEnv({ DISK_CRITICAL_MIB: raw })).toEqual({
+        criticalBytes: DISK_CRITICAL_BYTES_DEFAULT,
+        warningBytes: DISK_WARNING_BYTES_DEFAULT,
+      });
+    }
+  });
+
+  it("Infinity 与极小值都不被当成有效门槛", () => {
+    const result = diskThresholdsFromEnv({
+      DISK_CRITICAL_MIB: "1e999",
+      DISK_WARNING_MIB: "1e999",
+    });
+    expect(Number.isFinite(result.criticalBytes)).toBe(true);
+    expect(Number.isFinite(result.warningBytes)).toBe(true);
+    expect(result.criticalBytes).toBe(DISK_CRITICAL_BYTES_DEFAULT);
+  });
+
   it("读取目录时读不到空间就返回 undefined，而不是抛错或误判为耗尽", () => {
     // 容器挂载异常时不应让清理停工，也不应谎称磁盘已满。
     expect(

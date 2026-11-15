@@ -42,7 +42,9 @@ export function diskThresholdsFromEnv(env: NodeJS.ProcessEnv = process.env): {
     // 负数、0、NaN、非整数一律回退：`-5 * 1024**2` 是真值，
     // 只靠 `||` 回退会把负数当成有效门槛传下去。
     if (!Number.isFinite(value) || value <= 0) return fallback;
-    return Math.round(value) * 1024 ** 2;
+    const bytes = Math.round(value) * 1024 ** 2;
+    // `0.4` 这类极小值取整后为 0，会让门槛永远不被触发；回退到默认。
+    return bytes > 0 ? bytes : fallback;
   };
   return {
     criticalBytes: mib(env.DISK_CRITICAL_MIB, DISK_CRITICAL_BYTES_DEFAULT),

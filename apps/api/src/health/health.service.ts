@@ -8,18 +8,14 @@ import {
   describeDiskAssessment,
 } from "./disk-space.js";
 import { HealthResponseDto } from "./health-response.dto.js";
+import { LevelThrottle } from "./level-throttle.js";
 import { ReadinessResponseDto } from "./readiness-response.dto.js";
 
 @Injectable()
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
-  /**
-   * 按等级分别记录上次告警时间。
-   *
-   * 只用单个时间戳会让等级升级被吞掉：磁盘从 warning 恶化到 critical 时，
-   * 恰恰是最需要看到告警的时刻，反而会因为刚刚报过 warning 而被节流。
-   */
-  private readonly lastDiskWarnAt = new Map<string, number>();
+  /** 按等级分别计时；单个时间戳会让 warning→critical 的升级被吞掉。 */
+  private readonly diskWarnThrottle = new LevelThrottle(10 * 60_000);
 
   constructor(private readonly database: DatabaseService) {}
 
@@ -32,11 +28,12 @@ export class HealthService {
    * 不节流会让告警日志本身成为写盘最多的东西。
    */
   private warnDiskOnce(disk: DiskAssessment): void {
-    const now = Date.now();
-    const last = this.lastDiskWarnAt.get(disk.level) ?? 0;
-    if (now - last < 10 * 60_000) return;
-    this.lastDiskWarnAt.set(disk.level, now);
-    this.logger.warn(describeDiskAssessment(disk, `工作目录 ${process.cwd()}`));
+    // ok 时没有文案；不过滤会打印 `WARN ... undefined`，
+    // 正常磁盘反而每 10 分钟刷一条垃圾日志。
+    const message = describeDiskAssessment(disk, `工作目录 ${process.cwd()}`);
+    if (!message) return;
+    if (!this.diskWarnThrottle.allow(disk.level, Date.now())) return;
+    this.logger.warn(message);
   }
 
   async getReadiness(requestId: string): Promise<ReadinessResponseDto> {
