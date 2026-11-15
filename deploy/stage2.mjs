@@ -147,9 +147,11 @@ export function readTaskLabel(id, kind, run = docker) {
 
 /** 读取任意标签；用于同时核对 Compose 项目归属。 */
 export function readLabel(id, kind, label, run = docker) {
-  const format = `{{ index %s "%s" }}`
-    .replace("%s", kind === "container" ? ".Config.Labels" : ".Labels")
-    .replace("%s", label);
+  // 容器与镜像的标签都在 .Config.Labels（镜像 inspect 没有顶层 .Labels，
+  // 用错层级会渲染失败并 exit 1）；网络与卷在顶层 .Labels。
+  const root =
+    kind === "network" || kind === "volume" ? ".Labels" : ".Config.Labels";
+  const format = `{{ index ${root} "${label}" }}`;
   const subcommand =
     kind === "volume"
       ? ["volume", "inspect"]
@@ -211,13 +213,20 @@ export function cleanupStage2(project, options = {}) {
   const resources = listTaskResources(project, run);
   const removed = { containers: [], networks: [], volumes: [], images: [] };
   const refused = [];
+  const failed = [];
 
   const remove = (kind, name, args) => {
     if (!belongsToProject(name, kind, project, run)) {
       refused.push(`${kind}:${name}`);
       return false;
     }
-    run(args);
+    try {
+      run(args);
+    } catch (error) {
+      // 删除失败必须如实报出：已删除的体积计与真实残留都会误导清理结论。
+      failed.push(`${kind}:${name}:${error.message}`);
+      return false;
+    }
     return true;
   };
 
@@ -237,6 +246,7 @@ export function cleanupStage2(project, options = {}) {
   return {
     removed,
     refused,
+    failed,
     retainedVolumes: options.volumes ? [] : resources.volumes,
   };
 }

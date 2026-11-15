@@ -4,6 +4,7 @@ import {
   COMPOSE_PROJECT_LABEL,
   PRODUCTION_PROJECT,
   STAGE2_TASK,
+  STAGE_TASK_LABEL,
   belongsToProject,
   checkStage2Env,
   cleanupStage2,
@@ -308,4 +309,46 @@ test("belongsToProject requires both the task label and the project label", () =
     readLabel("ctr-ok", "container", COMPOSE_PROJECT_LABEL, run),
     "hehuoda-stage2",
   );
+});
+
+// 镜像与容器/网络/卷的标签层级不同：image inspect 没有顶层 .Labels
+// （渲染会失败并 exit 1），容器与镜像都在 .Config.Labels。
+test("label lookup uses the right root per resource kind", () => {
+  const formats = [];
+  const run = (args) => {
+    formats.push(args[args.indexOf("--format") + 1]);
+    return "hehuoda-stage2";
+  };
+  readLabel("sha256:abc", "image", STAGE_TASK_LABEL, run);
+  readLabel("ctr-1", "container", STAGE_TASK_LABEL, run);
+  readLabel("net-1", "network", STAGE_TASK_LABEL, run);
+  readLabel("vol-1", "volume", STAGE_TASK_LABEL, run);
+  assert.ok(formats[0].includes(".Config.Labels"), "image uses .Config.Labels");
+  assert.ok(!formats[0].includes(" .Labels"), "image inspect has no .Labels");
+  assert.ok(formats[1].includes(".Config.Labels"));
+  assert.ok(formats[2].includes(".Labels"));
+  assert.ok(!formats[2].includes(".Config.Labels"));
+  assert.ok(formats[3].includes(".Labels"));
+});
+
+// 删除失败不能静默计入 removed，否则清理报告会与实际残留相反。
+test("cleanup reports resources it failed to delete", () => {
+  const base = fakeDocker({
+    containers: ["hehuoda-stage2-api-1"],
+    networks: [],
+    volumes: [],
+    images: [],
+    labels: { "hehuoda-stage2-api-1": STAGE2_TASK },
+    owners: { "hehuoda-stage2-api-1": "hehuoda-stage2" },
+  });
+  const run = (args) => {
+    if (args[0] === "rm") throw new Error("container is in use");
+    return base(args);
+  };
+  const result = cleanupStage2("hehuoda-stage2", { docker: run });
+  assert.deepEqual(result.removed.containers, []);
+  assert.deepEqual(result.refused, []);
+  assert.equal(result.failed.length, 1);
+  assert.match(result.failed[0], /hehuoda-stage2-api-1/);
+  assert.match(result.failed[0], /in use/);
 });

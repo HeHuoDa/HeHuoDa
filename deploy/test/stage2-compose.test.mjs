@@ -105,6 +105,17 @@ test(
       config.services.api.environment.CAMPUS_VERIFICATION_ENABLED,
       "false",
     );
+    // 模板里的开关只有被 compose 显式引用才会注入容器；未引用的键不进容器，
+    // 因此不能把「写在 .env 里」当成「已生效」。此处锁定当前实际注入面。
+    for (const key of [
+      "INGESTION_ATTACHMENTS_ENABLED",
+      "SENSITIVE_BUSINESS_ENABLED",
+    ])
+      assert.equal(
+        config.services.api.environment[key],
+        undefined,
+        `${key} is not wired into the container; template comment must say so`,
+      );
     // 生产项目名不会被覆盖文件写成默认值。
     assert.notEqual(config.name, "hehuoda-deploy");
   },
