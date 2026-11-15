@@ -245,7 +245,7 @@ describe("30 天清理边界与被引用版本保留", () => {
     });
   });
 
-  it("清理不影响已批准材料、映射与正式比赛", async () => {
+  it("清理不影响已批准材料的引用关系、映射与正式比赛", async () => {
     const id = await candidateId();
     // 先写入附件（含已超期的一条），再完成审核与导入：附件写入会推进证据修订，
     // 放在审批之后会按规定使旧批准失效，那是正确行为，但不属于本用例要验证的清理边界。
@@ -303,6 +303,17 @@ describe("30 天清理边界与被引用版本保留", () => {
         )
       ).rows[0].status,
     ).toBe("imported");
+    // 注意：已批准材料的「引用」不失效，但原始字节按保留策略确实被清空（removed: 1）。
+    // 保留下来的是版本记录、提取文本与人工结果，不是 body 本身。
+    const cleared = await db.pool.query<{
+      withBody: number;
+      kept: number;
+    }>(
+      "SELECT count(*) FILTER (WHERE body IS NOT NULL)::int AS \"withBody\", count(*)::int AS kept FROM ingestion_attachment_versions WHERE attachment_id IN (SELECT id FROM ingestion_attachments WHERE notice_id=$1) AND segments::text LIKE '%历史规则%'",
+      [noticeId],
+    );
+    expect(cleared.rows[0].withBody).toBe(0);
+    expect(cleared.rows[0].kept).toBeGreaterThan(0);
     expect(
       await count("SELECT count(*)::int AS total FROM ingestion_mappings"),
     ).toBe(1);

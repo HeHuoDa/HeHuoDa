@@ -29,7 +29,22 @@
 
 ## 启动与验证
 
-在服务器上执行（`deploy/` 已随发布配置复制到 `/opt/hehuoda-test`）：
+发布流水线只把 `controller/deploy/*.mjs` 复制进发布包（`.github/workflows/deploy.yml`），
+**不包含** `compose.deploy.yaml`、`deploy/stage2.compose.override.yaml` 与 `deploy/stage2.env.example`。
+因此测试目录需要先从仓库显式准备这三类文件（命令中的 `$REPO` 指本仓库检出）：
+
+```bash
+sudo mkdir -p /opt/hehuoda-test/deploy && sudo chown -R "$USER" /opt/hehuoda-test
+cp "$REPO"/compose.deploy.yaml /opt/hehuoda-test/
+cp "$REPO"/deploy/stage2.compose.override.yaml /opt/hehuoda-test/deploy/
+cp "$REPO"/deploy/stage2.mjs "$REPO"/deploy/integrity.mjs /opt/hehuoda-test/deploy/
+cp "$REPO"/deploy/stage2.env.example /opt/hehuoda-test/deploy/
+# 按模板填写 .env（权限 600）；密码在服务器本地生成，不回传不提交
+install -m 600 /opt/hehuoda-test/deploy/stage2.env.example /opt/hehuoda-test/.env
+chmod 700 /opt/hehuoda-test
+```
+
+准备好后在服务器上执行：
 
 ```bash
 cd /opt/hehuoda-test
@@ -145,14 +160,53 @@ ssh -N -L 18080:127.0.0.1:18080 <已核实SSH目标>
 - 保留期内可恢复字节：`sha256(body)`/`sha256(raw_response)` 的还原哈希
 
 `verifyBackup(file, { integrity })` 需要时可按摘要对照；省略时保持原有四类计数门禁，
-不改变发布流水线既有判断。
+不改变发布流水线既有判断。注意 `deploy/integrity.mjs` **没有命令行入口**，
+它只导出函数；要生成摘要并在校验时使用，需在运维脚本里显式调用：
+
+```js
+import { readBusinessIntegrity } from "./deploy/integrity.mjs";
+import { verifyBackup } from "./deploy/backup.mjs";
+
+const expected = readBusinessIntegrity("hehuoda-stage2-db-1", {
+  docker,
+  user: "stage2",
+  database: "hehuoda_stage2_test",
+});
+verifyBackup("/opt/hehuoda-test/backups/x.dump", { integrity: expected });
+```
+
+`node deploy/backup.mjs verify <dump>` 只做四类计数，不接受摘要参数。
 
 差异以固定分类清单抛出（`count` / `content`），不打印字节或连接串。
 两类负向对照已验证：「删除一条正式通知」使计数差异被报出；
 「只改人工修正/正式比赛/长期正文内容、ID 与行数不变」使内容差异被报出。
 因此「0 差异」不是空断言。
 
-恢复耗时为秒级，但同机隔离恢复不等于异机灾难恢复。
+### 恢复耗时、备份清单与丢失窗口
+
+在隔离测试栈（4 vCPU / 3.7 GiB，dump 与恢复容器同机）的实测，作为规模参考，
+不是服务等级承诺：
+
+| 项                                | 实测值                                                 |
+| --------------------------------- | ------------------------------------------------------ |
+| dump 大小                         | 约 185 KiB（合成种子：2 通知版本、2 附件版本、1 映射） |
+| 导出（`pg_dump --format=custom`） | 约 0.36 s                                              |
+| 恢复到全新无网络容器              | 约 2.6 s                                               |
+| 恢复后业务差异                    | 0 项                                                   |
+
+备份清单：仓库未内置备份清单索引，现行为是**按目录列举**
+`/opt/hehuoda/backups/*.dump`（仅存于服务器，文件名带时间戳与 UUID）。
+发布流程每次备份成功后立即做一次隔离恢复校验，否则不保留该 dump。
+当前**没有**自动过期策略，备份不随发布版本清理，需人工轮转。
+
+丢失窗口：当前备份是**发布时点**快照，不是持续归档。两次发布之间的写入
+在主机或磁盘故障时没有可恢复副本；最坏情况丢失窗口＝上一次成功发布至今。
+这是现状事实，不是可接受的设定值；是否需要定时备份或异机异地副本，
+属于后续阶段决策，本阶段未做也不声称已覆盖。
+
+磁盘告警：本阶段**未引入**磁盘告警。现有事实是 `df` 中根分区可用 27 GiB，
+备份目录当前合计约 0.4 MiB，备份无自动过期因此会随发布次数单调增长。
+没有告警阈值、没有容量触发机制，属未建设项。
 
 ## 停止与精确清理
 
@@ -175,14 +229,14 @@ STAGE2_ENV_FILE=.env node deploy/stage2.mjs cleanup --volumes  # 连同测试卷
 
 ## 失败处理
 
-| 现象                                       | 处理                                                            |
-| ------------------------------------------ | --------------------------------------------------------------- |
-| `check-env` 或任一变更命令报配置不合规     | 按提示修 `.env`；不要为通过校验而放宽隔离条件                   |
-| `up` 后 API 不健康、日志报 relation 不存在 | 先跑 `migrate`；它会先拉起测试数据库再迁移                      |
-| `preflight` 报端口占用                     | 换 `HTTP_PORT` 或先确认占用者；不要占用生产 80/443              |
-| `docker ... failed` 只说固定类别           | 原始 stderr 不外泄，按类别（connection/oom/permission/sql）排查 |
-| 恢复摘要出现差异                           | 差异即失败：保留报告，先查数据是否真的缺失，不要放宽比较        |
-| 清理出现 `refused`                         | 手工核对两个标签；不属于本任务/本项目的资源不要删               |
+| 现象                                       | 处理                                                                                                                                                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check-env` 或任一变更命令报配置不合规     | 按提示修 `.env`；不要为通过校验而放宽隔离条件                                                                                                                                |
+| `up` 后 API 不健康、日志报 relation 不存在 | 先跑 `migrate`；它会先拉起测试数据库再迁移                                                                                                                                   |
+| `preflight` 报端口占用                     | 换 `HTTP_PORT` 或先确认占用者；不要占用生产 80/443                                                                                                                           |
+| `docker ... failed (exit N)`               | 该工具**不分类也不写诊断文件**（与 `runtime.mjs` 不同）；保留的只有退出码，需手工重跑对应命令排查。先确认 Docker 引擎是否在运行（`docker info`），不要把引擎未启动当成未安装 |
+| 恢复摘要出现差异                           | 差异即失败：保留报告，先查数据是否真的缺失，不要放宽比较                                                                                                                     |
+| 清理出现 `refused`                         | 手工核对两个标签；不属于本任务/本项目的资源不要删                                                                                                                            |
 
 ## 证据范围
 

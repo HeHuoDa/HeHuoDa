@@ -283,9 +283,12 @@ function composeArgs(envFile) {
     "deploy/stage2.compose.override.yaml",
   );
   const base = resolve(process.cwd(), "compose.deploy.yaml");
+  // 发布流水线只把 controller/deploy/*.mjs 复制进 payload，两个 YAML 不在其中。
+  // 因此这里给出需要显式上传的文件名，而不是一句笼统的「缺少文件」。
   if (!existsSync(base) || !existsSync(override))
     throw new Error(
-      "缺少 compose.deploy.yaml 或 deploy/stage2.compose.override.yaml",
+      "缺少 compose.deploy.yaml 或 deploy/stage2.compose.override.yaml；" +
+        "发布包只包含 deploy/*.mjs，这两个 YAML 需从仓库显式复制到测试目录",
     );
   return [
     "compose",

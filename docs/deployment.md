@@ -103,7 +103,7 @@ HTTP 测试与正式 HTTPS 分开验收。证书置于主机受控目录，通�
 
 ## 数据库备份与日常运维
 
-发布更新前执行 custom-format `pg_dump`，备份完整写入且通过隔离恢复校验后才继续。恢复校验在新建、无网络、独立匿名卷的临时 PostgreSQL 容器进行；失败阻止迁移和更新。备份不会随版本清理，也不会自动恢复到生产。持久卷不能替代异机备份；异机存储及灾难恢复须单独实际验证。需要业务关系级核对（人工修正、审核、映射、正式发布与保留期内字节哈希）时，传入 `deploy/integrity.mjs` 生成的摘要；省略时仍为四类计数门禁。
+发布更新前执行 custom-format `pg_dump`，备份完整写入且通过隔离恢复校验后才继续。恢复校验在新建、无网络、独立匿名卷的临时 PostgreSQL 容器进行；失败阻止迁移和更新。备份不会随版本清理，也不会自动恢复到生产。持久卷不能替代异机备份；异机存储及灾难恢复须单独实际验证。需要业务关系级核对（人工修正、审核、映射、正式发布与保留期内字节哈希）时，用 `deploy/integrity.mjs` 的 `readBusinessIntegrity()` 读取源库摘要，作为 `verifyBackup(file, { integrity })` 的参数传入（该模块无命令行入口，需在运维脚本中调用，详见 [capacity-and-recovery.md](capacity-and-recovery.md)）；省略时仍为四类计数门禁。
 
 运行时迁移 CLI 位于 API 镜像。手动维护使用当前成功版本记录的 SHA、镜像与 Compose 目录；不要从当前源码推断历史配置或手工改写 `current.json`。停机使用同一环境配置执行 Compose `stop` 或 `down`；禁止对现有环境使用 `down --volumes`、`volume prune` 或删除数据库目录。进程存活与就绪分别检查 `/api/v1/health` 和 `/api/v1/health/ready`。
 

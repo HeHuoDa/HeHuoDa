@@ -162,18 +162,6 @@ export function verifyBackup(file, operations = {}) {
   }
 }
 
-/**
- * 对一个在线数据库读取业务摘要，用于与隔离恢复结果比较。
- * 只接受可执行 psql 的容器名；不接受任意连接串，避免误连生产库。
- */
-export function readIntegrityFromContainer(container, operations = {}) {
-  return readBusinessIntegrity(container, {
-    docker: operations.docker || docker,
-    user: operations.user,
-    database: operations.database,
-  });
-}
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv[2] === "verify" && process.argv[3]) {
