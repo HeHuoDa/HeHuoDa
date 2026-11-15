@@ -104,6 +104,52 @@ ssh -N -L 18080:127.0.0.1:18080 <已核实SSH目标>
    只代表本机本镜像本样本。
 3. **清理边界**：见下节。
 
+### 样本、环境与估算公式
+
+一次实测的样本与分母（镜像 SHA `b319aae283731245e58614ae85e4c845c48f6d96`，
+Ubuntu 24.04.5 / kernel 6.8.0-124 / 4 vCPU / 3.7 GiB，Node v24.15.0 linux x64，
+容器限制 api 1.5 CPU / 768 MiB，PostgreSQL 17.10）：
+
+| 项           | 值                       |
+| ------------ | ------------------------ |
+| 通知         | 60 条                    |
+| 版本/通知    | 3                        |
+| 正文版本总数 | 180                      |
+| 附件         | 60 个 × 65536 B (64 KiB) |
+| 采集耗时     | 672 ms                   |
+
+估算公式（分母取写入前后的差值，不用绝对值，避免基线脏数据影响单价）：
+
+```text
+单版本成本
+  articleBytes   = (afterWrite.article_bytes   − baseline.article_bytes)   / Δversions  = 675.0 B
+  extractedBytes = (afterWrite.extracted_bytes − baseline.extracted_bytes) / Δversions  = 106.0 B
+  rawBytes       = (afterWrite.raw_bytes       − baseline.raw_bytes)       / Δversions  =  39.8 B
+
+单附件成本
+  bodyBytes      = (afterWrite.attachment_body_bytes − baseline…) / Δattachments   = 65536.0 B
+
+30 天预测
+  每日新版本数  = 栏目数 × 每栏目每日通知数 × 平均修订数
+  长期字节      = 每日新版本数 × 30 × (articleBytes + extractedBytes)
+  30 天保留字节 = 每日新版本数 × 30 × rawBytes + 每日新附件数 × 30 × bodyBytes
+```
+
+三个情景（参数为假设值，非实测来源量）：
+
+| 情景 | 栏目 | 修订 | 附件/日    | 30 天版本 | 长期成本 | 30 天保留  |
+| ---- | ---- | ---- | ---------- | --------- | -------- | ---------- |
+| 保守 | 4    | 1    | 0          | 120       | 0.09 MiB | 0          |
+| 中等 | 8    | 2    | 1 × 256KiB | 480       | 0.35 MiB | 60.04 MiB  |
+| 上限 | 27   | 2    | 2 × 512KiB | 1620      | 1.17 MiB | 810.18 MiB |
+
+上限情景的 810 MiB 是**指定参数下的情景值**，不是系统上限；当时磁盘可用 27 GiB。
+预测未计入候选、审核、审计行增长与备份累积，这几项随运营时间单调增长。
+附件 `segments`（提取文本）属长期成本，不计入 30 天保留——清理只清 `body`。
+
+本次实测的物理占用：数据库 9.33 → 9.95 → 10.24 MiB（基线 → 写入后 → 清理后），
+清理后反而增大 301.2 KiB，即 `body=NULL` 只做逻辑清理、物理磁盘不立即归还。
+
 ### 附件样本分类分母
 
 验收要求「支持/扫描/超限/受阻/人工格式分别列出」。下表是在该 SHA 镜像内
