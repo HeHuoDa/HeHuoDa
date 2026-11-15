@@ -92,7 +92,9 @@ export const INTEGRITY_QUERIES = [
 ];
 
 export function integrityScript() {
-  return ["\\set ON_ERROR_STOP=1"]
+  // ON_ERROR_STOP 用 \set 设置：psql 的非交互模式下命令行变量的合法写法是
+  // --set=NAME=VALUE；脚本内设置可避免不同客户端版本的参数解析差异。
+  return ["\\set ON_ERROR_STOP on"]
     .concat(
       INTEGRITY_QUERIES.map(
         ({ name, sql }) =>
@@ -112,10 +114,21 @@ function ordered(row) {
 /**
  * 在给定容器里执行核对 SQL 并返回可序列化的摘要。
  * 调用方负责创建隔离容器；这里只读取，不写入业务表。
+ * 恢复容器使用独立的 restore 角色，采集源侧（如生产库）需显式传入自己的角色，
+ * 否则会因角色不存在而失败，而不是静默返回空结果。
  */
 export function readBusinessIntegrity(container, operations = {}) {
   const run = operations.docker;
   if (!run) throw new Error("readBusinessIntegrity requires a docker runner");
+  const user = operations.user ?? "restore";
+  const database = operations.database ?? "restore";
+  if (typeof user !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(user))
+    throw new Error("invalid integrity role name");
+  if (
+    typeof database !== "string" ||
+    !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(database)
+  )
+    throw new Error("invalid integrity database name");
   const output = run(
     [
       "exec",
@@ -123,12 +136,11 @@ export function readBusinessIntegrity(container, operations = {}) {
       container,
       "psql",
       "-U",
-      "restore",
+      user,
       "-d",
-      "restore",
+      database,
       "-At",
-      "-v",
-      "ON_ERROR_STOP=1",
+      "--set=ON_ERROR_STOP=on",
     ],
     { input: integrityScript(), stdio: ["pipe", "pipe", "pipe"] },
   );

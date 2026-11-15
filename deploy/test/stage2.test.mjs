@@ -17,7 +17,8 @@ const valid = {
   POSTGRES_USER: "stage2",
   POSTGRES_DB: "hehuoda_stage2_test",
   POSTGRES_PASSWORD: "synthetic-password",
-  DATABASE_URL: "postgresql://stage2:synthetic-password@db:5432/hehuoda_stage2_test",
+  DATABASE_URL:
+    "postgresql://stage2:synthetic-password@db:5432/hehuoda_stage2_test",
   HTTP_BIND: "127.0.0.1",
   HTTP_PORT: "18080",
   INGESTION_ENABLED: "false",
@@ -51,8 +52,17 @@ test("production identity, public binding and enabled integrations are rejected"
     [{ CAMPUS_SUBJECT_HMAC_KEY: "x" }, /CAMPUS_SUBJECT_HMAC_KEY/],
     [{ CAMPUS_PROFILE_KEYS: '{"v1":"x"}' }, /CAMPUS_PROFILE_KEYS/],
     [{ POSTGRES_DB: "hehuoda" }, /生产库同名/],
-    [{ DATABASE_URL: "postgresql://stage2:p@localhost:5432/hehuoda_stage2_test" }, /db:5432/],
-    [{ DATABASE_URL: "postgresql://other:p@db:5432/hehuoda_stage2_test" }, /POSTGRES_USER/],
+    [
+      {
+        DATABASE_URL:
+          "postgresql://stage2:p@localhost:5432/hehuoda_stage2_test",
+      },
+      /db:5432/,
+    ],
+    [
+      { DATABASE_URL: "postgresql://other:p@db:5432/hehuoda_stage2_test" },
+      /POSTGRES_USER/,
+    ],
     [{ IMAGE_TAG: "abc" }, /40 位/],
   ];
   for (const [patch, pattern] of cases) {
@@ -109,10 +119,16 @@ test("cleanup only removes resources carrying the task label", () => {
   assert.deepEqual(result.removed.networks, ["hehuoda-stage2_default"]);
   // 默认不删数据卷，也不去读取/删除未要求清理的卷。
   assert.deepEqual(result.removed.volumes, []);
-  assert.deepEqual(result.retainedVolumes, ["hehuoda-stage2_database", "foreign-volume"]);
+  assert.deepEqual(result.retainedVolumes, [
+    "hehuoda-stage2_database",
+    "foreign-volume",
+  ]);
   assert.deepEqual(result.refused, ["container:foreign-container"]);
   assert.ok(!calls.some((call) => call.startsWith("rm -f foreign-container")));
-  assert.ok(!calls.some((call) => call.includes("prune")), "never prune globally");
+  assert.ok(
+    !calls.some((call) => call.includes("prune")),
+    "never prune globally",
+  );
 });
 
 test("cleanup refuses a resource whose label cannot be read", () => {
@@ -145,7 +161,10 @@ test("cleanup with --volumes still refuses a foreign volume", () => {
     calls.push(args.join(" "));
     return base(args);
   };
-  const result = cleanupStage2("hehuoda-stage2", { docker: run, volumes: true });
+  const result = cleanupStage2("hehuoda-stage2", {
+    docker: run,
+    volumes: true,
+  });
   assert.deepEqual(result.removed.volumes, ["hehuoda-stage2_database"]);
   assert.deepEqual(result.refused, ["volume:foreign-volume"]);
   assert.deepEqual(result.retainedVolumes, []);
@@ -161,5 +180,8 @@ test("resource listing carries the project name for the report", () => {
     volumes: [],
     images: [],
   });
-  assert.equal(readTaskLabel("x", "container", () => "  issue206-stage2  "), STAGE2_TASK);
+  assert.equal(
+    readTaskLabel("x", "container", () => "  issue206-stage2  "),
+    STAGE2_TASK,
+  );
 });

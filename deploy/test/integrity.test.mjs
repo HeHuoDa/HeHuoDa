@@ -62,7 +62,7 @@ test("business integrity summary covers human results, mappings and retained byt
 
 test("script keeps every query and stops on error", () => {
   const script = integrityScript();
-  assert.match(script, /^\\set ON_ERROR_STOP=1/);
+  assert.match(script, /^\\set ON_ERROR_STOP on/);
   for (const { name } of INTEGRITY_QUERIES)
     assert.ok(script.includes(`'${name}='`), name);
   assert.equal(

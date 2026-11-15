@@ -46,7 +46,9 @@ test(
         "-f",
         fileURLToPath(new URL("../../compose.deploy.yaml", import.meta.url)),
         "-f",
-        fileURLToPath(new URL("../stage2.compose.override.yaml", import.meta.url)),
+        fileURLToPath(
+          new URL("../stage2.compose.override.yaml", import.meta.url),
+        ),
         "config",
         "--format",
         "json",
@@ -83,9 +85,18 @@ test(
 
     // 每个可清理资源都带固定任务标签，清理脚本以此精确匹配。
     for (const service of ["db", "api", "web"])
-      assert.equal(config.services[service].labels["hehuoda.task"], "issue206-stage2");
-    assert.equal(config.networks.default.labels["hehuoda.task"], "issue206-stage2");
-    assert.equal(config.volumes.database.labels["hehuoda.task"], "issue206-stage2");
+      assert.equal(
+        config.services[service].labels["hehuoda.task"],
+        "issue206-stage2",
+      );
+    assert.equal(
+      config.networks.default.labels["hehuoda.task"],
+      "issue206-stage2",
+    );
+    assert.equal(
+      config.volumes.database.labels["hehuoda.task"],
+      "issue206-stage2",
+    );
 
     // 关闭项在合并后仍然关闭，不会被覆盖文件意外打开。
     assert.equal(config.services.api.environment.INGESTION_ENABLED, "false");

@@ -73,8 +73,7 @@ export function checkStage2Env(env) {
     if (!env[key]) failures.push(`缺少必要变量 ${key}`);
 
   const project = env.COMPOSE_PROJECT_NAME ?? "";
-  if (!project)
-    failures.push("缺少 COMPOSE_PROJECT_NAME");
+  if (!project) failures.push("缺少 COMPOSE_PROJECT_NAME");
   else if (project === PRODUCTION_PROJECT)
     failures.push("COMPOSE_PROJECT_NAME 不能复用生产项目名");
   else if (!/^[a-z0-9][a-z0-9_-]*$/.test(project))
@@ -95,12 +94,16 @@ export function checkStage2Env(env) {
     failures.push("WECHAT_LOGIN_ENABLED 必须为 false");
   if ((env.CAMPUS_VERIFICATION_ENABLED ?? "false") !== "false")
     failures.push("CAMPUS_VERIFICATION_ENABLED 必须为 false");
-  if (env.WECHAT_APP_SECRET) failures.push("测试环境不得填写 WECHAT_APP_SECRET");
+  if (env.WECHAT_APP_SECRET)
+    failures.push("测试环境不得填写 WECHAT_APP_SECRET");
   if (env.CAMPUS_SUBJECT_HMAC_KEY)
     failures.push("测试环境不得填写 CAMPUS_SUBJECT_HMAC_KEY");
   if (env.CAMPUS_PROFILE_KEYS && env.CAMPUS_PROFILE_KEYS !== "{}")
     failures.push("测试环境不得填写 CAMPUS_PROFILE_KEYS");
-  if (env.ADMIN_ALLOWED_ORIGINS && !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(env.ADMIN_ALLOWED_ORIGINS))
+  if (
+    env.ADMIN_ALLOWED_ORIGINS &&
+    !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(env.ADMIN_ALLOWED_ORIGINS)
+  )
     warnings.push("ADMIN_ALLOWED_ORIGINS 不是精确 HTTPS Origin");
 
   if (!(env.POSTGRES_DB ?? "").endsWith("_test"))
@@ -114,9 +117,15 @@ export function checkStage2Env(env) {
       const parsed = new URL(url);
       if (parsed.hostname !== "db" || parsed.port !== "5432")
         failures.push("DATABASE_URL 必须指向 db:5432");
-      if (env.POSTGRES_USER && decodeURIComponent(parsed.username) !== env.POSTGRES_USER)
+      if (
+        env.POSTGRES_USER &&
+        decodeURIComponent(parsed.username) !== env.POSTGRES_USER
+      )
         failures.push("DATABASE_URL 用户名与 POSTGRES_USER 不一致");
-      if (env.POSTGRES_DB && decodeURIComponent(parsed.pathname.slice(1)) !== env.POSTGRES_DB)
+      if (
+        env.POSTGRES_DB &&
+        decodeURIComponent(parsed.pathname.slice(1)) !== env.POSTGRES_DB
+      )
         failures.push("DATABASE_URL 库名与 POSTGRES_DB 不一致");
       if (
         env.POSTGRES_PASSWORD &&
@@ -228,7 +237,11 @@ export function cleanupStage2(project, options = {}) {
       removed.volumes.push(name);
     }
   }
-  return { removed, refused, retainedVolumes: options.volumes ? [] : resources.volumes };
+  return {
+    removed,
+    refused,
+    retainedVolumes: options.volumes ? [] : resources.volumes,
+  };
 }
 
 function envPath() {
@@ -244,10 +257,15 @@ function envPath() {
 }
 
 function composeArgs(envFile) {
-  const override = resolve(process.cwd(), "deploy/stage2.compose.override.yaml");
+  const override = resolve(
+    process.cwd(),
+    "deploy/stage2.compose.override.yaml",
+  );
   const base = resolve(process.cwd(), "compose.deploy.yaml");
   if (!existsSync(base) || !existsSync(override))
-    throw new Error("缺少 compose.deploy.yaml 或 deploy/stage2.compose.override.yaml");
+    throw new Error(
+      "缺少 compose.deploy.yaml 或 deploy/stage2.compose.override.yaml",
+    );
   return [
     "compose",
     "--project-name",
@@ -264,8 +282,11 @@ function composeArgs(envFile) {
 function preflight(envFile) {
   const env = parseEnv(readFileSync(envFile, "utf8"));
   const check = checkStage2Env(env);
-  const report = { env: { ok: check.ok, failures: check.failures, warnings: check.warnings } };
-  if (check.failures.length) throw new Error("测试配置不合规：" + check.failures.join("；"));
+  const report = {
+    env: { ok: check.ok, failures: check.failures, warnings: check.warnings },
+  };
+  if (check.failures.length)
+    throw new Error("测试配置不合规：" + check.failures.join("；"));
 
   const run = docker;
   const identity = docker([
@@ -291,22 +312,67 @@ function preflight(envFile) {
   return report;
 }
 
-function composeStatus(envFile, args) {
-  return docker([...composeArgs(envFile), ...args]);
+function composeStatus(envFile, args, options = {}) {
+  return docker([...composeArgs(envFile), ...args], options);
+}
+
+/**
+ * 全新测试库必须先执行迁移；生产由部署控制器完成这一步，测试栈需要显式执行。
+ * 迁移容器打同一任务标签，便于精确清理。
+ */
+function migrate(envFile) {
+  // 迁移会重写 schema，执行两次以验证幂等，与 deploy/smoke.mjs 的门禁一致。
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    composeStatus(
+      envFile,
+      [
+        "run",
+        "--rm",
+        "--no-deps",
+        "--label",
+        `${STAGE_TASK_LABEL}=${STAGE2_TASK}`,
+        "api",
+        "node",
+        "dist-openapi/scripts/migrate.js",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+  }
+  return { migrated: 2 };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const command = process.argv[2];
   try {
     if (command === "check-env" && process.argv[3]) {
-      const check = checkStage2Env(parseEnv(readFileSync(process.argv[3], "utf8")));
+      const check = checkStage2Env(
+        parseEnv(readFileSync(process.argv[3], "utf8")),
+      );
       console.log(JSON.stringify(check, null, 2));
       process.exitCode = check.ok ? 0 : 1;
     } else if (command === "preflight") {
       console.log(JSON.stringify(preflight(envPath()), null, 2));
+    } else if (command === "migrate") {
+      console.log(JSON.stringify(migrate(envPath())));
     } else if (command === "up") {
-      console.log(composeStatus(envPath(), ["up", "-d", "--wait", "--wait-timeout", "180"]));
-      console.log(JSON.stringify(listTaskResources(parseEnv(readFileSync(envPath(), "utf8")).COMPOSE_PROJECT_NAME), null, 2));
+      console.log(
+        composeStatus(envPath(), [
+          "up",
+          "-d",
+          "--wait",
+          "--wait-timeout",
+          "180",
+        ]),
+      );
+      console.log(
+        JSON.stringify(
+          listTaskResources(
+            parseEnv(readFileSync(envPath(), "utf8")).COMPOSE_PROJECT_NAME,
+          ),
+          null,
+          2,
+        ),
+      );
     } else if (command === "verify") {
       console.log(
         composeStatus(envPath(), [
@@ -336,7 +402,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log(composeStatus(envPath(), ["start"]));
     } else if (command === "resources") {
       const env = parseEnv(readFileSync(envPath(), "utf8"));
-      console.log(JSON.stringify(listTaskResources(env.COMPOSE_PROJECT_NAME), null, 2));
+      console.log(
+        JSON.stringify(listTaskResources(env.COMPOSE_PROJECT_NAME), null, 2),
+      );
     } else if (command === "cleanup") {
       const env = parseEnv(readFileSync(envPath(), "utf8"));
       if (!env.COMPOSE_PROJECT_NAME)
@@ -352,7 +420,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       );
     } else {
       throw new Error(
-        "用法：stage2.mjs check-env <.env> | preflight | up | verify | down | start | resources | cleanup [--volumes]",
+        "用法：stage2.mjs check-env <.env> | preflight | migrate | up | verify | down | start | resources | cleanup [--volumes]",
       );
     }
   } catch (error) {
