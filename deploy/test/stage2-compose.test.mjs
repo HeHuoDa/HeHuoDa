@@ -116,6 +116,9 @@ test(
         undefined,
         `${key} is not wired into the container; template comment must say so`,
       );
+    // 磁盘告警门槛必须真的注入容器，否则写在模板里也只是死配置。
+    assert.equal(config.services.api.environment.DISK_WARNING_MIB, "5120");
+    assert.equal(config.services.api.environment.DISK_CRITICAL_MIB, "1024");
     // 生产项目名不会被覆盖文件写成默认值。
     assert.notEqual(config.name, "hehuoda-deploy");
   },

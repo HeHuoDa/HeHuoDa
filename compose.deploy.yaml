@@ -46,6 +46,9 @@ services:
       ADMIN_RATE_LOGIN_GLOBAL: ${ADMIN_RATE_LOGIN_GLOBAL:-100}
       INGESTION_ENABLED: ${INGESTION_ENABLED:-false}
       INGESTION_RAW_DAYS: ${INGESTION_RAW_DAYS:-30}
+      # 磁盘余量告警门槛（MiB），只影响日志告警，不改变就绪判定。
+      DISK_CRITICAL_MIB: ${DISK_CRITICAL_MIB:-1024}
+      DISK_WARNING_MIB: ${DISK_WARNING_MIB:-5120}
       # 仅从服务器受保护的 .env 注入；默认关闭，密钥不进入镜像。
       WECHAT_LOGIN_ENABLED: ${WECHAT_LOGIN_ENABLED:-false}
       WECHAT_LOGIN_ADAPTER: real

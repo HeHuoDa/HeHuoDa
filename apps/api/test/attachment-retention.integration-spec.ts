@@ -25,6 +25,11 @@ import {
   sources,
   type HttpResponse,
 } from "@hehuoda/sicau-connectors/notices";
+import {
+  assessDiskSpace,
+  describeDiskAssessment,
+  readDiskSpace,
+} from "../src/health/disk-space.js";
 import { informationArticle } from "./notice-fixtures.js";
 
 const source = sources[0];
@@ -406,5 +411,30 @@ describe("30 天清理边界与被引用版本保留", () => {
     await expect(
       cleanupAttachmentBodies(failing as never, 30, clock),
     ).rejects.toThrow("permission denied");
+  });
+
+  it("磁盘余量评估不依赖数据库连接", async () => {
+    // 清理的目的是腾空间；把「读不到磁盘」当成清理失败，
+    // 会让真正的清理在监控异常时停止工作。
+    expect(() => readDiskSpace("/nonexistent-disk-probe")).toThrow();
+    const space = readDiskSpace(process.cwd());
+    expect(Number.isFinite(space.availableBytes)).toBe(true);
+    expect(space.availableBytes).toBeGreaterThanOrEqual(0);
+    expect(space.availableBytes).toBeLessThanOrEqual(space.totalBytes);
+
+    // 真实容量下必然判为 ok，不应在正常路径产出告警文案。
+    const level = assessDiskSpace(space);
+    expect(describeDiskAssessment(level, process.cwd()) === undefined).toBe(
+      level.level === "ok",
+    );
+
+    // 人为把门槛抬到极高时，同一真实容量应被判为告警，
+    // 证明阈值确实生效而不是恒定不下结论。
+    const forced = assessDiskSpace(space, {
+      criticalBytes: Number.MAX_SAFE_INTEGER,
+      warningBytes: Number.MAX_SAFE_INTEGER,
+    });
+    expect(forced.level).toBe("critical");
+    expect(describeDiskAssessment(forced, process.cwd())).toContain("严重不足");
   });
 });
