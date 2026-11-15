@@ -1183,12 +1183,20 @@ export async function readCurrentEvidence(pool: Queryable, noticeId: string) {
   return result.rows[0] ?? null;
 }
 
-export async function cleanupAttachmentBodies(pool: Pool, days = 30) {
+// 与 cleanupResponses 一致：可显式传入参照时间以验证 30 天边界，
+// 不传时仍按数据库当前时间计算。只清空原始字节，保留版本、文本与人工结果。
+export async function cleanupAttachmentBodies(
+  pool: Pool,
+  days = 30,
+  now = new Date(),
+) {
   if (!Number.isInteger(days) || days < 1 || days > 365)
     throw new Error("附件字节保留天数须为 1–365");
+  if (!(now instanceof Date) || Number.isNaN(now.getTime()))
+    throw new Error("清理参照时间无效");
   const result = await pool.query(
-    "UPDATE ingestion_attachment_versions SET body=NULL WHERE body IS NOT NULL AND fetched_at < now()-($1 * interval '1 day')",
-    [days],
+    "UPDATE ingestion_attachment_versions SET body=NULL WHERE body IS NOT NULL AND fetched_at < $2::timestamptz - ($1 * interval '1 day')",
+    [days, now],
   );
   return { removed: result.rowCount };
 }

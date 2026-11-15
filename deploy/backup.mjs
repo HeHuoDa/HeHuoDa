@@ -3,18 +3,38 @@ import { closeSync, openSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { backupDirectory, compose, docker, waitFor } from "./runtime.mjs";
+import { compareIntegrity, readBusinessIntegrity } from "./integrity.mjs";
 
-function removeVerificationContainer(container, run = docker) {
+export const RESTORE_CONTAINER_LABEL = "backup-verification";
+
+export function removeVerificationContainer(container, run = docker) {
   const label = run([
     "inspect",
     "--format",
     '{{ index .Config.Labels "hehuoda.task" }}',
     container,
   ]);
-  if (label !== "backup-verification") {
+  if (label !== RESTORE_CONTAINER_LABEL) {
     throw new Error("Refusing to remove a container with an unexpected label");
   }
   run(["rm", "-f", "-v", container]);
+}
+
+// 阶段二要求恢复后仍能核对业务关系，不只是「四类计数非空」。默认仍只做
+// 四类计数，避免改变发布流水线的既有门禁；显式传入 integrity 摘要时按差异判定。
+export function assertRestoredIntegrity(expected, actual) {
+  const differences = compareIntegrity(expected, actual);
+  if (differences.length) {
+    const detail = differences
+      .map((item) =>
+        item.kind === "count"
+          ? `${item.object}:${item.before}->${item.after}`
+          : `${item.object}:rows ${item.beforeRows}->${item.afterRows}`,
+      )
+      .join(", ");
+    throw new Error("Restored business integrity differs: " + detail);
+  }
+  return { differences: [] };
 }
 
 // A dump is retained only after pg_dump has exited successfully.
@@ -50,6 +70,7 @@ export function backup(tag, context) {
 
 // Restore only into a new container with no network and its own disposable anonymous volume.
 // There is deliberately no automatic restore-into-production command.
+// `integrity` 是需要对照的业务摘要（见 deploy/integrity.mjs）；省略时保持四类计数门禁。
 export function verifyBackup(file, operations = {}) {
   const run = operations.docker || docker;
   const wait = operations.waitFor || waitFor;
@@ -64,7 +85,7 @@ export function verifyBackup(file, operations = {}) {
         "--name",
         container,
         "--label",
-        "hehuoda.task=backup-verification",
+        `hehuoda.task=${RESTORE_CONTAINER_LABEL}`,
         "--network",
         "none",
         "--memory",
@@ -115,7 +136,7 @@ export function verifyBackup(file, operations = {}) {
     } finally {
       closeSync(fd);
     }
-    return JSON.parse(
+    const counts = JSON.parse(
       run([
         "exec",
         container,
@@ -130,9 +151,25 @@ export function verifyBackup(file, operations = {}) {
         "SELECT json_build_object('migrations', (SELECT count(*) FROM schema_migrations), 'colleges', (SELECT count(*) FROM colleges), 'competitions', (SELECT count(*) FROM competitions), 'ingestionRuns', (SELECT count(*) FROM ingestion_runs));",
       ]),
     );
+    if (operations.integrity) {
+      const actual = readBusinessIntegrity(container, { docker: run });
+      assertRestoredIntegrity(operations.integrity, actual);
+      return { ...counts, integrity: actual };
+    }
+    return counts;
   } finally {
     if (created) removeVerificationContainer(container, run);
   }
+}
+
+/**
+ * 对一个在线数据库读取业务摘要，用于与隔离恢复结果比较。
+ * 只接受可执行 psql 的容器名；不接受任意连接串，避免误连生产库。
+ */
+export function readIntegrityFromContainer(container, operations = {}) {
+  return readBusinessIntegrity(container, {
+    docker: operations.docker || docker,
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
