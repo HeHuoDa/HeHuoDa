@@ -325,6 +325,42 @@ describe("30 天清理边界与被引用版本保留", () => {
     ).toBe("approve,import,publish");
   });
 
+  it("省略参照时间时使用数据库时钟，不依赖应用进程时钟", async () => {
+    // 把行写成「数据库当前时间 - 31 天」，不传 now 时必须按数据库时钟判为到期。
+    await db.pool.query(
+      "UPDATE ingestion_versions SET fetched_at=now() - interval '31 days', raw_response='{}'::bytea WHERE notice_id=$1",
+      [noticeId],
+    );
+    await db.pool.query(
+      "UPDATE ingestion_attachment_versions SET fetched_at=now() - interval '31 days' WHERE attachment_id IN (SELECT id FROM ingestion_attachments WHERE notice_id=$1)",
+      [noticeId],
+    );
+    expect(await cleanupResponses(db.pool, 30)).toEqual({ removed: 1 });
+    expect(await cleanupAttachmentBodies(db.pool, 30)).toEqual({
+      removed: expect.any(Number),
+    });
+
+    // 反之：刚写入（数据库 now()）的行不传 now 时必须保留。
+    await db.pool.query(
+      "UPDATE ingestion_versions SET fetched_at=now(), raw_response='{}'::bytea WHERE notice_id=$1",
+      [noticeId],
+    );
+    expect(await cleanupResponses(db.pool, 30)).toEqual({ removed: 0 });
+
+    // 显式参照时间优先于数据库时钟：用极远未来时间使刚写入的行也到期。
+    await db.pool.query(
+      "UPDATE ingestion_versions SET raw_response='{}'::bytea WHERE notice_id=$1",
+      [noticeId],
+    );
+    expect(
+      await cleanupResponses(
+        db.pool,
+        30,
+        new Date(Date.now() + 400 * 24 * 3600_000),
+      ),
+    ).toEqual({ removed: 1 });
+  });
+
   it("清理参数越界与数据库失败不产生虚假成功", async () => {
     for (const days of [0, 366, 1.5, -1]) {
       await expect(cleanupResponses(db.pool, days, clock)).rejects.toThrow(

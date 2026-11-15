@@ -46,6 +46,27 @@ test("business integrity summary covers human results, mappings and retained byt
       relation in BUSINESS_CONTENT_QUERIES,
       `${relation} must be compared by stable key`,
     );
+  // 人工修正、批准文件、正式比赛内容与长期正文必须有内容摘要，
+  // 否则「只改内容不改 ID/数量」的恢复缺陷会被误判为一致。
+  for (const digest of [
+    "candidateStates",
+    "reviewRevisionKeys",
+    "competitionDigests",
+    "stageDigests",
+    "trackDigests",
+    "noticeDigests",
+    "versionTextDigests",
+    "attachmentSegmentDigests",
+  ])
+    assert.ok(
+      digest in BUSINESS_CONTENT_QUERIES,
+      `${digest} must carry a content digest`,
+    );
+  assert.match(BUSINESS_CONTENT_QUERIES.candidateStates, /data_digest/);
+  assert.match(BUSINESS_CONTENT_QUERIES.candidateStates, /file_digest/);
+  assert.match(BUSINESS_CONTENT_QUERIES.reviewRevisionKeys, /file_digest/);
+  assert.match(BUSINESS_CONTENT_QUERIES.versionTextDigests, /article_digest/);
+  assert.match(BUSINESS_CONTENT_QUERIES.versionTextDigests, /extracted_digest/);
   assert.deepEqual(Object.keys(RETAINED_BYTE_QUERIES).sort(), [
     "retainedAttachmentBodies",
     "retainedRawResponses",
@@ -58,6 +79,132 @@ test("business integrity summary covers human results, mappings and retained byt
   // 稳定排序是「另一个容器恢复后逐行相等」的前提。
   for (const { sql, kind, name } of INTEGRITY_QUERIES)
     if (kind === "rows") assert.match(sql, /\bORDER BY\b/, name);
+});
+
+// 负向对照：只改人工内容与正式内容、ID 与行数完全不变，必须被检出。
+test("comparison detects human and formal content edited without id churn", () => {
+  const digest = (seed) => seed.repeat(64).slice(0, 64);
+  const base = (overrides = {}) =>
+    parseIntegrityOutput(
+      scriptOutput({
+        competitions: 1,
+        publishedCompetitions: 1,
+        reviewRevisions: 1,
+        mappings: 1,
+        competitionIds: [{ id: "alpha" }],
+        publishedCompetitionIds: [{ id: "alpha" }],
+        competitionDigests: [
+          { id: "alpha", publication: "published", digest: digest("a") },
+        ],
+        stageDigests: [
+          { stage_id: "s1", competition_id: "alpha", digest: digest("b") },
+        ],
+        trackDigests: [{ track_id: "t1", stage_id: "s1", digest: digest("c") }],
+        noticeDigests: [{ id: "n1", digest: digest("d") }],
+        candidateStates: [
+          {
+            id: "c1",
+            status: "approved",
+            revision: 1,
+            source_version: "v1",
+            reviewer: "reviewer-1",
+            data_digest: digest("e"),
+            file_digest: digest("f"),
+          },
+        ],
+        reviewRevisionKeys: [
+          {
+            candidate_id: "c1",
+            candidate_revision: 1,
+            target_id: "alpha",
+            file_digest: digest("1"),
+          },
+        ],
+        versionTextDigests: [
+          {
+            id: "v1",
+            article_digest: digest("2"),
+            extracted_digest: digest("3"),
+          },
+        ],
+        attachmentSegmentDigests: [{ id: "a1", segments_digest: digest("4") }],
+        mappingRelations: [
+          {
+            candidate_id: "c1",
+            competition_id: "alpha",
+            stage_ids: '["s1"]',
+            notice_ids: '["n1"]',
+            track_ids: '["t1"]',
+          },
+        ],
+        ...overrides,
+      }),
+    );
+
+  assert.deepEqual(compareIntegrity(base(), base()), []);
+
+  // 人工修正内容被改（ID、状态、审核人、行数全不变）。
+  const editedCandidate = base({
+    candidateStates: [
+      {
+        id: "c1",
+        status: "approved",
+        revision: 1,
+        source_version: "v1",
+        reviewer: "reviewer-1",
+        data_digest: digest("9"),
+        file_digest: digest("f"),
+      },
+    ],
+  });
+  assert.deepEqual(compareIntegrity(base(), editedCandidate), [
+    { object: "candidateStates", kind: "content", beforeRows: 1, afterRows: 1 },
+  ]);
+
+  // 批准文件内容被改。
+  const editedFile = base({
+    candidateStates: [
+      {
+        id: "c1",
+        status: "approved",
+        revision: 1,
+        source_version: "v1",
+        reviewer: "reviewer-1",
+        data_digest: digest("e"),
+        file_digest: digest("8"),
+      },
+    ],
+  });
+  assert.deepEqual(
+    compareIntegrity(base(), editedFile).map((item) => item.object),
+    ["candidateStates"],
+  );
+
+  // 正式比赛内容被改（ID 与 publication 不变）。
+  const editedCompetition = base({
+    competitionDigests: [
+      { id: "alpha", publication: "published", digest: digest("7") },
+    ],
+  });
+  assert.deepEqual(
+    compareIntegrity(base(), editedCompetition).map((item) => item.object),
+    ["competitionDigests"],
+  );
+
+  // 长期正文被改（清理不得影响它）。
+  const editedText = base({
+    versionTextDigests: [
+      {
+        id: "v1",
+        article_digest: digest("6"),
+        extracted_digest: digest("3"),
+      },
+    ],
+  });
+  assert.deepEqual(
+    compareIntegrity(base(), editedText).map((item) => item.object),
+    ["versionTextDigests"],
+  );
 });
 
 test("script keeps every query and stops on error", () => {

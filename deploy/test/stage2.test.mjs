@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  COMPOSE_PROJECT_LABEL,
   PRODUCTION_PROJECT,
   STAGE2_TASK,
+  belongsToProject,
   checkStage2Env,
   cleanupStage2,
   listTaskResources,
   parseEnv,
+  readLabel,
   readTaskLabel,
 } from "../stage2.mjs";
 
@@ -89,8 +92,14 @@ function fakeDocker(labels) {
     if (key.startsWith("network ls")) return labels.networks.join("\n");
     if (key.startsWith("volume ls")) return labels.volumes.join("\n");
     if (key.startsWith("image ls")) return (labels.images ?? []).join("\n");
-    if (key.startsWith("inspect --format") || key.startsWith("volume inspect"))
-      return labels.labels[args[args.length - 1]] ?? "";
+    if (args.includes("--format")) {
+      const format = args[args.indexOf("--format") + 1];
+      const id = args[args.length - 1];
+      const owners = labels.owners ?? {};
+      const tasks = labels.labels ?? {};
+      if (format.includes(COMPOSE_PROJECT_LABEL)) return owners[id] ?? "";
+      return tasks[id] ?? "";
+    }
     return "";
   };
 }
@@ -107,6 +116,13 @@ test("cleanup only removes resources carrying the task label", () => {
       "foreign-container": "someone-else",
       "hehuoda-stage2_default": STAGE2_TASK,
       "hehuoda-stage2_database": STAGE2_TASK,
+      "foreign-volume": "someone-else",
+    },
+    owners: {
+      "hehuoda-stage2-api-1": "hehuoda-stage2",
+      "foreign-container": "someone-else",
+      "hehuoda-stage2_default": "hehuoda-stage2",
+      "hehuoda-stage2_database": "hehuoda-stage2",
       "foreign-volume": "someone-else",
     },
   });
@@ -155,6 +171,10 @@ test("cleanup with --volumes still refuses a foreign volume", () => {
       "hehuoda-stage2_database": STAGE2_TASK,
       "foreign-volume": "someone-else",
     },
+    owners: {
+      "hehuoda-stage2_database": "hehuoda-stage2",
+      "foreign-volume": "someone-else",
+    },
   });
   const calls = [];
   const run = (args) => {
@@ -171,6 +191,66 @@ test("cleanup with --volumes still refuses a foreign volume", () => {
   assert.ok(!calls.some((call) => call.startsWith("volume rm foreign-volume")));
 });
 
+// 关键回归：同一主机上两个测试项目共用同一任务标签时，清理 A 必须保留 B。
+// 只按任务标签过滤会跨项目删除，这是曾经的缺陷。
+test("cleanup keeps resources of another project sharing the same task label", () => {
+  const calls = [];
+  const base = fakeDocker({
+    containers: ["project-a-api-1", "project-b-api-1"],
+    networks: ["project-a_default", "project-b_default"],
+    volumes: ["project-a_database", "project-b_database"],
+    images: [],
+    labels: {
+      "project-a-api-1": STAGE2_TASK,
+      "project-b-api-1": STAGE2_TASK,
+      "project-a_default": STAGE2_TASK,
+      "project-b_default": STAGE2_TASK,
+      "project-a_database": STAGE2_TASK,
+      "project-b_database": STAGE2_TASK,
+    },
+    owners: {
+      "project-a-api-1": "project-a",
+      "project-b-api-1": "project-b",
+      "project-a_default": "project-a",
+      "project-b_default": "project-b",
+      "project-a_database": "project-a",
+      "project-b_database": "project-b",
+    },
+  });
+  const run = (args) => {
+    calls.push(args.join(" "));
+    return base(args);
+  };
+  const result = cleanupStage2("project-a", { docker: run, volumes: true });
+  assert.deepEqual(result.removed.containers, ["project-a-api-1"]);
+  assert.deepEqual(result.removed.networks, ["project-a_default"]);
+  assert.deepEqual(result.removed.volumes, ["project-a_database"]);
+  assert.deepEqual(result.refused, [
+    "container:project-b-api-1",
+    "network:project-b_default",
+    "volume:project-b_database",
+  ]);
+  assert.ok(
+    !calls.some((call) => call.includes("project-b") && call.includes(" rm")),
+  );
+  assert.ok(
+    !calls.some((call) =>
+      /rm -f project-b-api-1|network rm project-b_default|volume rm project-b_database/.test(
+        call,
+      ),
+    ),
+  );
+});
+
+test("cleanup refuses production project and missing project name", () => {
+  assert.throws(
+    () => cleanupStage2(PRODUCTION_PROJECT, { docker: () => "" }),
+    /生产项目/,
+  );
+  assert.throws(() => cleanupStage2("", { docker: () => "" }), /项目名/);
+  assert.throws(() => listTaskResources("", () => ""), /项目名/);
+});
+
 test("resource listing carries the project name for the report", () => {
   const run = () => "";
   assert.deepEqual(listTaskResources("hehuoda-stage2", run), {
@@ -183,5 +263,49 @@ test("resource listing carries the project name for the report", () => {
   assert.equal(
     readTaskLabel("x", "container", () => "  issue206-stage2  "),
     STAGE2_TASK,
+  );
+});
+
+// 双标签判定本身：任务标签正确但项目不同，必须不算本任务资源。
+test("belongsToProject requires both the task label and the project label", () => {
+  const labels = {
+    "ctr-ok": { task: STAGE2_TASK, project: "hehuoda-stage2" },
+    "ctr-other": { task: STAGE2_TASK, project: "hehuoda-stage2-b" },
+    "ctr-notask": { task: "other-task", project: "hehuoda-stage2" },
+    "ctr-empty": { task: "", project: "" },
+  };
+  const run = (args) => {
+    const format = args[args.indexOf("--format") + 1];
+    const id = args[args.length - 1];
+    const entry = labels[id];
+    if (!entry) return "";
+    return format.includes(COMPOSE_PROJECT_LABEL) ? entry.project : entry.task;
+  };
+  assert.equal(
+    belongsToProject("ctr-ok", "container", "hehuoda-stage2", run),
+    true,
+  );
+  assert.equal(
+    belongsToProject("ctr-other", "container", "hehuoda-stage2", run),
+    false,
+  );
+  assert.equal(
+    belongsToProject("ctr-notask", "container", "hehuoda-stage2", run),
+    false,
+  );
+  assert.equal(
+    belongsToProject("ctr-empty", "container", "hehuoda-stage2", run),
+    false,
+  );
+  // 标签读取抛错（资源已被删除等）时视为不属于本任务，不删。
+  assert.equal(
+    belongsToProject("missing", "container", "hehuoda-stage2", () => {
+      throw new Error("no such object");
+    }),
+    false,
+  );
+  assert.equal(
+    readLabel("ctr-ok", "container", COMPOSE_PROJECT_LABEL, run),
+    "hehuoda-stage2",
   );
 });

@@ -169,6 +169,8 @@ export function verifyBackup(file, operations = {}) {
 export function readIntegrityFromContainer(container, operations = {}) {
   return readBusinessIntegrity(container, {
     docker: operations.docker || docker,
+    user: operations.user,
+    database: operations.database,
   });
 }
 

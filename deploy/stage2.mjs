@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 export const STAGE2_TASK = "issue206-stage2";
 export const STAGE_TASK_LABEL = "hehuoda.task";
+export const COMPOSE_PROJECT_LABEL = "com.docker.compose.project";
 export const PRODUCTION_PROJECT = "hehuoda-deploy";
 
 export function docker(args, options = {}) {
@@ -141,101 +142,97 @@ export function checkStage2Env(env) {
 
 /** 读取资源标签；读不到就视为不可清理。 */
 export function readTaskLabel(id, kind, run = docker) {
-  const format =
-    kind === "container"
-      ? '{{ index .Config.Labels "hehuoda.task" }}'
-      : '{{ index .Labels "hehuoda.task" }}';
-  const subcommand = kind === "volume" ? ["volume", "inspect"] : ["inspect"];
+  return readLabel(id, kind, STAGE_TASK_LABEL, run);
+}
+
+/** 读取任意标签；用于同时核对 Compose 项目归属。 */
+export function readLabel(id, kind, label, run = docker) {
+  const format = `{{ index %s "%s" }}`
+    .replace("%s", kind === "container" ? ".Config.Labels" : ".Labels")
+    .replace("%s", label);
+  const subcommand =
+    kind === "volume"
+      ? ["volume", "inspect"]
+      : kind === "network"
+        ? ["network", "inspect"]
+        : kind === "image"
+          ? ["image", "inspect"]
+          : ["inspect"];
   return run([...subcommand, "--format", format, id]).trim();
 }
 
+/**
+ * 列出属于某个 Compose 项目的本任务资源。
+ * 任务标签单独使用不足以界定范围：同一主机上多个测试项目可以共用同一任务标签，
+ * 只按任务标签过滤会跨项目清理。因此两个标签必须同时匹配。
+ */
 export function listTaskResources(project, run = docker) {
-  const containers = run([
-    "ps",
-    "-a",
+  if (!project) throw new Error("缺少 Compose 项目名，拒绝列出或清理资源");
+  const filters = [
     "--filter",
     `label=${STAGE_TASK_LABEL}=${STAGE2_TASK}`,
-    "--format",
-    "{{.Names}}",
-  ])
-    .split("\n")
-    .filter(Boolean);
-  const networks = run([
-    "network",
-    "ls",
     "--filter",
-    `label=${STAGE_TASK_LABEL}=${STAGE2_TASK}`,
-    "--format",
-    "{{.Name}}",
-  ])
-    .split("\n")
-    .filter(Boolean);
-  const volumes = run([
-    "volume",
-    "ls",
-    "--filter",
-    `label=${STAGE_TASK_LABEL}=${STAGE2_TASK}`,
-    "--format",
-    "{{.Name}}",
-  ])
-    .split("\n")
-    .filter(Boolean);
-  const images = run([
-    "image",
-    "ls",
-    "--filter",
-    `label=${STAGE_TASK_LABEL}=${STAGE2_TASK}`,
-    "--format",
-    "{{.Repository}}:{{.Tag}}",
-  ])
-    .split("\n")
-    .filter(Boolean);
-  return { project, containers, networks, volumes, images };
+    `label=${COMPOSE_PROJECT_LABEL}=${project}`,
+  ];
+  const list = (command, format) =>
+    run([...command, ...filters, "--format", format])
+      .split("\n")
+      .filter(Boolean);
+  return {
+    project,
+    containers: list(["ps", "-a"], "{{.Names}}"),
+    networks: list(["network", "ls"], "{{.Name}}"),
+    volumes: list(["volume", "ls"], "{{.Name}}"),
+    images: list(["image", "ls"], "{{.Repository}}:{{.Tag}}"),
+  };
+}
+
+/** 资源是否同时带有本任务标签与目标 Compose 项目标签。 */
+export function belongsToProject(id, kind, project, run = docker) {
+  let task;
+  let owner;
+  try {
+    task = readLabel(id, kind, STAGE_TASK_LABEL, run);
+    owner = readLabel(id, kind, COMPOSE_PROJECT_LABEL, run);
+  } catch {
+    return false;
+  }
+  return task === STAGE2_TASK && owner === project;
 }
 
 /**
- * 精确清理：逐个复核标签后再删除。任何一项标签不符即中止并保留其余资源，
- * 不做「尽力删除」。默认不删除数据卷，需显式 --volumes。
+ * 精确清理：资源必须同时带有本任务标签与目标 Compose 项目标签，逐个复核后再删除。
+ * 任何一项不符即列入 refused 并保留，不做「尽力删除」。默认不删除数据卷。
  */
 export function cleanupStage2(project, options = {}) {
+  if (!project) throw new Error("缺少 Compose 项目名，拒绝清理");
+  if (project === PRODUCTION_PROJECT) throw new Error("拒绝清理生产项目资源");
   const run = options.docker || docker;
   const resources = listTaskResources(project, run);
   const removed = { containers: [], networks: [], volumes: [], images: [] };
   const refused = [];
 
-  for (const name of resources.containers) {
-    if (readTaskLabel(name, "container", run) !== STAGE2_TASK) {
-      refused.push(`container:${name}`);
-      continue;
+  const remove = (kind, name, args) => {
+    if (!belongsToProject(name, kind, project, run)) {
+      refused.push(`${kind}:${name}`);
+      return false;
     }
-    run(["rm", "-f", name]);
-    removed.containers.push(name);
-  }
-  for (const name of resources.networks) {
-    if (readTaskLabel(name, "network", run) !== STAGE2_TASK) {
-      refused.push(`network:${name}`);
-      continue;
-    }
-    run(["network", "rm", name]);
-    removed.networks.push(name);
-  }
-  for (const name of resources.images) {
-    if (readTaskLabel(name, "image", run) !== STAGE2_TASK) {
-      refused.push(`image:${name}`);
-      continue;
-    }
-    run(["image", "rm", name]);
-    removed.images.push(name);
-  }
+    run(args);
+    return true;
+  };
+
+  for (const name of resources.containers)
+    if (remove("container", name, ["rm", "-f", name]))
+      removed.containers.push(name);
+  for (const name of resources.networks)
+    if (remove("network", name, ["network", "rm", name]))
+      removed.networks.push(name);
+  for (const name of resources.images)
+    if (remove("image", name, ["image", "rm", name])) removed.images.push(name);
   if (options.volumes) {
-    for (const name of resources.volumes) {
-      if (readTaskLabel(name, "volume", run) !== STAGE2_TASK) {
-        refused.push(`volume:${name}`);
-        continue;
-      }
-      run(["volume", "rm", name]);
-      removed.volumes.push(name);
-    }
+    for (const name of resources.volumes)
+      if (remove("volume", name, ["volume", "rm", name]))
+        removed.volumes.push(name);
   }
   return {
     removed,
@@ -254,6 +251,20 @@ function envPath() {
   const found = candidates.find((candidate) => existsSync(candidate));
   if (!found) throw new Error("找不到测试 .env；用 STAGE2_ENV_FILE 指定路径");
   return found;
+}
+
+/**
+ * 读取并强制校验测试 .env。每个会变更 Docker 状态的命令都必须先过这一步：
+ * 不能依赖操作者记得先跑 preflight，也不能假设检查后 .env 未被修改。
+ */
+function loadGuardedEnv(envFile) {
+  const env = parseEnv(readFileSync(envFile, "utf8"));
+  const check = checkStage2Env(env);
+  if (!check.ok)
+    throw new Error("测试配置不合规：" + check.failures.join("；"));
+  if (env.COMPOSE_PROJECT_NAME === PRODUCTION_PROJECT)
+    throw new Error("拒绝在生产项目上执行测试栈命令");
+  return env;
 }
 
 function composeArgs(envFile) {
@@ -317,10 +328,19 @@ function composeStatus(envFile, args, options = {}) {
 }
 
 /**
- * 全新测试库必须先执行迁移；生产由部署控制器完成这一步，测试栈需要显式执行。
+ * 全新测试库必须先启动 db 并等健康，再执行迁移，最后才能启动 api/web。
+ * `compose run --no-deps` 不会拉起数据库，直接迁移在空环境上无法连接。
  * 迁移容器打同一任务标签，便于精确清理。
  */
 function migrate(envFile) {
+  loadGuardedEnv(envFile);
+  composeStatus(
+    envFile,
+    ["up", "-d", "--wait", "--wait-timeout", "120", "db"],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   // 迁移会重写 schema，执行两次以验证幂等，与 deploy/smoke.mjs 的门禁一致。
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     composeStatus(
@@ -355,27 +375,23 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     } else if (command === "migrate") {
       console.log(JSON.stringify(migrate(envPath())));
     } else if (command === "up") {
+      const file = envPath();
+      loadGuardedEnv(file);
       console.log(
-        composeStatus(envPath(), [
-          "up",
-          "-d",
-          "--wait",
-          "--wait-timeout",
-          "180",
-        ]),
+        composeStatus(file, ["up", "-d", "--wait", "--wait-timeout", "180"]),
       );
       console.log(
         JSON.stringify(
-          listTaskResources(
-            parseEnv(readFileSync(envPath(), "utf8")).COMPOSE_PROJECT_NAME,
-          ),
+          listTaskResources(loadGuardedEnv(file).COMPOSE_PROJECT_NAME),
           null,
           2,
         ),
       );
     } else if (command === "verify") {
+      const file = envPath();
+      loadGuardedEnv(file);
       console.log(
-        composeStatus(envPath(), [
+        composeStatus(file, [
           "exec",
           "-T",
           "api",
@@ -385,7 +401,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         ]),
       );
       console.log(
-        composeStatus(envPath(), [
+        composeStatus(file, [
           "exec",
           "-T",
           "web",
@@ -397,18 +413,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         ]),
       );
     } else if (command === "down") {
-      console.log(composeStatus(envPath(), ["stop"]));
+      const file = envPath();
+      loadGuardedEnv(file);
+      console.log(composeStatus(file, ["stop"]));
     } else if (command === "start") {
-      console.log(composeStatus(envPath(), ["start"]));
+      const file = envPath();
+      loadGuardedEnv(file);
+      console.log(composeStatus(file, ["start"]));
     } else if (command === "resources") {
-      const env = parseEnv(readFileSync(envPath(), "utf8"));
+      const env = loadGuardedEnv(envPath());
       console.log(
         JSON.stringify(listTaskResources(env.COMPOSE_PROJECT_NAME), null, 2),
       );
     } else if (command === "cleanup") {
-      const env = parseEnv(readFileSync(envPath(), "utf8"));
-      if (!env.COMPOSE_PROJECT_NAME)
-        throw new Error("缺少 COMPOSE_PROJECT_NAME，拒绝清理");
+      const env = loadGuardedEnv(envPath());
       console.log(
         JSON.stringify(
           cleanupStage2(env.COMPOSE_PROJECT_NAME, {

@@ -40,21 +40,41 @@ export const BUSINESS_COUNT_QUERIES = {
 /**
  * 稳定 ID 与关系抽样。排序键全部取主键或稳定列，不依赖写入顺序，
  * 因此同一数据在另一容器恢复后必须得到完全相同的行集合。
+ *
+ * 除键与状态外，还比较人工与正式内容的规范化摘要：只保留相同 ID/行数、
+ * 却改动人工修正、批准文件、正式比赛内容或长期正文的恢复缺陷，
+ * 必须能被检出，不能只看计数。
  */
 export const BUSINESS_CONTENT_QUERIES = {
   competitionIds: "SELECT id FROM competitions ORDER BY id",
   publishedCompetitionIds:
     "SELECT id FROM competitions WHERE publication='published' ORDER BY id",
+  // 正式比赛内容摘要（规范化 JSON 的 sha256，不含原始文本）。
+  competitionDigests:
+    "SELECT id,publication,encode(sha256(convert_to(data::text,'UTF8')),'hex') AS digest FROM competitions ORDER BY id",
+  stageDigests:
+    "SELECT id,competition_id,encode(sha256(convert_to(data::text,'UTF8')),'hex') AS digest FROM stages ORDER BY id",
+  trackDigests:
+    "SELECT id,competition_id,encode(sha256(convert_to(data::text,'UTF8')),'hex') AS digest FROM tracks ORDER BY id",
+  noticeDigests:
+    "SELECT id,encode(sha256(convert_to(data::text,'UTF8')),'hex') AS digest FROM notices ORDER BY id",
+  // 人工结果：候选数据（含人工修正）、批准文件、审核人。
   candidateStates:
-    "SELECT id,status,revision,source_version,COALESCE(reviewer,'') AS reviewer FROM ingestion_candidates ORDER BY id",
+    "SELECT id,status,revision,source_version,COALESCE(reviewer,'') AS reviewer,encode(sha256(convert_to(data::text,'UTF8')),'hex') AS data_digest,COALESCE(encode(sha256(convert_to(approved_file::text,'UTF8')),'hex'),'') AS file_digest FROM ingestion_candidates ORDER BY id",
   mappingRelations:
     "SELECT candidate_id,competition_id,stage_ids::text AS stage_ids,notice_ids::text AS notice_ids,track_ids::text AS track_ids FROM ingestion_mappings ORDER BY candidate_id",
   reviewRevisionKeys:
-    "SELECT candidate_id,candidate_revision,target_id FROM ingestion_review_revisions ORDER BY candidate_id,candidate_revision",
+    "SELECT candidate_id,candidate_revision,target_id,encode(sha256(convert_to(review::text,'UTF8')),'hex') AS file_digest FROM ingestion_review_revisions ORDER BY candidate_id,candidate_revision",
   operationKinds:
     "SELECT kind,count(*)::int AS total FROM ingestion_operations GROUP BY kind ORDER BY kind",
+  // 长期正文与提取文本摘要：清理后仍应完全一致。
+  versionTextDigests:
+    "SELECT id,encode(sha256(convert_to(COALESCE(article::text,''),'UTF8')),'hex') AS article_digest,encode(sha256(convert_to(COALESCE(extracted::text,''),'UTF8')),'hex') AS extracted_digest FROM ingestion_versions ORDER BY id",
   attachmentKeys:
     "SELECT a.id,n.id AS notice_id,a.latest_version::text AS latest_version,COALESCE(v.sha256,'') AS sha256,COALESCE(v.status,'') AS status FROM ingestion_attachments a JOIN ingestion_notices n ON n.id=a.notice_id LEFT JOIN ingestion_attachment_versions v ON v.id=a.latest_version ORDER BY a.id",
+  // 附件提取文本（segments）摘要：清理只清 body，文本必须保留。
+  attachmentSegmentDigests:
+    "SELECT id::text AS id,COALESCE(encode(sha256(convert_to(segments::text,'UTF8')),'hex'),'') AS segments_digest FROM ingestion_attachment_versions ORDER BY id",
   attachmentVersionKeys:
     "SELECT id::text AS id,attachment_id::text AS attachment_id,revision,COALESCE(sha256,'') AS sha256,status,COALESCE(error_code,'') AS error_code FROM ingestion_attachment_versions ORDER BY id",
   evidenceStates:

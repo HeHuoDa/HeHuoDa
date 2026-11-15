@@ -35,11 +35,19 @@
 cd /opt/hehuoda-test
 STAGE2_ENV_FILE=.env node deploy/stage2.mjs check-env .env   # 校验生产隔离
 STAGE2_ENV_FILE=.env node deploy/stage2.mjs preflight        # 镜像平台、端口、既有资源
-STAGE2_ENV_FILE=.env node deploy/stage2.mjs migrate          # 空库执行迁移（幂等，跑两次）
+STAGE2_ENV_FILE=.env node deploy/stage2.mjs migrate          # 先启动 db 并等健康，再迁移（幂等，跑两次）
 STAGE2_ENV_FILE=.env node deploy/stage2.mjs up               # 启动并等待健康
 STAGE2_ENV_FILE=.env node deploy/stage2.mjs verify           # API/Web 就绪检查
 STAGE2_ENV_FILE=.env node deploy/stage2.mjs resources        # 列出本任务资源
 ```
+
+每个会变更 Docker 状态的命令（`migrate`/`up`/`down`/`start`/`verify`/`cleanup`）
+都会重新读取并校验 `.env`，不合规立即拒绝；不依赖操作者记得先跑 `preflight`，
+也覆盖「检查后修改了 `.env`」的情况。
+
+`migrate` 会先 `compose up -d --wait db` 等测试数据库健康再迁移：
+`compose run --no-deps` 不会拉起数据库，在全新空环境上直接迁移无法连接。
+因此从无容器、无卷的状态也可按上述顺序一次走通。
 
 `check-env` 会拒绝：复用生产项目名或库名、绑定非回环地址、占用 80/443、
 开启调度/微信登录/校园核验、填写生产身份密钥、`IMAGE_TAG` 非 40 位 SHA。
@@ -57,30 +65,39 @@ ssh -N -L 18080:127.0.0.1:18080 <已核实SSH目标>
 
 ## 容量测量
 
-容量脚本在测试 API 容器内运行，只写测试库：
+仓库内现行、可维护的入口是 `deploy/integrity.mjs`（恢复摘要）与
+`deploy/stage2.mjs`（启停与清理）。容量采样本阶段使用的是一次性测量脚本，
+保留在本地 `.data/` 目录、**不在本仓库中**；下列步骤说明可复现的流程与产物形状，
+仓库不提供 `capacity-stage2.mjs` 这类命令。
 
-```bash
-docker cp capacity-stage2.mjs hehuoda-stage2-api-1:/app/capacity-stage2.mjs
-docker exec -e STAGE2_SHA=<完整SHA> hehuoda-stage2-api-1 node /app/capacity-stage2.mjs
-docker cp hehuoda-stage2-api-1:/tmp/stage2-report/capacity.json ./capacity.json
-```
+可复现流程（在测试栈已健康后执行）：
 
-环境变量控制样本规模（默认与实测值一致）：
-`STAGE2_NOTICES=60`、`STAGE2_VERSIONS=3`、`STAGE2_ATTACHMENTS=60`、
-`STAGE2_ATTACHMENT_BYTES=65536`、`STAGE2_PARSE_ROUNDS=3`、`STAGE2_THROUGHPUT_ROUNDS=20`。
+1. 把测量脚本复制进测试 API 容器，在容器内运行（只连测试 `.env` 指向的库），
+   报告写到 `/tmp/stage2-report/capacity.json`（0600）；
+2. 把报告复制出容器到 `/opt/hehuoda-test`，再取回本地；
+3. 报告分三块，分别引用，不得混为一条证据（见下）。
+
+测量参数（默认值与一次实测一致）：多条通知 × 多版本、多个附件 × 固定字节、
+解析轮次与吞吐轮次。参数只影响样本规模，不改变判据。
 
 报告分三块，必须分别引用，不得混为一条证据：
 
 1. **逻辑与物理占用**：`ingestion_versions.article/extracted`、附件 `body`/`segments`
    的逻辑字节，以及 `pg_database_size`、各表 `table/index/toast` 物理字节。
-2. **Linux 隔离解析**：真实 `attachment-sandbox` 子进程下 PDF/DOCX 的耗时与
-   RSS 基线，以及并发 1 的串行吞吐。只代表本机本镜像本样本。
+2. **Linux 隔离解析**：真实 `attachment-sandbox` 子进程下 PDF/DOCX 的耗时、
+   进程树内存峰值（含子进程）与容器 cgroup 水位，以及并发 1 的串行吞吐。
+   只代表本机本镜像本样本。
 3. **清理边界**：见下节。
+
+容量数字的定位：这是**合成样本的诊断结果**，可用于判断增长由哪一项主导、
+量级是否在服务器余量内；它不包括候选/审核/审计行增长与备份累积，
+不是完整容量准入结论。
 
 ## 30 天清理边界
 
 `cleanupResponses(pool, days, now)` 与 `cleanupAttachmentBodies(pool, days, now)`
-接受显式参照时间；省略时沿用数据库时钟（调度器行为不变）。
+接受显式参照时间；**省略 `now` 时仍用数据库时钟**（`now()`），与调度器原有行为一致，
+避免应用与数据库时钟偏差改变到期结果。
 
 判据是严格小于：`fetched_at < now - days`。
 
@@ -99,32 +116,43 @@ docker cp hehuoda-stage2-api-1:/tmp/stage2-report/capacity.json ./capacity.json
 
 ## 隔离备份恢复
 
-导出与恢复都只走本任务资源，不写入生产备份目录 `/opt/hehuoda/backups`：
+导出与恢复都只走本任务资源，不写入生产备份目录 `/opt/hehuoda/backups`。
+仓库提供的能力是 `deploy/integrity.mjs` 的摘要与 `deploy/backup.mjs` 的
+`verifyBackup(file, { integrity })`；本阶段的恢复演练脚本（测试栈快照与
+生产库只读副本）是一次性脚本，保存在本地 `.data/`，不在本仓库中。
 
-```bash
-# 测试栈自身快照（推荐：可以覆盖候选/审核/映射/多版本附件）
-node deploy/recovery-test.mjs
+可复现流程：
 
-# 生产库只读副本（只读导出，不恢复回生产）
-node deploy/recovery.mjs
-```
+1. 从目标容器 `pg_dump --format=custom --no-owner --no-acl` 到测试目录
+   （不写生产备份目录）；
+2. 用 `readBusinessIntegrity(container, { user, database })` 读源库摘要；
+3. 新建无网络、独立匿名卷、独立随机口令的 `postgres:17.10-bookworm` 容器，
+   `pg_restore --exit-on-error`；
+4. 再用同一函数读恢复库摘要，`compareIntegrity` 比对；
+5. 仅当容器带 `hehuoda.task=backup-verification` 标签时才 `docker rm -f -v`。
 
-两者的共同流程：`pg_dump --format=custom` → 新建无网络、独立匿名卷、
-独立随机口令的 `postgres:17.10-bookworm` 容器 → `pg_restore --exit-on-error`
-→ 对比业务完整性摘要 → 删除该容器。
+生产库里没有 `restore` 角色，因此读源侧必须显式传 `user`/`database`，
+否则会因角色不存在而失败（这是有意的失败，不是静默空结果）。
 
 完整性摘要由 `deploy/integrity.mjs` 生成，比较项包括：
 
-- 计数：正式比赛（含 published）、stages/tracks/notices、候选与 approving/imported 状态、
+- 计数：正式比赛（含 published）、stages/tracks/notices、候选与 approved/imported 状态、
   审核修订、操作审计、映射、附件与附件版本、含字节的版本数与总字节、原始响应用量
 - 关系与稳定 ID：比赛 ID、候选状态与修订、映射关系、审核修订键、附件与版本键、证据状态
+- **人工与正式内容摘要**：候选 `data` 与 `approved_file`、审核修订 `review`、
+  比赛/stage/track/notice 的 `data`、长期正文 `article`/`extracted`、附件 `segments`
+  的 sha256；只改内容不改 ID/行数的恢复缺陷也能被检出
 - 保留期内可恢复字节：`sha256(body)`/`sha256(raw_response)` 的还原哈希
 
 `verifyBackup(file, { integrity })` 需要时可按摘要对照；省略时保持原有四类计数门禁，
 不改变发布流水线既有判断。
 
 差异以固定分类清单抛出（`count` / `content`），不打印字节或连接串。
-负向对照已验证：删除一条正式通知后比较会报出差异，因此「0 差异」不是空断言。
+两类负向对照已验证：「删除一条正式通知」使计数差异被报出；
+「只改人工修正/正式比赛/长期正文内容、ID 与行数不变」使内容差异被报出。
+因此「0 差异」不是空断言。
+
+恢复耗时为秒级，但同机隔离恢复不等于异机灾难恢复。
 
 ## 停止与精确清理
 
@@ -137,8 +165,11 @@ STAGE2_ENV_FILE=.env node deploy/stage2.mjs cleanup --volumes  # 连同测试卷
 
 清理规则：
 
-- 逐个读取资源标签，标签读不到或不是 `issue206-stage2` 时**拒绝删除**并列入 `refused`
-- 默认不删数据卷；`--volumes` 也只删带本任务标签的卷
+- 资源必须**同时**带 `hehuoda.task=issue206-stage2` 与
+  `com.docker.compose.project=<目标项目>` 两个标签；只有任务标签可能跨项目误删
+- 逐个复核两个标签，任一读不到或不匹配时**拒绝删除**并列入 `refused`
+- 拒绝在生产项目名或空项目名下清理
+- 默认不删数据卷；`--volumes` 也只删带完整双标签的卷
 - 任何路径都不执行 `docker system prune`、`volume prune` 或 `down --volumes` 到生产
 - 清理后仍需人工删除 `/opt/hehuoda-test`（含 `.env`、备份与报告），该目录不在工具范围内
 
@@ -146,12 +177,12 @@ STAGE2_ENV_FILE=.env node deploy/stage2.mjs cleanup --volumes  # 连同测试卷
 
 | 现象                                       | 处理                                                            |
 | ------------------------------------------ | --------------------------------------------------------------- |
-| `check-env` 报失败                         | 按提示修 `.env`；不要为通过校验而放宽隔离条件                   |
-| `up` 后 API 不健康、日志报 relation 不存在 | 先跑 `migrate`，空库没有迁移不能启动                            |
+| `check-env` 或任一变更命令报配置不合规     | 按提示修 `.env`；不要为通过校验而放宽隔离条件                   |
+| `up` 后 API 不健康、日志报 relation 不存在 | 先跑 `migrate`；它会先拉起测试数据库再迁移                      |
 | `preflight` 报端口占用                     | 换 `HTTP_PORT` 或先确认占用者；不要占用生产 80/443              |
 | `docker ... failed` 只说固定类别           | 原始 stderr 不外泄，按类别（connection/oom/permission/sql）排查 |
 | 恢复摘要出现差异                           | 差异即失败：保留报告，先查数据是否真的缺失，不要放宽比较        |
-| 清理出现 `refused`                         | 手工核对标签来源；不属于本任务的资源不要删                      |
+| 清理出现 `refused`                         | 手工核对两个标签；不属于本任务/本项目的资源不要删               |
 
 ## 证据范围
 
@@ -160,3 +191,7 @@ STAGE2_ENV_FILE=.env node deploy/stage2.mjs cleanup --volumes  # 连同测试卷
 - **CI**：质量门禁与镜像冒烟。
 - **生产**：只做了只读导出与身份核对，未执行恢复、清理、迁移或故障注入。
 - **异机灾难恢复**：未执行。同机隔离恢复不等于异机恢复，也不覆盖磁盘或主机级故障。
+- **旧版应用兼容**：只验证了新代码可读旧数据，未实际运行旧应用。
+
+上述云端证据的镜像是该 SHA 的既有 CI 产物；清理边界结论来自与源码一致的判据
+（镜像内函数早于本次改动，不接受参照时刻），报告分两条路径如实并列。
