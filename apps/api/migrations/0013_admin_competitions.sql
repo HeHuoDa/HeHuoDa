@@ -1,7 +1,7 @@
 CREATE TABLE admin_competition_commands (
   actor_id uuid NOT NULL REFERENCES admin_accounts(id),
   operation_id uuid NOT NULL,
-  action text NOT NULL CHECK(action IN ('save','publish','hide','preview')),
+  action text NOT NULL CHECK(action IN ('save','publish','hide')),
   input_hash text NOT NULL,
   result jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),

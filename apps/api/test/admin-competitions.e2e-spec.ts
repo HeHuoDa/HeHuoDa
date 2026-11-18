@@ -720,6 +720,50 @@ describe("管理端正式比赛接口", () => {
     ).toBe("1");
   });
 
+  it.each([
+    ["HTML 注入", "https://www.moe.gov.cn/<script>alert(1)</script>"],
+    ["路径含尖括号", "https://www.moe.gov.cn/a<b>"],
+  ])("拒绝%s的外链", async (_label, url) => {
+    await seed();
+    const response = await write("POST", "admin/competitions/alpha/commands", {
+      operationId: randomUUID(),
+      reason: "写入含标记的外链",
+      action: "save",
+      baseline: await baselineOf("alpha"),
+      patch: { id: "alpha", notices: [{ id: "alpha-notice", url }] },
+      confirmPublished: true,
+    });
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("允许路径或查询串里含 @ 的公开外链", async () => {
+    await seed();
+    const response = await write("POST", "admin/competitions/alpha/commands", {
+      operationId: randomUUID(),
+      reason: "合法 @ 路径",
+      action: "save",
+      baseline: await baselineOf("alpha"),
+      patch: {
+        id: "alpha",
+        notices: [
+          {
+            id: "alpha-notice",
+            url: "https://www.moe.gov.cn/notice/@2026/index.html",
+          },
+        ],
+      },
+      confirmPublished: true,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      (
+        await test.pool.query(
+          "SELECT data->>'url' AS url FROM notices WHERE id='alpha-notice'",
+        )
+      ).rows[0].url,
+    ).toBe("https://www.moe.gov.cn/notice/@2026/index.html");
+  });
+
   it("请求体伪造 actor 字段被拒绝", async () => {
     await seed();
     const response = await write("POST", "admin/competitions/alpha/commands", {

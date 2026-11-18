@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
@@ -90,14 +91,20 @@ export class AdminCompetitionService {
   async baseline(id: string) {
     const client = await this.admin.database.pool.connect();
     try {
+      // 基线跨 colleges 与 competitions 多次读取，必须处于同一只读快照。
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const catalog = await readCatalog(client, { competitionIds: [id] });
       const record = catalog.competitions[0] ?? null;
+      await client.query("COMMIT");
       return {
         targetId: id,
         exists: !!record,
         baseline: baselineOf(record, catalog.colleges),
         publication: record?.publication ?? null,
       };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
       client.release();
     }
@@ -193,17 +200,19 @@ export class AdminCompetitionService {
       },
     );
     // 幂等回执只存业务结果；审计 ID 由同一事务写入的 command_operation_id 反查。
+    // 必须限定为本管理员，否则 operationId 由客户端指定即可读到他人审计。
     const audit = await this.admin.database.pool.query<{ id: string }>(
-      "SELECT operation_id AS id FROM admin_operations WHERE command_operation_id=$1 AND result='success'",
-      [command.operationId],
+      "SELECT operation_id AS id FROM admin_operations WHERE command_operation_id=$1 AND actor_id=$2 AND result='success'",
+      [command.operationId, context.id],
     );
+    if (!audit.rows[0]) throw new InternalServerErrorException();
     return {
       targetId: result.targetId,
       action: result.action,
       publication: result.publication,
       baseline: result.baseline,
       changes: result.changes,
-      auditOperationId: audit.rows[0]?.id ?? "",
+      auditOperationId: audit.rows[0].id,
     };
   }
 
@@ -212,9 +221,14 @@ export class AdminCompetitionService {
     targetId: string,
     reason: string,
   ): AdminOperation {
+    // 三种命令各自的审计 action 必须可区分，否则无法从审计里还原“下架”与“保存”。
     return {
       action:
-        action === "publish" ? "competition.publish" : "competition.update",
+        action === "publish"
+          ? "competition.publish"
+          : action === "hide"
+            ? "competition.hide"
+            : "competition.update",
       objectType: "competition",
       objectId: targetId,
       reason,

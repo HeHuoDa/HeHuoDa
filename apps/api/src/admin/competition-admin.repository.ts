@@ -5,21 +5,6 @@ import { readCatalog } from "../competitions/catalog.js";
 import type { EditionRecord } from "../competitions/competition.model.js";
 import { baselineOf } from "./competition-admin.model.js";
 
-export interface AdminCompetitionRow {
-  id: string;
-  name: string;
-  edition: string;
-  category: string;
-  organizer: string;
-  origin: string;
-  publication: "draft" | "published" | "hidden";
-  stageCount: number;
-  trackCount: number;
-  noticeCount: number;
-  updatedOrder: number;
-  baseline: string;
-}
-
 export interface AdminCompetitionListQuery {
   page: number;
   pageSize: number;
@@ -39,7 +24,7 @@ export class AdminCompetitionRepository {
 
   /**
    * 管理端读取全部发布状态（draft/published/hidden），与公开端只读 published 不同。
-   * 排序固定为更新时间倒序 + id，保证翻页稳定。
+   * 排序固定为届次 ID，保证同名或同时间写入后翻页仍稳定。
    */
   async list(query: AdminCompetitionListQuery) {
     const client = await this.database.pool.connect();

@@ -16,7 +16,6 @@ import {
 import {
   AdminFormalCompetitionDto,
   AdminImportCompetitionDto,
-  AdminReviewTimeValueDto,
 } from "./admin-review-response.dto.js";
 import { competitionActions } from "./competition-admin.model.js";
 
@@ -27,7 +26,7 @@ export const competitionStatusValues = [
 ] as const;
 
 export class AdminCompetitionListQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @ApiPropertyOptional({ type: Number, default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -35,7 +34,7 @@ export class AdminCompetitionListQueryDto {
   @Max(1000000)
   page = 1;
 
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 50 })
+  @ApiPropertyOptional({ type: Number, default: 20, minimum: 1, maximum: 50 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -56,16 +55,6 @@ export class AdminCompetitionListQueryDto {
   @IsString()
   @Length(1, 100)
   q?: string;
-}
-
-export class AdminCompetitionBaselineQueryDto {
-  @ApiProperty({
-    description: "目标届次；草稿阶段可先查询未保存记录的基线",
-    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-  })
-  @Length(1, 100)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  id!: string;
 }
 
 export class AdminCompetitionCommandDto {
@@ -260,5 +249,3 @@ export class AdminCompetitionListDto {
   @ApiProperty({ minimum: 1 }) page!: number;
   @ApiProperty({ minimum: 1, maximum: 50 }) pageSize!: number;
 }
-
-export { AdminReviewTimeValueDto };

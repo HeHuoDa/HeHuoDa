@@ -1758,6 +1758,7 @@
                 "account.create",
                 "competition.update",
                 "competition.publish",
+                "competition.hide",
                 "ingestion.scan",
                 "ingestion.configure",
                 "ingestion.resume",
@@ -5698,11 +5699,7 @@
             "schema": {
               "minimum": 1,
               "default": 1,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -5713,11 +5710,7 @@
               "minimum": 1,
               "maximum": 50,
               "default": 20,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -7364,6 +7357,7 @@
               "account.create",
               "competition.update",
               "competition.publish",
+              "competition.hide",
               "ingestion.scan",
               "ingestion.configure",
               "ingestion.resume",

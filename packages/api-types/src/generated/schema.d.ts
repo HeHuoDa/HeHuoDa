@@ -1302,7 +1302,7 @@ export interface components {
             actorType: "admin" | "maintenance" | "anonymous";
             actorId: string | null;
             /** @enum {string} */
-            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
+            action: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "competition.hide" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
             /** @enum {string} */
             objectType: "account" | "session" | "competition" | "source" | "candidate" | "attachment";
             objectId: string | null;
@@ -3833,7 +3833,7 @@ export interface operations {
                 pageSize?: components["schemas"]["Object"];
                 actorType?: "admin" | "maintenance" | "anonymous";
                 actorId?: string;
-                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
+                action?: "auth.login" | "auth.logout" | "account.create" | "competition.update" | "competition.publish" | "competition.hide" | "ingestion.scan" | "ingestion.configure" | "ingestion.resume" | "ingestion.attachment.recheck" | "ingestion.attachment.reparse" | "candidate.review" | "candidate.import";
                 objectType?: "account" | "session" | "competition" | "source" | "candidate" | "attachment";
                 from?: string;
                 to?: string;
@@ -6133,8 +6133,8 @@ export interface operations {
     AdminCompetitionController_list: {
         parameters: {
             query?: {
-                page?: components["schemas"]["Object"];
-                pageSize?: components["schemas"]["Object"];
+                page?: number;
+                pageSize?: number;
                 status?: "draft" | "published" | "hidden";
                 /** @description 字面包含匹配名称、届次或主办方 */
                 q?: string;

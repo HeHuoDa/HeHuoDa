@@ -130,7 +130,8 @@ export function compareChanges(
   return [...changes, ...relationDiffs(before, after)];
 }
 
-const today = (now: string) => now.slice(0, 10);
+const today = (now: string) =>
+  new Date(new Date(now).getTime() + 8 * 3600_000).toISOString().slice(0, 10);
 const validDate = (value: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   Number.isFinite(Date.parse(value + "T00:00:00Z")) &&

@@ -91,6 +91,17 @@ describe("管理端比赛命令模型", () => {
     );
   });
 
+  it("人工核对日期按北京时间当天判定，不用 UTC 日期", () => {
+    // 2026-10-26T17:00Z 已是北京时间 10-27 01:00。
+    const boundary = record({
+      notices: [{ ...record().notices[0]!, checkedAt: "2026-10-27" }],
+    });
+    expect(publishBlocks(boundary, "2026-10-26T17:00:00.000Z")).toEqual([]);
+    expect(
+      publishBlocks(boundary, "2026-10-26T15:59:00.000Z").map((b) => b.code),
+    ).toEqual(["CHECKED_AT_INVALID"]);
+  });
+
   it("save 不能改变发布状态，只能提交草稿内容", () => {
     const draft = record();
     expect(

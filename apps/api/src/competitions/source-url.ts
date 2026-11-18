@@ -1,5 +1,5 @@
 // 来源链接校验基线：采集通道只认学校 HTTPS 域名，手工维护通道放宽到公开 HTTPS DNS。
-export const SICau_DOMAIN = "sicau.edu.cn";
+export const SICAU_DOMAIN = "sicau.edu.cn";
 
 // 保留与不可路由后缀；URL 解析层的非法主机表达也会被拒绝。
 const RESERVED_SUFFIXES = [
@@ -41,15 +41,15 @@ const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const NUMERIC_TLD = /^\d+$/;
 
 export function isSicauHost(hostname: string): boolean {
-  return hostname === SICau_DOMAIN || hostname.endsWith("." + SICau_DOMAIN);
+  return hostname === SICAU_DOMAIN || hostname.endsWith("." + SICAU_DOMAIN);
 }
 
 function parseHttps(raw: string): string | null {
   if (typeof raw !== "string" || !raw.trim() || raw.length > 2000)
     return "来源链接无效";
   if (raw !== raw.trim() || /\s/.test(raw)) return "来源链接不能含空白字符";
-  // 归一化前拦截反斜杠、userinfo 与协议相对写法，避免解析器替换语义。
-  if (raw.includes("\\") || raw.includes("@")) return "来源链接不能含账号信息";
+  // 归一化前拦截反斜杠，避免解析器把 \ 当成路径分隔符替换语义。
+  if (raw.includes("\\")) return "来源链接无效";
   if (!/^https?:\/\//i.test(raw)) return "来源链接必须是 https";
   let url: URL;
   try {
@@ -58,8 +58,11 @@ function parseHttps(raw: string): string | null {
     return "来源链接无效";
   }
   if (url.protocol !== "https:") return "来源链接必须使用 https";
+  // userinfo 只可能出现在 authority 段；路径与查询串里的 @ 是合法字符。
   if (url.username || url.password) return "来源链接不能含账号信息";
   if (url.port && url.port !== "443") return "来源链接只能使用默认端口 443";
+  // 与 import.ts 的 text 规则一致：任何字段都不能携带 HTML 标记字符。
+  if (raw.includes("<") || raw.includes(">")) return "来源链接不能含 HTML 标记";
   return null;
 }
 

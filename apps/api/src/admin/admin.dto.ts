@@ -43,6 +43,7 @@ export const ADMIN_ACTIONS = [
   "account.create",
   "competition.update",
   "competition.publish",
+  "competition.hide",
   "ingestion.scan",
   "ingestion.configure",
   "ingestion.resume",
