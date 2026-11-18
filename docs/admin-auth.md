@@ -1,6 +1,6 @@
 # 管理员认证、权限与审计
 
-对应 #37。管理后台是独立桌面 Web；依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，学生端采用川农统一身份认证（H5 使用内存 Access Token + `HttpOnly` Refresh Cookie `Path=/api/v1/auth` + `X-Refresh-CSRF`，Android 使用内存 Access Token + Keystore 加密存储 Refresh Token），与管理员账号及 `hh_admin_session` Cookie（`Path=/api/v1/admin`）严格隔离、互不互通。本模块不改变学生端公开比赛接口。
+对应 #37。管理后台是独立桌面 Web，使用管理员账号及 `hh_admin_session` Cookie（`Path=/api/v1/admin`）。用户端计划在 M2 接入川农统一身份认证，H5 与 Android 的会话契约见 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)。管理端与用户端各自校验账号和会话。
 
 ## 初始化与配置
 

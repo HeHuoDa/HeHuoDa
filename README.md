@@ -1,6 +1,6 @@
 # 禾伙搭
 
-四川农业大学校园比赛信息与协作平台。项目当前收敛为 **管理端桌面 Web（`apps/admin`）+ 用户端普通 uni-app（`apps/uni`：H5 与 Android 签名 APK）+ NestJS/Fastify API（`apps/api`）**；**已放弃微信小程序、iOS、微信登录与历史用户迁移**，用户登录统一采用基于自有连接器的**川农统一身份认证**，站内组队、治理后台接线与 27 院采集规模化运营在本期暂缓（详见 [ADR 0011](docs/adr/0011-android-h5-and-sicau-only-auth.md)）。
+禾伙搭面向四川农业大学学生，提供校园比赛信息查询。桌面管理端位于 `apps/admin`，后端 API 位于 `apps/api`。用户端 `apps/uni` 已具备 H5 游客浏览能力，交付目标为 H5 与 Android 签名 APK。M2 将使用项目已有连接器接入川农统一身份认证，作为两端的唯一用户登录方式。站内组队、后台治理接线与 27 院采集规模化运营暂缓。平台范围及历史账号决策见 [ADR 0011](docs/adr/0011-android-h5-and-sicau-only-auth.md)。
 
 ## 当前状态与路线图（2026-11-18）
 
@@ -19,25 +19,25 @@
 ### 分期里程碑（M0–M4）
 
 - **M0（契约确立）**：#213 完成 ADR 0011、领域词汇与现行文档同步。
-- **M1（管理端 + H5 公开比赛闭环）**：#38（比赛后端）→ #46（管理前端接线）+ #215（`/admin/` 部署整合）+ #214（H5 暂缓组队/模拟入口收口）→ #84（H5 浏览器全流程验收）。
-- **M2（Android + H5 川农唯一登录）**：#217/#218（后端匿名登录事务、H5 Cookie + `X-Refresh-CSRF`）+ #219/#220（Android 工程、APK 打包与 Keystore 安全存储）→ #221/#222（双端登录接线）→ #223/#224（下线微信接口与 `mp-weixin` 分支）→ #225/#226（双端登录验收）。
-- **M3（首期正式分发与运维）**：#58/#140（外部条件与准入开关）+ #83（双端构建回归门禁）+ #227（容器网络分段、异机恢复与 APP API 兼容）+ #86/#87/#88/#143/#228（生产切流、回滚、签名 APK HTTPS 分发与运维责任落实）。
+- **M1（管理端 + H5 公开比赛闭环）**：#38 交付比赛后端，#46 完成管理端联调，#214 收口暂缓入口。#84 在 #46 和 #214 完成后验收 H5 公开流程。#215 负责同源 `/admin/` 部署与实站验证。
+- **M2（Android + H5 川农唯一登录）**：#217/#218 交付匿名登录事务与 H5 Cookie 会话，#219/#220 完成 Android 打包与安全存储适配，#221/#222 接入双端登录，#223/#224 清理遗留微信入口，#225 验收 H5 认证回归。
+- **M3（首期正式分发与运维）**：#226 执行 Android 真机矩阵验收，#140/#227 完善安全准入、异机恢复与多版本兼容，#86/#87/#88/#228 完成发布准入、产物归档、H5 正式切流和签名 APK HTTPS 分发。#58 外部条件与 #143 部署通道可提前推进，#83 双端门禁在 #219 完成后建立。
 - **M4（工程收尾）**：#90 评估并退役 `apps/web`。
 
 ## 文档导航
 
-| 主题             | 文档入口                                                                                                                                                   | 说明                                                                                                       |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 核心架构决策     | [ADR 目录](docs/adr/0011-android-h5-and-sicau-only-auth.md)（0001–0011）                                                                                   | 含 [ADR 0011（Android/H5 与学校唯一登录）](docs/adr/0011-android-h5-and-sicau-only-auth.md) 及历史演进记录 |
-| 领域词汇         | [GLOSSARY.md](GLOSSARY.md)                                                                                                                                 | 统一业务概念与避免叫法                                                                                     |
-| 开发计划         | [禾伙搭项目开发计划书](docs/禾伙搭-项目开发计划书.md)                                                                                                      | V2.0 范围、阶段任务、技术基线与交付标准                                                                    |
-| 用户端跨端说明   | [uni-app 跨端适配清单](docs/agents/uni-app-migration.md)                                                                                                   | H5/Android 平台边界与历史迁移交付记录                                                                      |
-| 样式、控件与资源 | [学生端样式](docs/student-ui-style.md)、[复用表单](docs/uni-forms.md)、[学院选择器](docs/uni-college-picker.md)、[图标资源](docs/uni-assets.md)            | `--hhr-*` 主题、`px/rem` 策略、FormDialog 与资源契约                                                       |
-| 认证与权限       | [统一身份认证服务](docs/campus-verification.md)、[业务权限契约](docs/business-access.md)                                                                   | 川农 e 认证、姓名学号逐字比对、加密存储、H5/Android 会话与暂缓权限边界                                     |
-| 管理端与采集     | [管理员认证](docs/admin-auth.md)、[管理端前端](docs/admin-frontend.md)、[采集接口](docs/admin-ingestion.md)、[采集控制页](docs/admin-ingestion-control.md) | Cookie/CSRF 隔离、原子审计、来源与候选审核接线                                                             |
-| 连接器与质量集   | [共享包架构](docs/sicau-connectors.md)、[质量集协议](docs/quality-eval-protocol.md)                                                                        | `@hehuoda/sicau-connectors/notices` 与 `/auth`、7 字段契约与名单隔离                                       |
-| 部署与容灾       | [单机部署与恢复](docs/deployment.md)、[容量与清理操作](docs/capacity-and-recovery.md)                                                                      | SSH + rsync 归档交付、`/admin/` 路由、30 天清理与隔离恢复演练                                              |
-| 仓库协作规范     | [AGENTS.md](AGENTS.md)、[Issue 规则](docs/agents/issue-tracker.md)、[PR 约定](docs/agents/pull-requests.md)、[分诊标签](docs/agents/triage-labels.md)      | 分支提交规范、Issue 可开工标准与 PR 模板流程                                                               |
+| 主题             | 文档入口                                                                                                                                                   | 说明                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 核心架构决策     | [ADR 目录](docs/adr/)                                                                                                                                      | [ADR 0011](docs/adr/0011-android-h5-and-sicau-only-auth.md)记录 Android/H5 与学校唯一登录决策 |
+| 领域词汇         | [GLOSSARY.md](GLOSSARY.md)                                                                                                                                 | 统一业务概念与避免叫法                                                                        |
+| 开发计划         | [禾伙搭项目开发计划书](docs/禾伙搭-项目开发计划书.md)                                                                                                      | V2.0 范围、阶段任务、技术基线与交付标准                                                       |
+| 用户端跨端说明   | [uni-app 跨端适配清单](docs/agents/uni-app-migration.md)                                                                                                   | H5/Android 平台边界与历史迁移交付记录                                                         |
+| 样式、控件与资源 | [学生端样式](docs/student-ui-style.md)、[复用表单](docs/uni-forms.md)、[学院选择器](docs/uni-college-picker.md)、[图标资源](docs/uni-assets.md)            | `--hhr-*` 主题、`px/rem` 策略、FormDialog 与资源契约                                          |
+| 认证与权限       | [统一身份认证服务](docs/campus-verification.md)、[业务权限契约](docs/business-access.md)                                                                   | 川农 e 认证、姓名学号逐字比对、加密存储、H5/Android 会话与暂缓权限边界                        |
+| 管理端与采集     | [管理员认证](docs/admin-auth.md)、[管理端前端](docs/admin-frontend.md)、[采集接口](docs/admin-ingestion.md)、[采集控制页](docs/admin-ingestion-control.md) | Cookie/CSRF 隔离、原子审计、来源与候选审核接线                                                |
+| 连接器与质量集   | [共享包架构](docs/sicau-connectors.md)、[质量集协议](docs/quality-eval-protocol.md)                                                                        | `@hehuoda/sicau-connectors/notices` 与 `/auth`、7 字段契约与名单隔离                          |
+| 部署与容灾       | [单机部署与恢复](docs/deployment.md)、[容量与清理操作](docs/capacity-and-recovery.md)                                                                      | SSH + rsync 归档交付、`/admin/` 路由、30 天清理与隔离恢复演练                                 |
+| 仓库协作规范     | [AGENTS.md](AGENTS.md)、[Issue 规则](docs/agents/issue-tracker.md)、[PR 约定](docs/agents/pull-requests.md)、[分诊标签](docs/agents/triage-labels.md)      | 分支提交规范、Issue 可开工标准与 PR 模板流程                                                  |
 
 ## 技术栈
 
@@ -119,7 +119,7 @@ pnpm dev:admin
 
 ### uni-app 用户端（H5 与 Android）
 
-- **导航与暂缓策略（方案 B）**：保留三栏原生 `tabBar`（首页 / 找队友 / 我的）与 [ADR 0005](docs/adr/0005-uni-navigation-shell.md) 导航注册表（`src/navigation/routes.ts` 与 `pages.json`）。按 #214 收口方向，「找队友」及演示招募/互动入口在 M1 收口为温和暂缓提示；`pages/my/favorites` 维持仅本次内存会话有效的只读临时收藏，刷新或冷启动清空并明示说明。
+- **导航与暂缓策略（方案 B）**：保留三栏原生 `tabBar`（首页 / 找队友 / 我的）与 [ADR 0005](docs/adr/0005-uni-navigation-shell.md) 导航注册表（`src/navigation/routes.ts` 与 `pages.json`）。按 #214 收口方向，「找队友」及演示招募/互动入口在 M1 收口为温和暂缓提示；`pages/my/favorites` 维持仅本次内存会话有效的临时收藏，刷新或冷启动清空并明示说明。
 - **编译期配置**：`apps/uni/.env` 严禁填入凭据。H5 开发留空 `VITE_API_BASE_URL` 走同源 `/api/v1`（由 `UNI_DEV_API_TARGET` 代理到后端）；**Android APK 正式构建必须显式配置受控 HTTPS 完整 API 地址**，禁止关闭 TLS 校验或使用相对路径；`VITE_API_TIMEOUT_MS` 默认 `5000`（允许 `1–60000`）。
 - **认证演进**：当前基线代码仍存在微信过渡入口与 `#ifdef MP-WEIXIN` 分支；M2（#128、#217–#225）将切换为川农统一身份认证唯一登录（首次建号默认昵称 **`禾伙搭用户`**），H5 使用内存 Access Token + `HttpOnly` Refresh Cookie（配 `Origin` 与 `X-Refresh-CSRF` 校验），Android 使用内存 Access Token + Android Keystore 加密存储适配。
 - **H5 独立构建与预览**：
@@ -135,7 +135,7 @@ pnpm --filter @hehuoda/uni preview:h5   # 监听 127.0.0.1:5176，仅托管静�
 
 - 仅面向桌面浏览器（1024px / 1440px）使用；Cookie 会话（`hh_admin_session`）、`Origin`、`X-CSRF-Token` 及同源 `BroadcastChannel` 跨标签失效机制见[管理员认证说明](docs/admin-auth.md)与[管理端前端说明](docs/admin-frontend.md)。
 - 生产环境将由 #215 以 `/admin/` 子路径并入 Web Nginx 镜像，与 H5（`/`）及 API（`/api/v1/`）保持同源部署。
-- **手工比赛外链规则（ADR 0011 冻结）**：管理员在管理端手工录入/编辑比赛官方通知或报名参考外链时，仅允许**无凭据、无非默认端口的公开 `https://` ASCII DNS 链接**（不限于 `*.sicau.edu.cn`）；严禁将此规则扩及 `packages/sicau-connectors/src/notices` 或自动采集入库白名单。
+- **手工比赛外链规则（ADR 0011 冻结）**：管理员在管理端手工录入/编辑比赛官方通知或报名参考外链时，仅允许**无凭据、无非默认端口的公开 `https://` DNS 链接**（不限于 `*.sicau.edu.cn`）；严禁将此规则扩及 `packages/sicau-connectors/src/notices` 或自动采集入库白名单。
 
 ### 后端与数据库（`apps/api`）
 
