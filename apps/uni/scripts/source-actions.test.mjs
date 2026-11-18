@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSourceUrl, resolveWebViewSource } from "../src/source/policy.ts";
+import {
+  parseSourceUrl,
+  resolvePublicSourceUrl,
+  resolveWebViewSource,
+} from "../src/source/policy.ts";
 import { createSourceActions } from "../src/source/actions.ts";
 
 test("来源仅接受明确的 HTTP(S) 地址，不修复危险或歧义输入", () => {
@@ -85,6 +89,55 @@ test("承载页重新校验精确业务主机，默认关闭，跳转参数和�
       String(candidate),
     );
   }
+});
+
+test("H5 公开外链仅接受公开 HTTPS DNS 地址，非川农站点不再依赖白名单", () => {
+  for (const url of [
+    "https://news.example.edu.cn/info/2026.htm",
+    "https://www.sicau.edu.cn/a?q=1",
+    "https://events.other-university.org/race#detail",
+    "https://news.example.edu.cn:443/a",
+  ]) {
+    const source = resolvePublicSourceUrl(url);
+    assert.ok(source, url);
+    assert.equal(source.url, url);
+  }
+  for (const url of [
+    "http://news.example.edu.cn/a",
+    "https://news.example.edu.cn:8443/a",
+    "https://user:pass@news.example.edu.cn/a",
+    "https://user@news.example.edu.cn/a",
+    "https://192.168.0.10/a",
+    "https://10.0.0.1:443/a",
+    "https://[::1]/a",
+    "https://localhost/a",
+    "https://intranet/a",
+    "https://printer.local/a",
+    "https://example.test/a",
+    "https://example.invalid/a",
+    "https://news.example.edu.cn/%zz",
+    "https://news.example.edu.cn/a b",
+    "javascript:alert(1)",
+    undefined,
+  ])
+    assert.equal(resolvePublicSourceUrl(url), null, String(url));
+});
+
+test("H5 复制只在地址合法时生效，拒绝地址既不写入也不提供动作", async () => {
+  const copied = [];
+  const h5 = createSourceActions(
+    { writeClipboard: async (url) => copied.push(url) },
+    [],
+    resolvePublicSourceUrl,
+  );
+  assert.equal(
+    (await h5.copy("https://events.other-university.org/race")).status,
+    "copied",
+  );
+  assert.deepEqual(copied, ["https://events.other-university.org/race"]);
+  for (const url of ["http://news.example.edu.cn/a", "https://a.test/b"])
+    assert.equal((await h5.copy(url)).status, "invalid", url);
+  assert.deepEqual(copied, ["https://events.other-university.org/race"]);
 });
 
 test("微信空/未允许域名直接复制；核准域名打开，失效或导航失败回退复制", async () => {

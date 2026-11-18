@@ -46,6 +46,18 @@
 | 表单输入、日期/时间选择器与弹层（`forms/`、`FormDialog`、`FormDateTime`） | H5 原生控件适配器、Escape、Tab 循环、背景 `inert` 与 `visualViewport`                         | 验证 Android 原生软键盘弹出对弹窗/输入框的遮挡、`adjustPosition` 策略、系统大字号与长文本换行                                                     | 中   |
 | Android 打包配置、签名与遗留清理（#219/#224/#228）                        | 清理残留 `#ifdef MP-WEIXIN` 后回归 H5 构建与页面                                              | 补齐 `run-uni.mjs`、`platform-config.mjs` 与 `manifest.template.json` Android 配置，验证签名 APK 生成、覆盖升级与 HTTPS 下载页                    | 中   |
 
+## Issue #214：M1 暂缓收口（现行边界）
+
+`apps/uni` 按 ADR 0011 方案 B 收口站内组队与模拟登录入口，M1 只开放正式比赛信息浏览：
+
+- **找队友三处入口统一暂缓**：`pages/teams/index.vue`、`teams/new.vue`、`teams/detail.vue` 只渲染 `components/TeamsUnavailable.vue`，文案区分「暂缓开放的能力」与「当前可用的浏览能力」；旧直达地址 `#/pages/teams/new`、`#/pages/teams/detail?id=…` 与带参数地址仍落地到暂缓说明（参数被忽略，不报错），`tabBar` 三栏切换不受影响。`pages.json` 与 `navigation/routes.ts` 的 `pages/teams/new`、`pages/teams/detail` 标题同步改为「找队友」，与暂缓语义一致。
+- **详情与个人中心收口**：`pages/home/competition.vue` 移除「查看关联演示招募」，摘要把「收藏与组队」改为「收藏」，并改为说明收藏只在本次会话内保留；`components/ProfileOverview.vue` 只保留收藏统计与收藏/通知快捷入口，昵称在统一身份认证开放前只读，移除联系方式授权开关、重置示例与只读队伍区；`pages/profile/index.vue` 对旧 `section=teams|applications`、`/my/teams`、`/my/applications` 与旧通知交接只显示暂缓说明。
+- **M1 认证入口**：`pages/auth/login.vue`、`register.vue` 用 `components/AuthPendingNotice.vue` 说明「学校统一身份认证即将开放、当前免登录浏览」，不再提供任何可提交的凭据表单；`pages/campus/index.vue` 两端统一为「统一身份认证尚未开放」说明，无表单、无认证请求，保留 `#221` 接线结构。
+- **H5 公开外链**：`source/policy.ts` 新增 `resolvePublicSourceUrl()`（仅公开 DNS `https://`、端口缺省或 `:443`、拒绝 userinfo／IP／内部保留域）；`CompetitionSourceAction` 在 H5 用它门控 `<a target="_blank" rel="noopener noreferrer">` 与复制，`parseSourceUrl`／`resolveWebViewSource` 与 `source/config.ts` 白名单边界保持不变。
+- 删除随之失效的演示实现与测试：四位团队控制器（`team-list/team-publish/team-detail/profile-team`）、`ProfileTeams/ProfileApplications/ProfileTeamEditor/ProfileTeamConfirmDialog/ProfileTeamsReadOnly`、`AuthForm` ＋ `forms/auth-form.ts`、`navigation/team-query.ts`，以及对应的控制器级与页面级测试；`navigation/navigate.ts` 删除 `returnToTeams`，`openTabWithQuery` 与 `stores/navigation.ts` 的 `pendingTabQueries` 只保留 `home`。新增 `scripts/teams-deferred.test.mjs` 覆盖三处暂缓页面（H5 与 mp-weixin 双平台）。
+- 跨端影响：H5 与 Android 共用同一套暂缓页面和外链策略；Android 侧仍需实测系统浏览器打开外链与硬件返回键（#220/#226）。`mp-weixin` 分支仍可编译，#224 才清理遗留条件编译。
+- 验证边界：单测、`typecheck`、`lint`、`build:h5`、`build`（含 mp-weixin）与 H5 浏览器模拟（320/375/390/430/1440px）在本任务完成；Android 真机与真实官方站点内容分别归 #226 与 #84。
+
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）
 
 > **阅读提示**：下方按历史 Issue 编号（#12–#151）保存 2026-10 期间的技术事实、当时验证记录与取舍理由，仅供追溯源码来历。其中涉及“微信小程序验收（#85）、微信发布（#89）、微信登录为主入口（#132/#151）”的要求**已被 [ADR 0011](../adr/0011-android-h5-and-sicau-only-auth.md) 替代，不再作为现行约束**。

@@ -18,9 +18,11 @@ export interface SourcePorts {
 export function createSourceActions(
   ports: SourcePorts,
   allowedHosts: readonly string[] = approvedWebViewHosts,
+  /** 可操作地址的接受规则：H5 传公开 HTTPS 规则，小程序沿用原解析。 */
+  accept: (value: unknown) => unknown = parseSourceUrl,
 ) {
   async function copy(value: unknown): Promise<SourceResult> {
-    const source = parseSourceUrl(value);
+    const source = accept(value) as ReturnType<typeof parseSourceUrl>;
     if (!source)
       return {
         status: "invalid",

@@ -52,6 +52,36 @@ export function parseSourceUrl(value: unknown): SourceUrl | null {
   };
 }
 
+/** 保留 / 内网专用后缀：DNS 中不指向公开站点，公开外链一律拒绝。 */
+const RESERVED_SUFFIXES = [
+  "local",
+  "localhost",
+  "test",
+  "example",
+  "invalid",
+  "internal",
+  "home",
+  "lan",
+  "arpa",
+];
+
+/**
+ * ADR 0011 的公开外链规则：仅无凭据、无显式非默认端口的公开 HTTPS DNS 地址。
+ * H5 新标签安全打开与复制都走这里，不再依赖小程序业务域名白名单；
+ * 微信小程序承载页仍用 resolveWebViewSource 的精确主机列表。
+ */
+export function resolvePublicSourceUrl(value: unknown): SourceUrl | null {
+  const source = parseSourceUrl(value);
+  if (
+    !source ||
+    source.protocol !== "https" ||
+    (source.port !== "" && source.port !== "443") ||
+    RESERVED_SUFFIXES.includes(source.hostname.split(".").at(-1)!)
+  )
+    return null;
+  return source;
+}
+
 /**
  * 仅核准主机的 HTTPS 静态通知可嵌入；带 query/hash 的地址统一复制，
  * 不尝试猜测各站的跳转参数名，防止编码和站点私有跳转参数绕过。
