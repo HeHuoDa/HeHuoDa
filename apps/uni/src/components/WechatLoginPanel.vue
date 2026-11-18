@@ -141,7 +141,7 @@ function goBack() {
 
 <style scoped>
 /*
- * 与 AuthForm 共用品牌面板的间距与字号；间距写固定 px 的理由见 AuthForm.vue。
+ * 沿认证品牌面板的间距与字号；间距写固定 px，避免 H5 根字号缩放改变留白。
  */
 .auth-heading {
   display: block;

@@ -53,7 +53,7 @@ import ProjectLogo from "../components/ProjectLogo.vue";
  * 移动优先：320–430px 与旧 Web 认证页同一结构（品牌、故事、表单卡片）。
  * 桌面端在 768px 以上切为两列，沿用旧 Web 的 1080px / 460px 与 80px 间距。
  *
- * 间距写固定 px（对照迁移例外，见 docs/student-ui-style.md 与 AuthForm.vue）：
+ * 间距写固定 px（对照迁移例外，见 docs/student-ui-style.md）：
  * uni-app H5 会随视口缩放根字号，rem 会让 20px / 24px 留白在各档宽度波动。
  */
 .auth-layout {
