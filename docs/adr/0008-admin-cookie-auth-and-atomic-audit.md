@@ -3,6 +3,8 @@
 - 状态：采纳，由 #37 实施；前端接线与生产激活分别验收。
 - 日期：2026-10-27
 
+> **2026-11-18 认证关联说明**：依据 [ADR 0011](0011-android-h5-and-sicau-only-auth.md)，学生端认证已由原 ADR-0006 微信 Bearer 会话调整为川农统一身份认证（H5 使用内存 Access Token + HttpOnly Refresh Cookie，Android 使用内存 Access Token + Keystore 加密存储 Refresh Token）。管理员 `hh_admin_session` Cookie、Origin 与 `X-CSRF-Token` 隔离设计保持不变，与学生 Cookie 路径严格隔离（`/api/v1/admin` vs `/api/v1/auth`）。
+
 ## 背景
 
 学生已有微信 Bearer 会话（ADR-0006），管理后台需要受控账号、浏览器刷新恢复和跨模块操作审计。此前公开采集 CLI 的 reviewer 是维护者填写的来源标识，不足以成为 HTTP 身份。复用学生账号并暗中附加管理员权限会混淆两种凭据生命周期；仅在业务提交后追加日志又不能保证发布等操作可追溯。

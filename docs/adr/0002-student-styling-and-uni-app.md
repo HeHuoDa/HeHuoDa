@@ -2,6 +2,8 @@
 
 状态：Accepted · 2026-10-03 · 关联 [Issue #19](https://github.com/HeHuoDa/HeHuoDa/issues/19)
 
+> **2026-11-18 目标端演进说明**：依据 [ADR 0011](0011-android-h5-and-sicau-only-auth.md)，普通 uni-app（`apps/uni`）的目标端已收敛为 **H5 与 Android（仅签名 APK）**，微信小程序（`mp-weixin`）已放弃；本决策中移除 Vant、保留 `--hhr-*` 主题与按需封装组件的样式架构继续有效，下文“微信小程序”仅作历史背景保留。
+
 ## 背景
 
 原学生端将 Vant、Tailwind 与普通 CSS 混用，全局样式、主题覆盖和组件行为分散，后续普通 uni-app 的 H5 与微信小程序迁移需要明确渲染边界。沿用 Vant 可以减少控件开发，但会继续维护覆盖和 Web 组件耦合；改用另一套完整 UI 库仍有同类成本。

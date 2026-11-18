@@ -2,6 +2,8 @@
 
 状态：Accepted · 2026-10-18 · 关联 [Issue #60](https://github.com/HeHuoDa/HeHuoDa/issues/60)
 
+> **2026-11-18 目标端与暂缓入口说明**：依据 [ADR 0011](0011-android-h5-and-sicau-only-auth.md)，`apps/uni` 目标端已收敛为 **H5 与 Android（签名 APK）**，微信小程序及 #85/#89 相关前提不再适用（#224 将清理 `mp-weixin` 条件分支）；三栏 `tabBar` 与 `openProfileSection` 架构继续有效，M1 阶段找队友与演示互动入口收口为温和暂缓提示（方案 B）。下文保留完整历史导航决策。
+
 ## 背景
 
 旧 Web 用户端用 Vue Router 的 History 路由、`StudentLayout` 与 `BrandLayout` 组织页面：桌面侧栏、移动端顶栏与底部三栏导航、`document.title` 拼接标题、`/my/teams` 与 `/my/applications` 重定向到个人中心分区。uni-app 没有等价的动态路由：页面必须在 `pages.json` 静态注册，平台主导航用 `switchTab`，普通页面用 `navigateTo`，且 `switchTab` 不能携带 query。迁移还要避免把浏览器 History、`document.title` 或 DOM 当成导航基础设施。
