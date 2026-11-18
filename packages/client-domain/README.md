@@ -39,4 +39,4 @@ Web 的 `data/profile-demo.ts` 和 `data/team-demo.ts` 继续提供原 store ID�
 
 Web `team-clock.ts` 的 Vue 生命周期和 interval 保留在应用层，不进入共享包。迁移实际页面时需要在 uni 的显示/隐藏/卸载生命周期中启动、暂停和清理时钟，并重新计算可申请状态；本包的截止判断显式接收 `now`。
 
-H5 与 mp-weixin 编译是本地代码检查；微信运行、iOS/Android 真机、键盘与安全区由 #85 验证。浏览器 DOM、路由及资源适配继续留在各应用，后续移除旧 Web 不要求修改本包或 uni 的导入关系。
+H5 编译与本地测试不替代真机验证；依据 [ADR 0011](../../docs/adr/0011-android-h5-and-sicau-only-auth.md)，目标端已收敛为 **H5 与 Android（签名 APK）**（放弃微信小程序与 iOS），且站内组队与招募演示交互在 M1 按 #214 收口为温和暂缓提示（保留包内纯规则测试不删）。H5 与 Android 端内回归及真机验收分别由 #84/#225 与 #220/#226 执行。浏览器 DOM、路由及资源适配继续留在各应用，后续按 #90 评估移除旧 Web 不要求修改本包与 `apps/uni` 的导入关系。

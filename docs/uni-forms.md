@@ -1,5 +1,7 @@
 # uni-app 复用表单与受控弹层
 
+> **2026-11-18 平台方向注记**：依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，用户端现收敛为 **H5 与 Android（签名 APK）**，放弃微信小程序（现存 `#ifdef MP-WEIXIN` 分支将在 #224 清理，Android 运行时与原生返回键 `onBackPress`/安全区能力在 #219/#220 核验）。下文保留的微信平台分支说明属于 #65 迁移期事实，现期目标端验证分别归属 H5（#84/#225）与 Android 真机（#220/#226）。
+
 Issue #65 提供 `apps/uni` 内部复用能力。业务页面仍由 #67、#71、#72、#73、#74 接入；这里不实现登录、资料页或招募页，也不建立认证、网络写入、持久化或通用 UI 框架。
 
 ## 组件契约
@@ -28,13 +30,13 @@ Issue #65 提供 `apps/uni` 内部复用能力。业务页面仍由 #67、#71、
 
 ## 平台与交互边界
 
-H5 从条件编译分支加载 `NativeTextControl.h5.vue`、`NativePicker.h5.vue`，由 render 创建真实 input/textarea/select/date/time，标签名称、错误关联及焦点落在真实控件上。普通 uni 标签在 H5 渲染为包装元素，不能只给包装层画焦点环或设置 aria。邮箱键盘/自动填充仅 H5 使用对应原生属性，微信保留平台输入能力。
+H5 从条件编译分支加载 `NativeTextControl.h5.vue`、`NativePicker.h5.vue`，由 render 创建真实 input/textarea/select/date/time，标签名称、错误关联及焦点落在真实控件上。普通 uni 标签在 H5 渲染为包装元素，不能只给包装层画焦点环或设置 aria。邮箱键盘/自动填充仅 H5 使用对应原生属性，非 H5 保留平台输入能力。
 
-`forms/dialog-h5.ts` 是唯一浏览器弹层适配器：处理 Escape 取消、Tab 循环、焦点恢复、背景 inert、滚轮隔离及 visualViewport。其 DOM 查询和 focus 不进入 mp-weixin 依赖图；不使用 HTMLDialogElement、showModal、HTML form 关联或 body 滚动锁。H5 原生日期/时间弹出面板的键盘行为由浏览器管理，移动 Safari 仍需真机验证。
+`forms/dialog-h5.ts` 是唯一浏览器弹层适配器：处理 Escape 取消、Tab 循环、焦点恢复、背景 inert、滚轮隔离及 visualViewport。其 DOM 查询和 focus 不进入非 H5 编译依赖图；不使用 HTMLDialogElement、showModal、HTML form 关联或 body 滚动锁。H5 原生日期/时间弹出面板的键盘行为由浏览器管理，手机端浏览器仍需真机验证。
 
-微信以 `onPageHide`/`onUnload` 和组件卸载清理监听；页面隐藏时通知父层取消。当前策略也会在小程序切后台时丢弃草稿；未来消费页面若引入 chooseImage/chooseLocation 等可能触发页面隐藏的全屏原生流程，须先区分临时窗体与路由离开，再接入该流程，本票未提供这类控件。微信原生导航返回不支持 `onBackPress`，所以返回会离开当前页并丢弃草稿，不实现“先关闭弹层、再返回”的伪拦截。弹层底部有显式取消，遮罩不关闭。原生 tabBar 位于页面视图之外，tab 页面打开弹层时暂时隐藏，关闭/离开后恢复；单页同一时刻仅打开一个弹层，不支持嵌套弹层。
+历史 `mp-weixin` 分支以 `onPageHide`/`onUnload` 和组件卸载清理监听（Android 原生返回键 `onBackPress` 及前后台行为将在 #220 核验并适配，不直接沿用小程序返回丢弃草稿的假定）。弹层底部有显式取消，遮罩不关闭。原生 tabBar 位于页面视图之外，tab 页面打开弹层时暂时隐藏，关闭/离开后恢复；单页同一时刻仅打开一个弹层，不支持嵌套弹层。
 
-标题与底部操作固定，中部 `scroll-view` 使用有确定高度的 Flex 剩余区（父面板高度确定、滚动区 height:0 + flex:1）。微信使用 `uni.onKeyboardHeightChange` 扣减可用高度，关闭时以原回调调用 `offKeyboardHeightChange`；弹层内输入须传 `adjustPosition=false`，避免平台再次顶起页面。H5 用 visualViewport 调整高度/偏移；底部保留安全区。原生 textarea/picker、真实键盘、页面栈与安全区的最终效果交 #85 验证。
+标题与底部操作固定，中部 `scroll-view` 使用有确定高度的 Flex 剩余区（父面板高度确定、滚动区 height:0 + flex:1）。非 H5 分支当前通过 `uni.onKeyboardHeightChange` 扣减可用高度并传 `adjustPosition=false`；H5 用 visualViewport 调整高度/偏移；底部保留安全区。Android 真机软键盘、系统返回键、`picker`/输入框及安全区的实际表现交 #220/#226 实测，不以微信小程序历史条件推断。
 
 ## 样式与消费方责任
 
