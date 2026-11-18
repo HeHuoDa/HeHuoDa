@@ -8,10 +8,6 @@ import {
 import { createHealthApi } from "../src/api/health.ts";
 import { createCompetitionApi } from "../src/api/competition-client.ts";
 import {
-  initialTeamPublishState,
-  createTeamPublishController,
-} from "../src/stores/team-publish-controller.ts";
-import {
   createDetailController,
   initialDetailState,
 } from "../src/stores/detail-controller.ts";
@@ -92,48 +88,6 @@ test("健康与比赛查询共用注入的跨端传输入口及非 2xx 错误契
       error.requestId === "limit-78" &&
       error.details.retry === true,
   );
-});
-
-test("招募比赛选择保留错误请求编号，重试清理旧错误且 reset 后迟到结果无效", async () => {
-  const { calls, http } = platform();
-  const state = initialTeamPublishState();
-  const controller = createTeamPublishController(
-    state,
-    { publish() {} },
-    createCompetitionApi(http),
-  );
-  const search = controller.search();
-  calls[0].success({
-    statusCode: 429,
-    data: { requestId: "search-limit", message: "internal" },
-  });
-  await search;
-  assert.equal(state.searchError, "请求过于频繁，请稍后重试。");
-  assert.equal(state.searchRequestId, "search-limit");
-  assert.equal(state.items.length, 0);
-  const retry = controller.retrySearch();
-  assert.equal(state.searchError, "");
-  assert.equal(state.searchRequestId, null);
-  controller.reset();
-  calls[1].success({ statusCode: 500, data: { requestId: "late" } });
-  await retry;
-  assert.deepEqual(state, initialTeamPublishState());
-  const select = controller.select("hidden");
-  calls[2].success({
-    statusCode: 404,
-    data: { requestId: "selection-missing" },
-  });
-  await select;
-  assert.match(state.selectionError, /不存在或未公开/);
-  assert.equal(state.selectionRequestId, "selection-missing");
-  const unavailable = controller.select("visible");
-  calls[3].success({
-    statusCode: 503,
-    data: { requestId: "selection-down", message: "internal" },
-  });
-  await unavailable;
-  assert.equal(state.selectionError, "服务暂时不可用，请稍后重试。");
-  assert.equal(state.selectionRequestId, "selection-down");
 });
 
 test("健康、首页、详情和收藏通过同一传输失败时均显示安全反馈及请求编号", async () => {

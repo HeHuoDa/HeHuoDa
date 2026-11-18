@@ -53,7 +53,7 @@ export const routeRegistry = {
     status: "baseline",
     source: null,
     description:
-      "小程序统一身份认证、学期资格及本人学校资料，H5 仅说明开放范围。",
+      "M1 统一身份认证尚未开放；本页只说明当前免登录浏览范围与后续开放计划。",
   },
   "source-webview": {
     name: "source-webview",
@@ -80,7 +80,7 @@ export const routeRegistry = {
     kind: "tab",
     status: "baseline",
     source: "/teams",
-    description: "按项目与角色发现招募，寻找志同道合的伙伴。",
+    description: "组队与招募暂缓开放，本页说明当前只开放正式比赛信息浏览。",
   },
   profile: {
     name: "profile",
@@ -89,7 +89,7 @@ export const routeRegistry = {
     kind: "tab",
     status: "baseline",
     source: "/profile",
-    description: "查看示例资料、编辑个人介绍与技能，了解联系方式授权。",
+    description: "查看免登录示例资料与收藏入口，了解统一身份认证开放计划。",
   },
   "competition-detail": {
     name: "competition-detail",
@@ -98,25 +98,25 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/home/competitions/:id",
-    description: "查看比赛届次、赛道、赛段和来源通知，进入关联演示招募。",
+    description: "查看比赛届次、赛道、赛段和来源通知。",
   },
   "team-detail": {
     name: "team-detail",
     path: "/pages/teams/detail",
-    title: "队伍详情",
+    title: "找队友",
     kind: "page",
     status: "baseline",
     source: "/teams/:id",
-    description: "了解队伍目标、成员与合作需求。",
+    description: "组队与招募暂缓开放，旧队伍地址落到暂缓说明页。",
   },
   "team-new": {
     name: "team-new",
     path: "/pages/teams/new",
-    title: "发布招募",
+    title: "找队友",
     kind: "page",
     status: "baseline",
     source: "/teams/new",
-    description: "填写项目目标与角色需求，演示发布队伍招募。",
+    description: "组队与招募暂缓开放，旧发布地址落到暂缓说明页。",
   },
   favorites: {
     name: "favorites",
@@ -152,7 +152,7 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/login",
-    description: "登录禾伙搭，继续寻找校园伙伴。",
+    description: "学校统一身份认证即将开放，当前免登录浏览比赛信息。",
   },
   register: {
     name: "register",
@@ -161,7 +161,7 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/register",
-    description: "注册禾伙搭，从认识彼此开始。",
+    description: "不开放单独注册，后续只通过学校统一身份认证首次登录自动建号。",
   },
   "not-found": {
     name: "not-found",

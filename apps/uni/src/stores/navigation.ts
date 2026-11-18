@@ -20,14 +20,13 @@ interface ProfileNavigation {
  */
 export const useNavigationStore = defineStore("navigation", () => {
   const pendingProfileNavigation = ref<ProfileNavigation | null>(null);
-  const pendingTabQueries = ref<Partial<Record<"home" | "teams", RouteQuery>>>(
-    {},
-  );
+  // 组队入口暂缓后只剩首页需要一次性交接（返回比赛列表时带回筛选）。
+  const pendingTabQueries = ref<Partial<Record<"home", RouteQuery>>>({});
 
-  function requestTabQuery(name: "home" | "teams", query: RouteQuery) {
+  function requestTabQuery(name: "home", query: RouteQuery) {
     pendingTabQueries.value[name] = copyRouteQuery(query);
   }
-  function consumeTabQuery(name: "home" | "teams"): RouteQuery | null {
+  function consumeTabQuery(name: "home"): RouteQuery | null {
     const query = pendingTabQueries.value[name] ?? null;
     delete pendingTabQueries.value[name];
     return query;
