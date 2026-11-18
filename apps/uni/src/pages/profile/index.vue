@@ -1,273 +1,77 @@
 <script setup lang="ts">
-import { pageRouteQuery } from "../../navigation/h5-address";
-import { computed, nextTick, onScopeDispose, reactive, ref, watch } from "vue";
-import { onLoad, onUnload } from "@dcloudio/uni-app";
-import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
-import ProfileApplications from "../../components/ProfileApplications.vue";
-import ProfileTeams from "../../components/ProfileTeams.vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
 import ProfileOverview from "../../components/ProfileOverview.vue";
 import FormButton from "../../components/FormButton.vue";
-import { useSessionStore } from "../../stores/session";
+import { openPage } from "../../navigation/navigate";
 import {
-  copyRouteQuery,
   parseProfileSection,
   type ProfileSection,
-  type RouteQuery,
 } from "../../navigation/params";
+import { pageRouteQuery } from "../../navigation/h5-address";
 import { useNavigationStore } from "../../stores/navigation";
-import { useH5Query } from "../../navigation/use-h5-query";
-import {
-  notificationAnchor,
-  profileNotificationTarget,
-} from "../../navigation/notification-target";
-import {
-  createProfileTeamController,
-  initialProfileTeamState,
-} from "../../stores/profile-team-controller";
 
+/**
+ * 个人中心。
+ *
+ * M1 保留资料示例、收藏入口与关于页入口；队伍、申请与邀请分区随
+ * 站内组队一并暂缓（ADR 0011 方案 B）。旧地址 /my/teams、/my/applications
+ * 与旧通知交接仍可进入本页，只看暂缓说明，不再渲染演示队伍与申请记录。
+ */
 const navigation = useNavigationStore();
-const session = useSessionStore();
-const state = reactive(initialProfileTeamState());
-const controller = createProfileTeamController(state, session);
-// 分区只由控制器持有，页面不再维护第二份 section 状态。
-const section = computed(() => state.section);
-// 后续个人中心业务页从这里读取附加参数；不把它们当作身份或权限。
-const routeQuery = ref<RouteQuery>({});
-const notice = ref("");
-const highlightId = ref("");
-let highlightTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-let positioning = 0;
-let visible = true;
+const legacySection = ref<ProfileSection>("profile");
 
-function clearPosition() {
-  positioning++;
-  highlightId.value = "";
-  if (highlightTimer !== undefined) globalThis.clearTimeout(highlightTimer);
-  highlightTimer = undefined;
-}
-async function locate(query: RouteQuery) {
-  clearPosition();
-  if (
-    !["teamId", "recordId", "invitationId", "revision"].some(
-      (key) => query[key] !== undefined,
-    )
-  )
-    return;
-  const currentPosition = positioning;
-  const revision = session.sessionRevision;
-  const result = profileNotificationTarget(session, section.value, query);
-  if (result.error) {
-    notice.value = result.error;
-    return;
-  }
-  if (!result.target) return;
-  if (result.target.section === "teams")
-    controller.select(result.target.teamId);
-  await nextTick();
-  if (
-    !visible ||
-    currentPosition !== positioning ||
-    revision !== session.sessionRevision
-  )
-    return;
-  const rechecked = profileNotificationTarget(session, section.value, query);
-  if (rechecked.error) {
-    notice.value = rechecked.error;
-    return;
-  }
-  const anchor = notificationAnchor(session, result.target);
-  highlightId.value = anchor;
-  notice.value = "已定位关联记录；此操作不会处理申请或邀请。";
-  uni.pageScrollTo({
-    selector: `#${anchor}`,
-    duration: 0,
-    fail() {
-      if (currentPosition === positioning && visible)
-        notice.value =
-          "关联内容已展开，但未能自动滚动，请在本分区查看高亮记录。";
-    },
-  });
-  highlightTimer = globalThis.setTimeout(() => {
-    highlightId.value = "";
-  }, 3000);
+const pending = computed(() =>
+  legacySection.value === "teams"
+    ? "我的队伍"
+    : legacySection.value === "applications"
+      ? "申请与邀请"
+      : "",
+);
+
+function applySection(section: ProfileSection) {
+  legacySection.value = section;
 }
 
-const content: Record<ProfileSection, { title: string; description: string }> =
-  {
-    profile: {
-      title: "个人中心",
-      description: "查看示例资料、编辑个人介绍与技能，了解联系方式授权。",
-    },
-    teams: {
-      title: "我的队伍",
-      description: "管理你带领或加入的队伍：招募、成员、申请与邀请。",
-    },
-    applications: {
-      title: "申请与邀请",
-      description: "跟进自己的申请与收到的邀请，撤回、确认或拒绝。",
-    },
-  };
-
-const current = computed(() => content[section.value]);
-let timer: ReturnType<typeof globalThis.setInterval> | undefined;
-let disposed = false;
-
-function applySection(next: ProfileSection, query?: RouteQuery) {
-  clearPosition();
-  if (query) {
-    routeQuery.value = { ...query };
-    for (const key of ["teamId", "recordId", "invitationId", "revision"])
-      delete routeQuery.value[key];
-  }
-  controller.switchSection(next);
-  if (query) void locate(query);
-}
-function showProfile() {
-  applySection("profile");
-  notice.value = "";
-}
-function consumePendingSection() {
-  const pending = navigation.consumeProfileNavigation();
-  if (!pending) return;
-  notice.value = "";
-  applySection(pending.section, pending.query);
-}
-function tick() {
-  controller.syncClock();
-  session.syncNotifications(state.now);
-}
-function startClock() {
-  tick();
-  if (timer === undefined) timer = globalThis.setInterval(tick, 1000);
-}
-function stopClock() {
-  if (timer !== undefined) globalThis.clearInterval(timer);
-  timer = undefined;
-}
-function leave() {
-  visible = false;
-  clearPosition();
-  stopClock();
-  // 页面隐藏或卸载时丢弃弹层与旧操作上下文，回来后重新读取实时会话。
-  controller.clearTransient();
-}
-const unregisterReset = session.registerReset("profile-team", () => {
-  clearPosition();
-  routeQuery.value = {};
-  notice.value = "";
-  controller.reset();
-});
-function dispose() {
-  if (disposed) return;
-  disposed = true;
-  leave();
-  unregisterReset();
-}
-
-function restoreRouteSection(query: RouteQuery) {
-  const parsed = parseProfileSection(query?.section);
-  const next = copyRouteQuery(query ?? {});
-  delete next.section;
-  notice.value = !parsed.issue
-    ? ""
-    : parsed.issue === "conflict"
-      ? "分区参数重复且取值不一致，已显示个人资料。"
-      : "分区参数无效，已显示个人资料。";
-  applySection(parsed.section, next);
+function openFavorites() {
+  openPage("favorites");
 }
 onLoad((platformQuery) => {
-  restoreRouteSection(pageRouteQuery(platformQuery ?? {}));
-  consumePendingSection();
+  const query = pageRouteQuery(platformQuery ?? {});
+  applySection(parseProfileSection(query?.section).section);
+  const handed = navigation.consumeProfileNavigation();
+  if (handed) applySection(handed.section);
 });
-
-// 首次加载先解析深链，再消费交接；已挂载页面在显示或收到新意图时消费。
-usePageLifecycle({
-  show() {
-    visible = true;
-    startClock();
-    consumePendingSection();
-  },
-  hide: leave,
+onScopeDispose(() => {
+  legacySection.value = "profile";
 });
+// 已挂载页面收到新交接时直接落到对应说明，不重复 switchTab。
 watch(
   () => navigation.pendingProfileNavigation,
-  () => {
-    if (visible) consumePendingSection();
+  (handed) => {
+    if (!handed) return;
+    const next = navigation.consumeProfileNavigation();
+    if (next) applySection(next.section);
   },
-);
-onUnload(dispose);
-onScopeDispose(dispose);
-useH5Query(
-  "profile",
-  () => ({ ...routeQuery.value, section: section.value }),
-  restoreRouteSection,
 );
 </script>
 
 <template>
   <view class="hhr-page hhr-page--tab">
     <view class="hhr-page__inner">
-      <view
-        v-if="notice"
-        class="hhr-notice mb-4"
-        role="status"
-        aria-live="polite"
-        >{{ notice }}</view
-      >
-      <template v-if="section === 'teams'">
-        <view class="section-heading">
-          <text class="section-title">{{ current.title }}</text>
-          <text class="section-copy">{{ current.description }}</text>
-        </view>
-        <ProfileTeams :controller="controller" :highlight-id="highlightId" />
-        <FormButton
-          class="mt-4 section-back"
-          variant="secondary"
-          @click="showProfile"
-          >返回个人资料</FormButton
+      <view v-if="pending" class="hhr-notice mb-4" role="status">
+        <text class="block"
+          >「{{
+            pending
+          }}」随站内组队一并暂缓开放，当前只开放正式比赛信息浏览。</text
         >
-      </template>
-      <template v-else-if="section === 'applications'">
-        <view class="section-heading">
-          <text class="section-title">{{ current.title }}</text>
-          <text class="section-copy">{{ current.description }}</text>
-        </view>
-        <ProfileApplications
-          :controller="controller"
-          :highlight-id="highlightId"
-        />
-        <FormButton
-          class="mt-4 section-back"
-          variant="secondary"
-          @click="showProfile"
-          >返回个人资料</FormButton
+      </view>
+      <ProfileOverview />
+      <view v-if="pending" class="mt-4">
+        <FormButton variant="secondary" @click="openFavorites"
+          >查看我的收藏</FormButton
         >
-      </template>
-      <ProfileOverview v-else />
+      </view>
     </view>
   </view>
 </template>
-
-<style scoped>
-.section-heading {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-.section-title {
-  font-family: var(--hhr-font-display);
-  font-size: 28px;
-  line-height: 36px;
-  font-weight: 600;
-}
-.section-copy {
-  font-size: 13px;
-  line-height: 24px;
-  color: var(--hhr-color-muted);
-  overflow-wrap: anywhere;
-}
-.section-back {
-  width: auto;
-  max-width: 100%;
-}
-</style>

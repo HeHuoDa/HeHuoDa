@@ -19,28 +19,35 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 
-test("关于页公开展示真实查询、会话演示和未开放服务，Logo 失败仍可阅读", async () => {
+test("关于页公开展示真实查询、会话保留、暂缓组队与统一认证未开放，Logo 失败仍可阅读", async () => {
   setActivePinia(createPinia());
   const app = await mount("../src/pages/about/index.vue");
   try {
     const content = textOf(app.container);
     for (const expected of [
       /一起成长，各有所长。/,
-      /四川农业大学校园比赛与项目组队平台/,
+      /四川农业大学校园比赛信息平台/,
       /承办学院.*参赛资格/s,
-      /官方报名/,
+      /官方原文/,
       /真实公开查询/,
-      /会话演示/,
-      /刷新.*统一重置/s,
-      /站内通知.*官方来源通知/s,
-      /默认不共享/,
-      /同队有效成员.*所有者授权/s,
-      /不收集.*真实联系方式/s,
-      /微信一键登录/,
-      /H5.*不提供登录渠道/s,
+      /当前会话/,
+      /刷新.*清空/s,
+      /暂缓开放/,
+      /组队与招募/,
+      /统一身份认证/,
+      /禾伙搭用户/,
+      /不收集、不展示任何联系方式/,
     ])
       assert.match(content, expected);
-    assert.doesNotMatch(content, /@|版本号|官方运营|立即注册/);
+    for (const gone of [
+      /微信一键登录/,
+      /小程序可用/,
+      /H5.*不提供登录渠道/s,
+      /重置示例/,
+      /演示发布/,
+      /@|版本号|立即注册/,
+    ])
+      assert.doesNotMatch(content, gone);
     const image = app.find(
       (node) => node.props.src === "/static/hehuoda-logo.png",
     );
