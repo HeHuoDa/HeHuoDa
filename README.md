@@ -1,143 +1,89 @@
 # 禾伙搭
 
-四川农业大学校园比赛与项目组队平台。当前包含普通 uni-app 用户端（H5／微信小程序同源）、保留作对照与回滚的旧 Web、独立管理端前端，以及 NestJS/Fastify API。项目仍在开发中，尚未形成真实账号与组队业务闭环。
+四川农业大学校园比赛信息与协作平台。项目当前收敛为 **管理端桌面 Web（`apps/admin`）+ 用户端普通 uni-app（`apps/uni`：H5 与 Android 签名 APK）+ NestJS/Fastify API（`apps/api`）**；**已放弃微信小程序、iOS、微信登录与历史用户迁移**，用户登录统一采用基于自有连接器的**川农统一身份认证**，站内组队、治理后台接线与 27 院采集规模化运营在本期暂缓（详见 [ADR 0011](docs/adr/0011-android-h5-and-sicau-only-auth.md)）。
 
-截至 **2026-10-23**，已核对远端 `main`（`4dae578c38465993949538839a559100d4c11150`）、源码与 GitHub Issues／Actions：
+## 当前状态与路线图（2026-11-18）
 
-| 范围     | 已有能力                                                                                        | 当前边界                                                                                       |
-| -------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 用户端   | #59–#78、#80 已关闭；导航、主题、控件、比赛、队伍、资料管理、收藏、通知、关于及来源操作均有实现 | 完整 H5 回归、布局／生命周期收尾、微信真机及正式发布仍待验收                                   |
-| 真实 API | 健康／数据库就绪、学院、比赛列表与详情；PostgreSQL 持久化与人工核对导入                         | 认证、验证码、个人业务与招募写接口及消息投递未开放；相应界面使用内存会话演示                   |
-| 通知采集 | 四院试点、批次一至批次四官方通知扫描（原两院默认启用）、候选审核、导入与显式发布 CLI            | #49 的 27 学院扩展、管理 HTTP 接口及真实联调仍开放                                             |
-| 管理端   | #36、#42–#45 已关闭，独立应用与比赛／来源／审核／治理页面已存在                                 | #37–#41、#46 仍开放；固定示例不等于管理员认证、业务写入或真实联调                              |
-| 部署     | PR #120／#121 已合并；uni H5/API 镜像、Nginx、SHA/digest 发布、备份恢复与回滚工具已实现         | 有远端镜像发布与手动部署成功记录；#25 仍开放，不能据此认定正式 TLS、异机恢复及完整生产验收完成 |
+基线源码核查自 `main`（`e88901c1689816d7fa123f9459496a66f239d3ba`），GitHub 任务状态以 [GitHub Issues](https://github.com/HeHuoDa/HeHuoDa/issues) 为准。下表严格区分“已合并源码/本地测试”与“待交付/待真实验收”：
 
-当前 20 个开放 Issue、无开放 PR；数量为核查时点快照，后续以 [GitHub Issues](https://github.com/HeHuoDa/HeHuoDa/issues) 为准。当前 main 的 [CI 39733924690](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39733924690) 中 `quality`、`image-smoke`、`publish-images`、`ci-gate` 均成功；[手动 Deploy 39771854939](https://github.com/HeHuoDa/HeHuoDa/actions/runs/39771854939) 的传输与部署步骤成功。本次只读核实这些记录，未独立检查服务器在线状态、正式证书、异机恢复或微信真机，也未重跑全套业务测试。
+| 模块          | 已实现基础                                                                                                                               | 当前边界与待交付任务                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 架构与契约    | 确立 Android/H5 与川农唯一登录决策（[ADR 0011](docs/adr/0011-android-h5-and-sicau-only-auth.md)），同步全套现行文档与 `GLOSSARY.md`      | M0 契约基准已冻结；外部环境条件（签名、测试机、学校认证复核、生产域名）由 #58 统筹推进                                                                   |
+| 用户端（uni） | `apps/uni` 已具备跨端导航骨架、主题与表单/学院/资源组件、真实比赛公开列表/详情/来源动作、仅本次会话有效的临时收藏及暂缓前演示入口        | #214 收口暂缓组队与模拟登录入口；#84 执行 M1 H5 浏览器验收；#219/#220/#222/#226 推进 Android 构建、Keystore 安全存储与真机；#224 清理微信残余分支        |
+| 认证与会话    | `@hehuoda/sicau-connectors/auth` 连接器、校园认证事务与 AES-256-GCM 资料/HMAC 绑定（`0005_campus.sql`）、会话轮换底座（`0004_auth.sql`） | 现行源码暂为旧微信登录 + 登录后核验过渡态；#128（#217/#218/#221/#222/#225）改造为学校唯一登录、H5 HttpOnly Cookie 与 Android Keystore；#223 下线微信接口 |
+| 管理端与比赛  | `apps/admin` 已接通 Cookie 登录、工作台、审计操作、来源/运行追溯、候选审核/导入/发布、附件追溯（#173/#177）；比赛模型与导入事务已实现    | #38 交付比赛管理后端 CRUD/预览/发布/隐藏；#46 对接比赛管理前端；#215 将管理端以 `/admin/` 整合进 Web 镜像；用户/招募/举报治理（#41/#216）暂缓            |
+| 官方通知采集  | 27 院来源配置与多栏目调度/附件沙箱底座（#129/#174–#177）、7 字段辅助录入收敛（`competition-rules-23`）                                   | 保留已有采集、审核、导入与发布 CLI；27 院扩展与长期运营（#49/#178/#179/#206）已暂缓，不阻塞 M1 手工比赛维护上线                                          |
+| 部署与恢复    | `quality` + `image-smoke` CI 门禁、SSH + rsync 归档直传、数据库备份恢复、容量清理及 Stage 2 隔离栈工具已合并                             | #143 验证生产回滚；#215 补充 `/admin/` 路由与静态冒烟；#227 落实网络分段、异机恢复演练与多版本 API 兼容；#228（M3）上线签名 APK HTTPS 下载分发           |
+| 旧端对照      | `apps/web` 保留完整桌面/移动视觉与规则对照；`packages/client-domain` 抽离共享业务规则                                                    | `apps/web` 仅作视觉与回滚参照，不新增业务功能；M1–M3 稳定且无回滚源码依赖后按 #90 评估退役                                                               |
 
-单机容器化、镜像冒烟、SHA 发布、HTTPS 和备份恢复操作见[部署与恢复说明](docs/deployment.md)。原开发 Compose 保持独立；部署工作流是否执行取决于实际开关与环境条件，不能从默认关闭推断当前配置。
+### 分期里程碑（M0–M4）
 
-管理员后端的受控初始化、Cookie／CSRF、事务审计和回退约束见[管理员认证说明](docs/admin-auth.md)；管理前端接线与生产启用仍须分别验收。
+- **M0（契约确立）**：#213 完成 ADR 0011、领域词汇与现行文档同步。
+- **M1（管理端 + H5 公开比赛闭环）**：#38（比赛后端）→ #46（管理前端接线）+ #215（`/admin/` 部署整合）+ #214（H5 暂缓组队/模拟入口收口）→ #84（H5 浏览器全流程验收）。
+- **M2（Android + H5 川农唯一登录）**：#217/#218（后端匿名登录事务、H5 Cookie + `X-Refresh-CSRF`）+ #219/#220（Android 工程、APK 打包与 Keystore 安全存储）→ #221/#222（双端登录接线）→ #223/#224（下线微信接口与 `mp-weixin` 分支）→ #225/#226（双端登录验收）。
+- **M3（首期正式分发与运维）**：#58/#140（外部条件与准入开关）+ #83（双端构建回归门禁）+ #227（容器网络分段、异机恢复与 APP API 兼容）+ #86/#87/#88/#143/#228（生产切流、回滚、签名 APK HTTPS 分发与运维责任落实）。
+- **M4（工程收尾）**：#90 评估并退役 `apps/web`。
 
-仓库现由 [HeHuoDa 组织](https://github.com/HeHuoDa/HeHuoDa)维护，默认分支为 `main`。已有本地副本使用 `git remote set-url origin https://github.com/HeHuoDa/HeHuoDa.git` 更新远程地址；提交者姓名和邮箱仍使用个人身份。项目范围、阶段安排与当前进度见[项目开发计划书](docs/禾伙搭-项目开发计划书.md)。
+## 文档导航
 
-## 管理端前端演示
-
-独立应用 `apps/admin` 可执行 `pnpm dev:admin` 预览登录、工作台、操作记录及业务导航。管理服务未开放时明确显示“待接入”，布局与筛选分页示例需单独展开；不创建登录态，不代表线上管理能力。完整范围与验证命令见 [管理端前端说明](docs/admin-frontend.md)。
-
-采集来源配置、异步扫描、候选审核及独立发布的后端契约见[管理采集与审核接口](docs/admin-ingestion.md)；页面入口见[管理端采集控制页面](docs/admin-ingestion-control.md)。后端接口与页面适配分别交付，管理页面真实接线仍由 #173／#46 验收，现有页面示例不执行官网抓取或配置写入。
+| 主题             | 文档入口                                                                                                                                                   | 说明                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 核心架构决策     | [ADR 目录](docs/adr/0011-android-h5-and-sicau-only-auth.md)（0001–0011）                                                                                   | 含 [ADR 0011（Android/H5 与学校唯一登录）](docs/adr/0011-android-h5-and-sicau-only-auth.md) 及历史演进记录 |
+| 领域词汇         | [GLOSSARY.md](GLOSSARY.md)                                                                                                                                 | 统一业务概念与避免叫法                                                                                     |
+| 开发计划         | [禾伙搭项目开发计划书](docs/禾伙搭-项目开发计划书.md)                                                                                                      | V2.0 范围、阶段任务、技术基线与交付标准                                                                    |
+| 用户端跨端说明   | [uni-app 跨端适配清单](docs/agents/uni-app-migration.md)                                                                                                   | H5/Android 平台边界与历史迁移交付记录                                                                      |
+| 样式、控件与资源 | [学生端样式](docs/student-ui-style.md)、[复用表单](docs/uni-forms.md)、[学院选择器](docs/uni-college-picker.md)、[图标资源](docs/uni-assets.md)            | `--hhr-*` 主题、`px/rem` 策略、FormDialog 与资源契约                                                       |
+| 认证与权限       | [统一身份认证服务](docs/campus-verification.md)、[业务权限契约](docs/business-access.md)                                                                   | 川农 e 认证、姓名学号逐字比对、加密存储、H5/Android 会话与暂缓权限边界                                     |
+| 管理端与采集     | [管理员认证](docs/admin-auth.md)、[管理端前端](docs/admin-frontend.md)、[采集接口](docs/admin-ingestion.md)、[采集控制页](docs/admin-ingestion-control.md) | Cookie/CSRF 隔离、原子审计、来源与候选审核接线                                                             |
+| 连接器与质量集   | [共享包架构](docs/sicau-connectors.md)、[质量集协议](docs/quality-eval-protocol.md)                                                                        | `@hehuoda/sicau-connectors/notices` 与 `/auth`、7 字段契约与名单隔离                                       |
+| 部署与容灾       | [单机部署与恢复](docs/deployment.md)、[容量与清理操作](docs/capacity-and-recovery.md)                                                                      | SSH + rsync 归档交付、`/admin/` 路由、30 天清理与隔离恢复演练                                              |
+| 仓库协作规范     | [AGENTS.md](AGENTS.md)、[Issue 规则](docs/agents/issue-tracker.md)、[PR 约定](docs/agents/pull-requests.md)、[分诊标签](docs/agents/triage-labels.md)      | 分支提交规范、Issue 可开工标准与 PR 模板流程                                                               |
 
 ## 技术栈
 
-项目采用 **pnpm workspace 单仓（Monorepo）**，包含现有 Web 应用、迁移中的 uni-app 用户端、API 服务和共享接口类型包。以下版本来自各工作区的 `package.json` 与 `compose.yaml`；保留依赖声明的 `^` / `~` 范围，实际安装版本以 `pnpm-lock.yaml` 为准。
+项目采用 **pnpm workspace 单仓（Monorepo）**，运行环境固定为 **Node.js `>=24.15.0 <25`**（`.nvmrc` 为 `24`）与 **pnpm `10.30.3`**。依赖版本以 `pnpm-lock.yaml` 为准：
 
-| 层次             | 技术与版本                                                                                       | 项目用途                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| 运行环境与包管理 | Node.js `>=24.15.0 <25`、pnpm `10.30.3`                                                          | 统一运行环境、工作区依赖与脚本                                        |
-| 开发语言         | TypeScript `6.0.x`；共享类型包 `5.9.3`                                                           | Web / API 类型检查；共享包兼容类型生成工具                            |
-| Web 框架与构建   | Vue `^3.5.42`、Vite `^8.3.0`、`@vitejs/plugin-vue` `^6.0.8`                                      | Vue 单文件组件、开发服务器与生产构建                                  |
-| 路由与状态       | Vue Router `5.3.1`、Pinia `4.0.3`                                                                | 学生端路由、布局导航与健康状态管理                                    |
-| 样式与图标       | Tailwind CSS / `@tailwindcss/vite` `4.3.3`、`@lucide/vue` `1.51.0`                               | 工具类与主题 CSS、自封装复用组件、统一图标入口；当前未使用 Vant       |
-| HTTP 客户端      | Axios `1.20.0`                                                                                   | Web 通过 `/api/v1` 请求 API，开发时由 Vite 代理                       |
-| API 框架与服务器 | NestJS `^12.0.1`、`@nestjs/platform-fastify` `12.1.2`、Fastify `5.12.5`                          | 模块、控制器、依赖注入与 HTTP 服务                                    |
-| 配置与请求校验   | `@nestjs/config` `12.0.1`、Joi `18.2.9`、`class-validator` `0.15.1`、`class-transformer` `0.5.1` | 环境配置校验、DTO 转换与严格请求校验                                  |
-| 通知采集与调度   | Cheerio `1.2.0`、`@nestjs/schedule` `12.0.2`                                                     | 四院试点、批次一至批次四公开 HTML 解析、北京时间定时扫描与持久化续跑  |
-| 数据库与访问层   | PostgreSQL `17`、Drizzle ORM `0.45.3`、`pg` `8.23.1`                                             | 学院与比赛持久化、连接池和查询；SQL 迁移由项目脚本执行                |
-| 接口契约         | `@nestjs/swagger` `12.0.2`、`openapi-typescript` `7.13.0`                                        | 从 DTO / Swagger 生成 OpenAPI JSON，再生成 Web 使用的 TypeScript 类型 |
-| Web 测试         | Vitest `5.0.3`、`@vue/test-utils` `2.5.1`、jsdom `30.1.1`                                        | 组件、路由、状态与请求行为单元测试                                    |
-| API 测试         | Jest `30.5.2`、`ts-jest` `29.4.14`                                                               | 单元测试、真实 PostgreSQL 集成测试与 HTTP e2e 测试                    |
-| 代码质量与协作   | ESLint `10.11.0`、Prettier `3.9.9`、GitHub Actions                                               | 静态检查、格式统一与 CI 质量门禁                                      |
-| 本地数据库环境   | Docker Compose，`postgres:17` 镜像                                                               | 开发／测试数据库；生产另用独立 Compose、uni H5/API 镜像与 Nginx       |
+| 工作区 / 层次               | 核心技术与声明版本                                                                                                                              | 职责与说明                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `@hehuoda/uni`              | 普通 uni-app（DCloud `3.0.0-5020420260813003`）、Vue `3.5.42`（运行映射内嵌 `3.4.21`）、Pinia `3.0.4`、Tailwind CSS `4.3.3`、Vite `5.2.8`       | 用户端 H5 与 Android（APK）同源工程；`check:toolchain` 校验编译层与内嵌运行时宿主 |
+| `@hehuoda/admin`            | Vue `^3.5.42`、Vue Router `5.3.1`、Element Plus `^2.11.5`、Tailwind CSS `4.3.3`、`@lucide/vue` `1.51.0`、Vite `^8.3.0`                          | 独立桌面管理端（1024/1440px），#215 后以 `/admin/` 构建并并入 Web 镜像            |
+| `@hehuoda/api`              | NestJS `^12.0.1`、Fastify `5.12.5`、Drizzle ORM `0.45.3`、PostgreSQL `17`、Joi `18.2.9`、`class-validator` `0.15.1`、`@nestjs/swagger` `12.0.2` | 业务 API、管理员认证与事务审计、采集调度与审核、C `attachment-sandbox`（Linux）   |
+| `@hehuoda/api-types`        | `@nestjs/swagger` + `openapi-typescript` `7.13.0`、TypeScript `5.9.3`                                                                           | 从 `apps/api/openapi.json` 生成只含类型的接口契约（`schema.d.ts`）                |
+| `@hehuoda/client-domain`    | 纯 TypeScript `6.0.3`（零框架/DOM 依赖）                                                                                                        | 共享学院目录、筛选/UTC+8 时间解析、资料与暂缓期保留的演示规则                     |
+| `@hehuoda/sicau-connectors` | Node.js ESM、`cheerio` `1.2.0`、`pdfjs-dist` `5.4.624`、`mammoth` `1.11.0`、`yauzl` `3.2.1`                                                     | `/notices`（公开通知/附件解析）与 `/auth`（`SchoolAuthClient` 川农统一身份认证）  |
+| `@hehuoda/web`              | Vue `^3.5.42`、Pinia `4.0.3`、Vue Router `5.3.1`、Axios `1.20.0`                                                                                | 历史学生端 Web，仅保留作视觉/规则对照与应急回滚（#90 评估退役）                   |
+| 质量与交付                  | ESLint `10.11.0`、Prettier `3.9.9`、Jest `30.5.2`、Vitest `5.0.3`、Node `--test`、Docker Compose、GitHub Actions                                | 分层单测/集成/API e2e/容器冒烟与 SSH+rsync 归档发布                               |
 
-普通 uni-app（H5、微信小程序）已交付主要工程与页面，部署用户端目标为 uni H5；旧 Web 保留对照与回滚，退役归 #90。真实认证、招募与申请写接口仍待开发。迁移中，Vue Router 的 History 路由、Axios 浏览器请求、DOM / 浏览器 API、Lucide SVG 与 Tailwind Web CSS 均需逐项适配和实测，不能直接视为小程序兼容。迁移任务与替代方案见[迁移提醒与待办](docs/agents/uni-app-migration.md)。
+> 注意：`apps/uni` 中的 Vite `5.2.8` 为 DCloud 锁定配套（含已知开发服务器安全公告 [GHSA-x574-m823-4x7w](https://github.com/vitejs/vite/security/advisories/GHSA-x574-m823-4x7w)），仅监听本机且不用于生产托管。
 
-## 环境
+## 环境与快速启动
 
-- Node.js 24，最低 `24.15.0`，支持范围 `>=24.15.0 <25`；`.nvmrc` 使用 `24`，不固定补丁版本。
-- pnpm `10.30.3`，由根目录 `packageManager` 固定。
+### 1. 安装依赖
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
 ```
 
-安装 Node 时如未包含 Corepack，请先按 [Corepack 官方说明](https://github.com/nodejs/corepack#manual-installs)安装。
+### 2. 准备本地数据库与环境变量
 
-## uni-app 用户端（迁移中）
-
-关于页面已由 #77 提供：从个人中心“关于禾伙搭”进入，或直接打开 H5 `/#/pages/about/index`／小程序 `pages/about/index`。页面说明平台定位、使用方式、真实公开查询、会话演示与未开放服务；无需登录，无历史时也可返回个人资料区。页面本身不请求业务 API，无版本或反馈渠道的虚构占位。`/about` 是需求预留的兼容别名，旧 Web 没有关于页成品；微信实际运行与真机仍交 #85。
-
-`apps/uni`（`@hehuoda/uni`）与旧 Web 并存，同一源码构建 H5 和微信小程序。当前已接入首页 / 找队友 / 我的三项原生 `tabBar`，比赛与队伍详情、发布招募、收藏、通知、关于、登录注册及 404 页面；页面标题来自 `pages.json`，跳转统一走 `src/navigation/navigate.ts`。比赛公开查询使用真实 API，队伍、资料、授权、申请邀请、收藏和通知使用内存会话；迁移范围及 18 项能力对应任务见[迁移清单](docs/agents/uni-app-migration.md#issue-59正式工程基础)。`pnpm dev` 仍只启动旧 Web/API，新客户端单独启动，不切换线上入口。
-
-导航注册表在 `apps/uni/src/navigation/routes.ts`：新增页面只需在 `pages.json` 注册并补一条定义，`test:unit` 会校验两处一致、标题同源与旧地址映射完整。旧个人中心地址 `/my/teams`、`/my/applications` 映射到「我的」的队伍/申请分区；平台主导航用 `switchTab`，普通页面用 `navigateTo`。H5 兼容层在 uni 创建路由前，将旧 pathname、query 与赛段锚点转换成原生 hash 地址，以 `replaceState` 保留当前历史项；随后复用 uni 自带 router，不创建另一套路由或业务页面栈。未知页面进入 404，非法或不存在的业务 ID 由详情页分别反馈。决策见 [ADR 0005](docs/adr/0005-uni-navigation-shell.md)。
-
-H5 列表筛选、页码修正与个人中心分区替换当前地址，避免每次输入或服务端页码修正新增历史记录；打开详情仍新增历史项，浏览器后退／前进恢复列表参数与 uni 保存的滚动位置。合法附加 query 与重复值沿链路保留；已移除的 category/eligible 和非法筛选按共享规则清洗。`/home/competitions/:id#赛段ID` 会转换为详情的 `stage` 参数，业务 ID 与参数只解码一次；通知稳定 ID 只用于定位，不授予权限或执行业务操作。H5 标题追加「· 禾伙搭」，微信仍用原生标题与一次性交接，不调用 DOM／History。
-
-独立验证可先 `pnpm --filter @hehuoda/uni build:h5`，再 `pnpm --filter @hehuoda/uni preview:h5`，默认监听 `127.0.0.1:5176`（可用 `PORT` 调整）。此预览仅托管 `dist/build/h5`，不启动旧 Web、不代理或模拟 API；API 路径直接 404。页面网络成功态需另备隔离 API，或明确标注受控 HTTP 替身。生产部署沿 [部署说明](docs/deployment.md)：API／资源优先，其他 pathname 回退 uni 的 index.html，浏览器启动后统一映射；无需 Nginx 重复维护业务路由表。
-
-样式入口为 `apps/uni/src/app.css`，主题变量在 `src/styles/theme.css`，页面根节点与 `.hhr-*` 组件类在 `src/styles/base.css`；页面只消费语义工具类（`bg-brand`、`text-ink`、`rounded-panel`）。字号、触控下限与断点用 px，间距与宽高用 rem（构建时换算 rpx），理由与组件类清单见[学生端全局样式](docs/student-ui-style.md#uni-app-用户端样式迁移中)。H5 的 `/#/pages/style/index` 与小程序「样式基线」页逐项渲染主题色、字号层级、按钮四态与状态块，用于样式回归。
-
-在根目录完成冻结安装后执行：
-
-```bash
-pnpm --filter @hehuoda/uni dev:h5
-pnpm --filter @hehuoda/uni dev:mp-weixin
-pnpm --filter @hehuoda/uni lint
-pnpm --filter @hehuoda/uni typecheck
-pnpm --filter @hehuoda/uni check:toolchain
-pnpm --filter @hehuoda/uni test:unit
-pnpm --filter @hehuoda/uni build:h5
-pnpm --filter @hehuoda/uni build:mp-weixin
-```
-
-H5 开发地址默认 [http://127.0.0.1:5174/](http://127.0.0.1:5174/)，端口冲突时以实际输出为准。H5 生产构建在 `apps/uni/dist/build/h5`；小程序开发/生产产物分别在 `dist/dev/mp-weixin`、`dist/build/mp-weixin`。根 `pnpm lint/typecheck/build/test:unit` 自动纳入新包，`build` 同时检查配套版本并构建两端。
-
-客户端直接锁定 Vue / `@vue/runtime-core` **3.5.42**、Pinia **3.0.4**、Tailwind CSS **4.3.3**、weapp-tailwindcss **5.6.3**；DCloud 整组锁定 **3.0.0-5020420260813003**（编译器 5.24），Vite **5.2.8**、TypeScript **6.0.3**、vue-tsc **3.3.11**，Node / pnpm 沿用根约束。这些是应用安装与编译工具版本；DCloud 仍将两端 `vue` 导入映射到内嵌 **3.4.21** 运行时，不能据此宣称支持全部 Vue 3.5 API。`check:toolchain` 分别核对这两层及内部 renderer 的实际 peer 宿主；后续页面引入新 API 时须核对目标运行时。
-
-保持 pnpm 默认隔离布局。`pnpm-workspace.yaml` 的精确版本 `packageExtensions` 仅为三项 DCloud 内部依赖补充 Vue 3.4.21 宿主，使其 server-renderer 3.4.21 与运行时配套，不过滤或放宽 peer 检查。H5 配置将 devtools-api 入口解析到真实路径，避免软链使传递依赖丢失包边界；小程序保留官方平台适配。旧 Web 继续使用自己的 Vue/Pinia/Vite。
-
-### 平台配置与验收边界
-
-复制 `apps/uni/.env.example` 到同目录 `.env`，由账号准备任务 #58 就绪后填入 `UNI_MP_WEIXIN_APPID`。开发/构建脚本将已提交的 `manifest.template.json` 与受控环境合成为忽略的 `src/manifest.json`，不要手工修改生成文件。禁止提交真实平台配置或本地环境文件；修改配置后重启构建。
-
-AppID 未就绪时允许本地 H5 与小程序编译，脚本明确标记“本地编译”；DCloud 自动生成的 `touristappid` 不是正式平台配置，不能用它证明微信运行或用于发布。`UNI_RELEASE=true` 时缺少 AppID、使用游客 ID 或格式非法均拒绝执行；格式检查也不代表账号有效或审核通过。保留 `urlCheck=true`，不关闭合法域名检查。
-
-健康页 `/#/pages/health/index` 已通过统一 `uni.request` 入口查询真实 `GET /api/v1/health`；支持首载、刷新、错误重试及请求 ID 展示。微信开发者工具已验证健康查询、停服失败、重启重试、重复点击和页面隐藏后的迟到响应保护。学院与比赛公开查询已由 #78 接入；生产合法域名、设备键盘和安全区域及真机全流程由 #58/#85 后续验证。
-
-### 统一请求与健康页
-
-在 `apps/uni/.env` 配置下列编译期变量，修改后重启开发服务器或重新构建。所有 `VITE_*` 值都会进入客户端，禁止放凭据：
-
-| 变量                  | 规则                                                                                                                                                                                                                                                 |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_API_BASE_URL`   | 包含 `/api/v1` 的 API 基址，不带查询参数、片段或账号密码。H5 开发留空使用 `/api/v1`；其他环境缺失时，健康页明确提示配置错误，不回退本机地址。小程序必须使用完整地址；正式环境完整地址须为 HTTPS。H5 正式环境也可显式设置 `/api/v1`，由部署代理处理。 |
-| `VITE_API_TIMEOUT_MS` | 超时毫秒数，默认 `5000`，允许 `1–60000` 的整数。                                                                                                                                                                                                     |
-| `UNI_DEV_API_TARGET`  | 仅 H5 development 开发代理使用，默认 `http://127.0.0.1:3001`，不进入客户端；例如本地 API 使用 3013 端口时设置为 `http://127.0.0.1:3013`。                                                                                                            |
-
-H5 开发服务器把 `/api` 原路径代理到本地 API，无需新增后端 CORS；正式静态构建不包含开发代理。小程序开发可将 `VITE_API_BASE_URL` 显式设为可达开发 API 的完整地址，但设备不能用电脑的 localhost，微信运行还须配置合法 HTTPS 域名。使用不同平台地址时，在对应构建的进程环境中传入变量，或维护不提交的本地环境文件；不要把 H5 相对地址用于小程序。
-
-请求入口为 `apps/uni/src/api/http.ts` 的 `createHttpClient`，`get(path, validate)` 返回 `{ promise, cancel }`；健康调用在 `api/health.ts`。回调 `success` 仍须检查 HTTP 2xx 和必要字段，非 2xx 保留安全的 `code/message/requestId/details?`，缺少错误体使用通用提示，请求 ID 可回退响应头 `x-request-id`。`RequestError.kind` 区分 `http`、`invalid-response`、`network`、`timeout`、`cancelled`、`config`；平台未提供超时标志的其他传输失败归为 `network`，不依赖浏览器网络状态推断。
-
-只提供手动 GET 重试，不加入 token、Cookie 会话或自动业务写重试。取消先结算 Promise，再调用 `RequestTask.abort`；健康控制器同时用请求代次忽略迟到结果。页面隐藏/卸载时取消，重新显示时重查，加载期间禁用重复刷新。接口只证明进程可达，不检查数据库、认证或比赛查询；单独验证健康无需迁移或填充数据库。平台依据见 [uni.request 官方说明](https://uniapp.dcloud.net.cn/api/request/request.html)，小程序实际网络、域名和真机取消行为仍交 #85。
-
-Vite 5 已退出上游当前维护范围，5.2.8 存在已公开的开发服务器安全问题；当前保留 DCloud 指定配套用于复现，并仅默认监听本机，不作为生产服务器。构建兼容与安全维护分别判断，发布准入前需核查受影响依赖和修复方案，不能以双端构建通过代替安全评估。依据：[Vite 维护政策](https://vite.dev/releases)、[开发服务器公告](https://github.com/vitejs/vite/security/advisories/GHSA-x574-m823-4x7w)。
-
-## 本地开发
-
-服务端四类敏感操作的权限、模块能力门禁和账号生命周期接入见[业务权限契约](docs/business-access.md)。`SENSITIVE_BUSINESS_ENABLED` 默认关闭；当前缺少真实校园、组队及治理提供者，开启会拒绝启动，不能据此开放正式组队。
-
-Compose 项目名固定为 `hehuoda`，新建数据库、用户及测试库使用同名品牌标识。已有持久化数据库不会随配置文本改名；切换前须先备份旧库，在隔离环境恢复并核验，再调整运行连接。不要通过删除数据卷处理改名后的认证失败。改动配置不代表已有数据库已迁移。
-
-在仓库根目录复制环境变量示例：
+复制环境变量示例文件（实际 `.env` 不提交 Git）：
 
 ```bash
 cp apps/api/.env.example apps/api/.env
+cp apps/uni/.env.example apps/uni/.env
+cp apps/admin/.env.example apps/admin/.env
 ```
 
 PowerShell 等效命令：
 
 ```powershell
 Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item apps/uni/.env.example apps/uni/.env
+Copy-Item apps/admin/.env.example apps/admin/.env
 ```
+
+启动开发 PostgreSQL 17、执行 SQL 迁移（`0001`–`0012`）并导入初始已核对比赛数据：
 
 ```bash
 docker compose up -d --wait
@@ -145,287 +91,147 @@ pnpm --filter @hehuoda/api db:migrate
 pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json
 pnpm --filter @hehuoda/api data:import data/publish-reviewed.json --preview
 pnpm --filter @hehuoda/api data:import data/publish-reviewed.json
-pnpm dev
 ```
 
-- Web 首页：[http://localhost:5173/home](http://localhost:5173/home)，根路径跳转到 `/home`，未知地址显示独立 404；端口占用时以 Vite 输出为准。
-- Web 健康页：[http://localhost:5173/health](http://localhost:5173/health)，保留独立健康检查与刷新/重试。
-- API：[http://127.0.0.1:3001/api/v1/health](http://127.0.0.1:3001/api/v1/health)。
-- Swagger：[http://127.0.0.1:3001/docs](http://127.0.0.1:3001/docs)。
-- OpenAPI JSON：[http://127.0.0.1:3001/docs-json](http://127.0.0.1:3001/docs-json)。
+如需本地调试管理端登录，可在配置好 `apps/api/.env` 的 `ADMIN_ALLOWED_ORIGINS`（如 `http://127.0.0.1:5183`）后运行受控初始化命令创建管理员账号（不接受命令行传密，无默认密码）：
 
-API 默认只监听本机。开发端口冲突时可设置 API 的 PORT 和 Web 的 API_PROXY_TARGET（默认 http://127.0.0.1:3001），无需停止其他进程。Web 的 `/api` 请求由 Vite 代理到 API；修改 API 端口时需同步设置 Web 的 `API_PROXY_TARGET`，代理配置位于 `apps/web/vite.config.ts`。环境变量支持 `NODE_ENV`、`PORT` 与 `DATABASE_URL`；端口必须是 1–65535 的整数。`.env` 不提交。
+```bash
+pnpm --filter @hehuoda/api admin:init
+```
 
-健康接口返回 `{ status: "ok", requestId: string }`，请求 ID 来自 Fastify。异常响应包含稳定的 `code`、用户可读的 `message` 与 `requestId`，未知异常不暴露内部细节。health 不检查数据库就绪；学院与比赛接口使用数据库。
+### 3. 启动各端服务
 
-## 学生端样式
+```bash
+# 终端 1：启动 API（默认 http://127.0.0.1:3001，Swagger: /docs，OpenAPI: /docs-json）
+pnpm --filter @hehuoda/api dev
 
-学生端采用禾苗绿主色、暖白背景、谷物黄点缀和轻量圆角卡片。该风格已提取到 `apps/web/src/style.css`，通过共享变量统一 Tailwind 与原生控件；现有 `/health` 页面已接入。
+# 终端 2：启动 uni-app 用户端 H5（默认 http://127.0.0.1:5174/）
+pnpm --filter @hehuoda/uni dev:h5
 
-实现后续页面时遵循[学生端全局样式约定](docs/student-ui-style.md)。设计预览、截图和验收产物仅保留本地，不进入 Git。
+# 终端 3（按需）：启动管理端桌面 Web（默认 http://127.0.0.1:5183/）
+pnpm dev:admin
+```
 
-学生端已提供桌面侧栏与移动底部导航；业务页面直接开放，尚无认证状态；比赛数据由公开查询接口提供。登录、注册采用独立品牌布局和实际表单；找队友三个页面和个人中心资料编辑提供可重置的会话内演示；队伍、申请与邀请共用找队友会话状态，管理操作归属个人中心，收藏与通知仍为待开发占位。
+- 根目录 `pnpm dev` 仍同时启动 `@hehuoda/api` 与保留作历史对照的 `@hehuoda/web`（`http://localhost:5173`），不用于新端交付。
+- `apps/uni` 中的 `dev:mp-weixin` / `build:mp-weixin` 为迁移过渡期遗留脚本（将在 #224 移除），不再作为目标发布端；Android 打包与真机调试脚本将在 #219 落地。
 
-| 路由                                             | 当前页面                                         |
-| ------------------------------------------------ | ------------------------------------------------ |
-| `/`                                              | 跳转到 `/home`                                   |
-| `/home`                                          | 首页                                             |
-| `/home/competitions/:id`                         | 首页内部的比赛详情                               |
-| `/teams`、`/teams/:id`、`/teams/new`             | 找队友、队伍详情、发布招募                       |
-| `/my/teams`、`/my/applications`、`/my/favorites` | 前两项兼容跳转至个人中心分区；收藏待开发         |
-| `/notifications`                                 | 站内通知（待开发）                               |
-| `/profile`                                       | 个人中心：资料、授权、队伍管理与申请邀请会话演示 |
-| `/login`、`/register`                            | 登录、注册前端表单                               |
-| `/health`                                        | 独立服务状态页                                   |
-| 未匹配路径                                       | 页面不存在，可返回首页                           |
+## 各端关键边界与规则
 
-首页与比赛详情读取 API；找队友使用明确标注的演示队伍，未知队伍 ID 显示不存在。原计划的 `/competitions` 路径已由首页替代。收藏与通知在移动端通过“个人中心”进入。此表仅描述旧 Web；uni 收藏、通知与关于已实现，参见上文。当前部署以 uni H5 为目标，旧 pathname 映射已有 Nginx 基础，完整刷新／返回兼容仍归 #82。
+### 用户端（`apps/uni`：H5 + Android）
 
-登录校验邮箱及非空密码；注册包含昵称、邮箱、密码、确认密码与邮箱验证码，密码至少 8 位，不裁剪密码或限制字符组合。密码支持显示/隐藏，验证码发送前校验邮箱。OpenAPI 包含健康与比赛公开查询，认证尚未接入；提交反馈“认证服务暂未开放”，发送反馈“验证码服务暂未开放”；不创建登录状态、不模拟发送成功或倒计时。密码与验证码不写入浏览器存储、日志或 URL，切换认证页面时清空输入。
+- **导航与暂缓策略（方案 B）**：保留三栏原生 `tabBar`（首页 / 找队友 / 我的）与 [ADR 0005](docs/adr/0005-uni-navigation-shell.md) 导航注册表（`src/navigation/routes.ts` 与 `pages.json`）。按 #214 收口方向，「找队友」及演示招募/互动入口在 M1 收口为温和暂缓提示；`pages/my/favorites` 维持仅本次内存会话有效的只读临时收藏，刷新或冷启动清空并明示说明。
+- **编译期配置**：`apps/uni/.env` 严禁填入凭据。H5 开发留空 `VITE_API_BASE_URL` 走同源 `/api/v1`（由 `UNI_DEV_API_TARGET` 代理到后端）；**Android APK 正式构建必须显式配置受控 HTTPS 完整 API 地址**，禁止关闭 TLS 校验或使用相对路径；`VITE_API_TIMEOUT_MS` 默认 `5000`（允许 `1–60000`）。
+- **认证演进**：当前基线代码仍存在微信过渡入口与 `#ifdef MP-WEIXIN` 分支；M2（#128、#217–#225）将切换为川农统一身份认证唯一登录（首次建号默认昵称 **`禾伙搭用户`**），H5 使用内存 Access Token + `HttpOnly` Refresh Cookie（配 `Origin` 与 `X-Refresh-CSRF` 校验），Android 使用内存 Access Token + Android Keystore 加密存储适配。
+- **H5 独立构建与预览**：
 
-邮箱验证码是 Issue #9 新增要求，真实发送、校验、有效期与重发规则依赖后续邮件接口，本次未联调。账号服务尚未开放，当前不能注册或登录。认证表单与尚未开放的服务边界以当前源码及 Issue #9 为准。
+```bash
+pnpm --filter @hehuoda/uni build:h5
+pnpm --filter @hehuoda/uni preview:h5   # 监听 127.0.0.1:5176，仅托管静态 H5 产物，不代理 API
+```
 
-## 项目结构与接口契约
+样式基线页为 `/#/pages/style/index`，健康页为 `/#/pages/health/index`，关于页为 `/#/pages/about/index`。
 
-以下展示已纳入版本控制的主要目录与关键文件，省略依赖、构建输出和本地验收产物：
+### 管理端（`apps/admin`）
+
+- 仅面向桌面浏览器（1024px / 1440px）使用；Cookie 会话（`hh_admin_session`）、`Origin`、`X-CSRF-Token` 及同源 `BroadcastChannel` 跨标签失效机制见[管理员认证说明](docs/admin-auth.md)与[管理端前端说明](docs/admin-frontend.md)。
+- 生产环境将由 #215 以 `/admin/` 子路径并入 Web Nginx 镜像，与 H5（`/`）及 API（`/api/v1/`）保持同源部署。
+- **手工比赛外链规则（ADR 0011 冻结）**：管理员在管理端手工录入/编辑比赛官方通知或报名参考外链时，仅允许**无凭据、无非默认端口的公开 `https://` ASCII DNS 链接**（不限于 `*.sicau.edu.cn`）；严禁将此规则扩及 `packages/sicau-connectors/src/notices` 或自动采集入库白名单。
+
+### 后端与数据库（`apps/api`）
+
+- **数据库迁移清单（`apps/api/migrations/`）**：
+  - `0001_competitions.sql`：学院、比赛届次、赛段、赛道、来源通知与关系表
+  - `0002_ingestion.sql`、`0003_ingestion_recovery_indexes.sql`：采集来源、运行、通知版本、候选与续跑索引
+  - `0004_auth.sql`：平台用户、会话族、令牌、审计与限流表（`wechat_identities` 在 #223 下线接口时保留表结构兼容）
+  - `0005_campus.sql`：校园身份 HMAC 绑定、学期资格、AES-256-GCM 加密资料与核验事务
+  - `0006_admin.sql`：管理员账号、会话、操作审计及状态撤销触发器
+  - `0007_ingestion_admin.sql`、`0008_ingestion_review.sql`：管理采集请求、命令幂等、人工修订与预览回执
+  - `0009_ingestion_channels.sql`：多栏目状态、通知关联、四阶段扫描任务与调度轮
+  - `0010_ingestion_attachments.sql`、`0011_ingestion_attachment_requests.sql`：附件版本、提取证据与重查请求
+  - `0012_ingestion_classification.sql`：赛事分类、规则版本（当前 `competition-rules-23`）、7 字段提取修订与人工分类审计
+- **人工导入与采集审核 CLI**（操作细则分别见 [ADR 0003](docs/adr/0003-competition-catalog-persistence.md)、[管理采集接口](docs/admin-ingestion.md) 与 [共享包架构](docs/sicau-connectors.md)）：
+
+```bash
+# 人工导入比赛清单（正式发布与更新已发布内容均需显式校验/确认）
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --validate
+pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --preview
+
+# 采集来源、扫描、运行追溯、审核导出与发布 CLI
+pnpm --filter @hehuoda/api ingestion sources
+pnpm --filter @hehuoda/api ingestion scan --source information-engineering --preview
+pnpm --filter @hehuoda/api ingestion runs
+pnpm --filter @hehuoda/api ingestion candidates
+pnpm --filter @hehuoda/api ingestion export --candidate <候选ID> --out ../../.data/review.json
+pnpm --filter @hehuoda/api ingestion cleanup --days 30
+```
+
+> 注：Linux 容器内置 C `attachment-sandbox`（seccomp + Landlock）；Windows 本机运行采集时附件解析自动转人工核对。
+
+## 仓库目录结构
 
 ```text
 HeHuoDa/
 ├── apps/
-│   ├── web/                          # @hehuoda/web：学生端 Web 应用
+│   ├── uni/                          # @hehuoda/uni：普通 uni-app 用户端（H5 + Android）
+│   ├── admin/                        # @hehuoda/admin：独立桌面管理端 Web
+│   ├── api/                          # @hehuoda/api：NestJS / Fastify API、迁移、CLI 与 OpenAPI
 │   │   ├── src/
-│   │   │   ├── api/                  # Axios 客户端、健康与比赛 API 请求
-│   │   │   ├── assets/               # 生产 Logo 与学院院徽
-│   │   │   ├── components/           # 图标、表单、学院筛选与加载组件
-│   │   │   ├── data/                 # 学院选择、筛选规则与历史测试演示数据
-│   │   │   ├── layouts/              # 学生端导航布局与认证品牌布局
-│   │   │   ├── router/               # Vue Router 路由与路由测试
-│   │   │   ├── stores/               # 健康状态、队伍与个人中心会话演示及测试
-│   │   │   ├── views/                # 比赛、找队友、个人中心、认证、健康与占位页
-│   │   │   ├── App.vue              # 根组件
-│   │   │   ├── main.ts              # 应用入口，注册 Router 与 Pinia
-│   │   │   └── style.css            # 全局主题变量与 Tailwind 样式
-│   │   ├── vite.config.ts            # Vue / Tailwind 插件与开发 API 代理
-│   │   └── vitest.config.ts          # Web 单元测试配置
-│   └── api/                          # @hehuoda/api：NestJS / Fastify 服务
-│       ├── src/
-│       │   ├── common/               # 错误 DTO、异常过滤器与全局校验管道
-│       │   ├── competitions/         # 学院/比赛查询、DTO、仓储、时间与导入规则
-│       │   ├── config/               # 环境变量校验
-│       │   ├── database/             # 数据库模块、连接池、Drizzle schema 与迁移执行
-│       │   ├── health/               # 健康检查接口
-│       │   ├── ingestion/            # 官网请求、HTML 解析、扫描续跑、审核与调度
-│       │   ├── app.module.ts         # 根模块
-│       │   ├── configure-app.ts      # API 前缀、校验、异常处理与 Swagger
-│       │   └── main.ts              # 服务启动入口
-│       ├── data/                     # 人工核对比赛数据与显式发布清单
-│       ├── migrations/               # 受版本控制的 SQL 迁移
-│       ├── scripts/                  # 数据迁移、人工导入、采集审核 CLI 与 OpenAPI 生成
-│       ├── test/                     # 集成/e2e 测试、固定数据与 Jest 配置
-│       ├── .env.example              # 本地环境变量示例（实际 .env 不提交）
-│       └── openapi.json              # 生成并提交的接口契约
+│   │   │   ├── admin/                # 管理员登录、CSRF、原子审计与采集/审核接口
+│   │   │   ├── auth/                 # 平台会话、刷新轮换与审计（待 #217/#218/#223 改造）
+│   │   │   ├── business-access/      # 敏感业务能力门禁与账号生命周期端口（组队默认关闭）
+│   │   │   ├── campus/               # 校园认证事务、HMAC 绑定与加密资料
+│   │   │   ├── common/               # 错误模型、异常过滤器与全局校验管道
+│   │   │   ├── competitions/         # 公开查询与事务导入校验
+│   │   │   ├── config/               # 环境变量校验与可信代理适配
+│   │   │   ├── database/             # Drizzle schema、连接池与 SQL 迁移器
+│   │   │   ├── health/               # /health 与 /health/ready
+│   │   │   └── ingestion/            # 调度轮、多栏目扫描、附件沙箱与审核状态机
+│   │   ├── migrations/               # 0001–0012 受版本控制的增量 SQL
+│   │   ├── data/                     # 核对比赛数据与发布清单
+│   │   ├── scripts/                  # 迁移、admin:init、data:import、ingestion 与 openapi:write
+│   │   └── test/                     # Jest 集成测试与 Fastify/HTTP e2e 测试
+│   └── web/                          # @hehuoda/web：历史学生端（对照与回滚参考，待 #90 评估退役）
 ├── packages/
-│   └── api-types/                    # @hehuoda/api-types：共享类型，无运行时代码
-│       └── src/
-│           ├── generated/schema.d.ts # 从 OpenAPI 自动生成，禁止手工编辑
-│           └── index.ts              # 共享类型导出入口
-├── docs/
-│   ├── adr/                          # 架构决策及其演进记录
-│   ├── agents/                       # Issue、领域文档、分诊与跨端迁移约定
-│   ├── student-ui-style.md           # 学生端全局样式约定
-│   └── 禾伙搭-项目开发计划书.md      # 业务范围、阶段安排与进度
-├── .github/                          # Issue / PR 模板与 CI、自动合并工作流
-├── third-party-notices/              # 第三方资源许可证
-├── AGENTS.md                         # 仓库 Agent 指引
-├── GLOSSARY.md                       # 业务领域词汇与上下文
-├── compose.yaml                      # 开发与测试 PostgreSQL 服务
-├── eslint.config.mjs                 # 工作区 ESLint 配置
-├── package.json                      # 根脚本、Node / pnpm 约束与公共开发依赖
-├── pnpm-workspace.yaml               # apps/* 与 packages/* 工作区定义
-└── pnpm-lock.yaml                    # 统一依赖锁文件
+│   ├── api-types/                    # @hehuoda/api-types：由 OpenAPI 生成的共享 TS 类型（禁止手改）
+│   ├── client-domain/                # @hehuoda/client-domain：无框架依赖的领域规则包
+│   └── sicau-connectors/             # @hehuoda/sicau-connectors：服务端 /notices 与 /auth 私有包
+├── deploy/                           # 镜像冒烟（smoke.mjs）、归档交付（rsync/archive/release）、Stage 2 与 Nginx 配置
+├── docs/                             # ADR（0001–0011）、各端规范、开发计划书与 Agent 协作指南
+├── .github/                          # Issue/PR 模板与 CI/Deploy/Auto-merge 工作流
+├── third-party-notices/              # Lucide 等第三方许可证声明
+├── AGENTS.md                         # 仓库开发与审查核心约定
+├── GLOSSARY.md                       # 项目领域词汇表
+├── compose.yaml                      # 本地开发/测试 PostgreSQL 17 服务
+├── compose.deploy.yaml               # 生产/测试单机容器编排
+├── Dockerfile                        # api（含 attachment-sandbox）与 web（Nginx）多阶段镜像构建
+├── package.json                      # 根脚本、Node/pnpm 版本约束与共用工具链
+└── pnpm-workspace.yaml               # 工作区包定义与 DCloud 精确 peer 扩展
 ```
 
-Web 的组件与逻辑单元测试（`*.spec.ts`）就近放在源码目录；API 单元测试同样就近放置，集成与 e2e 测试集中在 `apps/api/test/`。`apps/web/src/data/` 中的历史比赛演示数据用于旧行为测试，生产比赛页面通过 `src/api/` 读取真实 API。
+## 契约生成、质量检查与 CI
 
-接口契约流向为 **API DTO / Swagger → `apps/api/openapi.json` → `packages/api-types/src/generated/schema.d.ts` → Web**。Web 通过 `workspace:*` 引用共享包；共享类型不会代替 API 运行时请求校验。学院与比赛 API 通过数据库访问层读取 PostgreSQL，健康检查不依赖活数据库。
-
-修改 API DTO 或路由后运行：
+修改后端 DTO 或路由后，必须同步生成 OpenAPI 与共享类型且确认无未提交差异：
 
 ```bash
 pnpm api:generate
-git diff -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
+git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
 ```
 
-生成过程不监听端口，不需要数据库。生成文件随代码提交，不手工编辑。为支持 NestJS 装饰器元数据，API 先编译生成脚本到被忽略的 `dist-openapi/`，再由 Node 执行。类型生成包采用 TypeScript 5.9，应用采用 TypeScript 6，以匹配各工具的兼容范围。
-
-## 质量检查
+全量质量与测试检查命令：
 
 ```bash
 pnpm format:check
 pnpm lint
-pnpm api:generate
-git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
 pnpm typecheck
 pnpm build
 pnpm test:unit
+pnpm test:deployment
 TEST_DATABASE_URL=postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test pnpm test:integration
 TEST_DATABASE_URL=postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test pnpm test:e2e
+pnpm test:images   # 构建真实 Docker 镜像并在隔离卷上运行冒烟测试
 ```
 
-PowerShell 先执行 `$env:TEST_DATABASE_URL="postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test"`，再运行两个数据库测试命令。测试连接数据库名须以 `_test` 结尾，且不能与开发连接相同；每套测试创建独立 schema，完成后清理。
+> PowerShell 设置测试库变量：`$env:TEST_DATABASE_URL="postgresql://hehuoda:hehuoda_test@127.0.0.1:54323/hehuoda_test"`。测试库名必须以 `_test` 结尾。根 `test:e2e` 当前仅覆盖 API HTTP 与注入测试，不代表浏览器 H5 模拟（320/375/390/430px）或 Android 真机验收已执行。
 
-API 单元测试覆盖配置、异常过滤、严格查询校验、报名时间边界与官网解析/访问预算；真实 PostgreSQL 集成测试验证迁移、事务导入、排序分页，以及候选审核、版本冲突、并发锁和扫描恢复。API e2e 包含本机临时端口的真实 HTTP 健康与 Swagger 测试，以及 Fastify 注入的公开比赛查询、候选到显式发布流程；不等同浏览器端到端业务验收。Web 单元测试覆盖健康状态、路由导航、认证表单、比赛请求与状态反馈、招募和个人中心会话演示。API 的 Jest ESM 模式使用 `--experimental-vm-modules`，Node 会输出对应实验功能提示。
-
-ESLint 使用原生支持的 `eslint.config.mjs`；`eslint-config-prettier` 关闭与 Prettier 冲突的格式规则。生成文件与构建输出不参与格式检查。
-
-## CI 与协作
-
-GitHub Actions 在面向 `main` 的 PR、`main` 推送及手动触发时运行完整质量检查，Action 固定为完整提交 SHA。`ci-gate` 要求 `quality` 与真实镜像 `image-smoke` 成功；main 发布还须 `publish-images` 成功，PR 允许发布 Job 按规则跳过。配置没有路径过滤器。
-
-`quality` 已配置临时 PostgreSQL 17 service，运行数据库集成测试与真实 HTTP e2e；官网采集测试使用离线片段与模拟网络。当前没有独立 integration/e2e Job，也没有浏览器业务闭环 CI。2026-10-12 核验组织仓库：`main` 必需 `ci-gate`、分支保持最新、解决讨论且管理员同样受约束；Allow auto-merge 与 merge commit 已开启。[PR #48 的 CI](https://github.com/HeHuoDa/HeHuoDa/actions/runs/38193253994)已通过，属于该 PR 的证据，不代表后续改动已验证。
-
-`auto-merge.yml` 在 PR 的 `CI` 成功后自动启用合并：仅处理本仓库面向 `main` 的非草稿 PR，核对通过 CI 的提交仍是 PR 最新提交，并使用 merge commit 保留分步提交。它遵守分支保护，不检出或执行 PR 代码。该工作流合并到默认分支后才会触发；CI 会在草稿 PR 转为可审阅时重新运行，成功后再次触发自动合并。
-
-合并命令执行后，工作流重新确认 PR 已合并，先显式 dispatch main CI，再按条件清理来源远程分支；漏发由 `release-recovery.yml` 检查补发，发布幂等与失败重试规则见部署说明。仅删除 SHA 仍等于通过 CI 的提交、未受保护、不是默认分支且没有其他打开的 PR 引用的本仓库分支；已删除或新增提交的分支会跳过。如果 `--auto` 只启用了等待合并，本次运行保留分支，后续延迟合并的分支清理仍依赖仓库设置或人工操作。
-
-问题与方案记录在 GitHub Issues，PR 使用仓库模板。参见 [AGENTS.md](AGENTS.md)，现行决策见 [ADR](docs/adr/0001-phase-one-technology-foundation.md)。
-
-新建 Issue 可选择[问题反馈](.github/ISSUE_TEMPLATE/bug_report.yml)、[功能建议](.github/ISSUE_TEMPLATE/feature_request.yml)或[开发任务](.github/ISSUE_TEMPLATE/task.yml)表单，默认进入 `needs-triage`；确认需求后按[分诊标签映射](docs/agents/triage-labels.md)更新状态。提交 PR 时使用 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md)，填写关联 Issue、变更内容与实际验证结果。
-
-本机 Agent 配置、依赖、构建缓存、日志、浏览器测试产物及本地运行数据由 `.gitignore` 排除。环境变量示例、根锁文件、OpenAPI 文档与生成的接口类型随代码提交。
-
-本地检查不能证明远端 CI 已执行；分支保护、required checks 与 Auto-merge 需要在 GitHub 单独配置和核验。真实登录、招募与申请写接口仍待开发；容器发布工具已实现，镜像与手动部署运行记录及未验收范围见本文开头和部署说明。
-
-## 学生端样式与跨端规划
-
-Issue #19 完整移除 Vant；现采用 Tailwind 为主、少量普通 CSS、按复用与行为需要封装组件。图标使用 `@lucide/vue` 1.51.0，经 `AppIcon.vue` 统一入口静态按需导入，许可证与渲染适配见[图标来源](third-party-notices/lucide-LICENSE.txt)和[样式约定](docs/student-ui-style.md)。认证、健康状态与导航保持既有行为。
-
-项目采用普通 uni-app，目标 H5、微信小程序。apps/uni 主要页面已实现，当前推进迁移收尾与分端验收；旧 Web 保留对照与回滚。开发时持续识别、解释并记录影响，参见[迁移提醒与待办](docs/agents/uni-app-migration.md)。验证结果与构建体积对比记录在 PR；验收文档和截图仅保留本地。
-
-图标与加载组件位于 `apps/web/src/components/`，分别为 `AppIcon.vue`、`app-icons.ts` 和 `LoadingIndicator.vue`，复用既有认证与学院组件。
-
-## 比赛查询与人工导入（Issue #22）
-
-首页显式请求每页 4 个赛段；API 默认 20，支持 1–50。PostgreSQL 按完整过滤结果计算赛段数、去重届次数与页数，并按届次全部通知的最大发布日期倒序、届次 ID、赛段展示顺序、赛段 ID 稳定排序。API 使用服务端当前时刻，页面显示 evaluatedAt；官方通知、历史与演示标识独立于发布状态。比赛报名、材料提交和举行时间分别展示；未注明开始时间的通知提示待核对，不以发布日期推断开放报名。
-
-URL query 约定：`hosts` 为稳定学院 ID 的逗号列表或 `all`，缺省为全部学院；显式空值（`hosts=`）表示未选择且不显示比赛；`q`、`status`、`page` 分别保存搜索、状态与页码。旧版 `category`、`eligible` 参数在 URL 规范化时移除。有效自选学院优先于 all，校验、去重并按字典排序；无关参数保留。筛选变更回到第 1 页，规范化使用 replace，不增加历史记录。首页搜索和状态筛选合并在院徽卡片内，使用紧凑控件；点击院徽仅按承办学院筛选，不提供“本学院可参加”筛选。参赛范围与其他资格限制在比赛卡片和详情中说明，不作为学院入口的筛选依据。
-
-程序设计为个人赛，生物竞赛为同校区 4 人组队；挑战杯院赛保留各自截止与材料方式。详情提供官方原文、发布时间、核对日期与复制入口，并明确平台组队不等于官方报名。收藏仍为禁用的后续入口；关联招募跳转找队友并携带比赛 ID，匹配结果明确标注为演示，无匹配时显示空结果。不接入业务 localStorage 或认证。
-
-公开接口为 GET /api/v1/colleges、GET /api/v1/competitions、GET /api/v1/competitions/:id；详情仅返回已发布届次，草稿、隐藏或不存在统一 404。请求错误统一返回 code、message、requestId。直接 API 的 q/status/page/pageSize 重复值返回 400；hosts 可重复合并，未知学院忽略；q 为最长 100 字符的字面包含搜索。超页返回最后有效页，无结果 page=1、totalPages=1；页面收到响应后 replace 纠正页码。生产页面不读取 competitions.ts，该文件及 competition-demo.ts 仅供旧行为测试。
-
-人工数据位于 apps/api/data/reviewed-competitions.json：27 个稳定学院 ID、4 个非演示届次，默认草稿。2026-10-04 重新读取六条官网通知；挑战杯校团委附件需验证码，未验证附件规则，保留未知字段及提醒。复赛/院赛日期用 date 精度，24:00 等价保存为次日 00:00 的精确瞬间并保留原文说明。统计建模通知明确的是材料截止，不自动当作报名截止。
-
-```bash
-pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --validate
-pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json --preview
-pnpm --filter @hehuoda/api data:import data/reviewed-competitions.json
-```
-
---validate 仅验证文件结构；--preview 在数据库事务内验证引用、发布条件与数据库约束，输出新增/更新和解除关系，再回滚。导入以稳定 ID 更新，缺失实体不删除；承办学院、范围学院和赛段来源缺省保留、数组完整替换、空数组清空。部分更新文件仍采用 colleges/competitions 根结构及各对象 id。未知时间为 { precision: "unknown", value: null }，清除时间须显式写该对象。
-
-发布须在输入对应届次写 publication: "published"；隐藏写 "hidden"。改动已发布内容（含关系和公开学院目录）执行时必须附 --confirm-published，预览无需确认。草稿变为发布亦须通过来源、赛道与时间校验。生产 NODE_ENV=production 拒绝 demo；导入失败整批回滚，不输出数据库凭据。--validate 不证明来源真实，请先人工核对。开发测试容器分别使用持久卷和独立临时数据，禁止将本地示例凭据用于生产。
-
-迁移由 apps/api/migrations/ 中的 SQL 与迁移记录管理，重复运行不重复建表；回退应用时保留比赛数据，不提供自动删库回退。正式接口契约从 DTO/Swagger 生成，无需活数据库或开放端口。Issue #23 已接入后端官方通知采集与维护者审核 CLI，使用方式见下节；管理界面、收藏、真实招募业务接口及认证仍待接入。比赛详情已可进入关联演示招募。
-
-首次草稿导入后公开列表为空，需按上方命令审阅并执行 publish-reviewed.json 显式发布清单。重新导入原始草稿文件会把已发布记录改回草稿，执行须 --confirm-published；通常对已发布内容使用按 ID 的部分更新文件，而不是重跑初始草稿清单。
-
-## 官方通知采集与人工审核（Issue #23）
-
-四院试点、批次一与批次二来源、公开 HTTP 与解析内核由私有包 `@hehuoda/sicau-connectors/notices` 提供；调度、持久化、审核与发布仍在 API。API 命令会先构建依赖，详见[共享包说明](docs/sicau-connectors.md)。
-
-先执行 `pnpm --filter @hehuoda/api db:migrate` 应用新增的 `0002_ingestion.sql`。采集来源、运行进度、通知版本、候选修订、审核记录及正式实体映射均持久化在 PostgreSQL。采集只生成候选；审核通过、导入与发布是三个独立操作。
-
-增量恢复修复新增 `0003_ingestion_recovery_indexes.sql`，通过同一迁移命令应用；只增加续跑关系与定时运行查询索引，不修改正式比赛数据。已有数据库也须执行迁移。
-
-新扫描先处理列表发现的未知通知，再复查已有通知；已知通知复查遵守日期上下界。小请求预算时给已发现的竞赛正文保留请求机会，剩余页和通知保存在游标中。请求或时长预算耗尽显示 `partial`，诊断标为 `kind: budget`，不增加失败通知数或标记官网失联；预算不足以完成 robots、列表和正文时仍需提高预算或续跑，不承诺每轮完成。
-
-定时任务在新扫描与恢复轮之间交替：恢复轮从最早未完成的定时运行游标继续，下一轮刷新首页并继承同一待处理链，避免反复从第一页开始或重复堆积旧通知。存在积压时首页新扫描可能每两个定时触发执行一次；没有积压时每次正常扫描。自动新扫描使用本轮日期窗口，已知日期滑出范围的待处理项在请求正文前忽略；恢复轮及手动续跑保留原运行范围。手动续跑定时任务后，自动调度继续追踪最新子游标；独立手动历史任务不会被接管。已被续跑的父记录不能再次续跑，应使用最新子运行的 ID；恢复依据 PostgreSQL 记录，重启不丢失该关系。
-
-列表中的站外转载、缺字段或不支持路径逐条跳过，运行诊断记录 `kind: skipped` 和原因，合法条目仍可采集；站外页面不会发起请求。全部条目异常、分页失效、拦截页仍报告失败，不能当成没有新通知。来源停用、锁占用及拒绝访问继续沿用既有停止规则。
-
-首批来源为信息工程学院 `information-engineering`（`https://xxgc.sicau.edu.cn/xygl/tz.htm`）和生命科学学院 `life-sciences`（`https://smkx.sicau.edu.cn/xwjtz/tzgg.htm`）。仅访问这些来源的 HTTPS 同域页面，按 robots 规则采集，不下载附件、不解析报名者名单。发布单位不自动成为承办单位；参赛资格、年份冲突、多赛段时间归属及缺失时间都留待人工核对。显式赛道名称、人数要求与规则条款保存原文候选及证据；不能明确归属的赛道模式、人数和规则保持未知，由维护者在正式批次中补全。正文、字段证据与来源版本长期保留，完整响应默认保留 30 天。
-
-以下命令在根目录运行，读取 `apps/api/.env` 中的 `DATABASE_URL`：
-
-```bash
-pnpm --filter @hehuoda/api ingestion sources
-pnpm --filter @hehuoda/api ingestion scan --source information-engineering --preview
-pnpm --filter @hehuoda/api ingestion scan --source information-engineering --from 2026-07-14 --to 2026-10-11
-pnpm --filter @hehuoda/api ingestion scan --source life-sciences --url https://smkx.sicau.edu.cn/info/1061/28771.htm
-pnpm --filter @hehuoda/api ingestion runs
-pnpm --filter @hehuoda/api ingestion candidates
-pnpm --filter @hehuoda/api ingestion operations
-```
-
-不指定来源时顺序扫描两站；默认北京时间最近 90 天，指定区间最多 366 天。单 URL 重跑和 `scan --source <来源> --resume <运行ID>` 必须指定来源；续跑沿用原范围和待处理游标。置顶、未知日期或乱序列表不触发提前截断，已知近期通知使用 ETag/Last-Modified 复查；适配器版本变化会重新解析。相同 URL 和正文版本不重复生成候选；新版重新进入待审核，转载只提示关联、不自动合并。结构异常、空列表、登录/验证码、域名或地址异常停止相关来源，正式比赛保持原状。
-
-审核文件导出到被忽略的 `.data/`。已有比赛须显式指定 `--target <比赛ID>`，否则生成新草稿的稳定 ID。审核文件的 `source`、`article`、`previousArticle`、`candidate`、`formalBefore` 和版本基线用于防止过期或篡改；人工只修正 `batch`，填写 `checkedAt`（真实核对日期）和 `resolution`（修正理由、未知字段及冲突处理）。完整字段结构沿用上一节人工导入文件，不能用猜测填补缺失资格或时间。首次导出的新比赛需要补齐届次、正式来源通知和赛段，默认不具备发布条件。
-
-```bash
-pnpm --filter @hehuoda/api ingestion export --candidate <候选ID> --out ../../.data/review.json
-# 核对原文并修改审核文件后执行；<维护者> 为审核身份标识。
-pnpm --filter @hehuoda/api ingestion approve --file ../../.data/review.json --reviewer <维护者>
-pnpm --filter @hehuoda/api ingestion apply --file ../../.data/review.json --reviewer <维护者> --preview
-pnpm --filter @hehuoda/api ingestion apply --file ../../.data/review.json --reviewer <维护者>
-# 重新导出以取得导入后的 baseline；发布只改变正式记录的发布状态。
-pnpm --filter @hehuoda/api ingestion export --candidate <候选ID> --out ../../.data/after-import.json
-pnpm --filter @hehuoda/api ingestion publish --candidate <候选ID> --baseline <新导出文件的baseline> --reviewer <维护者> --preview
-pnpm --filter @hehuoda/api ingestion publish --candidate <候选ID> --baseline <同一baseline> --reviewer <维护者>
-```
-
-`scan --preview` 不写入运行、候选或正式数据；`apply --preview` 回滚正式变更并记录预览审计，`publish --preview` 回滚整个事务。审核文件绑定来源版本、候选修订及正式比赛全部关系摘要；批准和导入在同一事务内重新校验基线，过期文件、新 ID 已被占用及并发修改都会拒绝。已发布记录出现新版候选时继续公开旧数据；更新它必须先执行同一文件的 `apply --preview`，再 `apply --confirm-published`。不得通过候选导入把已发布记录退回草稿。重复执行相同审核文件及操作返回已有结果，不重复覆盖正式数据。
-
-拒绝使用 `reject --candidate <ID> --reviewer <维护者> --reason <原因>`；同一版本后续扫描仍保持拒绝，只有来源新版或显式 `reopen`（同样要求身份与原因）重新进入待审核。来源下线或撤回只标记需要核对，不删除或隐藏正式比赛。运行、操作查询保留审核身份、时间、版本和历史人工修改依据。
-
-API 内调度默认每天北京时间 09:00、18:00 运行，`INGESTION_ENABLED=false` 可关闭；测试与 OpenAPI 生成始终关闭采集。来源开关与预算可通过 `configure --source <来源> --enabled true|false` 设置，API 与 CLI 共享 PostgreSQL 会话锁，所有来源总并发为 1。默认每源间隔 2 秒、请求超时 15 秒、每次最多 10 页/80 次请求/10 分钟、每响应最多 2 MiB；429 尊重 Retry-After（最多 60 秒），暂时错误最多重试两次。允许配置更低请求/页数预算，超出边界直接拒绝。
-
-| configure 参数 | 允许范围（整数）          | 默认值  |
-| -------------- | ------------------------- | ------- |
-| `--pages`      | 1–10                      | 10      |
-| `--requests`   | 1–200                     | 80      |
-| `--interval`   | 2000–60000 毫秒           | 2000    |
-| `--timeout`    | 1000–30000 毫秒           | 15000   |
-| `--duration`   | 1000–900000 毫秒          | 600000  |
-| `--bytes`      | 1024–5242880 字节         | 2097152 |
-| `--frequency`  | 1–1440 分钟（仅约束调度） | 60      |
-
-关闭来源会在下一请求前停止；CLI 的 Ctrl+C/SIGTERM 和 API 正常退出会中止正在进行的请求并保存游标。进程意外退出后，`runs` 或下次同源扫描会在确认数据库锁已释放后恢复中断状态。预算用尽、部分失败或中断返回非零退出码，查看运行记录后续跑；不能把前 10 页视为全站已遍历。独立执行 `cleanup --days 30` 清理过期完整响应；调度启用时也会清理，`INGESTION_RAW_DAYS` 可配置 1–365 天。清理不删除正文、证据、审核或映射。
-
-请求逐跳检查域名及实际公网地址，拒绝内网、metadata、保留地址、跨域跳转和超大响应，并保持 TLS 证书验证。本机代理若将官网解析为 `198.18.*` FakeIP，会被拒绝。此时可在环境变量 `INGESTION_DNS_OVERRIDES` 配置 JSON，例如 `{"xxgc.sicau.edu.cn":["经独立核实的当前公网IP"]}`；仅允许上述两个来源域名及公网地址，请求仍以原域名校验证书并固定连接地址。不要直接复制历史 DNS 地址；官网 DNS 变化后重新核实，或修复本机 DNS 后移除此配置。
-
-源码测试使用最小 HTML 片段、模拟网络和隔离 PostgreSQL schema，CI 不依赖官网可用性。真实网站与完整通知链路验收单独执行，完整 HTML、人工修正文件和结果仅本地保留。新增迁移只增加采集表，不改公开 API 契约；回退时先关闭调度，再回退应用，保留采集与比赛数据，重启新版可继续处理。登录站点、OCR、AI 解析、27 院运行覆盖与生产验收另行安排；已支持的内嵌文字 PDF 复用现有附件证据链，扫描件与不支持环境转人工。服务端采集不会迁移到客户端；H5 与微信小程序的来源外链、请求域名和复制适配见[迁移待办](docs/agents/uni-app-migration.md)。
-
-## 找队友会话内演示（Issue #13）
-
-`/teams`、`/teams/:id`、`/teams/new` 共用 `useTeamDemoStore`，仅在当前页面会话的内存保留数据，刷新或“重置演示”恢复初始队伍。队长计入人数；申请仅创建待处理演示记录，不改变成员；举报不外发、不进入审核。固定演示参与者独立于认证页面，不写 localStorage、sessionStorage 或模拟 Session；演示类型与 OpenAPI 招募契约分离。
-
-统一角色选项为编程、调研、设计、建模、答辩、其他。容量限制为 2–20 人（含队长）；标题 2–60 字、目标 10–2000 字、进度及技能职责不超过 500 字。截止按北京时间解释，并在提交时校验晚于实际当前时刻；开放、暂停、关闭是示例状态，满员/截止是即时派生结果。
-
-URL 参数为 `q`、`type`（competition/course/innovation/other）、`role`（上述统一角色）、`mode`（online/offline/hybrid）、`status`（available/unavailable）、`competition`（比赛 ID）和 `page`。缺省为全部条件与第一页；重复参数取第一项，关键词去首尾空白并限制 100 字，非法枚举或页码回到默认值，超页 replace 到最后有效页；默认值不写入 URL，无关参数保留。搜索提交生效，其他条件即时生效并回到第一页；详情返回与前进后退保留条件。按发布时间倒序、ID 升序稳定排列，每页 4 条。
-
-可选比赛关联复用公开比赛查询、生成类型与请求入口，支持关键词检索、继续加载、失败重试和迟到响应保护，不把首页第一页当成完整目录，也不静默以样例替代接口。未选择比赛时不因目录故障阻止发布；选中比赛详情尚未成功时需重试或清除。招募截止与官方报名时间分别展示；组队不代表官方报名或资格通过。邀请及确认入队已由 #15 实现会话演示；真实认证、招募写接口与服务器事务仍由后续任务完成。
-
-## 个人中心会话内演示（Issue #14）
-
-`/profile` 已替换占位页，桌面与移动主导航统一为“我的”，页面标题保留“个人中心”。个人资料、我的队伍、申请与邀请通过 `section=teams|applications` 定位；未指定、非法、空值或重复 section 回到个人资料，规范化使用 replace 并保留无关参数。浏览器直接访问、刷新与前进后退恢复分区。
-
-昵称、校区、学院、专业、年级、技能和简介支持展示、校验、编辑、取消和重置。`useProfileDemoStore` 仅保存当前页面会话的前端示例，路由往返保留，刷新恢复初始资料与默认未授权；不调用业务写 API，不写浏览器持久存储，不模拟登录或身份认证。学院使用 `colleges.ts` 的现有稳定 ID 与本地业务目录，不请求真实学院目录；校区为示例选项，所有资料都是自填示例。
-
-联系方式默认不共享，不收集或显示真实值。队伍面板仅在所有者授权且查看者与所有者均为同队有效成员时显示“已授权可见（无真实值）”；本人开关复用资料授权，其他成员开关明确为授权条件预览。退出、移除成员或解散立即清理相关展示。真实服务仍须在服务器独立执行权限校验。个人业务统计仍显示“待接入”，收藏、通知和账号入口保留。
-
-H5 迁移需回归表单标签与焦点、query/History、Tailwind 和安全区域；微信小程序需替换 HTML 表单与 DOM 焦点、页面参数和图标渲染，独立验收，预计成本中。资料规则与会话模型可复用，详见迁移待办。
-
-### 我的队伍与申请邀请（Issue #15）
-
-个人中心内使用共享的 `useTeamDemoStore` 展示带领与加入的队伍、待处理申请、有效邀请及各终态。管理详情留在个人中心内，无独立管理 URL。队长可拒绝申请、邀请或撤销邀请、编辑招募、暂停/关闭招募、移交、移除成员和解散；普通成员可退出，队长须先移交或解散。变更同步到找队友列表与详情。申请、邀请和成员记录分别维护；申请与邀请不加人，邀请不占名额，确认时重新检查有效邀请、剩余容量、截止与角色条件，重复操作不重复增加成员。操作先确认，失败反馈不增加成员。
-
-主导航移除独立队伍与申请入口；`/my/teams`、`/my/applications` 兼容跳转至 `/profile?section=teams|applications`，保留无关 query 与 hash。边界预览提供满员、截止、暂停、失效邀请、无队伍及无申请状态；切换预览会明确重置当前示例。刷新恢复初始状态，重置全部组队示例同时恢复资料和默认未授权，不写业务 localStorage、不模拟认证，也没有业务写请求、真实送达或服务器事务及并发保障。
-
-### 个人中心边界（旧 Web 与 uni-app）
-
-- 旧 Web 的收藏、通知仍是占位；uni-app 已实现会话收藏、站内通知及相应计数，不另行补建旧 Web 成品。
-- 真实账号、资料持久化、队伍/申请/邀请写 API、联系方式存储与服务端权限未接入。
-- uni-app 资料、授权、队伍管理与申请邀请已迁移，完整 H5 回归和微信真机／发布仍待验收；Web 检查不代表小程序兼容。
-
-2026-10-09 按最新确认统一使用“个人中心”，保留七项资料（昵称、校区、学院、专业、年级、技能、简介），移除个人中心与招募页的学习时长字段、展示和校验。原 Issue #14 中相关旧要求以本次后续确认与进展评论说明为准。
+- **GitHub Actions CI（`.github/workflows/ci.yml`）**：包含 `quality`（依赖、格式、lint、部署单元测试、loopback SSH+rsync 测试、OpenAPI 零差异、类型检查、全仓构建、单元/集成/API e2e）、`image-smoke`（实际容器冒烟与归档/回滚测试；`main` 推送或手动触发时保存 7 天 `release-archive`）以及 `ci-gate`。
+- **交付与产物边界**：截图、验收脚本、本地草稿及结果 JSON 留存在本地忽略目录（如 `.data/`、`docs/screenshots/`），不提交 Git；实际验证记录按 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md) 填写并执行关联 Issue 收尾（详见 [issue-tracker.md](docs/agents/issue-tracker.md) 与 [pull-requests.md](docs/agents/pull-requests.md)）。
