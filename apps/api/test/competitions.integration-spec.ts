@@ -200,6 +200,61 @@ describe("PostgreSQL 导入与查询", () => {
       importBatch(isolated.pool, { colleges: directory, competitions: [r] }),
     ).rejects.toThrow("URL");
   });
+  it("手工通道接受公开HTTPS外域，采集通道仍只认学校域名", async () => {
+    const manual = edition("manual");
+    manual.notices![0].url =
+      "https://www.moe.gov.cn/s78/A08/tongzhi/2026/1.html";
+    await expect(
+      importBatch(isolated.pool, {
+        colleges: directory,
+        competitions: [manual],
+      }),
+    ).rejects.toThrow("学校");
+    await importBatch(
+      isolated.pool,
+      { colleges: directory, competitions: [manual] },
+      { mode: "manual" },
+    );
+    expect(
+      (
+        await isolated.pool.query(
+          "SELECT data->>'url' AS url FROM notices WHERE id=$1",
+          ["manual-notice"],
+        )
+      ).rows[0].url,
+    ).toBe("https://www.moe.gov.cn/s78/A08/tongzhi/2026/1.html");
+  });
+  it("库中已有手工外链不阻断无关的采集导入，采集通道改它仍被拒绝", async () => {
+    const manual = edition("manual");
+    manual.notices![0].url = "https://www.gov.cn/zhengce/2026/contest.htm";
+    await importBatch(
+      isolated.pool,
+      { colleges: directory, competitions: [manual] },
+      { mode: "manual" },
+    );
+    await importBatch(isolated.pool, {
+      colleges: directory,
+      competitions: [edition("beta")],
+    });
+    expect(
+      (await isolated.pool.query("SELECT count(*) FROM competitions")).rows[0]
+        .count,
+    ).toBe("2");
+    await expect(
+      importBatch(
+        isolated.pool,
+        { competitions: [{ id: "manual", name: "采集试图改名" }] },
+        { confirmPublished: true },
+      ),
+    ).rejects.toThrow("学校");
+    expect(
+      (
+        await isolated.pool.query(
+          "SELECT data->>'name' AS name FROM competitions WHERE id='manual'",
+        )
+      ).rows[0].name,
+    ).toBe("测试比赛 manual");
+  });
   it("拒绝坏ID、非法日期、原始HTML、跨届来源和生产demo", async () => {
     expect(() => validateInput({ competitions: [{ id: "../bad" }] })).toThrow();
     expect(() =>

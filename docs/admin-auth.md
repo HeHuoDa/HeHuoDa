@@ -28,15 +28,22 @@ Origin 包含协议、主机和必要端口，不含路径或结尾斜杠，不�
 
 前缀 `/api/v1/admin`，响应（含错误）均 `Cache-Control: no-store`。具体 DTO 见生成的 `apps/api/openapi.json` 和 `packages/api-types/src/generated/schema.d.ts`。
 
-| 方法与路径            | 行为                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| POST `/auth/login`    | `{username,password}`，必须带允许的 Origin；200 返回 `{id,displayName,expiresAt}` 并设置 Cookie，不返回会话秘密 |
-| GET `/auth/session`   | 有效 Cookie 返回当前管理员及原始到期时间，否则401                                                               |
-| GET `/auth/csrf`      | 有效 Cookie 返回 `{csrfToken}`，与当前会话绑定，重载可恢复相同凭证                                              |
-| POST `/auth/logout`   | 有效会话须带 Origin 和 `X-CSRF-Token`；撤销并清 Cookie；已退出／无效会话重复退出仍安全返回204，但仍检查 Origin  |
-| GET `/dashboard`      | 返回 `modules`；每项含 module/available/count/scope/asOf                                                        |
-| GET `/operations`     | 审计列表，支持 actorType/actorId/action/objectType/from/to/page/pageSize                                        |
-| GET `/operations/:id` | 单条脱敏审计；非法 UUID 返回400，未找到404                                                                      |
+| 方法与路径                        | 行为                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| POST `/auth/login`                | `{username,password}`，必须带允许的 Origin；200 返回 `{id,displayName,expiresAt}` 并设置 Cookie，不返回会话秘密 |
+| GET `/auth/session`               | 有效 Cookie 返回当前管理员及原始到期时间，否则401                                                               |
+| GET `/auth/csrf`                  | 有效 Cookie 返回 `{csrfToken}`，与当前会话绑定，重载可恢复相同凭证                                              |
+| POST `/auth/logout`               | 有效会话须带 Origin 和 `X-CSRF-Token`；撤销并清 Cookie；已退出／无效会话重复退出仍安全返回204，但仍检查 Origin  |
+| GET `/dashboard`                  | 返回 `modules`；每项含 module/available/count/scope/asOf                                                        |
+| GET `/operations`                 | 审计列表，支持 actorType/actorId/action/objectType/from/to/page/pageSize                                        |
+| GET `/operations/:id`             | 单条脱敏审计；非法 UUID 返回400，未找到404                                                                      |
+| GET `/competitions`               | 正式比赛分页列表，含 draft/published/hidden，支持 status 与 q；可重新读取基线                                   |
+| GET `/competitions/baseline/:id`  | 目标届次当前正式基线；不存在时返回空记录基线（新建前预览用）                                                    |
+| GET `/competitions/:id`           | 管理端详情，含不可见于公开端的 draft/hidden 记录                                                                |
+| POST `/competitions/:id/preview`  | 变更预览；不提交正式数据，返回预览回执与发布底线缺口                                                            |
+| POST `/competitions/:id/commands` | 保存草稿、发布或隐藏；`operationId` 幂等重试返回首次结果                                                        |
+
+比赛写命令要求 `action`（save/publish/hide）、`reason`、`baseline`，可选 `patch`、`previewId`、`confirmPublished`。发布状态只由 publish/hide 改变，save 携带不同 `publication` 返回 400；修改已发布记录未传 `confirmPublished` 返回 409（`COMPETITION_CONFIRM_REQUIRED`）；基线不一致返回 409（`COMPETITION_BASELINE_STALE`）；发布底线不满足返回 422（`COMPETITION_PUBLISH_BLOCKED`，`details.blocks` 逐项列出）；预览回执过期或已被使用返回 409（`COMPETITION_PREVIEW_STALE`）。隐藏后公开列表与详情不再返回该记录，管理端仍可查询。手工维护通道接受公开、无凭据、无非默认端口的 HTTPS 外链；采集与审核通道仍限学校域名。
 
 Cookie 名为 `hh_admin_session`，32字节随机秘密以 base64url 表达，数据库仅存 SHA-256 摘要；HttpOnly、Path=/api/v1/admin、SameSite=Lax、无 Domain，生产额外 Secure。再次登录且携带旧 Cookie 时撤销旧会话；不携带旧 Cookie 的其他设备会话保持有效。退出立即撤销；数据库触发器在账号停用或密码摘要／盐变更时撤销其全部会话，重新启用也不会复活旧会话。账号、会话和审计存数据库，重启应用不会清除有效会话。
 

@@ -13,6 +13,9 @@ import { AdminReviewController } from "./admin-review.controller.js";
 import { AdminReviewService } from "./admin-review.service.js";
 import { AdminAttachmentController } from "../ingestion/admin-attachment.controller.js";
 import { AdminAttachmentService } from "../ingestion/admin-attachment.service.js";
+import { AdminCompetitionController } from "./admin-competition.controller.js";
+import { AdminCompetitionRepository } from "./competition-admin.repository.js";
+import { AdminCompetitionService } from "./admin-competition.service.js";
 @Module({
   imports: [AuthPersistenceModule],
   controllers: [
@@ -20,6 +23,7 @@ import { AdminAttachmentService } from "../ingestion/admin-attachment.service.js
     AdminIngestionController,
     AdminReviewController,
     AdminAttachmentController,
+    AdminCompetitionController,
   ],
   providers: [
     AdminOperationsService,
@@ -28,6 +32,8 @@ import { AdminAttachmentService } from "../ingestion/admin-attachment.service.js
     AdminReviewService,
     AdminAttachmentService,
     AdminService,
+    AdminCompetitionRepository,
+    AdminCompetitionService,
     AuthRateLimiter,
     { provide: APP_GUARD, useClass: AdminGuard },
   ],
