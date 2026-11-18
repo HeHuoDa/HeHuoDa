@@ -2,6 +2,7 @@ import Joi from "joi";
 import type { Pool, PoolClient } from "pg";
 import { isDeepStrictEqual } from "node:util";
 import { readCatalog, type RecordData } from "./catalog.js";
+import { manualNoticeUrlError, noticeUrlError } from "./source-url.js";
 import { unknownTime } from "./time.js";
 import type {
   CollegeRecord,
@@ -134,6 +135,8 @@ export interface ImportOptions {
   preview?: boolean;
   confirmPublished?: boolean;
   production?: boolean;
+  /** manual 仅限受信任的管理端手工维护入口；采集与导入通道固定为默认的 sicau。 */
+  mode?: "sicau" | "manual";
 }
 export function validateInput(input: unknown): ImportBatch {
   const result = batchSchema.validate(input, {
@@ -156,7 +159,7 @@ function mergeById<T extends { id: string }>(
     result.set(update.id, merge(result.get(update.id), update));
   return [...result.values()];
 }
-function mergeEdition(
+export function mergeEdition(
   old: RecordData | undefined,
   patch: ImportCompetition,
 ): RecordData {
@@ -235,6 +238,7 @@ function validateEdition(
   record: RecordData,
   collegeIds: Set<string>,
   production: boolean,
+  mode: "sicau" | "manual" = "sicau",
 ) {
   for (const key of ["name", "edition", "category", "organizer"] as const)
     needString(record[key], record.id + "." + key);
@@ -243,25 +247,9 @@ function validateEdition(
   for (const n of record.notices) {
     for (const key of ["title", "publisher", "kind", "url"] as const)
       needString(n[key], n.id + "." + key);
-    let url: URL;
-    try {
-      url = new URL(n.url);
-    } catch {
-      throw new ImportValidationError(n.id + " URL 无效");
-    }
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.port ||
-      !(
-        url.hostname === "sicau.edu.cn" ||
-        url.hostname.endsWith(".sicau.edu.cn")
-      )
-    )
-      throw new ImportValidationError(
-        n.id + " 官方 URL 必须使用学校 HTTPS 域名",
-      );
+    const error =
+      mode === "manual" ? manualNoticeUrlError(n.url) : noticeUrlError(n.url);
+    if (error) throw new ImportValidationError(n.id + " URL " + error);
   }
   for (const t of record.tracks)
     for (const key of ["name", "mode", "members", "rules"] as const)
@@ -394,11 +382,19 @@ export async function applyImportBatch(
   const directory = new Map(old.colleges.map((c) => [c.id, c]));
   for (const c of batch.colleges ?? []) directory.set(c.id, c);
   const records = new Map(old.competitions.map((c) => [c.id, c]));
+  const changed = new Set((batch.competitions ?? []).map((patch) => patch.id));
   for (const patch of batch.competitions ?? [])
     records.set(patch.id, mergeEdition(records.get(patch.id), patch));
   const idsByEntity = new Map<string, string>();
   for (const r of records.values()) {
-    validateEdition(r, new Set(directory.keys()), options.production ?? false);
+    // 只校验本次触碰的记录：库中已有的历史数据不属于本次写入的合法性证据。
+    if (!changed.has(r.id)) continue;
+    validateEdition(
+      r,
+      new Set(directory.keys()),
+      options.production ?? false,
+      options.mode ?? "sicau",
+    );
     for (const [kind, entities] of [
       ["stage", r.stages],
       ["track", r.tracks],

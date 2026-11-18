@@ -908,6 +908,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/competitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminCompetitionController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/competitions/baseline/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminCompetitionController_baseline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/competitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminCompetitionController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/competitions/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminCompetitionController_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/competitions/{id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminCompetitionController_execute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2362,6 +2442,135 @@ export interface components {
              * @description 已有附件内容版本 ID
              */
             versionId: string;
+        };
+        AdminCompetitionListItemDto: {
+            id: string;
+            name: string;
+            edition: string;
+            category: string;
+            organizer: string;
+            /** @enum {string} */
+            origin: "official" | "historical" | "demo";
+            /** @enum {string} */
+            publication: "draft" | "published" | "hidden";
+            stageCount: number;
+            trackCount: number;
+            noticeCount: number;
+            baseline: string;
+        };
+        AdminCompetitionListDto: {
+            items: components["schemas"]["AdminCompetitionListItemDto"][];
+            total: number;
+            page: number;
+            pageSize: number;
+        };
+        AdminCompetitionBaselineDto: {
+            targetId: string;
+            /** @description 目标届次是否已存在；false 表示这是一次新建 */
+            exists: boolean;
+            baseline: string;
+            /**
+             * @description 已存在时返回当前发布状态
+             * @enum {string|null}
+             */
+            publication: "draft" | "published" | "hidden" | null;
+        };
+        AdminCompetitionDto: {
+            id: string;
+            name: string;
+            edition: string;
+            category: string;
+            organizer: string;
+            /** @enum {string} */
+            origin: "official" | "historical" | "demo";
+            /** @enum {string} */
+            publication: "draft" | "published" | "hidden";
+            stages: components["schemas"]["AdminFormalStageDto"][];
+            tracks: components["schemas"]["AdminFormalTrackDto"][];
+            notices: components["schemas"]["AdminFormalNoticeDto"][];
+            /** @description 当前正式基线；写命令须原样回传 */
+            baseline: string;
+        };
+        AdminCompetitionPreviewDto: {
+            /** Format: uuid */
+            operationId: string;
+            reason: string;
+            /** @enum {string} */
+            action: "save" | "publish" | "hide";
+            baseline: string;
+            patch?: components["schemas"]["AdminImportCompetitionDto"];
+        };
+        AdminCompetitionChangeDto: {
+            /** @description 字段路径；关系集合按成员路径列出 */
+            field: string;
+            previous: {
+                [key: string]: unknown;
+            } | null;
+            current: {
+                [key: string]: unknown;
+            } | null;
+            /** @description 本次解除的关系成员，例如 stages.x.hosts:law */
+            removed?: string[];
+        };
+        AdminCompetitionPublishBlockDto: {
+            /** @enum {string} */
+            code: "STAGE_MISSING" | "STAGE_INCOMPLETE" | "TRACK_MISSING" | "SOURCE_MISSING" | "SOURCE_UNLINKED" | "SOURCE_INVALID" | "CHECKED_AT_MISSING" | "CHECKED_AT_INVALID";
+            message: string;
+        };
+        AdminCompetitionPreviewResultDto: {
+            /** Format: uuid */
+            previewId: string;
+            targetId: string;
+            /** @enum {string} */
+            action: "save" | "publish" | "hide";
+            baseline: string;
+            /**
+             * @description 预览后记录的发布状态（未提交）
+             * @enum {string}
+             */
+            publication: "draft" | "published" | "hidden";
+            changes: components["schemas"]["AdminCompetitionChangeDto"][];
+            /** @description 发布底线缺口；非空时 publish 会被拒绝 */
+            blocks: components["schemas"]["AdminCompetitionPublishBlockDto"][];
+        };
+        AdminCompetitionCommandDto: {
+            /**
+             * Format: uuid
+             * @description 写请求幂等键
+             */
+            operationId: string;
+            reason: string;
+            /**
+             * @description save 保存或新建草稿内容；publish 发布并校验发布底线；hide 从公开端下架
+             * @enum {string}
+             */
+            action: "save" | "publish" | "hide";
+            /** @description 服务端返回的正式基线；与当前记录不一致时返回 409，须重新读取 */
+            baseline: string;
+            /** @description 届次内容补丁，语义与导入一致：缺省字段保留，集合整体替换；publish/hide 忽略该字段 */
+            patch?: components["schemas"]["AdminImportCompetitionDto"];
+            /**
+             * Format: uuid
+             * @description 对应 preview 的 operationId；提供时校验预览未过期且未被消费
+             */
+            previewId?: string;
+            /** @description 修改已发布记录内容时必须显式确认 */
+            confirmPublished?: boolean;
+        };
+        AdminCompetitionCommandResultDto: {
+            targetId: string;
+            /** @enum {string} */
+            action: "save" | "publish" | "hide";
+            /** @enum {string} */
+            publication: "draft" | "published" | "hidden";
+            /** @description 写入后的新基线；重试返回首次结果中的基线 */
+            baseline: string;
+            changes: components["schemas"]["AdminCompetitionChangeDto"][];
+            /**
+             * Format: uuid
+             * @description admin_operations 审计记录 ID
+             */
+            auditOperationId: string;
         };
     };
     responses: never;
@@ -5912,6 +6121,374 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCompetitionController_list: {
+        parameters: {
+            query?: {
+                page?: components["schemas"]["Object"];
+                pageSize?: components["schemas"]["Object"];
+                status?: "draft" | "published" | "hidden";
+                /** @description 字面包含匹配名称、届次或主办方 */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 全部发布状态（draft/published/hidden）的分页列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompetitionListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCompetitionController_baseline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 目标届次当前正式基线；不存在时返回空记录基线 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompetitionBaselineDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCompetitionController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 管理端详情，含不可见于公开端的 draft/hidden 记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompetitionDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCompetitionController_preview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCompetitionPreviewDto"];
+            };
+        };
+        responses: {
+            /** @description 变更预览；不提交正式数据，返回预览回执与发布底线缺口 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompetitionPreviewResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCompetitionController_execute: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+                Origin: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCompetitionCommandDto"];
+            };
+        };
+        responses: {
+            /** @description 保存草稿、发布或隐藏；同一 operationId 重试返回首次结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompetitionCommandResultDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

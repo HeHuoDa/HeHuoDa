@@ -5686,6 +5686,577 @@
           "附件审核证据"
         ]
       }
+    },
+    "/api/v1/admin/competitions": {
+      "get": {
+        "operationId": "AdminCompetitionController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "hidden"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "字面包含匹配名称、届次或主办方",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "全部发布状态（draft/published/hidden）的分页列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCompetitionListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员比赛"
+        ]
+      }
+    },
+    "/api/v1/admin/competitions/baseline/{id}": {
+      "get": {
+        "operationId": "AdminCompetitionController_baseline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "目标届次当前正式基线；不存在时返回空记录基线",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCompetitionBaselineDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员比赛"
+        ]
+      }
+    },
+    "/api/v1/admin/competitions/{id}": {
+      "get": {
+        "operationId": "AdminCompetitionController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "管理端详情，含不可见于公开端的 draft/hidden 记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCompetitionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员比赛"
+        ]
+      }
+    },
+    "/api/v1/admin/competitions/{id}/preview": {
+      "post": {
+        "operationId": "AdminCompetitionController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCompetitionPreviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "变更预览；不提交正式数据，返回预览回执与发布底线缺口",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCompetitionPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员比赛"
+        ]
+      }
+    },
+    "/api/v1/admin/competitions/{id}/commands": {
+      "post": {
+        "operationId": "AdminCompetitionController_execute",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCompetitionCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存草稿、发布或隐藏；同一 operationId 重试返回首次结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCompetitionCommandResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "tags": [
+          "管理员比赛"
+        ]
+      }
     }
   },
   "info": {
@@ -11021,6 +11592,447 @@
           "reason",
           "baseline",
           "versionId"
+        ]
+      },
+      "AdminCompetitionListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "official",
+              "historical",
+              "demo"
+            ]
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ]
+          },
+          "stageCount": {
+            "type": "number"
+          },
+          "trackCount": {
+            "type": "number"
+          },
+          "noticeCount": {
+            "type": "number"
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "edition",
+          "category",
+          "organizer",
+          "origin",
+          "publication",
+          "stageCount",
+          "trackCount",
+          "noticeCount",
+          "baseline"
+        ]
+      },
+      "AdminCompetitionListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCompetitionListItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "AdminCompetitionBaselineDto": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean",
+            "description": "目标届次是否已存在；false 表示这是一次新建"
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "nullable": true,
+            "description": "已存在时返回当前发布状态"
+          }
+        },
+        "required": [
+          "targetId",
+          "exists",
+          "baseline",
+          "publication"
+        ]
+      },
+      "AdminCompetitionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "organizer": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "official",
+              "historical",
+              "demo"
+            ]
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ]
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalStageDto"
+            }
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalTrackDto"
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminFormalNoticeDto"
+            }
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "当前正式基线；写命令须原样回传"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "edition",
+          "category",
+          "organizer",
+          "origin",
+          "publication",
+          "stages",
+          "tracks",
+          "notices",
+          "baseline"
+        ]
+      },
+      "AdminCompetitionPreviewDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "save",
+              "publish",
+              "hide"
+            ]
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "patch": {
+            "$ref": "#/components/schemas/AdminImportCompetitionDto"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "action",
+          "baseline"
+        ]
+      },
+      "AdminCompetitionChangeDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "字段路径；关系集合按成员路径列出"
+          },
+          "previous": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "current": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "removed": {
+            "description": "本次解除的关系成员，例如 stages.x.hosts:law",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "field",
+          "previous",
+          "current"
+        ]
+      },
+      "AdminCompetitionPublishBlockDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "STAGE_MISSING",
+              "STAGE_INCOMPLETE",
+              "TRACK_MISSING",
+              "SOURCE_MISSING",
+              "SOURCE_UNLINKED",
+              "SOURCE_INVALID",
+              "CHECKED_AT_MISSING",
+              "CHECKED_AT_INVALID"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "AdminCompetitionPreviewResultDto": {
+        "type": "object",
+        "properties": {
+          "previewId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "save",
+              "publish",
+              "hide"
+            ]
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "description": "预览后记录的发布状态（未提交）"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCompetitionChangeDto"
+            }
+          },
+          "blocks": {
+            "description": "发布底线缺口；非空时 publish 会被拒绝",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCompetitionPublishBlockDto"
+            }
+          }
+        },
+        "required": [
+          "previewId",
+          "targetId",
+          "action",
+          "baseline",
+          "publication",
+          "changes",
+          "blocks"
+        ]
+      },
+      "AdminCompetitionCommandDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "写请求幂等键"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "save",
+              "publish",
+              "hide"
+            ],
+            "description": "save 保存或新建草稿内容；publish 发布并校验发布底线；hide 从公开端下架"
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "服务端返回的正式基线；与当前记录不一致时返回 409，须重新读取"
+          },
+          "patch": {
+            "description": "届次内容补丁，语义与导入一致：缺省字段保留，集合整体替换；publish/hide 忽略该字段",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdminImportCompetitionDto"
+              }
+            ]
+          },
+          "previewId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "对应 preview 的 operationId；提供时校验预览未过期且未被消费"
+          },
+          "confirmPublished": {
+            "type": "boolean",
+            "description": "修改已发布记录内容时必须显式确认"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason",
+          "action",
+          "baseline"
+        ]
+      },
+      "AdminCompetitionCommandResultDto": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "save",
+              "publish",
+              "hide"
+            ]
+          },
+          "publication": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ]
+          },
+          "baseline": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "写入后的新基线；重试返回首次结果中的基线"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCompetitionChangeDto"
+            }
+          },
+          "auditOperationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "admin_operations 审计记录 ID"
+          }
+        },
+        "required": [
+          "targetId",
+          "action",
+          "publication",
+          "baseline",
+          "changes",
+          "auditOperationId"
         ]
       }
     }
