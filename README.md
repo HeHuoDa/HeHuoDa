@@ -117,7 +117,7 @@ pnpm dev:admin
 
 ## 各端关键边界与规则
 
-### 用户端（`apps/uni`：H5 + Android）
+### uni-app 用户端（H5 与 Android）
 
 - **导航与暂缓策略（方案 B）**：保留三栏原生 `tabBar`（首页 / 找队友 / 我的）与 [ADR 0005](docs/adr/0005-uni-navigation-shell.md) 导航注册表（`src/navigation/routes.ts` 与 `pages.json`）。按 #214 收口方向，「找队友」及演示招募/互动入口在 M1 收口为温和暂缓提示；`pages/my/favorites` 维持仅本次内存会话有效的只读临时收藏，刷新或冷启动清空并明示说明。
 - **编译期配置**：`apps/uni/.env` 严禁填入凭据。H5 开发留空 `VITE_API_BASE_URL` 走同源 `/api/v1`（由 `UNI_DEV_API_TARGET` 代理到后端）；**Android APK 正式构建必须显式配置受控 HTTPS 完整 API 地址**，禁止关闭 TLS 校验或使用相对路径；`VITE_API_TIMEOUT_MS` 默认 `5000`（允许 `1–60000`）。

@@ -1,6 +1,12 @@
 # 单机容器部署与恢复
 
-本说明对应共享部署基础设施及 Issue #143。用户端部署 `apps/uni` 的 H5 和 API；管理端演示不增加线上镜像。微信小程序产物不进入 Nginx，也不由本工作流上传。历史部署记录见下方 ADR 与既有 Issue；本次计划尚无生产演练证据时，不能将流程描述为已经上线。
+本说明对应共享部署基础设施及 Issue #143、#215、#227、#228。依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，目标部署拓扑收敛为：
+
+- `web` 容器（Nginx）：承载 `apps/uni` 的 H5（`/`）与 `apps/admin` 管理端（`/admin/`，#215 集成接入，不新增独立 Node 服务）；已放弃微信小程序，不部署任何小程序产物。
+- `api` 容器（NestJS/Fastify）：承载 `/api/v1/`（生产环境不注册 `/docs` 与 `/docs-json` 且 Nginx 拒绝访问）。
+- Android 签名 APK：由独立发布流程与 HTTPS 下载入口分发（M3 / #228），不内置于容器静态目录中或通过应用商店发布。
+
+历史部署记录见下方 ADR 与既有 Issue；尚无对应阶段生产演练证据时，不能将流程描述为已经上线。
 
 ## 当前交付决策
 
@@ -91,13 +97,14 @@ gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
 
 ## HTTP 与 HTTPS
 
-### 微信登录与校园核验配置
+### 统一身份认证、管理端与 Android 环境变量配置
 
-服务器 `.env` 与开发机 `apps/api/.env` 分别维护，禁止整份覆盖服务器配置；保留服务器数据库、端口、镜像和网络参数。按 `deploy/.env.example` 添加微信 AppID/AppSecret、核验学期与独立资料密钥。生产环境优先生成自己的两类32字节随机密钥；已有绑定或加密资料时必须保留原键，不得直接重生成。配置文件通过已验证主机指纹的 SSH/SFTP 传输并保留 `600` 权限，不进入 Git、镜像、命令参数或日志。
+服务器 `.env` 与开发机 `apps/api/.env` 分别维护，禁止整份覆盖服务器配置；保留服务器数据库、端口、镜像和网络参数。按 `deploy/.env.example` 配置川农核验/登录开关、学期（`CAMPUS_TERMS`）、独立 32 字节随机数密钥（`CAMPUS_SUBJECT_HMAC_KEY`、`CAMPUS_PROFILE_KEYS`）及管理端精确 HTTPS 来源 `ADMIN_ALLOWED_ORIGINS`（只含协议、主机与必要端口，**不包含 `/admin/` 路径与通配符**）。`WECHAT_LOGIN_ENABLED` / `WECHAT_APP_ID` / `WECHAT_APP_SECRET` 为历史遗留字段，将在 #223 下线，禁止在现期部署中启用。
 
-Compose 仅向 API 显式注入这组配置，默认关闭登录及核验。发布前检查精确 SHA 的 CI/镜像与所需数据库迁移，先 `prepare` 再激活；已有版本会校验有效配置指纹，不能直接改受管配置后跳过门禁。配置生效需重新创建 API 容器，`restart` 不会更新容器环境。服务器健康、无效 code 的真实微信错误分支、真实用户微信登录与学校核验分别记录；H5 的成功响应不证明小程序已发布或真机可用。
+已有绑定或加密资料时必须保留原 HMAC 与资料键，不得直接重生成。配置文件通过已验证主机指纹的 SSH/SFTP 传输并保留 `600` 权限，不进入 Git、镜像、命令参数或日志。Compose 仅向 API 显式注入受控变量；配置生效需重新创建 API 容器，`restart` 不会更新容器环境。
 
-微信小程序正式构建的 `VITE_API_BASE_URL` 必须是服务器完整 HTTPS API 地址，并配置匹配的 request 合法域名。开发者工具内本地 HTTP 联调不作为正式网络验收。
+- **网络分段与限流边界（#227 待落实）**：现行 `compose.deploy.yaml` 尚未划分 `proxy`/`internal` 隔离网络与配置 `API_TRUSTED_PROXY_CIDRS`，导致经 Nginx 转发的管理员与学生认证请求共享容器入口 IP。开启线上川农登录/核验及正式管理端访问前，须按 #227 完成网络分段与可信最近一跳代理配置并验证真实来源限流。
+- **Android APK 与 H5 API 基址**：H5 由 Nginx 同源 `/api/v1/` 代理并提供静态回退，`/admin/` 深路由回退至管理端 `index.html`（静态资源缺失返回 404，#215 验收）。**Android APK 正式构建的 `VITE_API_BASE_URL` 必须是服务器完整 HTTPS API 地址**（禁止关闭 TLS 校验或使用相对地址）；正式 APK 通过独立 HTTPS 入口分发并校验 SHA-256 摘要（#228）。
 
 HTTP 测试与正式 HTTPS 分开验收。证书置于主机受控目录，通过 `.env` 的 `TLS_CERT_DIR`、`HTTP_PORT`、`HTTPS_PORT` 配置；Deploy 使用 `DEPLOY_TLS=true` 与 HTTPS 的 `DEPLOY_PUBLIC_URL` 选择 TLS Compose。Nginx 挂载证书只读，以 TLS 1.2/1.3 终止 HTTPS 并将 HTTP 308 跳转。证书在镜像外申请和续期，禁止把私钥烘焙进镜像。续期后先运行 `nginx -t` 再 reload 并检查公开入口；不以跳过 TLS 校验或自签证书代替正式验收。
 
@@ -109,7 +116,7 @@ HTTP 测试与正式 HTTPS 分开验收。证书置于主机受控目录，通�
 
 容量度量、30 天清理边界与隔离备份恢复的现行操作见 [capacity-and-recovery.md](capacity-and-recovery.md)。
 
-H5 由同源 `/api/v1` 提供，静态资源缺失返回 404，API 保持 JSON 错误响应；仅部署 uni H5，不启用旧 `apps/web` 作为另一套常态用户端。微信小程序继续使用独立 API 地址及合法域名，其构建、真机运行和发布不在本 Issue 范围。
+H5（`/`）与管理端（`/admin/`，#215）由同源 `/api/v1` 提供，静态资源缺失返回 404，API 保持 JSON 错误响应；不启用旧 `apps/web` 作为另一套常态用户端。Android 签名 APK 使用完整 HTTPS API 地址，其打包、真机验收与 HTTPS 分发分别由 #219、#226、#228 承接；容器发布与异机恢复演练、运维责任矩阵按 #143/#227 执行。
 
 ## 本地验证与未验收事项
 

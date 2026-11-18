@@ -29,7 +29,7 @@
 
 内部滚动使用 `scroll-view`，标题、选择反馈与 footer 位于其外，不拦截全页触摸事件。紧凑滚动高度手机 200px、桌面 186px；常规桌面 248px，手机面板 40vh 并由滚动区承担剩余空间，H5 用 40svh 贴近旧组件。手机宽度小于 360px 时三列，其余四列。常规/紧凑的 44px 全部按钮及至少 68px/80px 学院按钮沿旧端，桌面紧凑模式保留旧端 28px 全部按钮。
 
-H5 的内部滚动条样式仅在 H5 条件编译分支定位框架滚动容器；微信不使用 DOM 查询、动态 SVG 或浏览器事件拦截。官方依据：[scroll-view 区域滚动与固定高度](https://uniapp.dcloud.net.cn/component/scroll-view.html)、[button 平台属性](https://uniapp.dcloud.net.cn/component/button.html)。微信真实触摸、滚动边界、辅助技术及 iOS/Android 真机交 #85；编译与宿主替身测试不能代替这些验收。
+H5 的内部滚动条样式仅在 H5 条件编译分支定位框架滚动容器；非 H5 分支不使用浏览器事件拦截。官方依据：[scroll-view 区域滚动与固定高度](https://uniapp.dcloud.net.cn/component/scroll-view.html)、[button 平台属性](https://uniapp.dcloud.net.cn/component/button.html)。依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，微信小程序已放弃（#224 清理遗留条件分支），现期端内真实触摸、滚动边界与系统字号验收分别由 **H5（#84）与 Android 真机（#226）**承担；编译与宿主替身测试不能代替这些验收。
 
 ## 维护型 fixture 与验证
 
@@ -37,8 +37,6 @@ H5 的内部滚动条样式仅在 H5 条件编译分支定位框架滚动容器�
 
 `apps/uni/scripts/fixtures/CollegePickerFixture.vue` 是维护型最小交互 fixture：常规、紧凑实例共用一个受控模型，包含加载/失败/不一致/失效选择入口以及滚动区外操作。它不挂载到生产页面，也不注册生产路由。
 
-人工预览沿 `docs/uni-forms.md` 约定：复制到忽略的 `src/.local/`，临时从样式基线页挂载；它与 scripts/fixtures 同目录深度，相对导入可复用。两端编译此入口后再检查 H5 的 320/375/390/430px 与桌面 1440px；验证后恢复样式基线页。截图、临时页面及结果保留本地，不提交。
+人工预览沿 `docs/uni-forms.md` 约定：复制到忽略的 `src/.local/`，临时从样式基线页挂载；它与 scripts/fixtures 同目录深度，相对导入可复用。检查 H5 的 320/375/390/430px 与桌面 1440px 及 Android 真机表现；验证后恢复样式基线页。截图、临时页面及结果保留本地，不提交。
 
-微信原生自动化需要访问组件内部时，可把 fixture 临时作为样式页内容（仅将 `../../src/components/` 导入改为 `../../components/`），保留真实 `CollegePicker` 子组件，通过 `compact-colleges` / `regular-colleges` 标识取得 SDK 自定义组件，再查询其原生按钮；不要把组件宿主的点击当作内部按钮点击。此变换与截图/脚本均留本地，验证后恢复原页。
-
-H5 比较应以相同面板宽度、数据及选择状态对照旧 Web 原组件。原生导航与页面容器继续遵循 ADR 0005；本票 fixture 不证明 #68 首页已迁移，也不接真实比赛 API 或业务写 API。
+H5 比较应以相同面板宽度、数据及选择状态对照旧 Web 原组件。原生导航与页面容器继续遵循 ADR 0005；本票 fixture 不代替业务页面功能测试，也不接真实比赛 API。
