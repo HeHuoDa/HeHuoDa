@@ -52,13 +52,27 @@ export function applyCommand(
   action: CompetitionAction,
   patch: ImportCompetition,
 ): EditionRecord {
+  // 发布状态只能由 publish/hide 改变：save 写了些什么都不能顺手把记录推向公开端，
+  // 否则发布底线（赛段/赛道/来源/人工核对日期）会被一条保存命令绕过。
   const publication =
     action === "publish"
       ? "published"
       : action === "hide"
         ? "hidden"
-        : (patch.publication ?? before?.publication ?? "draft");
+        : (before?.publication ?? "draft");
   return mergeEdition(before ?? undefined, { ...patch, publication });
+}
+
+/** save 请求里出现发布状态即视为命令不合法，在应用前就拒绝。 */
+export function savePublicationInvalid(
+  before: EditionRecord | null,
+  patch: ImportCompetition,
+): string | null {
+  if (patch.publication === undefined) return null;
+  const current = before?.publication ?? "draft";
+  return patch.publication === current
+    ? null
+    : "保存草稿不能改变发布状态，请使用 publish 或 hide 命令";
 }
 
 function relationDiffs(

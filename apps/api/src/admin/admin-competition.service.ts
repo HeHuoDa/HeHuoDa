@@ -18,6 +18,7 @@ import {
   baselineOf,
   compareChanges,
   publishBlocks,
+  savePublicationInvalid,
   type AdminCompetitionChange,
   type CompetitionAction,
   type PublishBlock,
@@ -263,6 +264,10 @@ export class AdminCompetitionService {
     const body = (
       input.action === "save" ? (input.patch ?? {}) : {}
     ) as ImportCompetition;
+    if (input.action === "save") {
+      const invalid = savePublicationInvalid(before, body);
+      if (invalid) throw new BadRequestException(invalid);
+    }
     const after = applyCommand(before, input.action, body);
     if (
       before?.publication === "published" &&

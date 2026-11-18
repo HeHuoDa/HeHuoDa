@@ -647,6 +647,79 @@ describe("管理端正式比赛接口", () => {
     expect(reused.statusCode).toBe(409);
   });
 
+  it("save 不能靠 patch.publication 绕过发布底线", async () => {
+    await importBatch(test.pool, {
+      colleges: directory,
+      competitions: [edition("alpha", { publication: "draft" })],
+    });
+    const response = await write("POST", "admin/competitions/alpha/commands", {
+      operationId: randomUUID(),
+      reason: "想靠保存发布",
+      action: "save",
+      baseline: await baselineOf("alpha"),
+      patch: { id: "alpha", name: "改名", publication: "published" },
+    });
+    expect(response.statusCode).toBe(400);
+    const row = (
+      await test.pool.query(
+        "SELECT publication FROM competitions WHERE id='alpha'",
+      )
+    ).rows[0];
+    expect(row.publication).toBe("draft");
+  });
+
+  it("并发新建同一届次最多一个成功，另一个得到 409 而非 500", async () => {
+    await importBatch(test.pool, { colleges: directory, competitions: [] });
+    const baseline = await baselineOf("brand-new");
+    const results = await Promise.all(
+      ["新建甲", "新建乙"].map((name) =>
+        write("POST", "admin/competitions/brand-new/commands", {
+          operationId: randomUUID(),
+          reason: name,
+          action: "save",
+          baseline,
+          patch: {
+            id: "brand-new",
+            name,
+            edition: "2026",
+            category: "测试",
+            organizer: "学校",
+          },
+        }),
+      ),
+    );
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    expect(
+      (
+        await test.pool.query(
+          "SELECT count(*) FROM competitions WHERE id='brand-new'",
+        )
+      ).rows[0].count,
+    ).toBe("1");
+  });
+
+  it("审计 ID 始终是真实存在的记录", async () => {
+    await seed();
+    const response = await write("POST", "admin/competitions/alpha/commands", {
+      operationId: randomUUID(),
+      reason: "隐藏",
+      action: "hide",
+      baseline: await baselineOf("alpha"),
+    });
+    const auditOperationId = response.json().auditOperationId;
+    expect(auditOperationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(
+      (
+        await test.pool.query(
+          "SELECT count(*) FROM admin_operations WHERE operation_id=$1",
+          [auditOperationId],
+        )
+      ).rows[0].count,
+    ).toBe("1");
+  });
+
   it("请求体伪造 actor 字段被拒绝", async () => {
     await seed();
     const response = await write("POST", "admin/competitions/alpha/commands", {

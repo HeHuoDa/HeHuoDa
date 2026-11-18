@@ -3,6 +3,7 @@ import {
   baselineOf,
   compareChanges,
   publishBlocks,
+  savePublicationInvalid,
 } from "./competition-admin.model.js";
 import type { EditionRecord } from "../competitions/competition.model.js";
 
@@ -88,6 +89,29 @@ describe("管理端比赛命令模型", () => {
     expect(applyCommand(published, "hide", { id: "alpha" }).publication).toBe(
       "hidden",
     );
+  });
+
+  it("save 不能改变发布状态，只能提交草稿内容", () => {
+    const draft = record();
+    expect(
+      applyCommand(draft, "save", { id: "alpha", publication: "published" })
+        .publication,
+    ).toBe("draft");
+    expect(
+      applyCommand(draft, "save", { id: "alpha", publication: "hidden" })
+        .publication,
+    ).toBe("draft");
+    expect(savePublicationInvalid(draft, { id: "alpha" })).toBeNull();
+    expect(
+      savePublicationInvalid(draft, { id: "alpha", publication: "draft" }),
+    ).toBeNull();
+    expect(
+      savePublicationInvalid(draft, { id: "alpha", publication: "published" }),
+    ).toContain("publish");
+    const published = applyCommand(draft, "publish", { id: "alpha" });
+    expect(
+      savePublicationInvalid(published, { id: "alpha", publication: "hidden" }),
+    ).toContain("publish");
   });
 
   it("变更摘要列出字段级差异与解除的关系", () => {
