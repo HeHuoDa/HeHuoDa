@@ -3,6 +3,7 @@ import type { PageQuery } from "./resource";
 export function readQuery(
   query: LocationQuery,
   states: Record<string, string>,
+  defaultPageSize = 5,
 ): PageQuery {
   const first = (key: string) => {
     const value = query[key];
@@ -28,7 +29,10 @@ export function readQuery(
     from,
     to,
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
-    // 各列表选项不同（比赛支持 10/20/50），只保留服务端接受的 1–50 正整数。
-    pageSize: Number.isSafeInteger(size) && size >= 1 && size <= 50 ? size : 5,
+    // 各列表选项不同（比赛为 10/20/50），只保留服务端接受的 1–50 正整数。
+    pageSize:
+      Number.isSafeInteger(size) && size >= 1 && size <= 50
+        ? size
+        : defaultPageSize,
   };
 }

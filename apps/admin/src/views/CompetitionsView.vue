@@ -62,7 +62,8 @@ const injected = inject(competitionKey, null),
 const service = computed(() =>
   example.value ? exampleCompetitions : (injected ?? unavailableCompetitions),
 );
-const query = computed(() => readQuery(route.query, publicationStates));
+// 比赛列表只提供 10/20/50，默认值与选项保持一致，避免选择器落到无效值。
+const query = computed(() => readQuery(route.query, publicationStates, 10));
 const controller = createResourceController<
     CompetitionListItem,
     ManagedCompetition
