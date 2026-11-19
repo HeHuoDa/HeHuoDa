@@ -3,6 +3,27 @@ import type { components } from "@hehuoda/api-types";
 import { ConsoleError } from "./console/resource";
 
 export type Schema = components["schemas"];
+/** 服务端 ApiErrorDto 的公开错误体；只含脱敏信息，不是内部堆栈。 */
+interface PublicErrorBody {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+}
+function publicError(value: unknown): PublicErrorBody {
+  return value && typeof value === "object" ? (value as PublicErrorBody) : {};
+}
+/** 校验失败时 message 是字符串数组；合并为一条可读文本，不拼内部细节。 */
+function errorText(body: PublicErrorBody) {
+  const message = body.message;
+  if (typeof message === "string" && message.trim()) return message;
+  if (Array.isArray(message)) {
+    const parts = message.filter(
+      (item): item is string => typeof item === "string" && !!item.trim(),
+    );
+    if (parts.length) return parts.join("；");
+  }
+  return "";
+}
 export function safeReturn(value: unknown) {
   if (
     typeof value !== "string" ||
@@ -97,11 +118,21 @@ export function createAdminHttp(onIdentityChange = () => {}) {
           state.ready = true;
           onUnauthorized();
         }
+        // 读取服务端公开错误体，让管理页能区分基线冲突、确认缺失与发布缺口；
+        // 读不到就回落到既有通用提示，不把解析失败变成第二个错误。
+        let body: PublicErrorBody = {};
+        try {
+          body = publicError(await response.json());
+        } catch {
+          /* 非 JSON 错误响应 */
+        }
         throw new ConsoleError(
           response.status,
           response.status === 401
             ? "会话已失效，请重新登录。"
-            : "管理请求失败，请核对后重试。",
+            : errorText(body) || "管理请求失败，请核对后重试。",
+          typeof body.code === "string" ? body.code : undefined,
+          body.details,
         );
       }
       const value = response.status === 204 ? undefined : await response.json();

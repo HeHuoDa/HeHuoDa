@@ -1,5 +1,16 @@
 import type { AdminHttp, Schema } from "./http";
 import type { AdminServices } from "./services";
+import { ConsoleError, type PageQuery } from "./console/resource";
+import {
+  competitionContentKey,
+  type CompetitionAction,
+  type CompetitionCommandResult,
+  type CompetitionListItem,
+  type CompetitionPreviewReceipt,
+  type CompetitionService,
+  type ManagedCompetition,
+} from "./console/competitions";
+import type { ImportPatch } from "./console/review";
 import {
   defaultSettings,
   runStates,
@@ -13,7 +24,6 @@ import {
   candidateSummary,
   resolveNotificationKind,
 } from "./console/candidate-view";
-import { ConsoleError, type PageQuery } from "./console/resource";
 type Transport = Pick<AdminHttp, "request">;
 const ingestion = "/ingestion";
 const idPath = (kind: string, id: string) =>
@@ -278,6 +288,153 @@ export function createControlService(
       );
     },
     recover,
+  };
+}
+const competitions = "/competitions";
+/** 管理列表摘要的中文副标题：届次、类别、主办方与关系计数，缺值不补零。 */
+function competitionSecondary(item: Schema["AdminCompetitionListItemDto"]) {
+  return [
+    item.edition,
+    item.category,
+    item.organizer,
+    item.stageCount + " 赛段",
+    item.trackCount + " 赛道",
+    item.noticeCount + " 来源",
+  ]
+    .filter((value) => !!value)
+    .join(" · ");
+}
+function competitionDetail(
+  value: Schema["AdminCompetitionDto"],
+): ManagedCompetition {
+  const { baseline, ...content } = value;
+  return {
+    id: value.id,
+    title: value.name,
+    status: value.publication,
+    // 管理详情契约没有独立日期字段，页面显示明确空态而不是伪造日期。
+    date: "",
+    baseline,
+    content: structuredClone(content),
+  };
+}
+/**
+ * 正式比赛维护服务：全部走已登录管理 HTTP（同源、Cookie、CSRF、X-Admin-Id）。
+ * 写命令只发送本次实际改动；网络结果不明时由页面以同一 operationId 与同一
+ * 荷载重试，由服务端幂等回执返回首次结果，调用方不生成新的命令。
+ */
+export function createCompetitionService(http: Transport): CompetitionService {
+  const itemPath = (id: string) => `${competitions}/${encodeURIComponent(id)}`;
+  const patchOf = (patch: ImportPatch | undefined) =>
+    patch as unknown as Schema["AdminImportCompetitionDto"] | undefined;
+  const command = (
+    action: CompetitionAction,
+    input: { patch?: ImportPatch; baseline: string; reason: string },
+  ) => ({
+    reason: input.reason,
+    action,
+    baseline: input.baseline,
+    // publish/hide 只改状态，服务端忽略内容补丁，因此不发送。
+    ...(action === "save" && input.patch
+      ? { patch: patchOf(input.patch)! }
+      : {}),
+  });
+  return {
+    async list(query: PageQuery) {
+      const params = new URLSearchParams({
+        page: String(Math.max(1, query.page)),
+        // 契约上限 50；空筛选不发送，避免把空串当成筛选值。
+        pageSize: String(Math.min(50, Math.max(1, query.pageSize))),
+      });
+      if (query.status) params.set("status", query.status);
+      const q = query.q.trim();
+      if (q) params.set("q", q);
+      const result = await http.request<Schema["AdminCompetitionListDto"]>(
+        `${competitions}?${params}`,
+      );
+      const items: CompetitionListItem[] = result.items.map((item) => ({
+        id: item.id,
+        title: item.name,
+        status: item.publication,
+        date: "",
+        secondary: competitionSecondary(item),
+      }));
+      return { items, total: result.total };
+    },
+    async detail(id) {
+      return competitionDetail(
+        await http.request<Schema["AdminCompetitionDto"]>(itemPath(id)),
+      );
+    },
+    async baseline(id) {
+      const value = await http.request<Schema["AdminCompetitionBaselineDto"]>(
+        `${competitions}/baseline/${encodeURIComponent(id)}`,
+      );
+      return {
+        targetId: value.targetId,
+        exists: value.exists,
+        baseline: value.baseline,
+        publication: value.publication,
+      };
+    },
+    async preview(input) {
+      const result = await http.request<
+        Schema["AdminCompetitionPreviewResultDto"]
+      >(`${itemPath(input.patch.id)}/preview`, {
+        method: "POST",
+        body: {
+          // 预览回执以本次命令 UUID 作为 previewId，供后续同一命令消费。
+          operationId: crypto.randomUUID(),
+          ...command(input.action, input),
+        } satisfies Schema["AdminCompetitionPreviewDto"],
+      });
+      // 只有回执目标、动作与基线都相符时才能用于提交。
+      if (
+        result.targetId !== input.patch.id ||
+        result.action !== input.action ||
+        result.baseline !== input.baseline
+      )
+        throw new ConsoleError(409, "预览回执与当前命令不匹配，请重新预览。");
+      return {
+        contentKey: competitionContentKey(
+          input.content,
+          input.baseline,
+          input.action,
+        ),
+        token: result.previewId,
+        changes: result.changes,
+        blocks: result.blocks,
+      } satisfies CompetitionPreviewReceipt;
+    },
+    async change(input) {
+      // publish/hide 不接受预览回执，只有 save 能消费 previewId。
+      if (input.action !== "save" && input.receipt)
+        throw new ConsoleError(409, "发布或隐藏不使用预览回执，请重新预览。");
+      const result = await http.request<
+        Schema["AdminCompetitionCommandResultDto"]
+      >(`${itemPath(input.patch.id)}/commands`, {
+        method: "POST",
+        body: {
+          operationId: input.operationId,
+          ...command(input.action, input),
+          ...(input.action === "save" && input.receipt
+            ? { previewId: input.receipt.token }
+            : {}),
+          // 修改已发布内容时必须由管理员显式确认，不能由页面静默补上。
+          ...(input.action === "save" && input.confirmPublished
+            ? { confirmPublished: true }
+            : {}),
+        } satisfies Schema["AdminCompetitionCommandDto"],
+      });
+      return {
+        targetId: result.targetId,
+        action: result.action,
+        publication: result.publication,
+        baseline: result.baseline,
+        changes: result.changes,
+        auditOperationId: result.auditOperationId,
+      } satisfies CompetitionCommandResult;
+    },
   };
 }
 function reviewInput(file: Schema["AdminReviewFileDto"]): ReviewInput {

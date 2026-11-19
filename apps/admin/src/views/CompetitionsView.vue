@@ -18,16 +18,20 @@ import { ElMessageBox } from "element-plus";
 import type { College } from "@hehuoda/api-types";
 import {
   competitionKey,
+  competitionContentKey,
+  competitionDirty,
   emptyCompetition,
   exampleCompetitions,
   unavailableCompetitions,
   publicationStates,
   validateCompetition,
   competitionPatch,
-  type ManagedCompetition,
   type CompetitionAction,
+  type CompetitionListItem,
+  type CompetitionPreviewReceipt,
+  type ManagedCompetition,
 } from "../console/competitions";
-import type { CompetitionPatch, PreviewReceipt } from "../console/review";
+import type { CompetitionPatch } from "../console/review";
 import {
   createResourceController,
   ConsoleError,
@@ -44,6 +48,7 @@ import ResourceList from "../components/ResourceList.vue";
 import PublicCatalog from "../components/PublicCatalog.vue";
 import CompetitionFields from "../components/CompetitionFields.vue";
 import ReasonDialog from "../components/ReasonDialog.vue";
+
 const route = useRoute(),
   router = useRouter();
 const example = computed(() => route.query.preview === "1"),
@@ -52,12 +57,15 @@ const example = computed(() => route.query.preview === "1"),
   editing = computed(() => isNew.value || route.path.endsWith("/edit"));
 const injected = inject(competitionKey, null),
   api = inject(publicCatalogKey, null) ?? createPublicCatalog();
-const service = computed(
-  () =>
-    injected ?? (example.value ? exampleCompetitions : unavailableCompetitions),
+// 显式示例模式只读且完全隔离：即使已注入真实服务也不得回落到真实读写接口。
+const service = computed(() =>
+  example.value ? exampleCompetitions : (injected ?? unavailableCompetitions),
 );
 const query = computed(() => readQuery(route.query, publicationStates));
-const controller = createResourceController<ManagedCompetition>(),
+const controller = createResourceController<
+    CompetitionListItem,
+    ManagedCompetition
+  >(),
   state = controller.state;
 const draft = ref<CompetitionPatch | null>(null),
   original = ref<CompetitionPatch | null>(null),
@@ -71,27 +79,46 @@ const error = ref(""),
   stale = ref(false),
   dialog = ref(false),
   action = ref<CompetitionAction>("save"),
-  acknowledged = ref(false);
+  acknowledged = ref(false),
+  /** 修改已发布记录内容的显式二次确认；默认不勾选，不能由页面自行补上。 */
+  publishedAck = ref(false);
 const preview = ref<{
   key: string;
-  receipt?: PreviewReceipt;
+  receipt?: CompetitionPreviewReceipt;
   message: string;
 } | null>(null);
+const notice = ref("");
 let epoch = 0,
   previewEpoch = 0,
-  collegeEpoch = 0,
-  operationId = "";
+  collegeEpoch = 0;
+/** 一次写命令的身份：结果不明时原样重试，不允许中途换 UUID 或载荷。 */
+interface PendingCommand {
+  operationId: string;
+  action: CompetitionAction;
+  baseline: string;
+  patchKey: string;
+  receipt?: CompetitionPreviewReceipt;
+  confirmPublished: boolean;
+}
+const pending = ref<PendingCommand | null>(null);
 const contentKey = computed(() =>
-  JSON.stringify({
-    content: draft.value,
-    baseline: baseline.value,
-    action: action.value,
-  }),
+  draft.value
+    ? competitionContentKey(draft.value, baseline.value, action.value)
+    : "",
 );
 const dirty = computed(
   () => draft.value !== null && JSON.stringify(draft.value) !== initial.value,
 );
+/** 已存在记录仍有未提交的表单改动：发布/隐藏前必须先保存。 */
+const unsavedContent = computed(
+  () =>
+    !!draft.value &&
+    !!original.value &&
+    competitionDirty(toRaw(draft.value), toRaw(original.value)),
+);
 const fresh = computed(() => preview.value?.key === contentKey.value);
+const blocks = computed(() => preview.value?.receipt?.blocks ?? []);
+const changes = computed(() => preview.value?.receipt?.changes ?? []);
 const allowedActions = computed<CompetitionAction[]>(() => {
   if (isNew.value) return ["save"];
   if (!draft.value) return [];
@@ -101,6 +128,10 @@ const allowedActions = computed<CompetitionAction[]>(() => {
   ];
 });
 const labels = { save: "保存比赛", publish: "发布比赛", hide: "隐藏比赛" };
+/** 已发布记录的内容更新必须单独确认，与普通草稿保存区分。 */
+const needsPublishedAck = computed(
+  () => action.value === "save" && original.value?.publication === "published",
+);
 const title = computed(() =>
   action.value === "save" && original.value?.publication === "published"
     ? "更新已发布比赛（显式确认）"
@@ -118,6 +149,21 @@ const diffRows = computed(() =>
 function link(path: string) {
   return { path, query: example.value ? { preview: "1" } : {} };
 }
+function resetEdits() {
+  busy.value = false;
+  stale.value = false;
+  dialog.value = false;
+  error.value = "";
+  notice.value = "";
+  preview.value = null;
+  acknowledged.value = false;
+  publishedAck.value = false;
+  draft.value = null;
+  original.value = null;
+  baseline.value = "";
+  pending.value = null;
+  action.value = "save";
+}
 async function loadColleges() {
   const current = ++collegeEpoch;
   collegeError.value = "";
@@ -132,19 +178,13 @@ async function loadColleges() {
     if (current === collegeEpoch) collegeLoading.value = false;
   }
 }
+function validId(value: string) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
+}
 async function load() {
   const current = ++epoch;
   ++previewEpoch;
-  busy.value = false;
-  stale.value = false;
-  dialog.value = false;
-  error.value = "";
-  preview.value = null;
-  acknowledged.value = false;
-  draft.value = null;
-  original.value = null;
-  baseline.value = "";
-  action.value = "save";
+  resetEdits();
   if (!detail.value) {
     await controller.load(() => service.value.list(query.value));
     return;
@@ -153,19 +193,49 @@ async function load() {
   if (isNew.value) {
     draft.value = emptyCompetition();
     initial.value = JSON.stringify(draft.value);
+    // 新建在 ID 校验通过后才取该 ID 的服务端空记录基线（validate → ensureIdBaseline）。
     return;
   }
   await controller.select(() => service.value.detail(String(route.params.id)));
-  if (current === epoch && state.detail) {
-    draft.value = structuredClone(toRaw(state.detail.content));
-    original.value = structuredClone(toRaw(state.detail.content));
-    baseline.value = state.detail.baseline;
-    initial.value = JSON.stringify(draft.value);
-    action.value = editing.value
-      ? "save"
-      : draft.value.publication === "published"
-        ? "hide"
-        : "publish";
+  if (current !== epoch || !state.detail) return;
+  draft.value = structuredClone(toRaw(state.detail.content));
+  original.value = structuredClone(toRaw(state.detail.content));
+  baseline.value = state.detail.baseline;
+  initial.value = JSON.stringify(draft.value);
+  action.value = editing.value
+    ? "save"
+    : draft.value.publication === "published"
+      ? "hide"
+      : "publish";
+}
+/** 新建前按 ID 校验并取该 ID 的服务端基线；已存在时提示进入对应记录。 */
+async function ensureIdBaseline() {
+  if (!draft.value) return false;
+  if (!validId(draft.value.id)) {
+    error.value = "ID 须为不超过100字的小写英文、数字与连字符。";
+    await nextTick();
+    document.getElementById("competition-id")?.focus();
+    return false;
+  }
+  if (example.value) return true;
+  busy.value = true;
+  try {
+    const value = await service.value.baseline(draft.value.id);
+    if (value.exists) {
+      error.value = "";
+      const state = value.publication
+        ? (publicationStates as Record<string, string>)[value.publication]
+        : null;
+      notice.value = `届次 ${value.targetId} 已存在（${state ?? "状态未知"}），请进入该记录维护，避免重复新建。`;
+      return false;
+    }
+    baseline.value = value.baseline;
+    return true;
+  } catch (cause) {
+    error.value = errorMessage(cause);
+    return false;
+  } finally {
+    busy.value = false;
   }
 }
 function changeQuery(value: PageQuery) {
@@ -180,6 +250,8 @@ async function validate() {
     error.value = "当前对象不允许该动作，请重新加载并选择。";
     return false;
   }
+  if (isNew.value && action.value === "save" && !(await ensureIdBaseline()))
+    return false;
   const issue = validateCompetition(draft.value, colleges.value, action.value);
   if (!issue) return true;
   error.value = issue.message;
@@ -188,20 +260,38 @@ async function validate() {
   return false;
 }
 async function generate() {
-  if (busy.value || stale.value || !(await validate()) || !draft.value) return;
+  if (busy.value || stale.value || !draft.value) return;
   const current = epoch,
     request = ++previewEpoch,
-    key = contentKey.value;
+    key = contentKey.value,
+    target = structuredClone(toRaw(draft.value)),
+    targetBaseline = baseline.value,
+    targetAction = action.value;
+  if (targetAction !== "save" && unsavedContent.value) {
+    // 发布/隐藏只改状态，未保存的表单不会被提交，必须让管理员先保存。
+    error.value =
+      "表单仍有未保存的修改，发布或隐藏不会提交这些内容；请先选择“保存修改”。";
+    return;
+  }
   busy.value = true;
   error.value = "";
+  notice.value = "";
   preview.value = null;
   acknowledged.value = false;
+  publishedAck.value = false;
+  pending.value = null;
   try {
-    const receipt = await service.value.preview(
-      structuredClone(toRaw(draft.value)),
-      baseline.value,
-      action.value,
-    );
+    if (!(await validate())) return;
+    const receipt = await service.value.preview({
+      content: target,
+      patch: competitionPatch(
+        target,
+        original.value ? toRaw(original.value) : null,
+      ),
+      baseline: targetBaseline,
+      action: targetAction,
+      reason: "生成比赛变更预览",
+    });
     if (
       current === epoch &&
       request === previewEpoch &&
@@ -211,7 +301,9 @@ async function generate() {
       preview.value = {
         key,
         receipt,
-        message: "服务预览已返回，请核对下方差异。",
+        message: receipt.blocks.length
+          ? "服务预览已返回：发布底线仍有缺口，请先补齐后重新预览。"
+          : "服务预览已返回，请核对下方服务端差异。",
       };
   } catch (cause) {
     if (
@@ -219,63 +311,96 @@ async function generate() {
       request === previewEpoch &&
       key === contentKey.value
     ) {
-      if (cause instanceof ConsoleError && cause.status === 409)
-        stale.value = true;
       if (cause instanceof ServiceUnavailable)
+        // 示例模式不写也不预览真实服务，只做布局展示。
         preview.value = {
           key,
-          message:
-            "布局预览：服务未开放，尚未校验正式基线；任何确认均不会写入。",
+          message: "布局预览：示例模式只读，未校验正式基线，也不会写入服务端。",
         };
-      else error.value = errorMessage(cause);
+      else {
+        if (cause instanceof ConsoleError && cause.status === 409)
+          stale.value = true;
+        error.value = errorMessage(cause);
+      }
     }
   } finally {
     if (current === epoch && request === previewEpoch) busy.value = false;
   }
 }
 async function execute(reason: string) {
-  if (
-    busy.value ||
-    stale.value ||
-    !fresh.value ||
-    !acknowledged.value ||
-    !draft.value
-  )
+  if (busy.value || stale.value || !fresh.value || !acknowledged.value)
+    throw new Error("需要重新预览");
+  if (needsPublishedAck.value && !publishedAck.value)
+    throw new Error("修改已发布记录需显式确认");
+  if (!draft.value) throw new Error("需要重新预览");
+  if (!example.value && !preview.value?.receipt)
     throw new Error("需要重新预览");
   if (!(await validate())) throw new Error("校验失败");
-  const current = epoch;
+  if (example.value)
+    throw new ServiceUnavailable(
+      "示例模式只读，未保存、发布或隐藏；页面示例原状态未改变。",
+    );
+  const current = epoch,
+    target = structuredClone(toRaw(draft.value)),
+    patch = competitionPatch(
+      target,
+      original.value ? toRaw(original.value) : null,
+    ),
+    patchKey = JSON.stringify(patch);
+  const previous = pending.value;
+  const reusable =
+    !!previous &&
+    previous.patchKey === patchKey &&
+    previous.action === action.value &&
+    previous.baseline === baseline.value;
+  const command: PendingCommand = reusable
+    ? previous
+    : {
+        operationId: crypto.randomUUID(),
+        action: action.value,
+        baseline: baseline.value,
+        patchKey,
+        receipt: toRaw(preview.value!.receipt!),
+        confirmPublished: needsPublishedAck.value,
+      };
+  pending.value = command;
   busy.value = true;
   try {
-    if (!preview.value?.receipt)
-      throw new ServiceUnavailable(
-        "服务未开放，未保存、发布或隐藏；页面示例原状态未改变。",
-      );
     await service.value.change({
-      content: structuredClone(toRaw(draft.value)),
-      patch: competitionPatch(
-        toRaw(draft.value),
-        original.value ? toRaw(original.value) : null,
-      ),
-      baseline: baseline.value,
-      action: action.value,
+      patch,
+      baseline: command.baseline,
+      action: command.action,
       reason,
-      operationId,
-      receipt: toRaw(preview.value.receipt),
-      confirmPublished: original.value?.publication === "published",
+      operationId: command.operationId,
+      receipt: command.receipt,
+      confirmPublished: command.confirmPublished,
     });
-    if (current === epoch) {
-      initial.value = JSON.stringify(draft.value);
-      await load();
-    }
+    if (current !== epoch) return;
+    // 服务端已确认：清空暂存命令，再刷新列表与详情基线。
+    pending.value = null;
+    initial.value = JSON.stringify(target);
+    await load();
+    if (current !== epoch) return;
+    // 写入已确认，刷新失败不能提示写入失败；提供重载入口让管理员核对新基线。
+    notice.value =
+      state.detailStatus === "error"
+        ? "服务端已确认本次操作，但重新读取详情失败；请用“重新加载比赛”核对最新基线，不要重复提交。"
+        : "服务端已确认本次操作，详情与基线已重新读取。";
   } catch (cause) {
-    if (
-      current === epoch &&
-      cause instanceof ConsoleError &&
-      cause.status === 409
-    ) {
+    if (current !== epoch) throw cause;
+    // 错误同时留在页面表单区：关闭确认对话框后管理员仍能看到失败原因。
+    error.value = errorMessage(cause);
+    if (cause instanceof ConsoleError && cause.status === 409) {
       stale.value = true;
       preview.value = null;
+      acknowledged.value = false;
     }
+    // 只有服务端确定性拒绝才丢弃暂存命令；网络中断保留以便原样重试。
+    if (
+      cause instanceof ConsoleError &&
+      [400, 403, 409, 422].includes(cause.status)
+    )
+      pending.value = null;
     throw cause;
   } finally {
     if (current === epoch) busy.value = false;
@@ -313,10 +438,14 @@ onBeforeUnmount(() => {
 watch(contentKey, () => {
   acknowledged.value = false;
 });
+watch(needsPublishedAck, () => {
+  publishedAck.value = false;
+});
 watch(() => route.fullPath, load, { immediate: true });
 loadColleges();
 function confirm() {
-  operationId = crypto.randomUUID();
+  // 每次打开确认对话框都生成新的写命令；重试路径只复用已暂存的同一命令。
+  pending.value = null;
   dialog.value = true;
 }
 </script>
@@ -346,7 +475,11 @@ function confirm() {
       >
     </div>
     <p v-if="example" class="notice-strip">
-      独立页面示例 · 不代表真实比赛目录，操作不会保存。
+      独立页面示例 · 不代表真实比赛目录，所有操作均为只读，不会写入服务端。
+    </p>
+    <p v-if="notice" role="status" class="notice-strip">
+      {{ notice }}
+      <ElButton v-if="!detail" @click="load">重新加载列表</ElButton>
     </p>
     <template v-if="!detail"
       ><ResourceList
@@ -356,6 +489,9 @@ function confirm() {
         :error="state.error"
         :query="query"
         :states="publicationStates"
+        :date-filters="false"
+        :page-sizes="[10, 20, 50]"
+        search-placeholder="搜索名称、届次或主办方"
         @query="changeQuery"
         @retry="load"
         @open="router.push(link('/competitions/' + $event))"
@@ -367,7 +503,7 @@ function confirm() {
           @colleges="colleges = $event"
         />
         <p class="field-help">
-          公开详情仅含已发布内容；进入维护前必须由管理服务重新读取基线。当前管理服务未开放。
+          公开详情仅含已发布内容；进入维护前必须由管理服务重新读取基线。
         </p>
       </section></template
     >
@@ -389,7 +525,12 @@ function confirm() {
           >
         </div>
         <p class="field-help">
-          基线：{{ baseline || "新建草稿，待服务端确认 ID 可用" }}
+          基线：{{
+            baseline || (example ? "示例模式无正式基线" : "尚未取得服务端基线")
+          }}
+        </p>
+        <p v-if="dirty" role="status" class="form-error">
+          表单有未保存的修改；发布或隐藏只提交状态，不会带走这些内容。
         </p>
         <p v-if="collegeLoading" role="status">正在加载学院选项…</p>
         <p v-if="collegeError" role="alert">
@@ -437,12 +578,54 @@ function confirm() {
         <template v-if="preview"
           ><p role="status">{{ preview.message }}</p>
           <p v-if="!fresh" role="alert">内容已更改，原预览失效，请重新生成。</p>
-          <div class="diff-scroll" tabindex="0" aria-label="比赛变更差异">
+          <div
+            v-if="changes.length"
+            class="diff-scroll"
+            tabindex="0"
+            aria-label="服务端返回的比赛变更"
+          >
             <table class="review-diff">
               <thead>
                 <tr>
                   <th>字段</th>
-                  <th>原内容</th>
+                  <th>服务端原内容</th>
+                  <th>本次提交后</th>
+                  <th>解除的关系成员</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in changes" :key="row.field" class="changed">
+                  <th>{{ row.field }}</th>
+                  <td>
+                    <pre>{{ JSON.stringify(row.previous, null, 2) }}</pre>
+                  </td>
+                  <td>
+                    <pre>{{ JSON.stringify(row.current, null, 2) }}</pre>
+                  </td>
+                  <td>{{ row.removed?.join("、") || "—" }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else-if="preview.receipt" role="status">
+            服务端未返回字段差异，说明本次提交与正式基线一致。
+          </p>
+          <ul v-if="blocks.length" role="alert" class="block-list">
+            <li v-for="block in blocks" :key="block.code">
+              {{ block.code }} · {{ block.message }}
+            </li>
+          </ul>
+          <div
+            v-if="preview.receipt && !changes.length"
+            class="diff-scroll"
+            tabindex="0"
+            aria-label="本地表单与基线差异"
+          >
+            <table class="review-diff">
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>基线内容</th>
                   <th>本次内容</th>
                 </tr>
               </thead>
@@ -460,11 +643,6 @@ function confirm() {
                     <pre>{{ row.after }}</pre>
                   </td>
                 </tr>
-                <tr>
-                  <th>确认动作</th>
-                  <td>{{ draft.publication }}</td>
-                  <td>{{ labels[action] }}（独立确认）</td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -474,11 +652,29 @@ function confirm() {
               type="checkbox"
               :disabled="!fresh || busy || stale"
             />我已核对同一内容及目标动作；已发布内容更新不会退回草稿。</label
-          ><ElButton
-            :disabled="!fresh || !acknowledged || busy || stale"
+          >
+          <label v-if="needsPublishedAck" class="preview-ack">
+            <input
+              v-model="publishedAck"
+              type="checkbox"
+              :disabled="!fresh || busy || stale"
+            />确认修改已发布记录内容：公开端在本次确认前保持原状，本次提交会直接更新已发布版本。</label
+          >
+          <ElButton
+            :disabled="
+              !fresh ||
+              !acknowledged ||
+              (needsPublishedAck && !publishedAck) ||
+              busy ||
+              stale ||
+              (!example && blocks.length > 0)
+            "
             @click="confirm"
             >打开操作确认</ElButton
           >
+          <p v-if="pending" role="status" class="field-help">
+            上一提交结果未确认；重试会复用同一操作标识与载荷，由服务端幂等回执判定，不会重复写入。
+          </p>
         </template>
       </section>
     </template>
@@ -506,5 +702,10 @@ function confirm() {
   min-width: 0;
   color: #243d32;
   background: white;
+}
+.block-list {
+  margin: 0;
+  padding-left: 1.2em;
+  color: #8a3b12;
 }
 </style>
