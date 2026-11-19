@@ -85,7 +85,7 @@ function goBack() {
 
     <template v-else>
       <text class="auth-intro"
-        >首次登录会自动创建禾伙搭账号，昵称默认为「微信用户」，之后可在个人中心修改。</text
+        >首次登录会自动创建禾伙搭账号，昵称默认为「禾伙搭用户」，之后可在个人中心修改。</text
       >
       <view
         class="auth-consent"
