@@ -1,55 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { onPageHide, onUnload } from "@dcloudio/uni-app";
 import AppIcon from "./AppIcon.vue";
-import FormDialog from "./FormDialog.vue";
-import { useAuthStore } from "../stores/auth";
-import { useSessionStore } from "../stores/session";
 import { openPage } from "../navigation/navigate";
-// #ifdef MP-WEIXIN
-import { beijingTime, renewalDue } from "../campus/presentation";
-function openCampus() {
-  close();
-  openPage("campus-verification", undefined, () =>
-    emit("notice", "暂时无法打开认证页，请重试。"),
-  );
-}
-// #endif
 
 /**
  * 个人中心标题行的账号入口。
  *
- * 未登录显示线框人像，已登录显示昵称首字；点开是页面内下拉，
- * 收纳微信登录/账号、编辑资料、关于我们、联系方式授权与重置示例。
+ * M1 不提供任何登录渠道：入口只说明学校统一身份认证尚未开放、
+ * 当前可免登录浏览比赛，并保留修改资料与关于页入口。
  * 下拉用透明遮罩关闭：小程序没有 window 点击事件，不依赖事件冒泡。
- * 只呈现真实账号与演示设置，不把演示资料写进账号。
  */
 const emit = defineEmits<{ edit: []; notice: [value: string] }>();
 
-const auth = useAuthStore();
-const session = useSessionStore();
 const open = ref(false);
-const confirmingReset = ref(false);
-
-const initial = computed(() => {
-  const name = auth.nickname.trim();
-  return name ? Array.from(name)[0] : "";
-});
-
-/** 账号状态只来自 /auth/me，不采信本地缓存。 */
-const statusText = computed(() => {
-  if (!auth.accountStatus) return "账号状态未知";
-  const account = auth.accountStatus === "active" ? "账号正常" : "账号受限";
-  const campusLabels = {
-    unverified: "未认证",
-    valid: "已认证",
-    expired: "认证已过期",
-    revoked: "认证已撤销",
-  };
-  if (auth.campusStatus)
-    return `${account} · ${campusLabels[auth.campusStatus]}`;
-  return account;
-});
+/** 下拉顶部两行说明；拆成常量避免整块静态节点，组件宿主无需静态节点插入能力。 */
+const accountHint = "免登录浏览";
+const authHint = "统一身份认证登录即将开放";
 
 function toggle() {
   open.value = !open.value;
@@ -78,42 +45,6 @@ function openAbout() {
   openPage("about", undefined, () => {
     emit("notice", "暂时无法打开关于页面，请重试。");
   });
-}
-
-function askReset() {
-  close();
-  confirmingReset.value = true;
-}
-
-function cancelReset() {
-  confirmingReset.value = false;
-}
-
-function confirmReset() {
-  confirmingReset.value = false;
-  session.reset();
-  emit("notice", "示例数据已重置，联系方式默认不共享。");
-}
-
-/** 退出不关闭下拉：远端撤销失败时要在这里如实显示状态。 */
-async function logout() {
-  await auth.logout();
-}
-
-function authorize(event: unknown) {
-  const value = (event as { detail?: { value?: unknown } })?.detail?.value;
-  if (typeof value !== "boolean") return;
-  session.contactShared = value;
-}
-
-function authorizationKey(event: {
-  key?: string;
-  repeat?: boolean;
-  preventDefault?: () => void;
-}) {
-  if (event.key !== " " && event.key !== "Enter") return;
-  event.preventDefault?.();
-  if (!event.repeat) authorize({ detail: { value: !session.contactShared } });
 }
 
 // 页面隐藏或卸载时收起，避免回到页面时看到过期的下拉。
@@ -145,16 +76,13 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
       role="button"
       :aria-expanded="open"
       aria-haspopup="menu"
-      :aria-label="auth.authenticated ? `账号：${auth.nickname}` : '账号与设置'"
+      :aria-label="'账号与设置'"
       tabindex="0"
       @click="toggle"
       @keydown.enter.prevent="toggle"
       @keydown.space.prevent="toggle"
     >
-      <text v-if="auth.authenticated" class="profile-menu__initial">{{
-        initial
-      }}</text>
-      <AppIcon v-else name="user" :size="24" />
+      <AppIcon name="user" :size="24" />
     </view>
 
     <view
@@ -166,50 +94,14 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
     />
 
     <view v-if="open" class="profile-menu__card" role="menu">
-      <template v-if="auth.authenticated">
-        <view class="profile-menu__account">
-          <view class="profile-menu__avatar" aria-hidden="true">{{
-            initial
-          }}</view>
-          <view class="profile-menu__account-text">
-            <text class="profile-menu__nickname">{{ auth.nickname }}</text>
-            <text class="profile-menu__status">{{ statusText }}</text>
-            <!-- #ifdef MP-WEIXIN -->
-            <text v-if="auth.campus?.validUntil" class="profile-menu__status"
-              >有效至 {{ beijingTime(auth.campus.validUntil) }}</text
-            >
-            <text
-              v-if="
-                auth.campus?.status === 'valid' &&
-                renewalDue(auth.campus.validUntil)
-              "
-              class="profile-menu__status"
-              >七天内到期，下一学期需重新认证。</text
-            >
-            <!-- #endif -->
-          </view>
+      <view class="profile-menu__account">
+        <view class="profile-menu__avatar" aria-hidden="true">苗</view>
+        <view class="profile-menu__account-text">
+          <text class="profile-menu__nickname">{{ accountHint }}</text>
+          <text class="profile-menu__status">{{ authHint }}</text>
         </view>
-      </template>
-      <!-- #ifdef MP-WEIXIN -->
-      <view
-        v-if="auth.authenticated"
-        class="profile-menu__row"
-        role="menuitem"
-        tabindex="0"
-        @click="openCampus"
-        @keydown.enter.prevent="openCampus"
-        @keydown.space.prevent="openCampus"
-      >
-        <view class="profile-menu__text"
-          ><text class="profile-menu__label">统一身份认证</text
-          ><text class="profile-menu__hint"
-            >认证学校账号 · 资料仅本人可见</text
-          ></view
-        >
       </view>
-      <!-- #endif -->
       <view
-        v-else
         class="profile-menu__row"
         role="menuitem"
         tabindex="0"
@@ -218,8 +110,8 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
         @keydown.space.prevent="openLogin"
       >
         <view class="profile-menu__text">
-          <text class="profile-menu__label">微信登录</text>
-          <text class="profile-menu__hint">首次登录自动创建账号</text>
+          <text class="profile-menu__label">登录说明</text>
+          <text class="profile-menu__hint">学校统一身份认证尚未开放</text>
         </view>
       </view>
 
@@ -248,94 +140,14 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
           <text class="profile-menu__label">关于我们</text>
         </view>
       </view>
-
-      <view class="profile-menu__row profile-menu__row--switch">
-        <view class="profile-menu__text">
-          <text class="profile-menu__label">联系方式授权</text>
-          <text class="profile-menu__hint">{{
-            session.contactShared ? "演示已授权" : "未授权 · 不共享"
-          }}</text>
-        </view>
-        <switch
-          id="profile-menu-contact"
-          class="profile-menu__switch"
-          :checked="session.contactShared"
-          color="var(--hhr-color-brand)"
-          role="switch"
-          tabindex="0"
-          :aria-checked="session.contactShared"
-          aria-label="允许同队有效成员查看（演示）"
-          @change="authorize"
-          @keydown="authorizationKey"
-        />
-      </view>
-
-      <view
-        class="profile-menu__row"
-        role="menuitem"
-        tabindex="0"
-        @click="askReset"
-        @keydown.enter.prevent="askReset"
-        @keydown.space.prevent="askReset"
-      >
-        <view class="profile-menu__text">
-          <text class="profile-menu__label">重置示例</text>
-          <text class="profile-menu__hint">仅清空当前会话演示</text>
-        </view>
-      </view>
-
-      <template v-if="auth.authenticated">
-        <view
-          class="profile-menu__row profile-menu__row--logout"
-          role="menuitem"
-          tabindex="0"
-          @click="logout"
-          @keydown.enter.prevent="logout"
-          @keydown.space.prevent="logout"
-        >
-          <view class="profile-menu__text">
-            <text class="profile-menu__label">退出登录</text>
-          </view>
-        </view>
-      </template>
-
-      <text
-        v-if="auth.logoutNotice"
-        role="status"
-        aria-live="polite"
-        class="profile-menu__notice"
-        >{{ auth.logoutNotice }}</text
-      >
-      <text
-        v-else-if="!auth.authenticated && auth.errorMessage"
-        role="status"
-        class="profile-menu__notice"
-        >{{ auth.errorMessage }}</text
-      >
     </view>
-
-    <FormDialog
-      id="profile-reset-confirm"
-      :open="confirmingReset"
-      title="重置示例数据？"
-      save-label="确认重置"
-      @save="confirmReset"
-      @cancel="cancelReset"
-    >
-      <text class="block text-sm"
-        >收藏、队伍、申请与通知会恢复到初始示例，联系方式授权同时关闭。</text
-      >
-      <text class="block mt-3 text-xs text-muted"
-        >只影响当前会话的演示数据，不会删除真实账号，也不会退出登录。</text
-      >
-    </FormDialog>
   </view>
 </template>
 
 <style scoped>
 /*
  * 与个人中心标题行同高；触控区 44px，视觉尺寸 40px。
- * 间距写固定 px 的理由见 AuthForm.vue（H5 根字号随视口缩放）。
+ * 间距写固定 px：uni-app H5 的根字号随视口缩放，rem 会让留白在各档宽度波动。
  */
 .profile-menu {
   position: relative;

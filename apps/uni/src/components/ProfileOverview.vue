@@ -8,25 +8,17 @@ import {
 } from "@hehuoda/client-domain/profile";
 import { colleges } from "@hehuoda/client-domain/colleges";
 import { useSessionStore } from "../stores/session";
-import { useAuthStore } from "../stores/auth";
 import { useDraftForm } from "../forms/use-draft-form";
-import { openPage, openProfileSection } from "../navigation/navigate";
+import { openPage } from "../navigation/navigate";
 import AppIcon from "./AppIcon.vue";
 import FormInput from "./FormInput.vue";
 import FormPicker from "./FormPicker.vue";
 import FormDialog from "./FormDialog.vue";
 import FormButton from "./FormButton.vue";
 import ProfileMenu from "./ProfileMenu.vue";
-import ProfileTeamsReadOnly from "./ProfileTeamsReadOnly.vue";
 
 const session = useSessionStore();
-const auth = useAuthStore();
 const stats = computed(() => [
-  ...["我的队伍", "待处理邀请", "我的申请"].map((label) => ({
-    label,
-    count: "—",
-    note: "待接入",
-  })),
   { label: "收藏比赛", count: session.favoriteCount, note: "当前会话" },
 ]);
 const feedback = ref("");
@@ -47,11 +39,8 @@ const {
   validate: validateProfile,
   save: session.saveProfile,
 });
-/** 昵称属于真实账号：登录后显示并修改 /auth/me 的值，未登录回退示例昵称。 */
-const nicknameDraft = ref("");
-const displayNickname = computed(() =>
-  auth.authenticated ? auth.nickname : session.profile.nickname,
-);
+/** 昵称与其它资料均为会话内示例：登录未开放，不提供账号写入入口。 */
+const displayNickname = computed(() => session.profile.nickname);
 const collegeName = computed(
   () =>
     colleges.find((c) => c.id === session.profile.collegeId)?.name ??
@@ -81,18 +70,6 @@ const fields: {
 ];
 const links = [
   {
-    label: "我的队伍",
-    description: "加入与带领的队伍",
-    icon: "team" as const,
-    action: () => openProfileSection("teams"),
-  },
-  {
-    label: "申请与邀请",
-    description: "跟进你的组队进展",
-    icon: "mail" as const,
-    action: () => openProfileSection("applications"),
-  },
-  {
     label: "我的收藏",
     description: "回看心动的比赛",
     icon: "star" as const,
@@ -100,7 +77,7 @@ const links = [
   },
   {
     label: "站内通知",
-    description: "不错过重要消息",
+    description: "组队恢复后开放",
     icon: "bell" as const,
     action: () => openPage("notifications"),
   },
@@ -108,26 +85,15 @@ const links = [
 async function edit() {
   feedback.value = "";
   focusField.value = "";
-  nicknameDraft.value = auth.authenticated ? auth.nickname : "";
   begin();
   await nextTick();
   if (opened.value) focusField.value = "nickname";
 }
 async function save() {
   focusField.value = "";
-  // 真实昵称先写 /auth/me；未改动就不发请求，失败时保留弹窗。
-  if (auth.authenticated && nicknameDraft.value.trim() !== auth.nickname) {
-    const saved = await auth.updateNickname(nicknameDraft.value);
-    if (!saved) {
-      await nextTick();
-      if (opened.value) focusField.value = "nickname";
-      return;
-    }
-  }
   if (submit()) {
-    feedback.value = auth.authenticated
-      ? "昵称已保存到账号；其余示例资料仅保留在当前会话内。"
-      : "示例资料已更新，仅保留在当前会话内；未保存到服务器，刷新恢复初始示例。";
+    feedback.value =
+      "示例资料已更新，仅保留在当前会话内；未保存到服务器，刷新恢复初始示例。";
     return;
   }
   await nextTick();
@@ -136,7 +102,7 @@ async function save() {
 // 外部统一重置、页面切换均丢弃编辑草稿，避免旧资料再次写回。
 const unregister = session.registerReset("profile-editor", () => {
   cancel();
-  feedback.value = "演示会话已重置，联系方式默认不共享。";
+  feedback.value = "会话已重置，示例资料回到初始状态。";
 });
 watch(
   () => session.profile,
@@ -155,7 +121,7 @@ onBeforeUnmount(unregister);
       >
       <view class="flex flex-wrap items-center justify-between gap-3">
         <text class="profile-title font-serif font-semibold">个人中心</text>
-        <!-- 账号与设置入口：编辑资料、登录、关于与重置都收在这个下拉里。 -->
+        <!-- 账号与设置入口：登录说明、编辑资料与关于都收在这个下拉里。 -->
         <ProfileMenu @edit="edit" @notice="feedback = $event" />
       </view>
       <text class="block mt-2 text-sm text-muted"
@@ -213,28 +179,15 @@ onBeforeUnmount(unregister);
           ><AppIcon :name="link.icon" :size="20"
         /></view>
         <view class="profile-link-text"
-          ><text class="block text-sm font-semibold"
-            >{{ link.label
-            }}<text
-              v-if="link.icon === 'bell'"
-              class="notification-count"
-              :aria-label="`${session.unreadNotificationCount} 条未读通知`"
-              >{{ session.unreadNotificationCount }}</text
-            ></text
+          ><text class="block text-sm font-semibold">{{ link.label }}</text
           ><text class="block text-xs text-muted">{{
             link.description
           }}</text></view
         >
       </FormButton>
     </view>
-    <view class="profile-lower">
-      <ProfileTeamsReadOnly />
-    </view>
     <view class="mt-6 text-xs text-muted">
-      <text v-if="auth.authenticated"
-        >昵称属于你的微信账号；其余资料为示例，编辑仅影响本次会话。</text
-      >
-      <text v-else>当前展示示例资料，编辑仅影响本次会话。</text>
+      <text>当前免登录浏览，展示的是示例资料；编辑仅影响本次会话。</text>
     </view>
     <FormDialog
       id="profile-editor"
@@ -247,27 +200,15 @@ onBeforeUnmount(unregister);
       @cancel="cancel"
     >
       <text class="block mb-4 text-xs text-muted"
-        >昵称属于你的微信账号；其余为示例资料，请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
+        >以下为示例资料，请勿填写真实联系方式。校区为示例选项，学院复用本地业务目录稳定
         ID。</text
       >
       <FormInput
-        v-if="auth.authenticated"
-        id="profile-nickname"
-        v-model="nicknameDraft"
-        label="昵称（账号）"
-        :maxlength="20"
-        hint="首尾空格会被忽略，1–20 个字；保存后写入账号。"
-        :error="auth.nicknameError"
-        :focus="focusField === 'nickname'"
-        @confirm="save"
-      />
-      <FormInput
-        v-else
         id="profile-nickname"
         :model-value="displayNickname"
         label="昵称"
         disabled
-        hint="微信登录后可修改昵称。"
+        hint="统一身份认证开放后可修改昵称。"
       />
       <view class="profile-form">
         <FormInput
@@ -310,26 +251,14 @@ onBeforeUnmount(unregister);
       <text v-if="submitError" role="alert" class="block text-sm text-danger">{{
         submitError
       }}</text>
-      <text class="block my-4 text-xs text-muted">{{
-        auth.authenticated
-          ? "昵称保存到账号；其余示例资料仅更新当前会话，刷新后恢复。"
-          : "保存仅更新会话内前端演示，不表示服务器保存。"
-      }}</text>
+      <text class="block my-4 text-xs text-muted"
+        >保存仅更新当前会话内的示例资料，不表示服务器保存；刷新后恢复初始示例。</text
+      >
     </FormDialog>
   </view>
 </template>
 
 <style scoped>
-.notification-count {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--hhr-radius-badge);
-  color: var(--hhr-color-brand);
-  background: var(--hhr-color-brand-soft);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 .profile-page {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -432,11 +361,6 @@ onBeforeUnmount(unregister);
   background: var(--hhr-color-brand-soft);
   color: var(--hhr-color-brand);
 }
-.profile-lower {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-}
 .profile-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -487,9 +411,6 @@ onBeforeUnmount(unregister);
   }
   .profile-stat-number {
     font-size: 26px;
-  }
-  .profile-lower {
-    gap: 18px;
   }
   .profile-heading {
     margin-bottom: 20px;

@@ -52,6 +52,9 @@ export function parseSourceUrl(value: unknown): SourceUrl | null {
   };
 }
 
+/** H5 公开外链规则见 `./public-url.ts`；它与管理端手工录入通道共用同一份判定。 */
+export { resolvePublicSourceUrl } from "./public-url.ts";
+
 /**
  * 仅核准主机的 HTTPS 静态通知可嵌入；带 query/hash 的地址统一复制，
  * 不尝试猜测各站的跳转参数名，防止编码和站点私有跳转参数绕过。

@@ -21,10 +21,7 @@ import {
   createDetailController,
   initialDetailState,
 } from "../../stores/detail-controller";
-import {
-  openTabWithQuery,
-  returnToCompetitions,
-} from "../../navigation/navigate";
+import { openPage, returnToCompetitions } from "../../navigation/navigate";
 import { resolveStageTarget } from "../../navigation/competition-detail";
 import {
   copyRouteQuery,
@@ -102,6 +99,11 @@ function leave() {
 }
 function returnToList() {
   returnToCompetitions(sourceQuery);
+}
+function openFavorites() {
+  openPage("favorites", undefined, () => {
+    favoriteFeedback.value = "暂时无法打开收藏，请稍后重试。";
+  });
 }
 onLoad((platformQuery) => {
   const query = pageRouteQuery(platformQuery ?? {});
@@ -285,7 +287,7 @@ onScopeDispose(unregisterReset);
               <text class="detail-registration-title">如何报名</text
               ><text class="detail-registration">{{ item.registration }}</text>
               <text class="detail-disclaimer"
-                >平台组队不等于官方报名；学院范围匹配不表示已通过全部资格审核。</text
+                >平台展示不等于官方报名；学院范围匹配不表示已通过全部资格审核，最新要求以官方通知为准。</text
               >
               <view class="detail-stage-sources"
                 ><CompetitionSourceAction
@@ -338,10 +340,10 @@ onScopeDispose(unregisterReset);
           </view>
           <view class="hhr-panel detail-panel">
             <text class="detail-heading" role="heading" aria-level="2"
-              >收藏与组队</text
+              >收藏</text
             >
             <text class="detail-paragraph muted"
-              >收藏仅在当前会话保留，刷新、冷启动或重置后清空。平台组队不等于官方报名。</text
+              >收藏仅在当前会话保留，刷新、冷启动或重置后清空，不会同步到账号或其它设备。</text
             >
             <text
               v-if="favoriteFeedback"
@@ -362,12 +364,8 @@ onScopeDispose(unregisterReset);
                     ? "已收藏 · 取消收藏"
                     : "收藏比赛"
                 }}</FormButton
-              ><FormButton
-                variant="secondary"
-                @click="
-                  openTabWithQuery('teams', { competition: competition.id })
-                "
-                >查看关联演示招募</FormButton
+              ><FormButton variant="secondary" @click="openFavorites"
+                >查看我的收藏</FormButton
               ></view
             >
           </view>

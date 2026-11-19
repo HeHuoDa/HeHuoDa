@@ -7,7 +7,14 @@ import {
   type SourcePorts,
   type SourceResult,
 } from "../source/actions";
-import { parseSourceUrl, resolveWebViewSource } from "../source/policy";
+import {
+  approvedWebViewHosts,
+  parseSourceUrl,
+  resolveWebViewSource,
+} from "../source/policy";
+// #ifdef H5
+import { resolvePublicSourceUrl } from "../source/policy";
+// #endif
 // #ifdef H5
 import SourceLink from "./SourceLink.h5.vue";
 import { writeH5Clipboard } from "../source/clipboard-h5";
@@ -24,7 +31,12 @@ const props = defineProps<{
   compact?: boolean;
   copyOnly?: boolean;
 }>();
-const source = computed(() => parseSourceUrl(props.notice.url));
+// H5 按 ADR 0011 接受公开 HTTPS；小程序仍按原规则解析并受承载页主机白名单约束。
+let acceptSource: typeof parseSourceUrl = parseSourceUrl;
+// #ifdef H5
+acceptSource = resolvePublicSourceUrl;
+// #endif
+const source = computed(() => acceptSource(props.notice.url));
 const embeddable = computed(() => resolveWebViewSource(props.notice.url));
 const feedback = ref<SourceResult | null>(null);
 const busy = ref(false);
@@ -60,7 +72,7 @@ ports.openWebView = (url) =>
     );
   });
 // #endif
-const actions = createSourceActions(ports);
+const actions = createSourceActions(ports, approvedWebViewHosts, acceptSource);
 
 async function activate(open = false) {
   if (busy.value) return;

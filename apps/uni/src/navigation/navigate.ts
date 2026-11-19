@@ -127,11 +127,8 @@ export function openProfileSection(
   );
 }
 
-/** switchTab 不能携带 query；首页返回条件与关联招募用同一个一次性交接入口。 */
-export function openTabWithQuery(
-  name: "home" | "teams",
-  query: RouteQuery,
-): void {
+/** switchTab 不能携带 query；返回首页时用一次性交接把筛选条件带回去。 */
+export function openTabWithQuery(name: "home", query: RouteQuery): void {
   useNavigationStore().requestTabQuery(name, query);
   openTab(name, undefined, () => replaceH5TabQuery(name, query));
 }
@@ -146,17 +143,4 @@ export function returnToCompetitions(query: RouteQuery): void {
     return;
   }
   openTabWithQuery("home", query);
-}
-
-/** 返回找队友列表：上一页就是列表时直接回退，保留页面实例里的筛选与页码。 */
-export function returnToTeams(query: RouteQuery): void {
-  const pages = getCurrentPages();
-  if (
-    pages.length > 1 &&
-    pages[pages.length - 2].route === routePath("teams").slice(1)
-  ) {
-    uni.navigateBack({ delta: 1 });
-    return;
-  }
-  openTabWithQuery("teams", query);
 }

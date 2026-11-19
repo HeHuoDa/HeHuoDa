@@ -47,6 +47,11 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 const pageUrl = new URL("../src/pages/home/competition.vue", import.meta.url);
+const pageSource = readFileSync(pageUrl, "utf8");
+const pageTemplate = pageSource.slice(
+  pageSource.indexOf("<template>"),
+  pageSource.indexOf("</template>"),
+);
 const { descriptor } = parse(readFileSync(pageUrl, "utf8"));
 const compiled = compileScript(descriptor, { id: "competition-page" });
 const source = stripTypeScriptTypes(compiled.content).replace(
@@ -67,6 +72,44 @@ const flush = async () => {
   await new Promise((r) => setImmediate(r));
   await nextTick();
 };
+
+test("详情页不再提供关联演示招募入口，收藏入口通往当前会话收藏页", async () => {
+  // 模板级检查：比赛详情与组队演示入口解耦，收藏入口仍可用。
+  assert.doesNotMatch(pageTemplate, /查看关联演示招募/);
+  assert.doesNotMatch(pageTemplate, /openTabWithQuery\('teams'/);
+  assert.match(pageTemplate, /收藏比赛|取消收藏/);
+  assert.match(pageTemplate, /查看我的收藏/);
+  assert.match(pageTemplate, /仅在当前会话保留/);
+
+  const original = globalThis.uni;
+  const navigations = [];
+  globalThis.uni = {
+    request: () => ({ abort() {} }),
+    navigateTo(options) {
+      navigations.push(options.url);
+      options.success?.();
+    },
+    switchTab(options) {
+      navigations.push(options.url);
+    },
+  };
+  Object.values(hooks).forEach((list) => {
+    list.length = 0;
+  });
+  const scope = effectScope();
+  setActivePinia(createPinia());
+  const page = scope.run(() => Page.setup({}, { expose() {} }));
+  try {
+    hooks.load.forEach((fn) => fn({ id: "competition-a" }));
+    hooks.show.forEach((fn) => fn());
+    page.openFavorites();
+    assert.deepEqual(navigations, ["/pages/my/favorites"]);
+  } finally {
+    hooks.unload.forEach((fn) => fn());
+    scope.stop();
+    globalThis.uni = original;
+  }
+});
 
 test("实际页面等待 onReady 和详情渲染后定位；定位失败仍保留详情，隐藏时取消请求", async () => {
   const original = globalThis.uni;

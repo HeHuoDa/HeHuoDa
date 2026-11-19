@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { after, afterEach, test } from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
 import { extname } from "node:path";
-import { after, test } from "node:test";
 import { createPinia, setActivePinia } from "pinia";
 import { effectScope, nextTick } from "vue";
 import { compileScript, parse } from "vue/compiler-sfc";
@@ -10,7 +10,10 @@ import { useNavigationStore } from "../src/stores/navigation.ts";
 import { resolveSourceAddress } from "../src/navigation/routes.ts";
 import { useSessionStore } from "../src/stores/session.ts";
 
-// 执行真实页面 setup，再按平台顺序触发生命周期；子组件不参与导航状态测试。
+/**
+ * 个人中心导航：M1 只保留资料区，旧分区地址安全落到资料区并显示暂缓说明。
+ * 执行真实页面 setup，仅替换平台生命周期与不渲染的子组件。
+ */
 const lifecycleUrl = `data:text/javascript,${encodeURIComponent(`
   export const hooks = { load: [], show: [], hide: [], unload: [] };
   export const onLoad = callback => hooks.load.push(callback);
@@ -21,15 +24,13 @@ const lifecycleUrl = `data:text/javascript,${encodeURIComponent(`
 const { hooks } = await import(lifecycleUrl);
 const loader = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@dcloudio/uni-app") {
+    if (specifier === "@dcloudio/uni-app")
       return { url: lifecycleUrl, shortCircuit: true };
-    }
-    if (specifier.endsWith(".vue")) {
+    if (specifier.endsWith(".vue"))
       return {
         url: "data:text/javascript,export default {}",
         shortCircuit: true,
       };
-    }
     if (specifier.startsWith(".") && !extname(specifier)) {
       const url = new URL(`${specifier}.ts`, context.parentURL);
       if (existsSync(url)) return nextResolve(url.href, context);
@@ -38,9 +39,6 @@ const loader = registerHooks({
   },
 });
 after(() => loader.deregister());
-// 个人中心可见时启动演示时钟；本文件只验证导航交接，用替身避免真实定时器挂住进程。
-globalThis.setInterval = () => 1;
-globalThis.clearInterval = () => {};
 const pageUrl = new URL("../src/pages/profile/index.vue", import.meta.url);
 const { descriptor } = parse(readFileSync(pageUrl, "utf8"));
 const compiled = compileScript(descriptor, { id: "profile-navigation-test" });
@@ -59,93 +57,17 @@ const source = stripTypeScriptTypes(compiled.content).replace(
 const { default: Profile } = await import(
   `data:text/javascript,${encodeURIComponent(source)}`
 );
-const { openProfileSection, backOrHome, openTab } =
-  await import("../src/navigation/navigate.ts");
-const { openTabWithQuery, returnToCompetitions, withQuery } =
-  await import("../src/navigation/navigate.ts");
+const {
+  openProfileSection,
+  backOrHome,
+  openTab,
+  returnToCompetitions,
+  withQuery,
+} = await import("../src/navigation/navigate.ts");
 
-test("重置后的迟到导航失败不重新跳转或清除新会话定位", () => {
-  setActivePinia(createPinia());
-  const session = useSessionStore();
-  const navigation = useNavigationStore();
-  const original = globalThis.uni;
-  const requests = [];
-  let relaunches = 0,
-    failures = 0;
-  globalThis.uni = {
-    switchTab: (options) => requests.push(options),
-    reLaunch: () => relaunches++,
-  };
-  try {
-    openProfileSection(
-      "applications",
-      { recordId: "history-0" },
-      () => failures++,
-    );
-    session.reset();
-    navigation.requestProfileSection("teams", { teamId: "demo-1" });
-    requests[0].fail();
-    assert.equal(relaunches, 0);
-    assert.equal(failures, 0);
-    assert.equal(navigation.pendingProfileNavigation.query.teamId, "demo-1");
-  } finally {
-    globalThis.uni = original;
-  }
-});
-
-test("重置后的迟到 tab 成功回调不恢复旧地址意图", () => {
-  setActivePinia(createPinia());
-  const session = useSessionStore();
-  const original = globalThis.uni;
-  const requests = [];
-  let completed = 0;
-  globalThis.uni = { switchTab: (options) => requests.push(options) };
-  try {
-    openTab("teams", undefined, () => completed++);
-    session.reset();
-    requests[0].success();
-    assert.equal(completed, 0);
-  } finally {
-    globalThis.uni = original;
-  }
-});
-
-test("比赛返回复用首页栈，空栈交接筛选；关联招募只传比赛 ID且只消费一次", () => {
-  setActivePinia(createPinia());
-  const originalUni = globalThis.uni;
-  const originalPages = globalThis.getCurrentPages;
-  const calls = [];
-  globalThis.uni = {
-    switchTab: ({ url }) => calls.push(url),
-    navigateBack: () => calls.push("back"),
-  };
-  try {
-    globalThis.getCurrentPages = () => [{ route: "pages/index/index" }, {}];
-    returnToCompetitions({ hosts: "all", q: "创新", page: "2" });
-    assert.deepEqual(calls, ["back"]);
-    globalThis.getCurrentPages = () => [{}];
-    returnToCompetitions({ hosts: "", q: "创新", page: "2" });
-    const navigation = useNavigationStore();
-    assert.deepEqual(navigation.consumeTabQuery("home"), {
-      hosts: "",
-      q: "创新",
-      page: "2",
-    });
-    assert.equal(navigation.consumeTabQuery("home"), null);
-    openTabWithQuery("teams", { competition: "competition-a" });
-    assert.equal(calls.at(-1), "/pages/teams/index");
-    assert.deepEqual(navigation.consumeTabQuery("teams"), {
-      competition: "competition-a",
-    });
-    assert.equal(navigation.consumeTabQuery("teams"), null);
-    assert.equal(
-      withQuery("/detail", { hosts: "", id: "a" }),
-      "/detail?hosts=&id=a",
-    );
-  } finally {
-    globalThis.uni = originalUni;
-    globalThis.getCurrentPages = originalPages;
-  }
+afterEach(() => {
+  delete globalThis.uni;
+  delete globalThis.getCurrentPages;
 });
 
 function mountProfile(query = {}) {
@@ -167,96 +89,112 @@ function mountProfile(query = {}) {
   };
 }
 
-test("首次进入个人中心：页面加载不会覆盖交接分区，意图只消费一次", () => {
+test("重置后的迟到导航失败不重新跳转或清除新会话定位", () => {
   setActivePinia(createPinia());
-  useNavigationStore().requestProfileSection("teams");
-  const first = mountProfile();
-  try {
-    assert.equal(first.page.current.value.title, "我的队伍");
-  } finally {
-    first.stop();
-  }
-  const second = mountProfile();
-  try {
-    assert.equal(second.page.current.value.title, "个人中心");
-  } finally {
-    second.stop();
-  }
-});
-
-test("停留在个人中心时可再次切分区，非法深链仍显示反馈", async () => {
-  setActivePinia(createPinia());
-  const mounted = mountProfile({ section: "bogus" });
-  try {
-    assert.match(mounted.page.notice.value, /分区参数无效/);
-    useNavigationStore().requestProfileSection("applications");
-    await nextTick();
-    assert.equal(mounted.page.current.value.title, "申请与邀请");
-    assert.equal(mounted.page.notice.value, "");
-  } finally {
-    mounted.stop();
-  }
-});
-
-test("旧地址映射经主导航交接到页面时保留附加参数，再次同分区也能更新", async () => {
-  const previousUni = globalThis.uni;
+  const session = useSessionStore();
+  const navigation = useNavigationStore();
+  const requests = [];
+  let relaunches = 0,
+    failures = 0;
   globalThis.uni = {
-    switchTab: ({ url }) => assert.equal(url, "/pages/profile/index"),
+    switchTab: (options) => requests.push(options),
+    reLaunch: () => relaunches++,
   };
+  openProfileSection(
+    "applications",
+    { recordId: "history-0" },
+    () => failures++,
+  );
+  session.reset();
+  navigation.requestProfileSection("teams", { teamId: "demo-1" });
+  requests[0].fail();
+  assert.equal(relaunches, 0);
+  assert.equal(failures, 0);
+  assert.equal(navigation.pendingProfileNavigation.query.teamId, "demo-1");
+});
+
+test("重置后的迟到 tab 成功回调不恢复旧地址意图", () => {
+  setActivePinia(createPinia());
+  const session = useSessionStore();
+  const requests = [];
+  let completed = 0;
+  globalThis.uni = { switchTab: (options) => requests.push(options) };
+  openTab("teams", undefined, () => completed++);
+  session.reset();
+  requests[0].success();
+  assert.equal(completed, 0);
+});
+
+test("比赛返回复用首页栈，空栈交接筛选；交接只消费一次", () => {
+  setActivePinia(createPinia());
+  const calls = [];
+  globalThis.uni = {
+    switchTab: ({ url }) => calls.push(url),
+    navigateBack: () => calls.push("back"),
+  };
+  globalThis.getCurrentPages = () => [{ route: "pages/index/index" }, {}];
+  returnToCompetitions({ hosts: "all", q: "创新", page: "2" });
+  assert.deepEqual(calls, ["back"]);
+  globalThis.getCurrentPages = () => [{}];
+  returnToCompetitions({ hosts: "", q: "创新", page: "2" });
+  const navigation = useNavigationStore();
+  assert.deepEqual(navigation.consumeTabQuery("home"), {
+    hosts: "",
+    q: "创新",
+    page: "2",
+  });
+  assert.equal(navigation.consumeTabQuery("home"), null);
+  assert.equal(
+    withQuery("/detail", { hosts: "", id: "a" }),
+    "/detail?hosts=&id=a",
+  );
+});
+
+test("个人中心加载直接显示资料区，不再恢复演示队伍或申请分区", () => {
+  setActivePinia(createPinia());
+  globalThis.uni = { switchTab() {} };
+  const mounted = mountProfile();
   try {
-    for (const path of ["/my/teams", "/my/applications"]) {
-      setActivePinia(createPinia());
-      const resolved = resolveSourceAddress(path, {
-        section: "bogus",
-        keep: "x",
-        page: "2",
-        tag: ["a", "b"],
-        nested: { ignored: true },
-      });
-      openProfileSection(resolved.section, resolved.query);
-      resolved.query.tag.push("changed-after-dispatch");
-      const mounted = mountProfile();
-      try {
-        assert.equal(mounted.page.section.value, resolved.section);
-        assert.deepEqual(mounted.page.routeQuery.value, {
-          keep: "x",
-          page: "2",
-          tag: ["a", "b"],
-        });
-        openProfileSection(resolved.section, { page: "3" });
-        await nextTick();
-        assert.deepEqual(mounted.page.routeQuery.value, { page: "3" });
-      } finally {
-        mounted.stop();
-      }
-      const next = mountProfile();
-      try {
-        assert.deepEqual(next.page.routeQuery.value, {});
-      } finally {
-        next.stop();
-      }
-    }
+    assert.equal(mounted.page.pending.value, "");
   } finally {
-    if (previousUni === undefined) delete globalThis.uni;
-    else globalThis.uni = previousUni;
+    mounted.stop();
   }
 });
 
-test("直接进入个人中心保留附加参数，冲突分区仍反馈错误", () => {
+test("旧 /my/teams、/my/applications 地址落到资料区并说明暂缓", () => {
   setActivePinia(createPinia());
-  const mounted = mountProfile({ section: "teams,applications", keep: "x" });
+  globalThis.uni = { switchTab() {} };
+  for (const [path, label] of [
+    ["/my/teams", "我的队伍"],
+    ["/my/applications", "申请与邀请"],
+  ]) {
+    const resolved = resolveSourceAddress(path, { keep: "x" });
+    assert.equal(resolved.name, "profile");
+    assert.equal(
+      resolved.section,
+      label === "我的队伍" ? "teams" : "applications",
+    );
+    const mounted = mountProfile({
+      ...resolved.query,
+      section: resolved.section,
+    });
+    try {
+      assert.equal(mounted.page.pending.value, label);
+      assert.equal(mounted.page.legacySection.value, resolved.section);
+    } finally {
+      mounted.stop();
+    }
+  }
+  // 未知分区参数回落到资料区，不显示遗留提示。
+  const bogus = mountProfile({ section: "bogus" });
   try {
-    assert.equal(mounted.page.current.value.title, "个人中心");
-    assert.deepEqual(mounted.page.routeQuery.value, { keep: "x" });
-    assert.match(mounted.page.notice.value, /分区参数重复/);
+    assert.equal(bogus.page.pending.value, "");
   } finally {
-    mounted.stop();
+    bogus.stop();
   }
 });
 
 test("可控平台分支：主导航失败回退，无历史回首页，有历史正常返回", () => {
-  const previousUni = globalThis.uni;
-  const previousPages = globalThis.getCurrentPages;
   const calls = [];
   globalThis.uni = {
     switchTab: ({ url, fail }) => {
@@ -266,86 +204,34 @@ test("可控平台分支：主导航失败回退，无历史回首页，有历�
     reLaunch: ({ url }) => calls.push(["reLaunch", url]),
     navigateBack: ({ delta }) => calls.push(["navigateBack", delta]),
   };
-  try {
-    openTab("teams");
-    globalThis.getCurrentPages = () => [{}];
-    backOrHome();
-    globalThis.getCurrentPages = () => [{}, {}];
-    backOrHome();
-    assert.deepEqual(calls, [
-      ["switchTab", "/pages/teams/index"],
-      ["reLaunch", "/pages/teams/index"],
-      ["switchTab", "/pages/index/index"],
-      ["reLaunch", "/pages/index/index"],
-      ["navigateBack", 1],
-    ]);
-  } finally {
-    if (previousUni === undefined) delete globalThis.uni;
-    else globalThis.uni = previousUni;
-    if (previousPages === undefined) delete globalThis.getCurrentPages;
-    else globalThis.getCurrentPages = previousPages;
-  }
+  openTab("teams");
+  globalThis.getCurrentPages = () => [{}];
+  backOrHome();
+  globalThis.getCurrentPages = () => [{}, {}];
+  backOrHome();
+  assert.deepEqual(calls, [
+    ["switchTab", "/pages/teams/index"],
+    ["reLaunch", "/pages/teams/index"],
+    ["switchTab", "/pages/index/index"],
+    ["reLaunch", "/pages/index/index"],
+    ["navigateBack", 1],
+  ]);
 });
 
-test("通知交接选中队伍并定位具体申请，重置清意图且旧异步定位不会执行", async () => {
+test("已位于个人中心时交接个人资料分区不会重复 switchTab", async () => {
   setActivePinia(createPinia());
-  const previousUni = globalThis.uni;
-  const scrolls = [];
-  globalThis.uni = {
-    pageScrollTo: (options) => scrolls.push(options.selector),
-  };
-  const navigation = useNavigationStore();
-  navigation.requestProfileSection("teams", {
-    teamId: "demo-7",
-    recordId: "incoming-1",
-    revision: "0",
-  });
-  const mounted = mountProfile();
-  try {
-    await nextTick();
-    await nextTick();
-    assert.equal(mounted.page.state.selectedId, "demo-7");
-    assert.deepEqual(scrolls, ["#incoming-target-2"]);
-    assert.equal(mounted.page.highlightId.value, "incoming-target-2");
-    assert.deepEqual(mounted.page.routeQuery.value, {});
-    hooks.show.forEach((fn) => fn());
-    await nextTick();
-    assert.equal(scrolls.length, 1);
-    navigation.requestProfileSection("applications", {
-      recordId: "own-pending",
-      revision: "0",
-    });
-    useSessionStore().reset();
-    await nextTick();
-    assert.equal(navigation.pendingProfileNavigation, null);
-    assert.equal(scrolls.length, 1);
-    assert.equal(mounted.page.highlightId.value, "");
-  } finally {
-    mounted.stop();
-    globalThis.uni = previousUni;
-  }
-});
-
-test("已位于个人中心时只交接新目标，不重复 switchTab 触发隐藏生命周期", async () => {
-  setActivePinia(createPinia());
-  const previousUni = globalThis.uni;
-  const previousPages = globalThis.getCurrentPages;
   let switches = 0;
   globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
-  globalThis.uni = { switchTab: () => switches++, pageScrollTo() {} };
+  globalThis.uni = { switchTab: () => switches++ };
   const mounted = mountProfile();
   try {
     openProfileSection("teams", { teamId: "demo-7" });
     await nextTick();
-    assert.equal(mounted.page.section.value, "teams");
-    assert.equal(switches, 0);
     openProfileSection("profile");
     await nextTick();
-    assert.equal(mounted.page.section.value, "profile");
     assert.equal(switches, 0);
+    assert.equal(useNavigationStore().pendingProfileNavigation, null);
   } finally {
     mounted.stop();
-    globalThis.uni = previousUni;
-    globalThis.getCurrentPages = previousPages;
   }
 });

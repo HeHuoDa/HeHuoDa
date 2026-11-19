@@ -21,15 +21,15 @@ const steps = [
   },
   {
     number: "02",
-    title: "找到同行的伙伴",
+    title: "核对官方来源",
     description:
-      "在找队友中了解招募、查看队伍，或演示发布招募。平台组队不等于官方报名，也不代表已经通过参赛资格审核。",
+      "详情中的官方来源通知可以新窗口安全打开或复制地址，再到浏览器里对照原文与核对日期。",
   },
   {
     number: "03",
-    title: "让合作更进一步",
+    title: "留下自己的关注",
     description:
-      "在个人中心编辑示例资料、管理队伍，跟进申请与邀请。申请或收到邀请不代表入队，受邀者确认后才建立成员关系。",
+      "收藏感兴趣的比赛，在收藏页回看。收藏只在本次会话内有效，刷新或重新打开后会清空。",
   },
 ];
 </script>
@@ -49,16 +49,16 @@ const steps = [
         </view>
         <text class="about-tagline">一起成长，各有所长。</text>
         <text class="about-intro"
-          >四川农业大学校园比赛与项目组队平台。让比赛信息更清楚，让每一份所长遇见合适的伙伴。</text
+          >四川农业大学校园比赛信息平台。当前阶段先把比赛信息讲清楚，让每次查看都能对得上官方原文。</text
         >
       </view>
 
       <view class="hhr-panel about-section">
         <view class="about-heading">
           <text class="about-section-title" role="heading" aria-level="2"
-            >从一次发现，到一起出发</text
+            >从一次发现开始</text
           >
-          <text class="about-copy">你可以这样使用禾伙搭</text>
+          <text class="about-copy">现在可以这样使用禾伙搭</text>
         </view>
         <view v-for="step in steps" :key="step.number" class="about-step">
           <text class="about-step__number" aria-hidden="true">{{
@@ -86,27 +86,27 @@ const steps = [
           >
         </view>
         <view class="about-capability">
-          <text class="about-status about-status--demo">会话演示</text>
-          <text class="about-item-title">组队、收藏与站内通知</text>
+          <text class="about-status">当前会话</text>
+          <text class="about-item-title">收藏与示例资料</text>
           <text class="about-copy"
-            >招募、资料编辑、队伍管理、申请与邀请、比赛收藏和站内通知已提供会话演示。收藏引用的比赛信息仍从真实公开接口查询。</text
-          >
-          <text class="about-copy"
-            >站内通知展示组队进展与平台提醒演示，与比赛的官方来源通知不同，不代表消息真实发送或投递。</text
-          >
-          <text class="about-copy"
-            >演示变化仅保留在当前内存会话，页面间切换可继续使用；刷新、冷启动或统一重置会恢复初始示例，不会保存到账号或服务器。个人中心下拉中的“重置示例”会清空队伍、收藏、通知与资料演示，联系方式授权同时关闭。</text
+            >收藏与服务内的示例资料只在本次内存会话保留，页面间切换可继续使用；刷新、冷启动或进程结束后清空，不会保存到账号或服务器。</text
           >
         </view>
         <view class="about-capability">
-          <text class="about-status about-status--demo">小程序可用</text>
-          <text class="about-item-title">微信一键登录</text>
+          <text class="about-status about-status--pending">暂缓开放</text>
+          <text class="about-item-title">组队与招募</text>
           <text class="about-copy"
-            >微信小程序支持一键登录：首次登录自动创建平台账号，昵称默认“微信用户”，可在个人中心下拉里修改。登录只使用微信临时凭证，不获取手机号、头像或好友信息。</text
+            >站内组队、招募发布、申请与邀请、队伍治理均暂缓开放。“找队友”只说明暂缓情况，不提供可操作的虚假队伍或申请。</text
+          >
+        </view>
+        <view class="about-capability">
+          <text class="about-status about-status--pending">M2 开放</text>
+          <text class="about-item-title">统一身份认证登录</text>
+          <text class="about-copy"
+            >登录将只使用四川农业大学统一身份认证，首次认证时创建账号，默认昵称为「禾伙搭用户」。开放前不需要注册，也不会收集邮箱、密码或验证码。</text
           >
           <text class="about-copy"
-            >H5
-            保留公开浏览与演示，不提供登录渠道；邮箱密码注册与验证码不再开发。</text
+            >当前无需登录即可浏览公开比赛信息；登录开放后会另行说明告知版本与资料保存范围。</text
           >
         </view>
       </view>
@@ -116,10 +116,7 @@ const steps = [
           >把联系方式的选择权留给你</text
         >
         <text class="about-copy"
-          >联系方式默认不共享。只有查看者与所有者均为同队有效成员，且获得所有者授权，才满足展示条件。申请者、未确认的受邀者、已退出或被移除的成员均不满足条件。</text
-        >
-        <text class="about-copy"
-          >当前只演示授权判断，不收集或展示真实联系方式。</text
+          >当前版本不收集、不展示任何联系方式，也不提供联系方式授权开关。登录与组队开放前，请通过比赛官方通知中的渠道联系组织单位。</text
         >
       </view>
 

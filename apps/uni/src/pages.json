@@ -37,13 +37,13 @@
     {
       "path": "pages/teams/detail",
       "style": {
-        "navigationBarTitleText": "队伍详情"
+        "navigationBarTitleText": "找队友"
       }
     },
     {
       "path": "pages/teams/new",
       "style": {
-        "navigationBarTitleText": "发布招募"
+        "navigationBarTitleText": "找队友"
       }
     },
     {

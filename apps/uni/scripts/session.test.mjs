@@ -15,7 +15,7 @@ test("统一重置先失效旧操作再恢复示例，并清除所有一次性�
   const navigation = useNavigationStore(pinia);
   const oldTeam = store.teams[0];
   store.addFavorite("old");
-  navigation.requestTabQuery("teams", { competition: "old" });
+  navigation.requestTabQuery("home", { competition: "old" });
   navigation.requestProfileSection("applications", { recordId: "history-0" });
   store.registerReset("pending-operation", () => {
     assert.equal(store.sessionRevision, 1);
@@ -24,7 +24,7 @@ test("统一重置先失效旧操作再恢复示例，并清除所有一次性�
   store.reset();
   assert.notEqual(store.teams[0], oldTeam);
   assert.equal(store.favoriteCount, 0);
-  assert.equal(navigation.consumeTabQuery("teams"), null);
+  assert.equal(navigation.consumeTabQuery("home"), null);
   assert.equal(navigation.consumeProfileNavigation(), null);
 });
 

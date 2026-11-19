@@ -1,150 +1,33 @@
 <script setup lang="ts">
 import FormButton from "../../components/FormButton.vue";
 import { openTab } from "../../navigation/navigate";
-// #ifdef MP-WEIXIN
-import { computed, onScopeDispose, reactive, ref, watch } from "vue";
-import { onLoad, onUnload } from "@dcloudio/uni-app";
-import CampusVerificationPanel from "../../components/CampusVerificationPanel.vue";
-import { createCampusApi } from "../../api/campus-client";
-import { authedHttp } from "../../api/client";
-import {
-  createCampusController,
-  initialCampusState,
-} from "../../campus/controller";
-import { useAuthStore } from "../../stores/auth";
-import { useAppLifecycleStore } from "../../stores/app-lifecycle";
-import { useSessionStore } from "../../stores/session";
-import { usePageLifecycle } from "../../lifecycle/use-page-lifecycle";
-import { campusReturnTarget } from "../../navigation/campus-return";
-import { openPage, replacePage } from "../../navigation/navigate";
-
-const auth = useAuthStore();
-const app = useAppLifecycleStore();
-const business = useSessionStore();
-const state = reactive(initialCampusState());
-const controller = createCampusController(
-  state,
-  createCampusApi(authedHttp),
-  () => auth.generation,
-);
-const returnTarget = ref<ReturnType<typeof campusReturnTarget>>(null);
-const authenticated = computed(() => auth.authenticated);
-let timer: ReturnType<typeof globalThis.setInterval> | undefined;
-let visible = false;
-onLoad((query) => {
-  returnTarget.value = campusReturnTarget(query ?? {});
-});
-function stopTimer() {
-  if (timer !== undefined) globalThis.clearInterval(timer);
-  timer = undefined;
-}
-function show() {
-  visible = true;
-  if (!auth.authenticated) return;
-  void controller.show();
-  stopTimer();
-  timer = globalThis.setInterval(() => {
-    if (state.transaction?.status === "processing") void controller.query();
-  }, 2000);
-}
-function hide() {
-  visible = false;
-  stopTimer();
-  controller.hide(false);
-  // 应用后台和页面隐藏可能同轮发生；立即清密，等本轮应用状态落定再区分离页。
-  void Promise.resolve().then(() => {
-    if (!visible && app.foreground) controller.hide(true);
-  });
-}
-function dispose() {
-  visible = false;
-  stopTimer();
-  controller.hide(true);
-}
-usePageLifecycle({ show, hide });
-onUnload(dispose);
-onScopeDispose(dispose);
-watch(
-  () => auth.generation,
-  () => {
-    stopTimer();
-    controller.reset();
-  },
-  { flush: "sync" },
-);
-watch(authenticated, (value) => {
-  if (value && visible && app.foreground) show();
-});
-watch(
-  () => state.transaction?.status,
-  (status) => {
-    if (status === "succeeded") void auth.reloadProfile();
-  },
-);
-function retry() {
-  if (state.pending) return;
-  void controller.reload();
-}
-function finish() {
-  dispose();
-  const target = returnTarget.value;
-  if (target?.name === "team-new") {
-    replacePage("team-new");
-    return;
-  }
-  if (
-    target?.name === "team-detail" &&
-    business.teams.some((team) => team.id === target.id)
-  ) {
-    replacePage("team-detail", { id: target.id });
-    return;
-  }
-  openTab("profile");
-}
-// #endif
+/**
+ * 统一身份认证入口。
+ *
+ * M1 只说明学校统一身份认证尚未开放，当前免登录浏览比赛；
+ * 页面不渲染认证表单、不读取凭据、也不发送认证请求。
+ * M2（#221）在同一路由接入真实认证流程后替换本说明。
+ */
 </script>
 
 <template>
   <view class="campus-page">
-    <!-- #ifdef MP-WEIXIN -->
-    <CampusVerificationPanel
-      v-if="authenticated"
-      :state="state"
-      @restart="controller.restart"
-      @reload="retry"
-      @refresh="controller.refresh"
-      @submit="controller.submit"
-      @query="controller.query"
-      @cancel="controller.cancel"
-      @back="finish"
-      @consent="state.consented = $event"
-      @name="controller.edit('name', $event)"
-      @account="controller.edit('account', $event)"
-      @password="controller.edit('password', $event)"
-      @captcha="controller.edit('captcha', $event)"
-      @image-error="controller.imageError"
-    />
-    <view v-else class="campus-unavailable">
-      <text class="block">请先微信登录，再进行统一身份认证。</text>
-      <FormButton
-        @click="openPage('login', { returnTo: 'campus-verification' })"
-        >前往微信登录</FormButton
+    <view class="campus-pending">
+      <text class="hhr-eyebrow">SICAU UNIFIED AUTH</text>
+      <text class="campus-title" role="heading" aria-level="1"
+        >统一身份认证尚未开放</text
       >
-      <FormButton variant="soft" @click="openTab('profile')"
+      <text class="campus-copy"
+        >M1
+        只开放正式比赛信息浏览，不需要登录也不需要认证学籍。后续将只使用四川农业大学统一身份认证完成登录，届时不会要求另设邮箱密码。</text
+      >
+      <text class="campus-copy"
+        >公开浏览不会收集姓名、学号、统一身份认证密码或验证码；如果收到此类页面，请不要填写。</text
+      >
+      <FormButton class="campus-action" @click="openTab('profile')"
         >返回个人中心</FormButton
       >
     </view>
-    <!-- #endif -->
-    <!-- #ifndef MP-WEIXIN -->
-    <view class="campus-unavailable">
-      <text class="block"
-        >统一身份认证仅在微信小程序提供，当前可继续浏览公开内容。</text
-      >
-      <FormButton variant="secondary" @click="openTab('profile')"
-        >返回个人中心</FormButton
-      >
-    </view>
-    <!-- #endif -->
   </view>
 </template>
 <style scoped>
@@ -152,15 +35,31 @@ function finish() {
   min-height: 100vh;
   background: var(--hhr-color-page);
 }
-.campus-unavailable {
+.campus-pending {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  align-items: flex-start;
+  gap: 12px;
   max-width: 600px;
   margin: 0 auto;
   padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
-  font-size: 16px;
+  font-size: 14px;
   color: var(--hhr-color-ink);
   line-height: 1.7;
+}
+.campus-title {
+  font-family: var(--hhr-font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.campus-copy {
+  color: var(--hhr-color-muted);
+  overflow-wrap: anywhere;
+}
+.campus-action {
+  width: auto;
+  max-width: 100%;
+  margin-top: 12px;
 }
 </style>
