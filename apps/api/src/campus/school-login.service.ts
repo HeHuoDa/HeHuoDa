@@ -46,12 +46,16 @@ import {
   subjectIndex,
 } from "./campus.config.js";
 import { safeSchoolReason, schoolApiError } from "./school-errors.js";
+import {
+  countActiveSchoolTransactions,
+  MAX_ACTIVE_SCHOOL_TRANSACTIONS,
+  MAX_SCHOOL_UPSTREAM_IN_FLIGHT,
+  schoolCapacity,
+} from "./school-capacity.js";
 
 const SOURCE = "sicau-eauth";
 const ACTIVE = ["waiting", "processing"];
 const TRANSACTION_TTL_MS = 300_000;
-const MAX_ACTIVE = 128;
-const MAX_UPSTREAM_IN_FLIGHT = 5;
 
 type Transaction = typeof schoolLoginTransactions.$inferSelect;
 interface LiveTransaction {
@@ -107,7 +111,6 @@ export class SchoolLoginService implements OnApplicationShutdown {
   private readonly logger = new Logger(SchoolLoginService.name);
   private readonly instanceId = randomUUID();
   private readonly live = new Map<string, LiveTransaction>();
-  private inFlight = 0;
   private shuttingDown = false;
 
   constructor(
@@ -222,18 +225,8 @@ export class SchoolLoginService implements OnApplicationShutdown {
   }
 
   private async upstream<T>(run: () => Promise<T>): Promise<T> {
-    if (this.inFlight >= MAX_UPSTREAM_IN_FLIGHT)
-      throw createApiError(
-        503,
-        "CAMPUS_UPSTREAM_CAPACITY",
-        "统一身份认证服务繁忙",
-      );
-    this.inFlight++;
-    try {
-      return await run();
-    } finally {
-      this.inFlight--;
-    }
+    // 与已登录核验共享同一份在途预算（单实例部署）。
+    return schoolCapacity.run(MAX_SCHOOL_UPSTREAM_IN_FLIGHT, run);
   }
 
   private drop(id: string) {
@@ -377,11 +370,10 @@ export class SchoolLoginService implements OnApplicationShutdown {
     const row = await this.transaction(async (tx) => {
       const now = this.clock.now();
       this.requireEnabled(now);
-      const active = await tx
-        .select({ id: schoolLoginTransactions.id })
-        .from(schoolLoginTransactions)
-        .where(inArray(schoolLoginTransactions.status, ACTIVE));
-      if (active.length >= MAX_ACTIVE)
+      if (
+        (await countActiveSchoolTransactions(tx)) >=
+        MAX_ACTIVE_SCHOOL_TRANSACTIONS
+      )
         throw createApiError(
           503,
           "CAMPUS_SESSION_CAPACITY",
@@ -394,6 +386,7 @@ export class SchoolLoginService implements OnApplicationShutdown {
           id,
           holderHash,
           instanceId: this.instanceId,
+          termId: this.requireEnabled(now).term.id,
           status: "processing",
           operation: "create",
           createdAt: now,
@@ -514,6 +507,8 @@ export class SchoolLoginService implements OnApplicationShutdown {
         now = this.clock.now();
       if (row.status !== "waiting") return this.view(row);
       this.requireEnabled(now);
+      // 锁内二次核对告知版本，避免用户同意旧说明后直接提交密码。
+      this.assertConsent(input.consentVersion);
       if (now >= row.expiresAt)
         return this.view(
           await this.terminate(tx, row, "expired", "expired", now),
@@ -592,6 +587,11 @@ export class SchoolLoginService implements OnApplicationShutdown {
           "CAMPUS_TRANSACTION_ENDED",
           "认证事务已结束，请重新发起",
         );
+      // 跨学期不静默授予新学期资格：学期变化时终结事务，要求重新发起。
+      if (row.termId !== term.id) {
+        await this.terminate(tx, row, "expired", "term_changed", now);
+        return { rejected: null, expiredTerm: true as const };
+      }
       const digest = subjectIndex(settings, identity.source, identity.subject);
       const { user, created } = await this.repository.findOrCreateSchoolUser(
         tx,
@@ -674,14 +674,28 @@ export class SchoolLoginService implements OnApplicationShutdown {
         },
         tx,
       );
-      return { rejected: null, user, session, expiresAt: finished.expiresAt };
+      return {
+        rejected: null,
+        expiredTerm: false as const,
+        user,
+        session,
+        expiresAt: finished.expiresAt,
+        accessExpiresAt: accessExpiry(now),
+      };
     });
     if (outcome.rejected)
       throw createApiError(403, "ACCOUNT_RESTRICTED", "账号当前受限，无法登录");
-    const { user, session, expiresAt } = outcome as {
+    if (outcome.expiredTerm)
+      throw createApiError(
+        409,
+        "CAMPUS_TRANSACTION_ENDED",
+        "认证事务已结束，请重新发起",
+      );
+    const { user, session, expiresAt, accessExpiresAt } = outcome as {
       user: UserRecord;
       session: { id: string; absoluteExpiresAt: Date };
       expiresAt: Date;
+      accessExpiresAt: Date;
     };
     return {
       id,
@@ -693,7 +707,8 @@ export class SchoolLoginService implements OnApplicationShutdown {
         user: { id: user.id, nickname: user.nickname, status: user.status },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        accessExpiresAt: accessExpiry(this.clock.now()).toISOString(),
+        // 与令牌摘要写入使用同一个 now，避免响应与数据库到期时间不一致。
+        accessExpiresAt: accessExpiresAt.toISOString(),
         sessionExpiresAt: session.absoluteExpiresAt.toISOString(),
       },
     };

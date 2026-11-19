@@ -373,4 +373,24 @@ describe("学校唯一登录：匿名事务边界与凭据保护", () => {
     expect(done.statusCode).toBe(200);
     expect(done.json().credential.accessToken).toEqual(expect.any(String));
   });
+
+  it("POST 取消别名与 DELETE 等价，可用于丢弃 body 的代理", async () => {
+    const t = await f.createChallenge();
+    const cancelled = await f.request(
+      "POST",
+      `auth/school/challenges/${t.id}/cancel`,
+      { holderToken: t.holderToken },
+    );
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json().status).toBe("cancelled");
+    // 伪造持有凭证同样不能取消。
+    const other = await f.createChallenge();
+    expect(
+      (
+        await f.request("POST", `auth/school/challenges/${other.id}/cancel`, {
+          holderToken: "B".repeat(43),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
 });

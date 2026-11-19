@@ -22,7 +22,7 @@ import {
 } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import { ApiErrorDto } from "../common/dto/api-error.dto.js";
-import { createApiError } from "../common/api-error.js";
+import { assertEmptyBody } from "../common/empty-body.js";
 import {
   SchoolLoginChallengeResponseDto,
   SchoolLoginCredentialDto,
@@ -53,7 +53,7 @@ export class SchoolLoginController {
   })
   @ApiCreatedResponse({ type: SchoolLoginChallengeResponseDto })
   create(@Req() request: FastifyRequest, @Body() body: unknown) {
-    this.assertEmptyBody(body);
+    assertEmptyBody(body);
     return this.service.create(request.ip ?? "unknown", request.id);
   }
 
@@ -119,14 +119,20 @@ export class SchoolLoginController {
     return this.service.cancel(id, body.holderToken, request.id);
   }
 
-  private assertEmptyBody(body: unknown) {
-    if (
-      body !== undefined &&
-      (!body ||
-        typeof body !== "object" ||
-        Array.isArray(body) ||
-        Object.keys(body).length > 0)
-    )
-      throw createApiError(400, "BAD_REQUEST", "此操作不接受输入字段");
+  // DELETE 携 body 在部分代理/网关会被丢弃，提供等价 POST 别名；
+  // 两者共用同一服务与契约，客户端可按运行环境选用。
+  @Post("challenges/:id/cancel")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  @ApiOperation({
+    summary: "取消原事务（POST 别名，避免代理丢弃 DELETE body）",
+  })
+  @ApiOkResponse({ type: SchoolLoginTransactionDto })
+  cancelByPost(
+    @Req() request: FastifyRequest,
+    @Param("id") id: string,
+    @Body() body: SchoolLoginHolderQueryDto,
+  ) {
+    return this.service.cancel(id, body.holderToken, request.id);
   }
 }

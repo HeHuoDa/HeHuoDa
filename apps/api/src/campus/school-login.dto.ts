@@ -7,11 +7,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import {
-  CredentialResponseDto,
-  UserDto,
-  USER_STATUS_VALUES,
-} from "../auth/auth.dto.js";
+import { CredentialResponseDto } from "../auth/auth.dto.js";
 
 // 匿名登录没有平台会话，客户端必须同时提交事务 ID 与持有凭证。
 // 仅凭事务 ID 无法读取、刷新或提交，持有凭证只以 SHA-256 摘要落库。
@@ -112,6 +108,3 @@ export class SchoolLoginCredentialDto {
   })
   credential?: CredentialResponseDto;
 }
-
-// 供 api-types 消费端直接引用的用户与状态枚举。
-export { UserDto, USER_STATUS_VALUES };

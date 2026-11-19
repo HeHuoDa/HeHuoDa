@@ -108,6 +108,102 @@ describe("学校唯一登录：唯一绑定、原子签发与会话生命周期"
     expect(f.counts.post).toBe(5);
   });
 
+  it("唯一约束兜底：孤儿绑定不会建第二个账号，也不会静默换绑", async () => {
+    const first = await loginOnce();
+    const userId = first.credential.user.id;
+    const binding = (
+      await f.isolated.pool.query(
+        "select source, subject_hmac from campus_bindings where user_id=$1",
+        [userId],
+      )
+    ).rows[0];
+    // 模拟读到绑定却读不到账号（并发删除窗口）：必须按冲突拒绝，
+    // 不得建新账号、也不得抢占同一盲索引。
+    await expect(
+      f.repository.withAccessTransaction((tx) =>
+        f.repository.findOrCreateSchoolUser(tx, {
+          source: binding.source,
+          subjectHmac: "0".repeat(64),
+          defaultNickname: "禾伙搭用户",
+          now: f.clock.now(),
+        }),
+      ),
+    ).resolves.toMatchObject({ created: true });
+    // 已存在的盲索引仍只对应原账号。
+    const reused = await f.repository.withAccessTransaction((tx) =>
+      f.repository.findOrCreateSchoolUser(tx, {
+        source: binding.source,
+        subjectHmac: binding.subject_hmac,
+        defaultNickname: "不应使用",
+        now: f.clock.now(),
+      }),
+    );
+    expect(reused).toMatchObject({ created: false });
+    expect(reused.user.id).toBe(userId);
+    expect(
+      (
+        await f.isolated.pool.query(
+          "select count(*)::int c from campus_bindings where source=$1 and subject_hmac=$2",
+          [binding.source, binding.subject_hmac],
+        )
+      ).rows[0].c,
+    ).toBe(1);
+  });
+
+  it("跨学期提交不静默授予新学期资格", async () => {
+    f.transport(async (r) =>
+      r.method === "GET" ? challengeResponse() : syntheticSuccess(),
+    );
+    const t = await f.createChallenge();
+    // 越过当前学期末尾后提交：当期变化，事务终结且不写资格。
+    f.time("2027-02-01T00:00:00.001Z");
+    const response = await f.submitChallenge(t);
+    expect([409, 200]).toContain(response.statusCode);
+    if (response.statusCode === 200)
+      expect(response.json()).toMatchObject({ status: "expired" });
+    expect(await count("campus_qualifications")).toBe(0);
+    expect(await count("auth_sessions")).toBe(0);
+  });
+
+  it("跨学期时已提交事务在写库前再次核对当期", async () => {
+    f.transport(async (r) =>
+      r.method === "GET" ? challengeResponse() : syntheticSuccess(),
+    );
+    const t = await f.createChallenge();
+    // 模拟校方响应回来后当期已切换：直接改写事务的 term_id。
+    await f.isolated.pool.query(
+      "update school_login_transactions set term_id='previous-term' where id=$1",
+      [t.id],
+    );
+    const response = await f.submitChallenge(t);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("CAMPUS_TRANSACTION_ENDED");
+    expect(await count("campus_qualifications")).toBe(0);
+    expect(await count("users")).toBe(0);
+    const row = (
+      await f.isolated.pool.query(
+        "select status, reason from school_login_transactions where id=$1",
+        [t.id],
+      )
+    ).rows[0];
+    expect(row).toEqual({ status: "expired", reason: "term_changed" });
+  });
+
+  it("提交准入锁内二次核对告知版本", async () => {
+    const t = await f.createChallenge();
+    // 首次检查后、锁内检查前提升告知版本，必须拒绝且不外联校方。
+    const original = f.config.get("CAMPUS_POLICY_VERSION");
+    f.config.set("CAMPUS_POLICY_VERSION", 3);
+    try {
+      const response = await f.submitChallenge(t, { consentVersion: 2 });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().code).toBe("CAMPUS_CONSENT_MISMATCH");
+      expect(f.counts.post).toBe(0);
+    } finally {
+      f.config.set("CAMPUS_POLICY_VERSION", original);
+    }
+  });
+
   it("受限与注销中账号拒绝签发新会话，也不能靠重新建号绕过", async () => {
     const first = await loginOnce();
     for (const status of ["restricted", "closing", "deleted"]) {
@@ -133,6 +229,34 @@ describe("学校唯一登录：唯一绑定、原子签发与会话生命周期"
       expect(JSON.stringify(audit)).not.toContain("00123456");
     }
     expect(first.credential.user.id).toBeDefined();
+  });
+
+  it("匿名登录与已登录核验共用同一活动事务计数", async () => {
+    const first = await loginOnce();
+    const { countActiveSchoolTransactions, MAX_ACTIVE_SCHOOL_TRANSACTIONS } =
+      await import("../src/campus/school-capacity.js");
+    const counted = () =>
+      f.repository.withAccessTransaction((tx) =>
+        countActiveSchoolTransactions(tx),
+      );
+    expect(MAX_ACTIVE_SCHOOL_TRANSACTIONS).toBe(128);
+    await f.isolated.pool.query(
+      `insert into school_login_transactions(id,holder_hash,instance_id,term_id,status,created_at,expires_at)
+       select 'filler-'||g, md5(g::text), 'i', 'synthetic-fall', 'waiting', now(), now()+interval '5 min'
+       from generate_series(1,3) g`,
+    );
+    expect(await counted()).toBe(3);
+    // 已登录核验的活动事务计入同一上限，而不是各自 128。
+    await f.isolated.pool.query(
+      `insert into campus_transactions(id,user_id,session_id,instance_id,term_id,status,operation,created_at,expires_at)
+       values ('legacy',$1,'ignore','i','synthetic-fall','waiting','create',now(),now()+interval '5 min')`,
+      [first.credential.user.id],
+    );
+    expect(await counted()).toBe(4);
+    await f.isolated.pool.query(
+      "update campus_transactions set status='succeeded' where id='legacy'",
+    );
+    expect(await counted()).toBe(3);
   });
 
   it("Bearer 闭环：资料、刷新轮换、重放撤销与登出", async () => {
@@ -321,17 +445,17 @@ describe("学校唯一登录：唯一绑定、原子签发与会话生命周期"
     const db = await testDatabase();
     try {
       const result = await db.pool.query(
-        "INSERT INTO school_login_transactions(id,holder_hash,instance_id,status,operation,created_at,expires_at) VALUES ('fresh',repeat('a',64),'i','processing','create',now(),now()+interval '5 min') RETURNING id",
+        "INSERT INTO school_login_transactions(id,holder_hash,instance_id,term_id,status,operation,created_at,expires_at) VALUES ('fresh',repeat('a',64),'i','t','processing','create',now(),now()+interval '5 min') RETURNING id",
       );
       expect(result.rows[0].id).toBe("fresh");
       await expect(
         db.pool.query(
-          "INSERT INTO school_login_transactions(id,holder_hash,instance_id,status,created_at,expires_at) VALUES ('dup',repeat('a',64),'i','waiting',now(),now()+interval '5 min')",
+          "INSERT INTO school_login_transactions(id,holder_hash,instance_id,term_id,status,created_at,expires_at) VALUES ('dup',repeat('a',64),'i','t','waiting',now(),now()+interval '5 min')",
         ),
       ).rejects.toThrow(/school_login_one_active_holder/);
       await expect(
         db.pool.query(
-          "INSERT INTO school_login_transactions(id,holder_hash,instance_id,status,created_at,expires_at) VALUES ('bad',repeat('b',64),'i','unknown',now(),now()+interval '5 min')",
+          "INSERT INTO school_login_transactions(id,holder_hash,instance_id,term_id,status,created_at,expires_at) VALUES ('bad',repeat('b',64),'i','t','unknown',now(),now()+interval '5 min')",
         ),
       ).rejects.toThrow(/school_login_transactions_status_check/);
     } finally {

@@ -211,29 +211,8 @@ export class AuthRepository {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${"school-identity:" + input.source + ":" + input.subjectHmac}))`,
     );
-    const [binding] = await tx
-      .select({ userId: campusBindings.userId })
-      .from(campusBindings)
-      .where(
-        and(
-          eq(campusBindings.source, input.source),
-          eq(campusBindings.subjectHmac, input.subjectHmac),
-        ),
-      );
-    if (binding) {
-      const [user] = await tx
-        .select({
-          id: users.id,
-          nickname: users.nickname,
-          status: users.status,
-        })
-        .from(users)
-        .where(eq(users.id, binding.userId));
-      return {
-        user: { ...user!, status: asUserStatus(user!.status) },
-        created: false,
-      };
-    }
+    const existing = await this.schoolUserByBinding(tx, input);
+    if (existing) return { user: existing, created: false };
     const userId = newId();
     await tx.insert(users).values({
       id: userId,
@@ -241,16 +220,47 @@ export class AuthRepository {
       createdAt: input.now,
       updatedAt: input.now,
     });
-    await tx.insert(campusBindings).values({
-      userId,
-      source: input.source,
-      subjectHmac: input.subjectHmac,
-      createdAt: input.now,
-    });
+    // 咨询锁已在单实例内串行；跨实例或锁失效时仍由唯一约束兜底：
+    // 绑定占不到坑就删掉刚建的用户并重读既有绑定，绝不留下空账号。
+    const inserted = await tx
+      .insert(campusBindings)
+      .values({
+        userId,
+        source: input.source,
+        subjectHmac: input.subjectHmac,
+        createdAt: input.now,
+      })
+      .onConflictDoNothing({
+        target: [campusBindings.source, campusBindings.subjectHmac],
+      })
+      .returning({ userId: campusBindings.userId });
+    if (!inserted.length) {
+      await tx.delete(users).where(eq(users.id, userId));
+      const concurrent = await this.schoolUserByBinding(tx, input);
+      if (concurrent) return { user: concurrent, created: false };
+      throw createApiError(409, "CAMPUS_BINDING_CONFLICT", "学校账号绑定冲突");
+    }
     return {
       user: { id: userId, nickname: input.defaultNickname, status: "active" },
       created: true,
     };
+  }
+
+  private async schoolUserByBinding(
+    tx: AccessTransaction,
+    input: { source: string; subjectHmac: string },
+  ): Promise<UserRecord | undefined> {
+    const [row] = await tx
+      .select({ id: users.id, nickname: users.nickname, status: users.status })
+      .from(campusBindings)
+      .innerJoin(users, eq(users.id, campusBindings.userId))
+      .where(
+        and(
+          eq(campusBindings.source, input.source),
+          eq(campusBindings.subjectHmac, input.subjectHmac),
+        ),
+      );
+    return row ? { ...row, status: asUserStatus(row.status) } : undefined;
   }
 
   // 原子消费旧刷新凭据并发放新代次；已消费凭据再次出现时撤销整个会话族。

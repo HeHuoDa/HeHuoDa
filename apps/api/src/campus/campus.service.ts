@@ -33,6 +33,12 @@ import {
 } from "../database/schema.js";
 import { consumeBudget } from "./budget.js";
 import {
+  countActiveSchoolTransactions,
+  MAX_ACTIVE_SCHOOL_TRANSACTIONS,
+  MAX_SCHOOL_UPSTREAM_IN_FLIGHT,
+  schoolCapacity,
+} from "./school-capacity.js";
+import {
   CAMPUS_SETTING_KEYS,
   campusSettings,
   currentTerm,
@@ -72,7 +78,6 @@ export class CampusService implements OnApplicationShutdown {
   private readonly logger = new Logger(CampusService.name);
   private readonly instanceId = randomUUID();
   private readonly live = new Map<string, LiveSession>();
-  private inFlight = 0;
   private shuttingDown = false;
   constructor(
     private readonly database: DatabaseService,
@@ -265,18 +270,8 @@ export class CampusService implements OnApplicationShutdown {
       );
   }
   private async upstream<T>(run: () => Promise<T>): Promise<T> {
-    if (this.inFlight >= 5)
-      throw createApiError(
-        503,
-        "CAMPUS_UPSTREAM_CAPACITY",
-        "统一身份认证服务繁忙",
-      );
-    this.inFlight++;
-    try {
-      return await run();
-    } finally {
-      this.inFlight--;
-    }
+    // 与匿名登录共享同一份在途预算（单实例部署）。
+    return schoolCapacity.run(MAX_SCHOOL_UPSTREAM_IN_FLIGHT, run);
   }
   private drop(id: string) {
     const live = this.live.get(id);
@@ -392,7 +387,10 @@ export class CampusService implements OnApplicationShutdown {
           "CAMPUS_TRANSACTION_ACTIVE",
           "已有正在进行的统一身份认证",
         );
-      if (active.length >= 128)
+      if (
+        (await countActiveSchoolTransactions(tx)) >=
+        MAX_ACTIVE_SCHOOL_TRANSACTIONS
+      )
         throw createApiError(
           503,
           "CAMPUS_SESSION_CAPACITY",

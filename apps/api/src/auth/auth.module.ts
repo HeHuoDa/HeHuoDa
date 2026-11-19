@@ -32,9 +32,11 @@ export class AuthCleanupScheduler {
     waitForCompletion: true,
   })
   async cleanup() {
+    // 任一用户登录通道开启就需要清理凭据与审计；仅学校登录时也要跑。
     if (
       this.config.get("NODE_ENV") === "test" ||
-      !this.config.get<boolean>("WECHAT_LOGIN_ENABLED", false)
+      (!this.config.get<boolean>("WECHAT_LOGIN_ENABLED", false) &&
+        !this.config.get<boolean>("CAMPUS_VERIFICATION_ENABLED", false))
     )
       return;
     try {

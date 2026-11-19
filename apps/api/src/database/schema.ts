@@ -578,6 +578,8 @@ export const schoolLoginTransactions = pgTable("school_login_transactions", {
   id: text().primaryKey(),
   holderHash: text("holder_hash").notNull(),
   instanceId: text("instance_id").notNull(),
+  // 创建时的当期学期；跨学期后不得静默授予新学期资格。
+  termId: text("term_id").notNull(),
   status: text().notNull(),
   operation: text(),
   challengeVersion: text("challenge_version"),

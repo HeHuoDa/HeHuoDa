@@ -4,6 +4,7 @@ CREATE TABLE school_login_transactions (
  id text PRIMARY KEY,
  holder_hash text NOT NULL,
  instance_id text NOT NULL,
+ term_id text NOT NULL,
  status text NOT NULL CHECK (status IN ('waiting','processing','succeeded','failed','cancelled','expired')),
  operation text,
  challenge_version text,

@@ -86,8 +86,14 @@ const environmentSchema = Joi.object({
   CAMPUS_VERIFICATION_ENABLED: Joi.boolean().default(false),
   CAMPUS_POLICY_VERSION: Joi.number().integer().min(1).default(2),
   CAMPUS_RATE_SUBMIT_USER: Joi.number().integer().min(1).default(5),
-  CAMPUS_RATE_SUBMIT_SOURCE: Joi.number().integer().min(1).default(100),
-  CAMPUS_RATE_SUBMIT_GLOBAL: Joi.number().integer().min(1).default(500),
+  CAMPUS_RATE_SUBMIT_SOURCE: Joi.number()
+    .integer()
+    .min(1)
+    .default(SCHOOL_LOGIN_LIMITS.submitSource),
+  CAMPUS_RATE_SUBMIT_GLOBAL: Joi.number()
+    .integer()
+    .min(1)
+    .default(SCHOOL_LOGIN_LIMITS.submitGlobal),
   CAMPUS_RATE_CHALLENGE_USER: Joi.number().integer().min(1).default(5),
   CAMPUS_RATE_CHALLENGE_SOURCE: Joi.number().integer().min(1).default(100),
   CAMPUS_RATE_CHALLENGE_GLOBAL: Joi.number().integer().min(1).default(500),

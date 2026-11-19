@@ -45,7 +45,11 @@ M2 唯一用户登录入口，**不使用 `AuthGuard`**，无需前置微信登�
 - 事务归属只看持有凭证摘要，不依赖平台会话；跨凭证、缺失与不存在统一 404。
 - 错误一律使用安全枚举：`CAMPUS_STALE_CHALLENGE`(409)、`CAMPUS_TRANSACTION_ENDED`(409)、`CAMPUS_TRANSACTION_BUSY`(409)、`CAMPUS_IDENTITY_MISMATCH`(400)、`CAMPUS_CONSENT_MISMATCH`(400，带 `details.currentVersion`)、`CAMPUS_RATE_LIMITED`(429)、`CAMPUS_UPSTREAM_*`/`CAMPUS_UNKNOWN_RESPONSE`(503)、`CAMPUS_UNSUPPORTED_VERIFICATION`(400)、`ACCOUNT_RESTRICTED`(403)、`CAMPUS_VERIFICATION_UNAVAILABLE`(503)。
 
-学校校方 I/O 永远在数据库事务之外：先取得可信身份，再进入一个短事务完成“查找或创建用户 + 绑定 + 资料 + 资格 + 会话/令牌 + 审计”。同一 `(source,subject_hmac)` 的并发首登由咨询锁串行，`campus_bindings` 的 `(source,subject_hmac)` 唯一约束兜底。受限、注销中与已删除账号拒绝签发新会话，也不会因重新登录而新建账号。
+学校校方 I/O 永远在数据库事务之外：先取得可信身份，再进入一个短事务完成“查找或创建用户 + 绑定 + 资料 + 资格 + 会话/令牌 + 审计”。同一 `(source,subject_hmac)` 的并发首登先由咨询锁串行，再以 `campus_bindings` 的 `(source,subject_hmac)` 唯一约束兜底：插入绑定冲突时删除刚建的空账号并重读既有绑定，因此不会出现两个账号或空账号。受限、注销中与已删除账号拒绝签发新会话，也不会因重新登录而新建账号。跨学期提交会终结事务并要求重新发起，不静默授予新学期资格。
+
+单实例部署下，匿名登录与已登录校园核验**共用**同一份校方在途预算（最多 5 个并行校方操作）与活动事务上限（最多 128 个），不会因两套路由叠加成 10 / 256。学号盲索引使用 `HMAC(hmacKey, ["login-rate-account", 学号])`，与绑定索引用同一密钥但不同域前缀，二者不可互相推导。
+
+**实网验收状态**：#58 的授权测试账号尚未就绪，本次只完成桩验收与隔离 PostgreSQL 回归；真实学校门户闭环（挑战 → 验证码 → 登录 → 刷新 → 登出）**待 #58 账号就绪后按正常流程填写验证码验收**，不与 #140 的生产安全开关验收混同。
 
 仅开启学校登录（`CAMPUS_VERIFICATION_ENABLED=true`、`WECHAT_LOGIN_ENABLED=false`）时无需 `WECHAT_APP_ID`/`WECHAT_APP_SECRET`；`/auth/refresh`、`/auth/logout`、`/auth/me` 与校园状态读取继续可用。`/auth/wechat/login` 仍受 `WECHAT_LOGIN_ENABLED` 保护，正式下线由 #223 收口。
 
