@@ -19,4 +19,10 @@ describe("管理列表URL参数", () => {
     expect(readQuery({ pageSize: "0" }, {}).pageSize).toBe(5);
     expect(readQuery({ pageSize: "abc" }, {}).pageSize).toBe(5);
   });
+  it("默认每页条数与调用方选项一致", () => {
+    // 比赛列表只提供 10/20/50，默认 10 才能让选择器有有效值。
+    expect(readQuery({}, {}, 10).pageSize).toBe(10);
+    expect(readQuery({ pageSize: "20" }, {}, 10).pageSize).toBe(20);
+    expect(readQuery({ pageSize: "7" }, {}, 10).pageSize).toBe(7);
+  });
 });
