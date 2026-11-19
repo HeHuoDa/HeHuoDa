@@ -17,9 +17,9 @@ onLaunch(() => {
   // #endif
 });
 onShow(() => {
-  // 先处理本地会话到期，再刷新会话派生事件、恢复页面请求和时钟。
+  // 先处理本地会话到期，再恢复页面请求和时钟。
+  // 站内通知随组队一并暂缓，M1 没有需要刷新的会话通知事件。
   useAuthStore().expireIfNeeded();
-  useSessionStore().syncNotifications();
   useAppLifecycleStore().show();
 });
 onHide(() => useAppLifecycleStore().hide());

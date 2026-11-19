@@ -77,7 +77,7 @@ const links = [
   },
   {
     label: "站内通知",
-    description: "平台公告示例",
+    description: "组队恢复后开放",
     icon: "bell" as const,
     action: () => openPage("notifications"),
   },

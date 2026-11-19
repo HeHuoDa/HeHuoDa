@@ -134,7 +134,7 @@ export const routeRegistry = {
     kind: "page",
     status: "placeholder",
     source: "/notifications",
-    description: "组队进展与平台提醒将在这里展示。",
+    description: "站内通知随组队一并暂缓开放，本页只说明开放范围与后续计划。",
   },
   about: {
     name: "about",
