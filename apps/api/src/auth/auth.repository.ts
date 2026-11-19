@@ -11,6 +11,7 @@ import {
   authAuditLogs,
   authSessions,
   authTokens,
+  campusBindings,
   users,
   wechatIdentities,
 } from "../database/schema.js";
@@ -54,7 +55,12 @@ export type AuditKind =
   | "refresh_replay"
   | "refresh_rejected"
   | "session_revoked"
-  | "nickname_changed";
+  | "nickname_changed"
+  // 学校唯一登录永远只有安全枚举，不带账号或学号引用。
+  | "campus_login_succeeded"
+  | "campus_login_failed"
+  | "campus_login_cancelled"
+  | "campus_login_rejected_account";
 
 export function accessExpiry(now: Date): Date {
   return new Date(now.getTime() + ACCESS_TOKEN_MINUTES * 60_000);
@@ -141,34 +147,110 @@ export class AuthRepository {
     tokens: TokenPair;
     now: Date;
   }): Promise<{ id: string; absoluteExpiresAt: Date; generation: number }> {
+    return this.withAccessTransaction((tx) => this.issueSessionInTx(tx, input));
+  }
+
+  // 学校唯一登录需要在同一个短事务里完成建号、绑定与会话签发，
+  // 因此将签发拆成可在调用方事务内复用的原子步骤。
+  async issueSessionInTx(
+    tx: AccessTransaction,
+    input: { userId: string; tokens: TokenPair; now: Date },
+  ): Promise<{ id: string; absoluteExpiresAt: Date; generation: number }> {
+    await lockAccessTransaction(tx);
+    await this.assertLoginable(tx, input.userId);
     const absoluteExpiresAt = sessionExpiry(input.now);
-    return this.database.db.transaction(async (tx) => {
-      await lockAccessTransaction(tx);
-      const [user] = await tx
-        .select({ status: users.status })
-        .from(users)
-        .where(eq(users.id, input.userId));
-      if (user?.status !== "active")
-        throw createApiError(403, "ACCOUNT_RESTRICTED", "账号当前受限");
-      const sessionId = newId();
-      await tx.insert(authSessions).values({
-        id: sessionId,
-        userId: input.userId,
-        createdAt: input.now,
-        absoluteExpiresAt,
-      });
-      await tx.insert(authTokens).values({
-        id: newId(),
-        sessionId,
-        generation: 1,
-        accessHash: hashToken(input.tokens.accessToken),
-        accessExpiresAt: accessExpiry(input.now),
-        refreshHash: hashToken(input.tokens.refreshToken),
-        refreshExpiresAt: absoluteExpiresAt,
-        createdAt: input.now,
-      });
-      return { id: sessionId, absoluteExpiresAt, generation: 1 };
+    const sessionId = newId();
+    await tx.insert(authSessions).values({
+      id: sessionId,
+      userId: input.userId,
+      createdAt: input.now,
+      absoluteExpiresAt,
     });
+    await tx.insert(authTokens).values({
+      id: newId(),
+      sessionId,
+      generation: 1,
+      accessHash: hashToken(input.tokens.accessToken),
+      accessExpiresAt: accessExpiry(input.now),
+      refreshHash: hashToken(input.tokens.refreshToken),
+      refreshExpiresAt: absoluteExpiresAt,
+      createdAt: input.now,
+    });
+    return { id: sessionId, absoluteExpiresAt, generation: 1 };
+  }
+
+  private async assertLoginable(
+    tx: AccessTransaction,
+    userId: string,
+  ): Promise<void> {
+    const [user] = await tx
+      .select({ status: users.status })
+      .from(users)
+      .where(eq(users.id, userId));
+    if (user?.status !== "active")
+      throw createApiError(403, "ACCOUNT_RESTRICTED", "账号当前受限");
+  }
+
+  /**
+   * 按 (source,subject_hmac) 盲索引查找或创建学校登录账号。
+   *
+   * 调用方必须已在权限事务内：同一学校身份的并发首登由咨询锁串行，
+   * campus_bindings 的 (source,subject_hmac) 唯一约束是最终兜底，
+   * 因此不会出现两个账号或空账号。
+   */
+  async findOrCreateSchoolUser(
+    tx: AccessTransaction,
+    input: {
+      source: string;
+      subjectHmac: string;
+      defaultNickname: string;
+      now: Date;
+    },
+  ): Promise<{ user: UserRecord; created: boolean }> {
+    await lockAccessTransaction(tx);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${"school-identity:" + input.source + ":" + input.subjectHmac}))`,
+    );
+    const [binding] = await tx
+      .select({ userId: campusBindings.userId })
+      .from(campusBindings)
+      .where(
+        and(
+          eq(campusBindings.source, input.source),
+          eq(campusBindings.subjectHmac, input.subjectHmac),
+        ),
+      );
+    if (binding) {
+      const [user] = await tx
+        .select({
+          id: users.id,
+          nickname: users.nickname,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.id, binding.userId));
+      return {
+        user: { ...user!, status: asUserStatus(user!.status) },
+        created: false,
+      };
+    }
+    const userId = newId();
+    await tx.insert(users).values({
+      id: userId,
+      nickname: input.defaultNickname,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+    await tx.insert(campusBindings).values({
+      userId,
+      source: input.source,
+      subjectHmac: input.subjectHmac,
+      createdAt: input.now,
+    });
+    return {
+      user: { id: userId, nickname: input.defaultNickname, status: "active" },
+      created: true,
+    };
   }
 
   // 原子消费旧刷新凭据并发放新代次；已消费凭据再次出现时撤销整个会话族。

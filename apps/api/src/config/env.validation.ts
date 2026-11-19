@@ -6,6 +6,7 @@ import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
 import {
   AUDIT_RETENTION_DAYS_DEFAULT,
   RATE_LIMIT_DEFAULTS,
+  SCHOOL_LOGIN_LIMITS,
 } from "../auth/auth.constants.js";
 
 export interface EnvironmentVariables {
@@ -38,6 +39,9 @@ export interface EnvironmentVariables {
   AUTH_RATE_REFRESH_PER_SUBJECT: number;
   AUTH_RATE_REFRESH_GLOBAL: number;
   AUTH_AUDIT_RETENTION_DAYS: number;
+  CAMPUS_RATE_LOGIN_GLOBAL: number;
+  CAMPUS_RATE_LOGIN_SOURCE: number;
+  CAMPUS_RATE_LOGIN_ACCOUNT: number;
 }
 
 const environmentSchema = Joi.object({
@@ -87,6 +91,19 @@ const environmentSchema = Joi.object({
   CAMPUS_RATE_CHALLENGE_USER: Joi.number().integer().min(1).default(5),
   CAMPUS_RATE_CHALLENGE_SOURCE: Joi.number().integer().min(1).default(100),
   CAMPUS_RATE_CHALLENGE_GLOBAL: Joi.number().integer().min(1).default(500),
+  // 学校唯一登录（匿名）预算：挑战按分钟，提交按滚动 15 分钟。
+  CAMPUS_RATE_LOGIN_GLOBAL: Joi.number()
+    .integer()
+    .min(1)
+    .default(SCHOOL_LOGIN_LIMITS.global),
+  CAMPUS_RATE_LOGIN_SOURCE: Joi.number()
+    .integer()
+    .min(1)
+    .default(SCHOOL_LOGIN_LIMITS.source),
+  CAMPUS_RATE_LOGIN_ACCOUNT: Joi.number()
+    .integer()
+    .min(1)
+    .default(SCHOOL_LOGIN_LIMITS.account),
   NODE_ENV: Joi.string()
     .valid("development", "test", "production")
     .default("development"),
