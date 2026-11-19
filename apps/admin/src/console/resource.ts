@@ -24,6 +24,10 @@ export class ConsoleError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** 服务端 ApiErrorDto.code；仅用于区分错误种类，不用于展示。 */
+    public code?: string,
+    /** 服务端公开错误详情，如发布底线缺口 details.blocks。 */
+    public details?: unknown,
   ) {
     super(message);
   }

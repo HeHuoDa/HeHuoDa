@@ -8,10 +8,12 @@ import { router } from "./router";
 import { adminHttp } from "./runtime";
 import {
   createAdminServices,
+  createCompetitionService,
   createControlService,
   createReviewService,
 } from "./adapters";
 import { adminServicesKey } from "./services";
+import { competitionKey } from "./console/competitions";
 import { ingestionControlKey } from "./console/ingestion-control";
 import { reviewKey } from "./console/review";
 import { safeReturn } from "./http";
@@ -47,6 +49,8 @@ createApp(App)
     ),
   )
   .provide(reviewKey, createReviewService(adminHttp))
+  // 正常登录入口注入真实比赛维护服务；显式 preview=1 示例在页面内单独隔离。
+  .provide(competitionKey, createCompetitionService(adminHttp))
   .use(router)
   .use(ElementPlus, { locale: zhCn })
   .mount("#app");

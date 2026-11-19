@@ -21,12 +21,14 @@ export function readQuery(
     from = "";
     to = "";
   }
+  const size = Number(first("pageSize"));
   return {
     q: first("q"),
     status: Object.hasOwn(states, first("status")) ? first("status") : "",
     from,
     to,
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
-    pageSize: first("pageSize") === "10" ? 10 : 5,
+    // 各列表选项不同（比赛支持 10/20/50），只保留服务端接受的 1–50 正整数。
+    pageSize: Number.isSafeInteger(size) && size >= 1 && size <= 50 ? size : 5,
   };
 }

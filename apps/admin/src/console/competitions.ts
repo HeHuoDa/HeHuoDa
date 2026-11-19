@@ -1,39 +1,89 @@
 import type { InjectionKey } from "vue";
 import type { College } from "@hehuoda/api-types";
-import type { CompetitionPatch, ImportPatch, PreviewReceipt } from "./review";
-import { validDate, safeSourceUrl } from "./review";
+import type { CompetitionPatch, ImportPatch } from "./review";
+import { validDate } from "./review";
+import { manualSourceUrlError } from "./source-url";
 import type { PageQuery, PageResult } from "./resource";
-import { queryPage } from "./resource";
+import { ConsoleError, errorMessage, queryPage } from "./resource";
+import type { Schema } from "../http";
 import { ServiceUnavailable } from "../services";
 
-// #38 尚未提供 HTTP 契约；此处仅为页面模型，不是生成 DTO。
+// 页面模型与 #38 生成 DTO（AdminCompetition*Dto）一一对应；此处不重复声明契约形状。
 export type CompetitionAction = "save" | "publish" | "hide";
 export interface ManagedCompetition {
   id: string;
-  title: string;
-  status: string;
-  date: string;
   baseline: string;
+  /** 完整可编辑内容；列表行需要的标题与状态从这里派生，避免再存一份副本。 */
   content: CompetitionPatch;
 }
+export interface CompetitionListItem {
+  id: string;
+  title: string;
+  status: string;
+  /** 管理列表契约没有日期字段，固定留空由页面显示明确空态。 */
+  date: string;
+  secondary: string;
+}
+export interface CompetitionBaseline {
+  targetId: string;
+  exists: boolean;
+  baseline: string;
+  publication: string | null;
+}
+export interface CompetitionPreviewReceipt {
+  /** 与页面 contentKey 同一算法；不一致的回执不能用于提交。 */
+  contentKey: string;
+  /** 服务端预览回执（previewId），只能消费一次。 */
+  token: string;
+  changes: Schema["AdminCompetitionChangeDto"][];
+  blocks: Schema["AdminCompetitionPublishBlockDto"][];
+}
+export interface CompetitionCommandResult {
+  targetId: string;
+  action: CompetitionAction;
+  publication: string;
+  baseline: string;
+  changes: Schema["AdminCompetitionChangeDto"][];
+  auditOperationId: string;
+}
+/**
+ * 比赛维护专用的错误文案。
+ * 服务端用不同 code 区分基线过期、目标不符、需显式确认、预览失效与发布底线；
+ * 这些原因直接决定下一步该重载、重预览还是补齐内容，不能收敛成一句泛化提示。
+ */
+export function competitionErrorMessage(error: unknown) {
+  if (error instanceof ConsoleError && error.code?.startsWith("COMPETITION_"))
+    return error.message || errorMessage(error);
+  return errorMessage(error);
+}
 export interface CompetitionService {
-  list(query: PageQuery): Promise<PageResult<ManagedCompetition>>;
+  list(query: PageQuery): Promise<PageResult<CompetitionListItem>>;
   detail(id: string): Promise<ManagedCompetition>;
-  preview(
-    content: CompetitionPatch,
-    baseline: string,
-    action: CompetitionAction,
-  ): Promise<PreviewReceipt>;
-  change(input: {
+  baseline(id: string): Promise<CompetitionBaseline>;
+  preview(input: {
     content: CompetitionPatch;
     patch: ImportPatch;
     baseline: string;
     action: CompetitionAction;
     reason: string;
+  }): Promise<CompetitionPreviewReceipt>;
+  change(input: {
+    patch: ImportPatch;
+    baseline: string;
+    action: CompetitionAction;
+    reason: string;
     operationId: string;
-    receipt?: PreviewReceipt;
+    receipt?: CompetitionPreviewReceipt;
     confirmPublished: boolean;
-  }): Promise<void>;
+  }): Promise<CompetitionCommandResult>;
+}
+/** 页面与服务适配共用的预览绑定键：内容、基线或动作任一变化即失效。 */
+export function competitionContentKey(
+  content: CompetitionPatch,
+  baseline: string,
+  action: CompetitionAction,
+) {
+  return JSON.stringify({ content, baseline, action });
 }
 export const competitionKey: InjectionKey<CompetitionService> =
   Symbol("competitions");
@@ -62,17 +112,33 @@ export function competitionPatch(
 ): ImportPatch {
   const patch: ImportPatch = { id: after.id };
   for (const key of Object.keys(after) as (keyof CompetitionPatch)[])
-    if (!before || JSON.stringify(after[key]) !== JSON.stringify(before[key]))
+    // 发布状态只能由 publish/hide 命令改变，save 携带不同 publication 会被拒绝。
+    if (
+      key !== "publication" &&
+      (!before || JSON.stringify(after[key]) !== JSON.stringify(before[key]))
+    )
       Object.assign(patch, { [key]: structuredClone(after[key]) });
   return patch;
+}
+/** 已有记录是否存在未提交的表单修改（发布/隐藏不含内容，须先保存）。 */
+export function competitionDirty(
+  after: CompetitionPatch,
+  before: CompetitionPatch | null,
+) {
+  return (
+    JSON.stringify(competitionPatch(after, before)) !==
+    JSON.stringify({ id: after.id })
+  );
+}
+export function validCompetitionId(value: string) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
 }
 export function validateCompetition(
   value: CompetitionPatch,
   colleges: College[],
   action: CompetitionAction = "save",
 ): { field: string; message: string } | null {
-  const id = (v: string) =>
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) && v.length <= 100;
+  const id = validCompetitionId;
   if (!id(value.id))
     return {
       field: "id",
@@ -142,17 +208,24 @@ export function validateCompetition(
         };
     }
   }
-  for (const n of value.notices)
+  for (const n of value.notices) {
+    const urlError = manualSourceUrlError(n.url);
     if (
       !n.title.trim() ||
       !n.publisher.trim() ||
-      !safeSourceUrl(n.url) ||
+      urlError ||
       [n.publishedAt, n.checkedAt].some((d) => d !== null && !validDate(d))
     )
       return {
+        // 手工比赛通道：公开 HTTPS 外链（无凭据、无非默认端口），官方性由管理员核实。
         field: "relations",
-        message: "来源须填写标题、发布单位、安全链接及有效日期（未知保持空）。",
+        message:
+          "来源须填写标题、发布单位、安全链接及有效日期（未知保持空）；" +
+          (urlError
+            ? urlError + "请自行核实其官方性。"
+            : "链接须为无凭据、无非默认端口的公开 https 地址，请自行核实其官方性。"),
       };
+  }
   for (const t of value.tracks)
     if (!t.name.trim() || !t.members.trim() || !t.rules.trim())
       return { field: "relations", message: "请填写赛道名称、人数与规则。" };
@@ -166,6 +239,7 @@ const unavailable = async (): Promise<never> => {
 export const unavailableCompetitions: CompetitionService = {
   list: unavailable,
   detail: unavailable,
+  baseline: unavailable,
   preview: unavailable,
   change: unavailable,
 };
@@ -227,9 +301,6 @@ export const competitionExamples: ManagedCompetition[] = Array.from(
     ];
     return {
       id: content.id,
-      title: content.name,
-      status: content.publication,
-      date: "2026-10-20",
       baseline: `example-baseline-${i}`,
       content,
     };
@@ -238,11 +309,30 @@ export const competitionExamples: ManagedCompetition[] = Array.from(
 export const exampleCompetitions: CompetitionService = {
   ...unavailableCompetitions,
   async list(q) {
-    return queryPage(competitionExamples, q);
+    // 示例行与真实管理列表同形：没有独立日期字段，只按名称与状态本地筛选。
+    return queryPage(
+      competitionExamples.map((v) => ({
+        id: v.id,
+        title: v.content.name,
+        status: v.content.publication ?? "draft",
+        date: "",
+        secondary: "示例 · 不会写入",
+      })),
+      q,
+    );
   },
   async detail(id) {
     const value = competitionExamples.find((v) => v.id === id);
     if (!value) throw new Error("未找到示例");
     return structuredClone(value);
+  },
+  async baseline(id) {
+    const value = competitionExamples.find((v) => v.id === id);
+    return {
+      targetId: id,
+      exists: !!value,
+      baseline: value?.baseline ?? "example-baseline-new",
+      publication: value?.content.publication ?? null,
+    };
   },
 };

@@ -120,6 +120,46 @@ it("退出网络失败后，重试会恢复CSRF再撤销服务端会话", async 
   });
   expect(http.state.session).toBeNull();
 });
+it("服务端公开错误体透出给页面，不丢失错误码与发布缺口详情", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ id: "admin-a", displayName: "A", expiresAt: "2099" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ adminId: "admin-a", csrfToken: "csrf-a" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            code: "COMPETITION_PUBLISH_BLOCKED",
+            message: "发布至少需要一条赛道",
+            requestId: "req-1",
+            details: { blocks: [{ code: "TRACK_MISSING", message: "缺赛道" }] },
+          },
+          { status: 422 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("<html>500</html>", { status: 500 })),
+  );
+  const http = createAdminHttp();
+  await http.restore();
+  await expect(
+    http.request("/competitions/alpha/commands", { method: "POST", body: {} }),
+  ).rejects.toMatchObject({
+    status: 422,
+    message: "发布至少需要一条赛道",
+    code: "COMPETITION_PUBLISH_BLOCKED",
+    details: { blocks: [{ code: "TRACK_MISSING", message: "缺赛道" }] },
+  });
+  // 非 JSON 错误响应回落到通用提示，不把解析失败变成第二个错误。
+  await expect(http.request("/dashboard")).rejects.toMatchObject({
+    status: 500,
+    message: "管理请求失败，请核对后重试。",
+  });
+});
 it("先恢复 Cookie 会话，写请求使用该会话 CSRF，凭证不持久化", async () => {
   const fetcher = vi
     .fn()

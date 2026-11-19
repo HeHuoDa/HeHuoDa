@@ -15,6 +15,10 @@ const props = defineProps<{
   query: PageQuery;
   states: Record<string, string>;
   searchable?: boolean;
+  searchPlaceholder?: string;
+  /** 服务端不支持日期筛选时隐藏起止日期，避免发出无效条件。 */
+  dateFilters?: boolean;
+  pageSizes?: number[];
 }>();
 const emit = defineEmits<{
   query: [value: PageQuery];
@@ -22,6 +26,7 @@ const emit = defineEmits<{
   retry: [];
 }>();
 function displayDate(value: string) {
+  if (!value) return "—";
   if (!value.includes("T") || !Number.isFinite(Date.parse(value))) return value;
   return new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
@@ -53,8 +58,8 @@ function apply() {
       <label v-if="searchable !== false"
         >搜索<ElInput
           v-model="filter.q"
-          aria-label="搜索标题或昵称"
-          placeholder="搜索标题或昵称"
+          :aria-label="searchPlaceholder ?? '搜索标题或昵称'"
+          :placeholder="searchPlaceholder ?? '搜索标题或昵称'"
           clearable
       /></label>
       <label
@@ -69,12 +74,12 @@ function apply() {
             :label="label"
             :value="key" /></ElSelect
       ></label>
-      <label
+      <label v-if="dateFilters !== false"
         >开始日期<input
           v-model="filter.from"
           type="date"
           aria-label="开始日期" /></label
-      ><label
+      ><label v-if="dateFilters !== false"
         >结束日期<input v-model="filter.to" type="date" aria-label="结束日期"
       /></label>
       <ElButton native-type="submit" type="primary">查询</ElButton>
@@ -141,8 +146,13 @@ function apply() {
               })
             "
           >
-            <option :value="5">5 条</option>
-            <option :value="10">10 条</option>
+            <option
+              v-for="size in pageSizes ?? [5, 10]"
+              :key="size"
+              :value="size"
+            >
+              {{ size }} 条
+            </option>
           </select></label
         ><ElPagination
           :current-page="query.page"
