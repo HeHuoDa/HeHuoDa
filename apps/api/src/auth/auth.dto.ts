@@ -41,7 +41,7 @@ export class RefreshRequestDto {
 
 export class UserDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: "微信用户" }) nickname!: string;
+  @ApiProperty({ example: "禾伙搭用户" }) nickname!: string;
   @ApiProperty({ enum: USER_STATUS_VALUES }) status!: string;
 }
 

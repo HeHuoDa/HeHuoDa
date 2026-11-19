@@ -17,6 +17,7 @@ import { LifecycleModule } from "../business-access/lifecycle.module.js";
 import { AuthPersistenceModule } from "./auth-persistence.module.js";
 import { CampusCoreModule } from "../campus/campus-core.module.js";
 import { CampusController } from "../campus/campus.controller.js";
+import { SchoolLoginController } from "../campus/school-login.controller.js";
 
 @Injectable()
 export class AuthCleanupScheduler {
@@ -31,9 +32,11 @@ export class AuthCleanupScheduler {
     waitForCompletion: true,
   })
   async cleanup() {
+    // 任一用户登录通道开启就需要清理凭据与审计；仅学校登录时也要跑。
     if (
       this.config.get("NODE_ENV") === "test" ||
-      !this.config.get<boolean>("WECHAT_LOGIN_ENABLED", false)
+      (!this.config.get<boolean>("WECHAT_LOGIN_ENABLED", false) &&
+        !this.config.get<boolean>("CAMPUS_VERIFICATION_ENABLED", false))
     )
       return;
     try {
@@ -52,7 +55,7 @@ export class AuthCleanupScheduler {
 
 @Module({
   imports: [AuthPersistenceModule, LifecycleModule, CampusCoreModule],
-  controllers: [AuthController, CampusController],
+  controllers: [AuthController, CampusController, SchoolLoginController],
   providers: [
     AuthRateLimiter,
     AuthService,

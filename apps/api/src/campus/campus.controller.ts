@@ -25,7 +25,7 @@ import {
 import { AuthGuard, type AuthenticatedRequest } from "../auth/auth.guard.js";
 import { ApiErrorDto } from "../common/dto/api-error.dto.js";
 import { CampusService } from "./campus.service.js";
-import { createApiError } from "../common/api-error.js";
+import { assertEmptyBody } from "../common/empty-body.js";
 import {
   CampusPolicyDto,
   CampusProfileResponseDto,
@@ -74,7 +74,7 @@ export class CampusController {
   @Header("Cache-Control", "no-store")
   @ApiOkResponse({ type: CampusTransactionDto })
   create(@Req() r: AuthenticatedRequest, @Body() body: unknown) {
-    this.assertEmptyBody(body);
+    assertEmptyBody(body);
     return this.campus.create(r.auth!, r.ip, r.id);
   }
   @Post("transactions/:id/captcha")
@@ -88,7 +88,7 @@ export class CampusController {
     @Param("id") id: string,
     @Body() body: unknown,
   ) {
-    this.assertEmptyBody(body);
+    assertEmptyBody(body);
     return this.campus.refresh(r.auth!, id, r.ip, r.id);
   }
   @Post("transactions/:id/submit")
@@ -123,17 +123,7 @@ export class CampusController {
     @Param("id") id: string,
     @Body() body: unknown,
   ) {
-    this.assertEmptyBody(body);
+    assertEmptyBody(body);
     return this.campus.cancel(r.auth!, id, r.id);
-  }
-  private assertEmptyBody(body: unknown) {
-    if (
-      body !== undefined &&
-      (!body ||
-        typeof body !== "object" ||
-        Array.isArray(body) ||
-        Object.keys(body).length > 0)
-    )
-      throw createApiError(400, "BAD_REQUEST", "此操作不接受输入字段");
   }
 }

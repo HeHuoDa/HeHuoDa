@@ -4,9 +4,9 @@
 
 > **2026-11-18 架构升级与演进边界（[ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)）**：
 >
-> - **现行基线代码（#134/#135/#167/#168）**：除公开告知接口外，`/api/v1/campus-verification` 当前仍受平台 `AuthGuard` 保护（历史上作为微信登录后的核验入口），`apps/uni` 中 `pages/campus/index` 尚保留 `#ifdef MP-WEIXIN` 历史条件分支。
+> - **现行基线代码（#134/#135/#167/#168 + #217）**：`/api/v1/auth/school/**` 已是**匿名的学校唯一登录入口**（不需登录、不需微信）；`/api/v1/campus-verification` 除公开告知接口外仍受平台 `AuthGuard` 保护，作为已登录后的个人核验与资料读取路由保留；`apps/uni` 中 `pages/campus/index` 尚保留 `#ifdef MP-WEIXIN` 历史条件分支，客户端接线由 #221/#222 改造。
 > - **M2 目标架构（#128 / #217 / #218 / #221 / #222 / #223 / #224）**：项目已放弃微信小程序与微信登录，**统一身份认证即将升级为 H5 与 Android（签名 APK）的唯一用户登录方式**：
->   - **匿名登录事务（#217）**：客户端无需前置微信登录；匿名创建短期认证事务并取得不可猜测的持有凭证与图形验证码，经 `SchoolAuthClient` 取得可信返回并逐字比对姓名/学号后，原子查找或创建平台账号（并发首登只建一号，默认昵称 **`禾伙搭用户`**）。
+>   - **匿名登录事务（#217，已交付后端）**：客户端无需前置微信登录；匿名创建短期认证事务并取得不可猜测的持有凭证与图形验证码，经 `SchoolAuthClient` 取得可信返回并逐字比对姓名/学号后，原子查找或创建平台账号（并发首登只建一号，默认昵称 **`禾伙搭用户`**）。契约见下文“学校唯一登录”。
 >   - **双端会话边界（#218/#220）**：H5 使用内存 Access Token + `HttpOnly` Refresh Cookie（配 `Origin` 与 `X-Refresh-CSRF`）；Android 使用内存 Access Token + Keystore 加密存储 Refresh Token；绝不长期保存学校密码用于静默重登。
 >   - **组队能力暂缓**：按 ADR 0011，站内组队、招募与联系方式授权等敏感业务已暂缓，`SENSITIVE_BUSINESS_ENABLED` 保持关闭；登录/绑定通过不表示开放组队。
 
@@ -25,6 +25,35 @@
 `apps/uni` 中面向旧微信开发工具的 2026-10-26 历史核验记录仅代表改造前的局部测试（不能代替现行 H5 浏览器与 Android 真机全链路验收）。M2 改造后将由 #225（H5 浏览器全流程）与 #226（Android 真机矩阵）分别验收。
 
 ## 基线 HTTP 接口与调用顺序
+
+### 学校唯一登录（匿名，`/api/v1/auth/school`）
+
+M2 唯一用户登录入口，**不使用 `AuthGuard`**，无需前置微信登录。匿名客户端持有事务 ID 与不可猜测的持有凭证（`holderToken`）：仅凭事务 ID 不能查询、刷新验证码或提交。服务端只保存持有凭证的 SHA-256 摘要（`school_login_transactions.holder_hash`），持有凭证只在创建与刷新验证码时下发。
+
+| 方法与路径                                | 行为                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------- |
+| POST /auth/school/challenges              | 空请求体；创建 5 分钟事务并返回 `holderToken`、验证码与版本（201）            |
+| POST /auth/school/challenges/{id}/captcha | `{holderToken}`；换验证码，不延长总期限、不重建持有凭证                       |
+| POST /auth/school/challenges/{id}/submit  | `{holderToken,name,account,password,captcha,challengeVersion,consentVersion}` |
+| POST /auth/school/challenges/{id}/status  | `{holderToken}`；查询原事务安全状态，不返回私人原值                           |
+| DELETE /auth/school/challenges/{id}       | `{holderToken}`；取消，已提交终态不改写                                       |
+
+契约边界：
+
+- 提交成功返回 `{id,status,expiresAt,reason,credential}`，`credential` 含 `user`（默认昵称 `禾伙搭用户`）、15 分钟 `accessToken`、30 天绝对上限 `refreshToken`、`accessExpiresAt`、`sessionExpiresAt`；`credential` **只在首次成功响应出现一次**，重复提交只回安全状态、不重放密码也不重复签发凭据。
+- 该 Bearer 通道供 Android 使用。浏览器**不能仅凭自报端类型**取得 Android JSON refresh token；H5 的 `HttpOnly` Refresh Cookie、`Origin` 与 `X-Refresh-CSRF` 由 #218 承接，服务端选择会话通道的边界也随该票收口。
+- 事务归属只看持有凭证摘要，不依赖平台会话；跨凭证、缺失与不存在统一 404。
+- 错误一律使用安全枚举：`CAMPUS_STALE_CHALLENGE`(409)、`CAMPUS_TRANSACTION_ENDED`(409)、`CAMPUS_TRANSACTION_BUSY`(409)、`CAMPUS_IDENTITY_MISMATCH`(400)、`CAMPUS_CONSENT_MISMATCH`(400，带 `details.currentVersion`)、`CAMPUS_RATE_LIMITED`(429)、`CAMPUS_UPSTREAM_*`/`CAMPUS_UNKNOWN_RESPONSE`(503)、`CAMPUS_UNSUPPORTED_VERIFICATION`(400)、`ACCOUNT_RESTRICTED`(403)、`CAMPUS_VERIFICATION_UNAVAILABLE`(503)。
+
+学校校方 I/O 永远在数据库事务之外：先取得可信身份，再进入一个短事务完成“查找或创建用户 + 绑定 + 资料 + 资格 + 会话/令牌 + 审计”。同一 `(source,subject_hmac)` 的并发首登先由咨询锁串行，再以 `campus_bindings` 的 `(source,subject_hmac)` 唯一约束兜底：插入绑定冲突时删除刚建的空账号并重读既有绑定，因此不会出现两个账号或空账号。受限、注销中与已删除账号拒绝签发新会话，也不会因重新登录而新建账号。跨学期提交会终结事务并要求重新发起，不静默授予新学期资格。
+
+单实例部署下，匿名登录与已登录校园核验**共用**同一份校方在途预算（最多 5 个并行校方操作）与活动事务上限（最多 128 个），不会因两套路由叠加成 10 / 256。学号盲索引使用 `HMAC(hmacKey, ["login-rate-account", 学号])`，与绑定索引用同一密钥但不同域前缀，二者不可互相推导。
+
+**实网验收状态**：#58 的授权测试账号尚未就绪，本次只完成桩验收与隔离 PostgreSQL 回归；真实学校门户闭环（挑战 → 验证码 → 登录 → 刷新 → 登出）**待 #58 账号就绪后按正常流程填写验证码验收**，不与 #140 的生产安全开关验收混同。
+
+仅开启学校登录（`CAMPUS_VERIFICATION_ENABLED=true`、`WECHAT_LOGIN_ENABLED=false`）时无需 `WECHAT_APP_ID`/`WECHAT_APP_SECRET`；`/auth/refresh`、`/auth/logout`、`/auth/me` 与校园状态读取继续可用。`/auth/wechat/login` 仍受 `WECHAT_LOGIN_ENABLED` 保护，正式下线由 #223 收口。
+
+### 已登录校园核验（历史个人核验路由）
 
 统一前缀 `/api/v1/campus-verification`。只有 `GET /policy` 可匿名访问，其他接口使用现有 Bearer 会话。所有响应及错误均为 `Cache-Control: no-store`。
 
@@ -68,6 +97,7 @@
 - `CAMPUS_SUBJECT_HMAC_KEY`：独立随机32字节密钥的标准 base64。HMAC-SHA-256 输入是 JSON `[source,subject]`；索引双向唯一，过期不释放。不能直接换键，否则旧索引无法匹配；轮换须独立迁移。
 - `CAMPUS_PROFILE_KEYS`：JSON 对象，键为 `keyId`，值为随机32字节资料密钥的标准 base64；`CAMPUS_PROFILE_KEY_ID` 指定当前写入键。资料密钥不能与 HMAC 密钥相同。启用时须有可用写键；旧键在资料迁移与备份恢复需要期间继续保护。
 - `CAMPUS_RATE_SUBMIT_USER/SOURCE/GLOBAL`：滚动15分钟预算，默认5/100/500；`CAMPUS_RATE_CHALLENGE_USER/SOURCE/GLOBAL`：滚动1分钟预算，默认5/100/500。创建与刷新共用挑战预算，学校失败同样计入已准入预算。来源按框架已解析客户端IP的HMAC标识，适当配置可信代理，不信任任意客户端自报来源。预算存库并受统一锁保护。
+- `CAMPUS_RATE_LOGIN_SOURCE/GLOBAL/ACCOUNT`：学校唯一登录的匿名预算，默认100/500/5；挑战计入滚动1分钟档，提交计入滚动15分钟档。`ACCOUNT` 档位按**学号盲索引**（HMAC-SHA-256，与绑定索引同密钥但带独立域前缀）计数，不保存明文学号。
 
 当前已确认的学期为 `2026-2027-1`：北京时间 2026年9月7日至2027年1月18日（含结束当天）。后端统一配置如下，前端从资格接口读取，不另设日期；结束边界使用次日零点，以包含1月18日全天：
 
@@ -85,7 +115,7 @@ CAMPUS_TERMS=[{"id":"2026-2027-1","startAt":"2026-09-07T00:00:00+08:00","endAt":
 
 ## 私人资料与数据清理
 
-迁移 `0005_campus.sql` 增加绑定、资格、资料、事务、审计及滑动预算表，不修改旧表数据。收到可信身份后，在统一权限锁保护的一个短事务内重新检查账号 active、原平台会话、平台事务、挑战版本、总期限和当期，再原子写入绑定、资料、资格、成功终态与审计。学校请求期间不持有数据库事务。跨学期必须重新创建，不能将旧挑战静默授予新学期资格；续验失败保留旧资料与资格。
+迁移 `0005_campus.sql` 增加绑定、资格、资料、事务、审计及滑动预算表，不修改旧表数据。迁移 `0014_school_login.sql` 为学校唯一登录新增独立的匿名事务表 `school_login_transactions`（纯新增表，不改 `0001–0013` 任何结构或数据）：事务在确认学校身份前没有平台账号，`holder_hash` 只存持有凭证摘要，`school_login_one_active_holder` 保证同一持有凭证同时只有一个活动事务，`status` 有值域约束。收到可信身份后，在统一权限锁保护的一个短事务内重新检查原平台事务、挑战版本、总期限和当期，再原子写入绑定、资料、资格、成功终态与审计。学校请求期间不持有数据库事务。跨学期必须重新创建，不能将旧挑战静默授予新学期资格；续验失败保留旧资料与资格。
 
 资料以 AES-256-GCM 加密，随机12字节 nonce、认证标签、`keyId` 和版本持久化；AAD 为 JSON `[userId,source,version]`，拒绝跨账号密文替换。解密或认证失败返回安全503，不返回损坏内容。只保存当前一份编号/姓名，同主体成功重验才可替换，保留编号前导零与姓名原值。
 
@@ -93,4 +123,4 @@ CAMPUS_TERMS=[{"id":"2026-2027-1","startAt":"2026-09-07T00:00:00+08:00","endAt":
 
 安全终态保留24小时，安全审计180天，滑动预算15分钟无新活动后清除。审计只保存内部账号/请求引用、事件和安全原因，不含学校原值；不要添加请求体、私人响应、异常 cause、APM 请求/响应采样或代理 body 日志。数据库备份按现有到期策略保留；删除不承诺改写历史备份，恢复流程必须重放已完成删除以免恢复注销资料，该恢复编排随 #138/#140 验收。
 
-回退先关闭入口，再回退兼容服务；保留迁移表、绑定、密文和密钥，不靠删表或丢弃密钥回滚。H5/Android 仅经平台 API；现行校园认证接口已按 #167/#168 交付基础，M2 唯一登录改造与分端适配见 #128（#217–#225）、#226 与 #140。验收分层记录：单元测试/集成测试、H5 浏览器模拟（320–430px）、Android 真机全矩阵与生产安全开关验收分别留证，不互相替代。
+回退先关闭入口，再回退兼容服务；保留迁移表、绑定、密文和密钥，不靠删表或丢弃密钥回滚。`0014_school_login.sql` 的回退边界：只回退服务进程，保留新表与数据（旧服务不查询该表即可运行，已验证）；反向删除 `school_login_transactions` 会丢弃进行中的匿名登录事务，仅在没有活动登录时允许，且属于独立迁移，不在本次范围。H5/Android 仅经平台 API；匿名唯一登录接口由 #217 交付，分端会话与客户端接线见 #218/#221/#222，微信路由下线见 #223，实网准入与安全开关见 #140。验收分层记录：单元测试/集成测试、H5 浏览器模拟（320–430px）、Android 真机全矩阵与生产安全开关验收分别留证，不互相替代。

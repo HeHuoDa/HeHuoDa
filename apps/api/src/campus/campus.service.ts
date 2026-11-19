@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  HttpException,
-  Injectable,
-  Logger,
-  type OnApplicationShutdown,
-} from "@nestjs/common";
+import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
 import { and, eq, inArray, lt, or } from "drizzle-orm";
@@ -12,7 +7,6 @@ import {
   SchoolAuthClient,
   SchoolAuthError,
   type AuthChallenge,
-  type AuthErrorCode,
   type AuthIdentity,
 } from "@hehuoda/sicau-connectors/auth";
 import { AuthClock } from "../auth/auth-clock.js";
@@ -37,13 +31,22 @@ import {
   campusAuditLogs,
   campusRateBudgets,
 } from "../database/schema.js";
+import { consumeBudget } from "./budget.js";
 import {
+  countActiveSchoolTransactions,
+  MAX_ACTIVE_SCHOOL_TRANSACTIONS,
+  MAX_SCHOOL_UPSTREAM_IN_FLIGHT,
+  schoolCapacity,
+} from "./school-capacity.js";
+import {
+  CAMPUS_SETTING_KEYS,
   campusSettings,
   currentTerm,
   openProfile,
   sealProfile,
   subjectIndex,
 } from "./campus.config.js";
+import { safeSchoolReason, schoolApiError } from "./school-errors.js";
 
 const SOURCE = "sicau-eauth";
 const ACTIVE = ["waiting", "processing"];
@@ -69,42 +72,12 @@ export interface CampusTransactionResult {
   qualification?: CampusSummary;
   challenge?: { version: string; imageDataUrl: string; expiresAt: string };
 }
-const errorStatus: Record<AuthErrorCode, number> = {
-  invalid_session: 409,
-  session_expired: 409,
-  stale_challenge: 409,
-  session_busy: 409,
-  invalid_input: 400,
-  capacity_exceeded: 503,
-  disposed: 503,
-  captcha_failed: 400,
-  credentials_failed: 400,
-  unsupported_verification: 400,
-  upstream_unavailable: 503,
-  upstream_timeout: 503,
-  unknown_response: 503,
-  cancelled: 409,
-};
-const safeReason = (error: unknown) => {
-  if (error instanceof SchoolAuthError) return error.code;
-  if (error instanceof HttpException) {
-    const response = error.getResponse();
-    if (
-      typeof response === "object" &&
-      "code" in response &&
-      response.code === "CAMPUS_IDENTITY_MISMATCH"
-    )
-      return "identity_mismatch";
-  }
-  return "internal_failure";
-};
 
 @Injectable()
 export class CampusService implements OnApplicationShutdown {
   private readonly logger = new Logger(CampusService.name);
   private readonly instanceId = randomUUID();
   private readonly live = new Map<string, LiveSession>();
-  private inFlight = 0;
   private shuttingDown = false;
   constructor(
     private readonly database: DatabaseService,
@@ -115,14 +88,7 @@ export class CampusService implements OnApplicationShutdown {
   private settings() {
     return campusSettings(
       Object.fromEntries(
-        [
-          "CAMPUS_VERIFICATION_ENABLED",
-          "CAMPUS_TERMS",
-          "CAMPUS_POLICY_VERSION",
-          "CAMPUS_SUBJECT_HMAC_KEY",
-          "CAMPUS_PROFILE_KEYS",
-          "CAMPUS_PROFILE_KEY_ID",
-        ].map((key) => [key, this.config.get(key)]),
+        CAMPUS_SETTING_KEYS.map((key) => [key, this.config.get(key)]),
       ),
     );
   }
@@ -272,38 +238,27 @@ export class CampusService implements OnApplicationShutdown {
   ) {
     const allowed = await this.transaction(async (tx) => {
       await this.assertAccess(tx, access, this.clock.now());
-      const now = this.clock.now(),
-        ms = now.getTime(),
-        windowMs = kind === "submit" ? 900_000 : 60_000;
-      const source = subjectIndex(this.settings(), "rate-source", ip);
+      const now = this.clock.now();
+      const windowMs = kind === "submit" ? 900_000 : 60_000;
+      const settings = this.settings();
       let ok = true;
       for (const [scope, subject, fallback] of [
         ["GLOBAL", "all", 500],
-        ["SOURCE", source, 100],
+        ["SOURCE", subjectIndex(settings, "rate-source", ip), 100],
         ["USER", access.user.id, 5],
       ] as const) {
-        const limit = this.config.get<number>(
-          `CAMPUS_RATE_${kind.toUpperCase()}_${scope}`,
-          fallback,
-        );
-        const id = JSON.stringify([kind, scope, subject]);
-        const [row] = await tx
-          .select()
-          .from(campusRateBudgets)
-          .where(eq(campusRateBudgets.id, id));
-        const events = (row?.events ?? []).filter(
-          (time) => time > ms - windowMs,
-        );
-        if (events.length >= limit) ok = false;
-        // 饱和预算不追加，避免遭滥用时无限增长；学校失败的已准入请求仍计数。
-        if (events.length < limit) events.push(ms);
-        await tx
-          .insert(campusRateBudgets)
-          .values({ id, events, updatedAt: now })
-          .onConflictDoUpdate({
-            target: campusRateBudgets.id,
-            set: { events, updatedAt: now },
-          });
+        const hit = await consumeBudget(tx, {
+          kind,
+          scope,
+          subject,
+          limit: this.config.get<number>(
+            `CAMPUS_RATE_${kind.toUpperCase()}_${scope}`,
+            fallback,
+          ),
+          windowMs,
+          now,
+        });
+        ok = hit && ok;
       }
       return ok;
     });
@@ -315,18 +270,8 @@ export class CampusService implements OnApplicationShutdown {
       );
   }
   private async upstream<T>(run: () => Promise<T>): Promise<T> {
-    if (this.inFlight >= 5)
-      throw createApiError(
-        503,
-        "CAMPUS_UPSTREAM_CAPACITY",
-        "统一身份认证服务繁忙",
-      );
-    this.inFlight++;
-    try {
-      return await run();
-    } finally {
-      this.inFlight--;
-    }
+    // 与匿名登录共享同一份在途预算（单实例部署）。
+    return schoolCapacity.run(MAX_SCHOOL_UPSTREAM_IN_FLIGHT, run);
   }
   private drop(id: string) {
     const live = this.live.get(id);
@@ -442,7 +387,10 @@ export class CampusService implements OnApplicationShutdown {
           "CAMPUS_TRANSACTION_ACTIVE",
           "已有正在进行的统一身份认证",
         );
-      if (active.length >= 128)
+      if (
+        (await countActiveSchoolTransactions(tx)) >=
+        MAX_ACTIVE_SCHOOL_TRANSACTIONS
+      )
         throw createApiError(
           503,
           "CAMPUS_SESSION_CAPACITY",
@@ -486,7 +434,7 @@ export class CampusService implements OnApplicationShutdown {
       return await this.acceptChallenge(access, row.id, challenge, requestId);
     } catch (error) {
       try {
-        await this.fail(row.id, safeReason(error), requestId);
+        await this.fail(row.id, safeSchoolReason(error), requestId);
       } finally {
         this.drop(row.id);
       }
@@ -494,19 +442,8 @@ export class CampusService implements OnApplicationShutdown {
     }
   }
   private safeError(error: unknown) {
-    // 本服务 createApiError 不含私人原值；外部错误一律只映射安全枚举。
-    if (error instanceof SchoolAuthError)
-      return createApiError(
-        errorStatus[error.code],
-        `CAMPUS_${error.code.toUpperCase()}`,
-        "统一身份认证未完成，请根据状态重新发起",
-      );
-    if (error instanceof HttpException) return error;
-    return createApiError(
-      503,
-      "CAMPUS_VERIFICATION_FAILED",
-      "统一身份认证暂不可用",
-    );
+    // 外部错误一律只映射安全枚举，绝不透传学校原报文或私原值。
+    return schoolApiError(error);
   }
   private async acceptChallenge(
     access: AccessContext,
@@ -588,7 +525,7 @@ export class CampusService implements OnApplicationShutdown {
       return await this.acceptChallenge(access, id, challenge, requestId);
     } catch (error) {
       try {
-        await this.fail(id, safeReason(error), requestId);
+        await this.fail(id, safeSchoolReason(error), requestId);
       } finally {
         this.drop(id);
       }
@@ -716,7 +653,7 @@ export class CampusService implements OnApplicationShutdown {
         requestId,
       );
     } catch (error) {
-      await this.fail(id, safeReason(error), requestId);
+      await this.fail(id, safeSchoolReason(error), requestId);
       throw this.safeError(error);
     } finally {
       this.drop(id);

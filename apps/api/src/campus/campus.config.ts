@@ -18,6 +18,15 @@ export interface CampusSettings {
   keys: Map<string, Buffer>;
   keyId: string;
 }
+// 校园核验与学校唯一登录共用的配置项名单；只在这里维护。
+export const CAMPUS_SETTING_KEYS = [
+  "CAMPUS_VERIFICATION_ENABLED",
+  "CAMPUS_TERMS",
+  "CAMPUS_POLICY_VERSION",
+  "CAMPUS_SUBJECT_HMAC_KEY",
+  "CAMPUS_PROFILE_KEYS",
+  "CAMPUS_PROFILE_KEY_ID",
+] as const;
 // 校验错误不得携带配置原值，尤其不能让 Joi 将密钥包含在错误消息里。
 export function campusSettings(
   config: Record<string, unknown>,

@@ -162,7 +162,7 @@ export class AuthService {
     input: { refreshToken: string },
     ctx: RequestContext,
   ): Promise<CredentialResult> {
-    this.assertLoginEnabled();
+    this.assertSessionChannelEnabled();
     const now = this.clock.now();
     await this.enforceRate(
       "refresh-global",
@@ -317,6 +317,18 @@ export class AuthService {
         "WECHAT_LOGIN_UNAVAILABLE",
         "微信登录服务暂未开放",
       );
+  }
+
+  // 刷新与会话读取属于平台会话能力，只有所有登录通道都关闭时才停用，
+  // 保证仅开启学校唯一登录（无微信配置）时刷新与登出正常。
+  // 错误码沿用既有常量，实际下线由 #223 收口。
+  private assertSessionChannelEnabled(): void {
+    if (
+      this.config.get<boolean>("WECHAT_LOGIN_ENABLED", false) ||
+      this.config.get<boolean>("CAMPUS_VERIFICATION_ENABLED", false)
+    )
+      return;
+    throw createApiError(503, "WECHAT_LOGIN_UNAVAILABLE", "登录服务暂未开放");
   }
 
   private async enforceRate(

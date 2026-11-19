@@ -572,6 +572,22 @@ export const campusTransactions = pgTable("campus_transactions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
+// 学校唯一登录的匿名事务：确认学校身份前没有平台账号，故不引用 users。
+// holder_hash 是持有凭证的 SHA-256 摘要；仅凭事务 ID 不能读取、刷新或提交。
+export const schoolLoginTransactions = pgTable("school_login_transactions", {
+  id: text().primaryKey(),
+  holderHash: text("holder_hash").notNull(),
+  instanceId: text("instance_id").notNull(),
+  // 创建时的当期学期；跨学期后不得静默授予新学期资格。
+  termId: text("term_id").notNull(),
+  status: text().notNull(),
+  operation: text(),
+  challengeVersion: text("challenge_version"),
+  reason: text(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
 export const campusAuditLogs = pgTable("campus_audit_logs", {
   id: text().primaryKey(),
   userId: text("user_id")
