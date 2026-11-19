@@ -101,6 +101,8 @@ interface PendingCommand {
   confirmPublished: boolean;
 }
 const pending = ref<PendingCommand | null>(null);
+/** 新建成功后正在把地址换成正式记录页，此时不重复加载也不拦截路由。 */
+const replacing = ref(false);
 const contentKey = computed(() =>
   draft.value
     ? competitionContentKey(draft.value, baseline.value, action.value)
@@ -360,7 +362,9 @@ async function execute(reason: string) {
         action: action.value,
         baseline: baseline.value,
         patchKey,
-        receipt: toRaw(preview.value!.receipt!),
+        // 只有 save 能消费预览回执；发布/隐藏携带 previewId 会被服务端拒绝。
+        receipt:
+          action.value === "save" ? toRaw(preview.value!.receipt!) : undefined,
         confirmPublished: needsPublishedAck.value,
       };
   pending.value = command;
@@ -379,6 +383,16 @@ async function execute(reason: string) {
     // 服务端已确认：清空暂存命令，再刷新列表与详情基线。
     pending.value = null;
     initial.value = JSON.stringify(target);
+    dialog.value = false;
+    // 新建成功后进入正式记录地址，避免停在“新增草稿”而重复创建同名 ID。
+    if (isNew.value) {
+      replacing.value = true;
+      try {
+        await router.replace(`/competitions/${target.id}/edit`);
+      } finally {
+        replacing.value = false;
+      }
+    }
     await load();
     if (current !== epoch) return;
     // 写入已确认，刷新失败不能提示写入失败；提供重载入口让管理员核对新基线。
@@ -407,6 +421,7 @@ async function execute(reason: string) {
   }
 }
 async function leave() {
+  if (replacing.value) return true;
   if (busy.value) return false;
   if (!dirty.value) return true;
   try {
@@ -441,11 +456,18 @@ watch(contentKey, () => {
 watch(needsPublishedAck, () => {
   publishedAck.value = false;
 });
-watch(() => route.fullPath, load, { immediate: true });
+watch(
+  () => route.fullPath,
+  () => {
+    // 新建成功后的地址替换由 execute 自行加载，避免重复请求。
+    if (replacing.value) return;
+    void load();
+  },
+  { immediate: true },
+);
 loadColleges();
 function confirm() {
-  // 每次打开确认对话框都生成新的写命令；重试路径只复用已暂存的同一命令。
-  pending.value = null;
+  // 不在这里清空暂存命令：网络结果不明时重开确认框仍需复用原操作标识与回执。
   dialog.value = true;
 }
 </script>

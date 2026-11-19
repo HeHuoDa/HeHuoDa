@@ -25,7 +25,7 @@ pnpm format:check
 | `/`                                                                                                  | 工作台               | 会话恢复后查询真实统计，含 scope/asOf；布局示例需单独展开                     |
 | `/login`                                                                                             | 登录                 | 必填校验、键盘可用的密码显隐、提交中与失败反馈                                |
 | `/operations`                                                                                        | 操作记录             | 查询真实管理审计，类型筛选、分页及详情                                        |
-| `/competitions`、`/competitions/new`、`/competitions/:id`、`/competitions/:id/edit`                  | 比赛届次维护         | 公开查询及独立管理示例，写服务待接入                                          |
+| `/competitions`、`/competitions/new`、`/competitions/:id`、`/competitions/:id/edit`                  | 比赛届次维护         | 真实列表／详情／基线／预览／保存／发布／隐藏；公开查询与独立示例只读          |
 | `/ingestion/sources`、`/ingestion/runs`、`/ingestion/runs/:id`                                       | 来源与运行追溯       | 真实来源、扫描受理、运行查询与续跑；`/sources`、`/runs` 为跳转入口            |
 | `/ingestion/candidates`、`/ingestion/candidates/:id`、`/ingestion/notices`、`/ingestion/notices/:id` | 候选审核与通知版本   | 真实审核／修正／批准／导入／发布与通知历史；`/reviews` 跳转候选列表           |
 | `/users`、`/recruitments`、`/reports` 及各自 `/:id`                                                  | 用户、招募与举报治理 | 列表／详情及示例交互已实现，真实管理写入未开放；`/teams` 跳转 `/recruitments` |
@@ -50,11 +50,11 @@ pnpm format:check
 
 ## 比赛届次维护（#42 → #38/#46）
 
-比赛列表与详情默认查询管理适配入口，#38/#46 接线完成前显示真实不可用反馈；显式 `preview=1` 才读取独立样例。公开查询区域复用现有 `/api/v1/colleges`、`/competitions`、`/competitions/:id` 的生成类型、真实 GET 与失败重试，不回退示例，不将已发布公开子集当成完整管理目录。公开详情只读，真实维护必须重新读取管理基线。
+比赛列表与详情默认使用 `createCompetitionService(http)` 的真实管理入口，列表按 `page`／`pageSize`／`status`／`q` 查询并省略空条件，`pageSize` 收敛到 1–50；列表项没有日期字段，该列以 `—` 明确表示空值。显式 `preview=1` 只读取独立只读样例，即使正常入口已注入真实服务也不会进入写链路。公开查询区域复用现有 `/api/v1/colleges`、`/competitions`、`/competitions/:id` 的生成类型、真实 GET 与失败重试，不回退示例，不将已发布公开子集当成完整管理目录。公开详情只读，真实维护必须重新读取管理基线。
 
-`console/competitions.ts` 是独立页面模型，#38/#46 合并契约后再用生成类型映射。新增只能保存草稿；现有届次的保存、发布、隐藏分别选择与确认，切换对象清除动作与预览。预览绑定完整内容、动作和基线；修改输入后失效，已发布更新须明确勾选并使用专门确认。无服务端凭据的布局预览不授权写入，保存、发布、隐藏均明确未执行。409 保留待核对输入并锁定本轮操作，须重新读取基线；403 与其他失败不提示成功，提交中不可重复或离页。
+`console/competitions.ts` 是独立页面模型，适配层用生成类型映射 `AdminCompetition*Dto`。新建先按 ID 取服务端空记录基线，`exists=true` 时提示进入对应记录而非重复创建；保存、发布、隐藏分别选择与确认，切换对象清除动作与预览。发布与隐藏只改发布状态，因此表单存在未保存内容时先要求保存；二者不携带预览回执。预览绑定完整内容、动作和基线，修改输入后失效；更新已发布记录内容必须单独勾选确认，未勾选时页面拒绝提交。写命令区分网络结果不明与确定性拒绝：前者重试复用同一 `operationId`、载荷与预览回执，后者丢弃暂存命令；写入已确认但刷新失败时明确提示不要重复提交。409 保留待核对输入并锁定本轮操作，须重新读取基线；403 与其他失败不提示成功，提交中不可重复或离页。
 
-表单分别维护 organizer、来源 publisher、赛段 hosts 和参赛范围，unknown 不自动变为全校。各类时间保留 instant/date/unknown，具体时刻含时区，日期不补时刻。赛段来源必须属于当前届次，ID/日期/学院/人数规则有校验与错误定位。未变关系省略，修改关系数组完整替换，空数组明确清空关系；不提供删除届次、归档或编辑学院字典。差异同时展示字段与嵌套关系，未保存关闭/离页有提示。依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，手工录入/编辑比赛的官方外链按“无凭据、无非默认端口的采用公开 DNS 域名的 `https://` 链接”（不限于校内域名）校验，由管理员核实官方来源，严禁放宽自动采集白名单。
+表单分别维护 organizer、来源 publisher、赛段 hosts 和参赛范围，unknown 不自动变为全校。各类时间保留 instant/date/unknown，具体时刻含时区，日期不补时刻。赛段来源必须属于当前届次，ID/日期/学院/人数规则有校验与错误定位。未变关系省略，修改关系数组完整替换，空数组明确清空关系；不提供删除届次、归档或编辑学院字典。差异同时展示字段与嵌套关系，未保存关闭/离页有提示。依据 [ADR 0011](adr/0011-android-h5-and-sicau-only-auth.md)，手工录入/编辑比赛的官方外链按“无凭据、无非默认端口的采用公开 DNS 域名的 `https://` 链接”（不限于校内域名）校验，由管理员核实官方来源，严禁放宽自动采集白名单。该规则独立实现于 `console/source-url.ts`（`manualSourceUrlError`），只用于比赛维护；采集与审核展示沿用的 `safeSourceUrl` 保持原有边界，两条通道的校验与提示不能合并。
 
 此任务不向 `apps/uni`（H5/Android）迁入 Element Plus、DOM、History 或管理写能力。管理端 1024/1440px 浏览器检查不能替代 H5 与 Android 目标端验收。
 
