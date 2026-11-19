@@ -92,7 +92,7 @@ describe("认证数据与真实 PG 事务", () => {
     const result = await login("o-1");
     expect(result.kind).toBe("active");
     expect(result.user).toMatchObject({
-      nickname: "微信用户",
+      nickname: "禾伙搭用户",
       status: "active",
     });
     expect(result.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);

@@ -30,7 +30,7 @@ describe("认证 HTTP 契约", () => {
       kind: "active",
       user: {
         id: expect.any(String),
-        nickname: "微信用户",
+        nickname: "禾伙搭用户",
         status: "active",
       },
       accessToken: expect.any(String),
@@ -118,7 +118,7 @@ describe("认证 HTTP 契约", () => {
     expect(response.json()).toEqual({
       user: {
         id: expect.any(String),
-        nickname: "微信用户",
+        nickname: "禾伙搭用户",
         status: "active",
       },
       campus: {
