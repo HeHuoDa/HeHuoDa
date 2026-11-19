@@ -710,6 +710,40 @@ export const adminOperations = pgTable("admin_operations", {
     .defaultNow(),
 });
 
+export const adminCompetitionCommands = pgTable(
+  "admin_competition_commands",
+  {
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => adminAccounts.id),
+    operationId: uuid("operation_id").notNull(),
+    action: text().notNull(),
+    inputHash: text("input_hash").notNull(),
+    result: jsonb().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.actorId, table.operationId] })],
+);
+
+export const adminCompetitionPreviews = pgTable("admin_competition_previews", {
+  id: uuid().primaryKey(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => adminAccounts.id),
+  action: text().notNull(),
+  targetId: text("target_id").notNull(),
+  baseline: text().notNull(),
+  commandHash: text("command_hash").notNull(),
+  changes: jsonb().notNull(),
+  blocks: jsonb().notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const adminIngestionCommands = pgTable(
   "admin_ingestion_commands",
   {

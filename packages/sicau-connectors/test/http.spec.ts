@@ -240,6 +240,20 @@ describe("有边界的 HTTP 采集", () => {
     await robot.fetcher.checkRobots();
     await expect(robot.fetcher.get(url)).rejects.toThrow("robots");
   });
+  it("采集请求只允许来源注册主机，外部比赛站点不得进入抓取路径", async () => {
+    const ok = fetcher([response(404), response(200)]);
+    await ok.fetcher.checkRobots();
+    await expect(ok.fetcher.get(source.listUrl)).resolves.toBeTruthy();
+    for (const external of [
+      "https://www.moe.gov.cn/s78/A08/tongzhi/2026/1.html",
+      "https://example.org/info/1.htm",
+      "https://" + new URL(source.listUrl).hostname + ":8443/info/1.htm",
+    ]) {
+      const hostile = fetcher([response(404), response(200)]);
+      await hostile.fetcher.checkRobots();
+      await expect(hostile.fetcher.get(external)).rejects.toThrow("白名单");
+    }
+  });
   it("429遵循 Retry-After，超时有限重试，永久错误不反复请求", async () => {
     const limited = fetcher([
       response(404),

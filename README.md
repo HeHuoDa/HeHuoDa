@@ -83,7 +83,7 @@ Copy-Item apps/uni/.env.example apps/uni/.env
 Copy-Item apps/admin/.env.example apps/admin/.env
 ```
 
-启动开发 PostgreSQL 17、执行 SQL 迁移（`0001`–`0012`）并导入初始已核对比赛数据：
+启动开发 PostgreSQL 17、执行 SQL 迁移（`0001`–`0013`）并导入初始已核对比赛数据：
 
 ```bash
 docker compose up -d --wait
@@ -149,6 +149,7 @@ pnpm --filter @hehuoda/uni preview:h5   # 监听 127.0.0.1:5176，仅托管静�
   - `0009_ingestion_channels.sql`：多栏目状态、通知关联、四阶段扫描任务与调度轮
   - `0010_ingestion_attachments.sql`、`0011_ingestion_attachment_requests.sql`：附件版本、提取证据与重查请求
   - `0012_ingestion_classification.sql`：赛事分类、规则版本（当前 `competition-rules-23`）、7 字段提取修订与人工分类审计
+  - `0013_admin_competitions.sql`：管理端比赛命令幂等回执与变更预览回执
 - **人工导入与采集审核 CLI**（操作细则分别见 [ADR 0003](docs/adr/0003-competition-catalog-persistence.md)、[管理采集接口](docs/admin-ingestion.md) 与 [共享包架构](docs/sicau-connectors.md)）：
 
 ```bash
@@ -186,7 +187,7 @@ HeHuoDa/
 │   │   │   ├── database/             # Drizzle schema、连接池与 SQL 迁移器
 │   │   │   ├── health/               # /health 与 /health/ready
 │   │   │   └── ingestion/            # 调度轮、多栏目扫描、附件沙箱与审核状态机
-│   │   ├── migrations/               # 0001–0012 受版本控制的增量 SQL
+│   │   ├── migrations/               # 0001–0013 受版本控制的增量 SQL
 │   │   ├── data/                     # 核对比赛数据与发布清单
 │   │   ├── scripts/                  # 迁移、admin:init、data:import、ingestion 与 openapi:write
 │   │   └── test/                     # Jest 集成测试与 Fastify/HTTP e2e 测试
