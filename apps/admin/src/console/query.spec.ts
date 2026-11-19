@@ -12,4 +12,11 @@ describe("管理列表URL参数", () => {
       readQuery({ from: "2024-02-29", to: "2026-10-20" }, {}),
     ).toMatchObject({ from: "2024-02-29", to: "2026-10-20" });
   });
+  it("只接受 1–50 的每页条数，其他值回退默认", () => {
+    expect(readQuery({ pageSize: "20" }, {}).pageSize).toBe(20);
+    expect(readQuery({ pageSize: "50" }, {}).pageSize).toBe(50);
+    expect(readQuery({ pageSize: "51" }, {}).pageSize).toBe(5);
+    expect(readQuery({ pageSize: "0" }, {}).pageSize).toBe(5);
+    expect(readQuery({ pageSize: "abc" }, {}).pageSize).toBe(5);
+  });
 });

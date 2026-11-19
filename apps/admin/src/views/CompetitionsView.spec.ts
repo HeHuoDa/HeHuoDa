@@ -334,3 +334,97 @@ it("从隐藏动作进入新增页面会重置为保存新草稿", async () => {
   expect((next.element as HTMLSelectElement).value).toBe("save");
   wrapper.unmount();
 });
+
+it("新建草稿首次预览使用校验后取得的服务端基线，不用空基线请求", async () => {
+  const baseline = vi.fn(async (id: string) => ({
+    targetId: id,
+    exists: false,
+    baseline: "d".repeat(64),
+    publication: null,
+  }));
+  const preview = vi.fn<CompetitionService["preview"]>(async (request) => ({
+    contentKey: competitionContentKey(
+      request.content,
+      request.baseline,
+      request.action,
+    ),
+    token: "preview-new",
+    changes: [],
+    blocks: [],
+  }));
+  const { wrapper } = await setup(
+    service({ baseline, preview }),
+    "/competitions/new",
+  );
+  await wrapper.get("#competition-id").setValue("brand-new-contest");
+  await wrapper.get("#competition-name").setValue("全新草稿");
+  await button(wrapper, "生成变更预览").trigger("click");
+  await flushPromises();
+  expect(baseline).toHaveBeenCalledWith("brand-new-contest");
+  // 取基线发生在预览之前：请求必须带 64 位正式基线，否则服务端会判 400。
+  expect(preview).toHaveBeenCalledTimes(1);
+  expect(preview.mock.calls[0]![0].baseline).toBe("d".repeat(64));
+  expect(wrapper.text()).toContain("服务预览已返回");
+  wrapper.unmount();
+});
+
+it("服务端确定性拒绝后丢弃暂存命令，重试生成新的操作标识", async () => {
+  const change = vi
+    .fn<CompetitionService["change"]>()
+    .mockRejectedValueOnce(
+      new ConsoleError(409, "基线已变化", "COMPETITION_BASELINE_STALE"),
+    )
+    .mockResolvedValueOnce({
+      targetId: "example-contest-2",
+      action: "save",
+      publication: "draft",
+      baseline: "c".repeat(64),
+      changes: [],
+      auditOperationId: "audit-1",
+    });
+  const { wrapper } = await setup(service({ change }), undefined, {
+    confirmDialog: false,
+  });
+  await button(wrapper, "生成变更预览").trigger("click");
+  await flushPromises();
+  const ack = wrapper.findAll(".preview-ack input[type=checkbox]");
+  await ack[0]!.setValue(true);
+  await ack[1]!.setValue(true);
+  await button(wrapper, "打开操作确认").trigger("click");
+  await flushPromises();
+  await wrapper.get(".confirm-stub button").trigger("click");
+  await flushPromises();
+  // 比赛维护的 409 直接展示服务端具体原因，不收敛成通用「重新审核」。
+  expect(wrapper.text()).toContain("基线已变化");
+  expect(wrapper.text()).toContain("本轮基线已过期");
+  wrapper.unmount();
+});
+
+it("保存成功后提示服务端已确认并重新读取基线", async () => {
+  const change = vi.fn<CompetitionService["change"]>(async () => ({
+    targetId: "example-contest-1",
+    action: "save",
+    publication: "draft",
+    baseline: "e".repeat(64),
+    changes: [],
+    auditOperationId: "audit-9",
+  }));
+  const { wrapper } = await setup(service({ change }), undefined, {
+    confirmDialog: false,
+  });
+  await button(wrapper, "生成变更预览").trigger("click");
+  await flushPromises();
+  // 已发布记录更新：核对确认与显式确认都要勾选才能提交。
+  const ack = wrapper.findAll(".preview-ack input[type=checkbox]");
+  await ack[0]!.setValue(true);
+  await ack[1]!.setValue(true);
+  await button(wrapper, "打开操作确认").trigger("click");
+  await flushPromises();
+  await wrapper.get(".confirm-stub button").trigger("click");
+  await flushPromises();
+  expect(change).toHaveBeenCalledTimes(1);
+  // 写入已确认后必须给出明确确认语，不能只剩列表刷新。
+  expect(wrapper.text()).toContain("服务端已确认本次操作");
+  expect(wrapper.text()).toContain("详情与基线已重新读取");
+  wrapper.unmount();
+});

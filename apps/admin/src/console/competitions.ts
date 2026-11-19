@@ -4,7 +4,7 @@ import type { CompetitionPatch, ImportPatch } from "./review";
 import { validDate } from "./review";
 import { manualSourceUrlError } from "./source-url";
 import type { PageQuery, PageResult } from "./resource";
-import { queryPage } from "./resource";
+import { ConsoleError, errorMessage, queryPage } from "./resource";
 import type { Schema } from "../http";
 import { ServiceUnavailable } from "../services";
 
@@ -12,10 +12,8 @@ import { ServiceUnavailable } from "../services";
 export type CompetitionAction = "save" | "publish" | "hide";
 export interface ManagedCompetition {
   id: string;
-  title: string;
-  status: string;
-  date: string;
   baseline: string;
+  /** 完整可编辑内容；列表行需要的标题与状态从这里派生，避免再存一份副本。 */
   content: CompetitionPatch;
 }
 export interface CompetitionListItem {
@@ -47,6 +45,16 @@ export interface CompetitionCommandResult {
   baseline: string;
   changes: Schema["AdminCompetitionChangeDto"][];
   auditOperationId: string;
+}
+/**
+ * 比赛维护专用的错误文案。
+ * 服务端用不同 code 区分基线过期、目标不符、需显式确认、预览失效与发布底线；
+ * 这些原因直接决定下一步该重载、重预览还是补齐内容，不能收敛成一句泛化提示。
+ */
+export function competitionErrorMessage(error: unknown) {
+  if (error instanceof ConsoleError && error.code?.startsWith("COMPETITION_"))
+    return error.message || errorMessage(error);
+  return errorMessage(error);
 }
 export interface CompetitionService {
   list(query: PageQuery): Promise<PageResult<CompetitionListItem>>;
@@ -122,13 +130,15 @@ export function competitionDirty(
     JSON.stringify({ id: after.id })
   );
 }
+export function validCompetitionId(value: string) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
+}
 export function validateCompetition(
   value: CompetitionPatch,
   colleges: College[],
   action: CompetitionAction = "save",
 ): { field: string; message: string } | null {
-  const id = (v: string) =>
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) && v.length <= 100;
+  const id = validCompetitionId;
   if (!id(value.id))
     return {
       field: "id",
@@ -198,19 +208,24 @@ export function validateCompetition(
         };
     }
   }
-  for (const n of value.notices)
+  for (const n of value.notices) {
+    const urlError = manualSourceUrlError(n.url);
     if (
       !n.title.trim() ||
       !n.publisher.trim() ||
-      manualSourceUrlError(n.url) ||
+      urlError ||
       [n.publishedAt, n.checkedAt].some((d) => d !== null && !validDate(d))
     )
       return {
         // 手工比赛通道：公开 HTTPS 外链（无凭据、无非默认端口），官方性由管理员核实。
         field: "relations",
         message:
-          "来源须填写标题、发布单位、安全链接及有效日期（未知保持空）；链接必须是无凭据、无非默认端口的公开 https 地址，请自行核实其官方性。",
+          "来源须填写标题、发布单位、安全链接及有效日期（未知保持空）；" +
+          (urlError
+            ? urlError + "请自行核实其官方性。"
+            : "链接须为无凭据、无非默认端口的公开 https 地址，请自行核实其官方性。"),
       };
+  }
   for (const t of value.tracks)
     if (!t.name.trim() || !t.members.trim() || !t.rules.trim())
       return { field: "relations", message: "请填写赛道名称、人数与规则。" };
@@ -286,9 +301,6 @@ export const competitionExamples: ManagedCompetition[] = Array.from(
     ];
     return {
       id: content.id,
-      title: content.name,
-      status: content.publication,
-      date: "2026-10-20",
       baseline: `example-baseline-${i}`,
       content,
     };
@@ -297,17 +309,17 @@ export const competitionExamples: ManagedCompetition[] = Array.from(
 export const exampleCompetitions: CompetitionService = {
   ...unavailableCompetitions,
   async list(q) {
-    const result = queryPage(competitionExamples, q);
-    return {
-      total: result.total,
-      items: result.items.map((v) => ({
+    // 示例行与真实管理列表同形：没有独立日期字段，只按名称与状态本地筛选。
+    return queryPage(
+      competitionExamples.map((v) => ({
         id: v.id,
-        title: v.title,
-        status: v.status,
-        date: v.date,
+        title: v.content.name,
+        status: v.content.publication ?? "draft",
+        date: "",
         secondary: "示例 · 不会写入",
       })),
-    };
+      q,
+    );
   },
   async detail(id) {
     const value = competitionExamples.find((v) => v.id === id);
@@ -320,7 +332,7 @@ export const exampleCompetitions: CompetitionService = {
       targetId: id,
       exists: !!value,
       baseline: value?.baseline ?? "example-baseline-new",
-      publication: value?.status ?? null,
+      publication: value?.content.publication ?? null,
     };
   },
 };

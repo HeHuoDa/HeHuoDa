@@ -26,6 +26,7 @@ import {
 } from "./console/candidate-view";
 type Transport = Pick<AdminHttp, "request">;
 const ingestion = "/ingestion";
+const competitions = "/competitions";
 const idPath = (kind: string, id: string) =>
   `${ingestion}/${kind}/${encodeURIComponent(id)}`;
 function pageParams(query: PageQuery, status = true, datesOnly = false) {
@@ -290,7 +291,6 @@ export function createControlService(
     recover,
   };
 }
-const competitions = "/competitions";
 /** 管理列表摘要的中文副标题：届次、类别、主办方与关系计数，缺值不补零。 */
 function competitionSecondary(item: Schema["AdminCompetitionListItemDto"]) {
   return [
@@ -310,10 +310,6 @@ function competitionDetail(
   const { baseline, ...content } = value;
   return {
     id: value.id,
-    title: value.name,
-    status: value.publication,
-    // 管理详情契约没有独立日期字段，页面显示明确空态而不是伪造日期。
-    date: "",
     baseline,
     content: structuredClone(content),
   };
@@ -347,7 +343,7 @@ export function createCompetitionService(http: Transport): CompetitionService {
         pageSize: String(Math.min(50, Math.max(1, query.pageSize))),
       });
       if (query.status) params.set("status", query.status);
-      const q = query.q.trim();
+      const q = query.q.trim().slice(0, 100);
       if (q) params.set("q", q);
       const result = await http.request<Schema["AdminCompetitionListDto"]>(
         `${competitions}?${params}`,

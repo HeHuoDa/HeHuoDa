@@ -17,6 +17,7 @@ import {
 import { ElMessageBox } from "element-plus";
 import type { College } from "@hehuoda/api-types";
 import {
+  competitionErrorMessage,
   competitionKey,
   competitionContentKey,
   competitionDirty,
@@ -24,6 +25,7 @@ import {
   exampleCompetitions,
   unavailableCompetitions,
   publicationStates,
+  validCompetitionId,
   validateCompetition,
   competitionPatch,
   type CompetitionAction,
@@ -35,7 +37,6 @@ import type { CompetitionPatch } from "../console/review";
 import {
   createResourceController,
   ConsoleError,
-  errorMessage,
   type PageQuery,
 } from "../console/resource";
 import { readQuery } from "../console/query";
@@ -180,9 +181,6 @@ async function loadColleges() {
     if (current === collegeEpoch) collegeLoading.value = false;
   }
 }
-function validId(value: string) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
-}
 async function load() {
   const current = ++epoch;
   ++previewEpoch;
@@ -213,7 +211,7 @@ async function load() {
 /** 新建前按 ID 校验并取该 ID 的服务端基线；已存在时提示进入对应记录。 */
 async function ensureIdBaseline() {
   if (!draft.value) return false;
-  if (!validId(draft.value.id)) {
+  if (!validCompetitionId(draft.value.id)) {
     error.value = "ID 须为不超过100字的小写英文、数字与连字符。";
     await nextTick();
     document.getElementById("competition-id")?.focus();
@@ -234,7 +232,7 @@ async function ensureIdBaseline() {
     baseline.value = value.baseline;
     return true;
   } catch (cause) {
-    error.value = errorMessage(cause);
+    error.value = competitionErrorMessage(cause);
     return false;
   } finally {
     busy.value = false;
@@ -265,10 +263,8 @@ async function generate() {
   if (busy.value || stale.value || !draft.value) return;
   const current = epoch,
     request = ++previewEpoch,
-    key = contentKey.value,
-    target = structuredClone(toRaw(draft.value)),
-    targetBaseline = baseline.value,
     targetAction = action.value;
+  let key = "";
   if (targetAction !== "save" && unsavedContent.value) {
     // 发布/隐藏只改状态，未保存的表单不会被提交，必须让管理员先保存。
     error.value =
@@ -283,7 +279,11 @@ async function generate() {
   publishedAck.value = false;
   pending.value = null;
   try {
+    // 校验会为新建草稿取服务端基线，必须在取基线之后才能固定预览键。
     if (!(await validate())) return;
+    const target = structuredClone(toRaw(draft.value)),
+      targetBaseline = baseline.value;
+    key = contentKey.value;
     const receipt = await service.value.preview({
       content: target,
       patch: competitionPatch(
@@ -322,7 +322,7 @@ async function generate() {
       else {
         if (cause instanceof ConsoleError && cause.status === 409)
           stale.value = true;
-        error.value = errorMessage(cause);
+        error.value = competitionErrorMessage(cause);
       }
     }
   } finally {
@@ -330,14 +330,16 @@ async function generate() {
   }
 }
 async function execute(reason: string) {
+  // 客户端前置条件不属于服务端拒绝，不能提示成“未确认执行结果”；统一用 400 明确未执行。
   if (busy.value || stale.value || !fresh.value || !acknowledged.value)
-    throw new Error("需要重新预览");
+    throw new ConsoleError(400, "预览已失效，请重新生成变更预览后再提交。");
   if (needsPublishedAck.value && !publishedAck.value)
-    throw new Error("修改已发布记录需显式确认");
-  if (!draft.value) throw new Error("需要重新预览");
+    throw new ConsoleError(400, "修改已发布记录须先勾选显式确认。");
+  if (!draft.value) throw new ConsoleError(400, "请重新加载比赛后再提交。");
   if (!example.value && !preview.value?.receipt)
-    throw new Error("需要重新预览");
-  if (!(await validate())) throw new Error("校验失败");
+    throw new ConsoleError(400, "缺少预览回执，请重新生成变更预览。");
+  if (!(await validate()))
+    throw new ConsoleError(400, "表单校验未通过，本次操作未执行。");
   if (example.value)
     throw new ServiceUnavailable(
       "示例模式只读，未保存、发布或隐藏；页面示例原状态未改变。",
@@ -393,8 +395,10 @@ async function execute(reason: string) {
         replacing.value = false;
       }
     }
+    const submittedPath = route.fullPath;
     await load();
-    if (current !== epoch) return;
+    // load() 会推进 epoch，不能用旧代数判断；以当前路由确认刷新仍属于本次提交。
+    if (route.fullPath !== submittedPath) return;
     // 写入已确认，刷新失败不能提示写入失败；提供重载入口让管理员核对新基线。
     notice.value =
       state.detailStatus === "error"
@@ -403,7 +407,7 @@ async function execute(reason: string) {
   } catch (cause) {
     if (current !== epoch) throw cause;
     // 错误同时留在页面表单区：关闭确认对话框后管理员仍能看到失败原因。
-    error.value = errorMessage(cause);
+    error.value = competitionErrorMessage(cause);
     if (cause instanceof ConsoleError && cause.status === 409) {
       stale.value = true;
       preview.value = null;

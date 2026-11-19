@@ -58,7 +58,7 @@ function apply() {
       <label v-if="searchable !== false"
         >搜索<ElInput
           v-model="filter.q"
-          aria-label="搜索标题或昵称"
+          :aria-label="searchPlaceholder ?? '搜索标题或昵称'"
           :placeholder="searchPlaceholder ?? '搜索标题或昵称'"
           clearable
       /></label>
