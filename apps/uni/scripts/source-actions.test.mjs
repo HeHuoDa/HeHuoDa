@@ -91,12 +91,18 @@ test("承载页重新校验精确业务主机，默认关闭，跳转参数和�
   }
 });
 
-test("H5 公开外链仅接受公开 HTTPS DNS 地址，非川农站点不再依赖白名单", () => {
+test("H5 公开外链与管理端手工通道判定一致，管理端能保存的外链在 H5 一定可打开", () => {
   for (const url of [
     "https://news.example.edu.cn/info/2026.htm",
     "https://www.sicau.edu.cn/a?q=1",
     "https://events.other-university.org/race#detail",
     "https://news.example.edu.cn:443/a",
+    // 管理端按 URL 归一化判定，这些写法在两端同样接受。
+    "https://www.sicau.edu.cn:00443/notice",
+    "https://中文.中国/notice",
+    "https://www.moe.gov.cn/notice/@2026/index.html",
+    "https://www.moe.gov.cn/a?mail=a@b.cn",
+    "HTTPS://Example.ORG/path",
   ]) {
     const source = resolvePublicSourceUrl(url);
     assert.ok(source, url);
@@ -115,7 +121,10 @@ test("H5 公开外链仅接受公开 HTTPS DNS 地址，非川农站点不再依
     "https://printer.local/a",
     "https://example.test/a",
     "https://example.invalid/a",
-    "https://news.example.edu.cn/%zz",
+    // ADR 0011 与管理端通道一并拒绝的保留后缀。
+    "https://x.onion/a",
+    "https://printer.corp/a",
+    "https://foo.localdomain/a",
     "https://news.example.edu.cn/a b",
     "javascript:alert(1)",
     undefined,
