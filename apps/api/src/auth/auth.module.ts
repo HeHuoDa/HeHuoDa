@@ -17,6 +17,7 @@ import { LifecycleModule } from "../business-access/lifecycle.module.js";
 import { AuthPersistenceModule } from "./auth-persistence.module.js";
 import { CampusCoreModule } from "../campus/campus-core.module.js";
 import { CampusController } from "../campus/campus.controller.js";
+import { SchoolLoginController } from "../campus/school-login.controller.js";
 
 @Injectable()
 export class AuthCleanupScheduler {
@@ -52,7 +53,7 @@ export class AuthCleanupScheduler {
 
 @Module({
   imports: [AuthPersistenceModule, LifecycleModule, CampusCoreModule],
-  controllers: [AuthController, CampusController],
+  controllers: [AuthController, CampusController, SchoolLoginController],
   providers: [
     AuthRateLimiter,
     AuthService,
