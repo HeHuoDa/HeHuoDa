@@ -161,7 +161,8 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/register",
-    description: "不开放单独注册，H5 直接通过学校统一身份认证首次登录自动建号。",
+    description:
+      "不开放单独注册，H5 直接通过学校统一身份认证首次登录自动建号。",
   },
   "not-found": {
     name: "not-found",

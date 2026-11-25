@@ -107,14 +107,16 @@ export type CoordinateRefreshResult =
 function defaultTabId(): string {
   const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } })
     .crypto;
-  if (typeof cryptoObj?.randomUUID === "function") return cryptoObj.randomUUID();
+  if (typeof cryptoObj?.randomUUID === "function")
+    return cryptoObj.randomUUID();
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function defaultRoundId(): string {
   const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } })
     .crypto;
-  if (typeof cryptoObj?.randomUUID === "function") return cryptoObj.randomUUID();
+  if (typeof cryptoObj?.randomUUID === "function")
+    return cryptoObj.randomUUID();
   return `round-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -275,7 +277,9 @@ export function createH5TabSync(
   const isSecureContext = overrides.isSecureContext ?? defaults.isSecureContext;
   const locks = "locks" in overrides ? overrides.locks : defaults.locks;
   const createChannel =
-    "createChannel" in overrides ? overrides.createChannel : defaults.createChannel;
+    "createChannel" in overrides
+      ? overrides.createChannel
+      : defaults.createChannel;
   const coordStorage = overrides.coordStorage ?? defaults.coordStorage;
   const now = overrides.now ?? defaults.now;
   const graceMs = overrides.graceMs ?? defaults.graceMs;

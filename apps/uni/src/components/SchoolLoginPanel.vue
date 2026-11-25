@@ -179,7 +179,9 @@ defineExpose({
 
     <template v-if="auth.authenticated">
       <text class="school-intro">
-        已登录：{{ auth.nickname }}（{{ campusSummary }}）。你可以直接继续浏览，或退出当前账号。
+        已登录：{{ auth.nickname }}（{{
+          campusSummary
+        }}）。你可以直接继续浏览，或退出当前账号。
       </text>
       <view class="school-actions">
         <FormButton @click="goBack">继续浏览</FormButton>
@@ -316,7 +318,12 @@ defineExpose({
           </view>
         </view>
 
-        <view v-else-if="state.pending === 'loading' || state.pending === 'creating'" class="school-card">
+        <view
+          v-else-if="
+            state.pending === 'loading' || state.pending === 'creating'
+          "
+          class="school-card"
+        >
           <text class="school-card__text" role="status" aria-live="polite"
             >正在获取统一身份认证说明与验证码…</text
           >
@@ -380,7 +387,9 @@ defineExpose({
         </view>
 
         <view
-          v-else-if="ended || needRestart || state.creationFailed || state.imageFailed"
+          v-else-if="
+            ended || needRestart || state.creationFailed || state.imageFailed
+          "
           class="school-actions"
         >
           <FormButton
@@ -389,7 +398,9 @@ defineExpose({
             :loading="state.pending === 'creating'"
             @click="controller.restart()"
             >{{
-              state.pending === "creating" ? "正在获取验证码…" : "重新获取验证码"
+              state.pending === "creating"
+                ? "正在获取验证码…"
+                : "重新获取验证码"
             }}</FormButton
           >
         </view>

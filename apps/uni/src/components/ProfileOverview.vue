@@ -214,7 +214,9 @@ onBeforeUnmount(unregister);
 
     <view
       v-if="auth.logoutNotice || auth.errorMessage"
-      :role="auth.logoutRemoteUnconfirmed || auth.errorMessage ? 'alert' : 'status'"
+      :role="
+        auth.logoutRemoteUnconfirmed || auth.errorMessage ? 'alert' : 'status'
+      "
       class="hhr-notice mb-4 profile-auth-banner"
     >
       <text class="block">{{ auth.logoutNotice || auth.errorMessage }}</text>
@@ -266,7 +268,11 @@ onBeforeUnmount(unregister);
         </view>
       </view>
 
-      <view v-if="auth.authenticated && auth.profileError" class="profile-sub-alert" role="alert">
+      <view
+        v-if="auth.authenticated && auth.profileError"
+        class="profile-sub-alert"
+        role="alert"
+      >
         <text class="text-xs">{{ auth.profileError }}</text>
         <FormButton variant="soft" @click="auth.reloadProfile()"
           >重新读取账号资料</FormButton
@@ -344,7 +350,9 @@ onBeforeUnmount(unregister);
       title="修改昵称"
       save-label="保存昵称"
       :saving="auth.nicknamePending"
-      :error-target="nicknameLocalError || auth.nicknameError ? 'account-nickname-field' : ''"
+      :error-target="
+        nicknameLocalError || auth.nicknameError ? 'account-nickname-field' : ''
+      "
       @save="saveNickname"
       @cancel="closeNicknameEditor"
     >

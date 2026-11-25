@@ -41,10 +41,7 @@ export interface AuthStorage {
 }
 
 export type AuthPhase =
-  | "idle"
-  | "authenticating"
-  | "authenticated"
-  | "anonymous";
+  "idle" | "authenticating" | "authenticated" | "anonymous";
 
 export interface AuthState {
   phase: AuthPhase;

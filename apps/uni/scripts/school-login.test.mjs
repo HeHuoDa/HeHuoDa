@@ -83,7 +83,10 @@ function makeHarness(overrides = {}) {
     content: `说明 v${version}`,
   });
 
-  const challenge = (version = "c1", expiresAt = "2099-01-01T00:10:00.000Z") => ({
+  const challenge = (
+    version = "c1",
+    expiresAt = "2099-01-01T00:10:00.000Z",
+  ) => ({
     id: "tx-1",
     status: "waiting",
     expiresAt,
@@ -289,7 +292,11 @@ test("提交结果不明时查原事务有界轮询；状态为 succeeded 但无
   assert.equal(await p, false);
 
   assert.equal(h.authenticated.length, 0, "状态接口不得直接建立登录态");
-  assert.equal(h.calls.filter((c) => c.label === "submit").length, 1, "不自动重发密码");
+  assert.equal(
+    h.calls.filter((c) => c.label === "submit").length,
+    1,
+    "不自动重发密码",
+  );
   assert.equal(h.state.transaction?.status, "failed");
   assert.match(h.state.message, /未送达|未下发/);
 });

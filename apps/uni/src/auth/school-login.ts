@@ -79,9 +79,14 @@ export function schoolLoginFailureMessage(error: unknown): string {
   if (error.kind === "cancelled") return "操作已取消。";
   if (error.kind === "timeout") return "连接超时，结果尚未确认，正在查询结果。";
   if (error.kind === "network") return "连接中断，结果尚未确认，正在查询结果。";
-  if (error.kind === "invalid-response") return "服务响应异常，请查询结果或重新获取验证码。";
+  if (error.kind === "invalid-response")
+    return "服务响应异常，请查询结果或重新获取验证码。";
 
-  if (error.statusCode === 429 || error.code === "CAMPUS_RATE_LIMITED" || error.code === "TOO_MANY_REQUESTS") {
+  if (
+    error.statusCode === 429 ||
+    error.code === "CAMPUS_RATE_LIMITED" ||
+    error.code === "TOO_MANY_REQUESTS"
+  ) {
     const seconds = detailNumber(error, "retryAfterSeconds");
     return seconds === null
       ? "请求过于频繁，请稍后再试。"
@@ -107,7 +112,8 @@ export function schoolLoginFailureMessage(error: unknown): string {
     unsupported_verification: "学校要求额外验证，目前暂不支持，请稍后再试。",
     unsupported_identity: "学校返回的身份无法安全识别，暂不能登录。",
     unknown_response: "学校返回的身份信息无法安全确认，暂不能登录。",
-    verification_unavailable: "统一身份认证暂未开放或缺少当期配置，当前可先浏览公开比赛。",
+    verification_unavailable:
+      "统一身份认证暂未开放或缺少当期配置，当前可先浏览公开比赛。",
     session_capacity: "当前登录人数较多，请稍后再试。",
     upstream_unavailable: "学校认证服务暂时不可用，请稍后再试。",
     upstream_timeout: "学校响应超时，结果未确认，正在查询本次结果。",
@@ -198,7 +204,9 @@ export function createSchoolLoginController(
     }
   }
 
-  function stripTransaction(tx: SchoolLoginChallenge | SchoolLoginTransaction): SchoolLoginTransaction {
+  function stripTransaction(
+    tx: SchoolLoginChallenge | SchoolLoginTransaction,
+  ): SchoolLoginTransaction {
     return {
       id: tx.id,
       status: tx.status,
@@ -220,7 +228,8 @@ export function createSchoolLoginController(
 
     if (tx.status === "failed") {
       if (tx.reason === "credential_unavailable") {
-        state.message = "学校身份已确认，但未下发登录凭据，请重新获取验证码后再试。";
+        state.message =
+          "学校身份已确认，但未下发登录凭据，请重新获取验证码后再试。";
         return;
       }
       state.message = schoolLoginFailureMessage(
@@ -240,7 +249,8 @@ export function createSchoolLoginController(
         reason: "credential_unavailable",
         challenge: undefined,
       };
-      state.message = "学校身份已确认，但登录凭据未送达，请重新获取验证码后再试。";
+      state.message =
+        "学校身份已确认，但登录凭据未送达，请重新获取验证码后再试。";
     }
   }
 
@@ -327,7 +337,13 @@ export function createSchoolLoginController(
 
   async function refresh() {
     const tx = state.transaction;
-    if (!active || state.pending || !tx || !holderToken || tx.status !== "waiting") {
+    if (
+      !active ||
+      state.pending ||
+      !tx ||
+      !holderToken ||
+      tx.status !== "waiting"
+    ) {
       return;
     }
     if (Date.parse(tx.expiresAt) <= now()) {
@@ -367,7 +383,10 @@ export function createSchoolLoginController(
     }
   }
 
-  async function queryOnce(at: number, accountGen: number): Promise<SchoolLoginTransaction | null> {
+  async function queryOnce(
+    at: number,
+    accountGen: number,
+  ): Promise<SchoolLoginTransaction | null> {
     const tx = state.transaction;
     if (!tx || !holderToken) return null;
     const result = await tracked(api.schoolQueryStatus(tx.id, holderToken));
@@ -409,10 +428,12 @@ export function createSchoolLoginController(
 
   async function boundedPollStatus(at: number, accountGen: number) {
     for (let attempt = 0; attempt < pollMaxAttempts; attempt += 1) {
-      if (!current(at, accountGen) || !state.transaction || !holderToken) return;
+      if (!current(at, accountGen) || !state.transaction || !holderToken)
+        return;
       if (attempt > 0) {
         await delay(pollIntervalMs);
-        if (!current(at, accountGen) || !state.transaction || !holderToken) return;
+        if (!current(at, accountGen) || !state.transaction || !holderToken)
+          return;
       }
       try {
         const result = await queryOnce(at, accountGen);
@@ -436,7 +457,8 @@ export function createSchoolLoginController(
     }
     if (current(at, accountGen)) {
       state.uncertain = true;
-      state.message = "核验仍未返回终态，请点击“查询本次结果”或重新获取验证码。";
+      state.message =
+        "核验仍未返回终态，请点击“查询本次结果”或重新获取验证码。";
     }
   }
 
@@ -529,7 +551,8 @@ export function createSchoolLoginController(
         } catch (authError) {
           if (active && epoch === at) {
             state.message =
-              authError instanceof RequestError && authError.kind === "cancelled"
+              authError instanceof RequestError &&
+              authError.kind === "cancelled"
                 ? "登录状态已变化，请确认当前账号状态。"
                 : schoolLoginFailureMessage(authError);
           }
@@ -575,7 +598,10 @@ export function createSchoolLoginController(
       body.captcha = "";
       if (!current(at, accountGen)) return false;
 
-      if (error instanceof RequestError && error.code === "CAMPUS_CONSENT_MISMATCH") {
+      if (
+        error instanceof RequestError &&
+        error.code === "CAMPUS_CONSENT_MISMATCH"
+      ) {
         // 告知版本过期：取消勾选并重读说明，不自动重发密码。
         state.consented = false;
         state.message = schoolLoginFailureMessage(error);
@@ -583,7 +609,10 @@ export function createSchoolLoginController(
         return false;
       }
 
-      if (error instanceof RequestError && error.code === "CAMPUS_STALE_CHALLENGE") {
+      if (
+        error instanceof RequestError &&
+        error.code === "CAMPUS_STALE_CHALLENGE"
+      ) {
         state.transaction = { ...tx, challenge: undefined };
         state.message = schoolLoginFailureMessage(error);
         return false;
@@ -600,7 +629,11 @@ export function createSchoolLoginController(
       }
 
       if (isUncertainSubmitError(error)) {
-        state.transaction = { ...tx, status: "processing", challenge: undefined };
+        state.transaction = {
+          ...tx,
+          status: "processing",
+          challenge: undefined,
+        };
         state.uncertain = true;
         state.message = schoolLoginFailureMessage(error);
         shouldPoll = true;
@@ -693,7 +726,12 @@ export function createSchoolLoginController(
     active = false;
     stopInflight();
     if (tx) state.transaction = { ...tx, challenge: undefined };
-    if (leaving && tx && token && ["waiting", "processing"].includes(tx.status)) {
+    if (
+      leaving &&
+      tx &&
+      token &&
+      ["waiting", "processing"].includes(tx.status)
+    ) {
       holderToken = null;
       try {
         api.schoolCancel(tx.id, token).promise.catch(() => {});

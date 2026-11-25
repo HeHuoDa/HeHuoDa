@@ -17,8 +17,7 @@ const object = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown): v is string =>
   typeof v === "string" && v.trim().length > 0;
-const nullableText = (v: unknown): v is string | null =>
-  v === null || text(v);
+const nullableText = (v: unknown): v is string | null => v === null || text(v);
 const isoDate = (v: unknown): v is string =>
   typeof v === "string" && Number.isFinite(Date.parse(v));
 const USER_STATUSES = ["active", "restricted", "closing", "deleted"] as const;

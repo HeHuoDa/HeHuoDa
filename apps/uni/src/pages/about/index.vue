@@ -103,7 +103,8 @@ const steps = [
           <text class="about-status">H5 已开放</text>
           <text class="about-item-title">统一身份认证登录</text>
           <text class="about-copy"
-            >H5 端已接入四川农业大学统一身份认证唯一登录，首次登录自动创建账号，默认昵称为「禾伙搭用户」，并可在个人中心修改并持久化保存昵称。</text
+            >H5
+            端已接入四川农业大学统一身份认证唯一登录，首次登录自动创建账号，默认昵称为「禾伙搭用户」，并可在个人中心修改并持久化保存昵称。</text
           >
           <text class="about-copy"
             >不登录也可以继续浏览公开比赛信息与使用会话内临时收藏；密码与验证码仅用于当次向学校校验，不在本地存储。</text

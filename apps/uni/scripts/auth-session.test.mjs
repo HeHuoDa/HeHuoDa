@@ -481,7 +481,11 @@ test("H5 模式：登出清除内存凭据且不依赖 Bearer，远端失败可�
   await tick();
   const logoutCall = apiA.calls.at(-1);
   assert.equal(logoutCall.label, "logout");
-  assert.equal(logoutCall.arg.token, null, "H5 退出前已清内存 Bearer，走 Cookie+CSRF");
+  assert.equal(
+    logoutCall.arg.token,
+    null,
+    "H5 退出前已清内存 Bearer，走 Cookie+CSRF",
+  );
   logoutCall.reject(new RequestError("network", "网络中断"));
   const res1 = await logoutPending;
   assert.equal(res1.remoteRevoked, false);

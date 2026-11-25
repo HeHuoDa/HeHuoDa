@@ -106,7 +106,11 @@ function installPlatform({ platform = "web" } = {}) {
 
 async function openPanel(props = {}, platform = installPlatform()) {
   setActivePinia(createPinia());
-  const app = await mount("../src/components/SchoolLoginPanel.vue", props, "H5");
+  const app = await mount(
+    "../src/components/SchoolLoginPanel.vue",
+    props,
+    "H5",
+  );
   await tick();
   // policy + challenge
   assert.equal(platform.requests[0].url, "/api/v1/campus-verification/policy");
@@ -185,7 +189,8 @@ test("H5 学校登录带 withCredentials+CSRF、密码不写入存储并刷新�
 
     // 提交后页面密码与验证码立即清空
     assert.equal(
-      panel.app.find((n) => n.props.id === "school-password")?.props.value ?? "",
+      panel.app.find((n) => n.props.id === "school-password")?.props.value ??
+        "",
       "",
     );
     assert.equal(
