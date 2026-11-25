@@ -41,6 +41,36 @@ describe("validateEnvironment", () => {
       }),
     ).toHaveProperty("ADMIN_ALLOWED_ORIGINS", "https://admin.example");
   });
+  it("H5来源默认关闭，拒绝通配符、路径与生产明文Origin", () => {
+    expect(validateEnvironment({}).H5_ALLOWED_ORIGINS).toBe("");
+    for (const origin of [
+      "*",
+      "null",
+      "https://h5.example/path",
+      "https://h5.example/",
+      "https://u:p@h5.example",
+      "https://*.example",
+    ])
+      expect(() =>
+        validateEnvironment({ H5_ALLOWED_ORIGINS: origin }),
+      ).toThrow();
+    const production = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test:test@db/test",
+    };
+    expect(() =>
+      validateEnvironment({
+        ...production,
+        H5_ALLOWED_ORIGINS: "http://h5.example",
+      }),
+    ).toThrow();
+    expect(
+      validateEnvironment({
+        ...production,
+        H5_ALLOWED_ORIGINS: "https://h5.example",
+      }),
+    ).toHaveProperty("H5_ALLOWED_ORIGINS", "https://h5.example");
+  });
   it("可信代理默认禁用，拒绝任意来源和非法网段配置", () => {
     expect(validateEnvironment({}).API_TRUSTED_PROXY_CIDRS).toBe("");
     expect(

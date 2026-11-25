@@ -393,4 +393,88 @@ describe("学校唯一登录：匿名事务边界与凭据保护", () => {
       ).statusCode,
     ).toBe(404);
   });
+
+  it("原生提交拒绝浏览器来源语义与自报平台字段，且不外联校方", async () => {
+    const t = await f.createChallenge();
+    const browserHeaders: Record<string, string>[] = [
+      { origin: "https://h5.example" },
+      { referer: "https://h5.example/login" },
+      { "sec-fetch-site": "same-origin" },
+      { "x-refresh-csrf": "1" },
+      { cookie: "hh_user_refresh=h5_" + "a".repeat(43) },
+    ];
+    for (const headers of browserHeaders) {
+      const rejected = await f.request(
+        "POST",
+        `auth/school/challenges/${t.id}/submit`,
+        {
+          ...loginCredentials,
+          holderToken: t.holderToken,
+          challengeVersion: t.challenge.version,
+        },
+        headers,
+      );
+      expect(rejected.statusCode).toBe(403);
+    }
+    const selfDeclared = await f.submitChallenge(t, { clientType: "android" });
+    expect(selfDeclared.statusCode).toBe(400);
+    expect(f.counts.post).toBe(0);
+    // 被拒后原挑战仍可通过原生无 Origin 正常提交。
+    const ok = await f.submitChallenge(t);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().credential.refreshToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(ok.headers["set-cookie"]).toBeUndefined();
+    expect(f.counts.post).toBe(1);
+  });
+
+  it("H5 提交校验失败在上游认证前被拒，不消耗挑战也不外联", async () => {
+    const t = await f.createChallenge();
+    const invalidCases: Record<string, string>[] = [
+      {},
+      { origin: "https://evil.example", "x-refresh-csrf": "1" },
+      {
+        origin: "https://evil.example",
+        referer: "https://h5.example/login",
+        "x-refresh-csrf": "1",
+      },
+      {
+        origin: "null",
+        referer: "https://h5.example/login",
+        "x-refresh-csrf": "1",
+      },
+      { origin: "https://h5.example" },
+      { origin: "https://h5.example", "x-refresh-csrf": "0" },
+    ];
+    for (const headers of invalidCases) {
+      const rejected = await f.request(
+        "POST",
+        `auth/school/challenges/${t.id}/submit/h5`,
+        {
+          ...loginCredentials,
+          holderToken: t.holderToken,
+          challengeVersion: t.challenge.version,
+        },
+        headers,
+      );
+      expect(rejected.statusCode).toBe(403);
+      expect(rejected.headers["set-cookie"]).toBeUndefined();
+    }
+    expect(f.counts.post).toBe(0);
+    const ok = await f.request(
+      "POST",
+      `auth/school/challenges/${t.id}/submit/h5`,
+      {
+        ...loginCredentials,
+        holderToken: t.holderToken,
+        challengeVersion: t.challenge.version,
+      },
+      { origin: "https://h5.example", "x-refresh-csrf": "1" },
+    );
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().credential.refreshToken).toBeUndefined();
+    expect(String(ok.headers["set-cookie"])).toMatch(
+      /^hh_user_refresh=h5_[A-Za-z0-9_-]{43};/,
+    );
+    expect(f.counts.post).toBe(1);
+  });
 });
