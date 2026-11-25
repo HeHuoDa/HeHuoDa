@@ -114,7 +114,7 @@ test("未选学院不会回退全部，查询失败不伪造空列表；翻页�
   assert.deepEqual(state.filters.hosts, []);
 });
 
-test("离页使旧请求失效，返回保持关键词与页码，已完成结果无需重复请求", async () => {
+test("离页使旧请求失效，返回保留筛选并重新查询已完成的结果", async () => {
   const { state, dirs, lists, controller } = setup();
   const initial = controller.update({ q: "校园" });
   dirs[0].resolve(directory);
@@ -128,15 +128,20 @@ test("离页使旧请求失效，返回保持关键词与页码，已完成结�
   assert.equal(state.status, "ready");
   assert.equal(state.filters.q, "校园");
   controller.cancel();
-  await controller.resume();
-  assert.equal(lists.length, 2);
+  const refreshed = controller.resume();
+  assert.equal(lists.length, 3);
+  assert.equal(lists[2].filters.q, "校园");
+  lists[2].resolve({ ...empty, evaluatedAt: "2026-10-19T02:00:00Z" });
+  await refreshed;
+  assert.equal(state.response.evaluatedAt, "2026-10-19T02:00:00Z");
+  assert.equal(dirs.length, 1);
   const page = controller.page(4);
   controller.cancel();
   const returned = controller.resume();
-  assert.equal(lists[3].filters.page, 4);
-  lists[3].resolve({ ...empty, page: 2 });
+  assert.equal(lists[4].filters.page, 4);
+  lists[4].resolve({ ...empty, page: 2 });
   await returned;
-  lists[2].resolve(empty);
+  lists[3].resolve(empty);
   await page;
   assert.equal(state.filters.page, 2);
 });
