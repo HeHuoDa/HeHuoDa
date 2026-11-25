@@ -682,19 +682,27 @@ test("delayed merge recovery dispatches missing main CI once and leaves existing
   }
 });
 
-test("rerunning an old SHA cannot displace newer main or PR checks", () => {
+test("new PR runs cancel older PR runs while reruns and main stay isolated by SHA", () => {
   const ci = workflow("ci");
-  const group = (sha, number) =>
+  const group = (sha, number, attempt = "1") =>
     ci.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
       condition(expression, {
         sha,
+        event_name: number ? "pull_request" : "workflow_dispatch",
+        run_attempt: attempt,
         workflow: "CI",
         ref: "refs/heads/main",
         event: { pull_request: { number } },
       }),
     );
   assert.notEqual(group("a".repeat(40)), group("b".repeat(40)));
-  assert.notEqual(group("a".repeat(40), 121), group("b".repeat(40), 121));
+  assert.equal(group("a".repeat(40), 121), group("b".repeat(40), 121));
+  assert.notEqual(group("a".repeat(40), 121), group("a".repeat(40), 122));
+  assert.notEqual(group("a".repeat(40), 121, "2"), group("b".repeat(40), 121));
+  assert.notEqual(
+    group("a".repeat(40), 121, "2"),
+    group("b".repeat(40), 121, "2"),
+  );
   assert.equal(
     condition(ci.concurrency["cancel-in-progress"], {
       event_name: "workflow_dispatch",

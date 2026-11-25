@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
+  # Old manual reruns must not cancel the latest PR check or displace a main archive.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'main' }}-${{ (github.event_name != 'pull_request' || github.run_attempt != '1') && github.sha || 'latest' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
