@@ -158,7 +158,7 @@ test("刷新失败清理本地凭据并要求重新登录，不重试旧刷新�
   assert.equal(ctx.storage.state.value, null);
   assert.equal(ctx.state.phase, "anonymous");
   assert.equal(ctx.session.accessToken(), null);
-  assert.match(ctx.state.errorMessage, /重新微信登录/);
+  assert.match(ctx.state.errorMessage, /重新使用学校账号登录/);
   assert.equal(ctx.api.calls.length, 1);
 });
 
@@ -306,4 +306,192 @@ test("错误映射只使用公开状态与错误码，不回显原始 message", 
     authFailureMessage(new RequestError("timeout", "超时")),
     "网络超时，结果未确认，请稍后重试。",
   );
+  assert.equal(
+    authFailureMessage(
+      new RequestError("http", "forbidden", {
+        statusCode: 403,
+        code: "FORBIDDEN",
+      }),
+    ),
+    "当前访问来源未获授权，请检查访问地址后重试。",
+  );
+});
+
+function createH5Env() {
+  let storedCoord = null;
+  let lockChain = Promise.resolve();
+  const listeners = new Set();
+  const locks = {
+    request(_name, callback) {
+      const next = lockChain.then(() => callback());
+      lockChain = next.catch(() => {});
+      return next;
+    },
+  };
+  const createChannel = () => {
+    const channel = {
+      onmessage: null,
+      postMessage(msg) {
+        queueMicrotask(() => {
+          for (const target of listeners) {
+            if (target !== channel && target.onmessage) {
+              target.onmessage({ data: msg });
+            }
+          }
+        });
+      },
+      close() {
+        listeners.delete(channel);
+      },
+    };
+    listeners.add(channel);
+    return channel;
+  };
+  const coordStorage = {
+    read: () => storedCoord,
+    write: (record) => {
+      storedCoord = record;
+    },
+  };
+  return {
+    env: (tabId) => ({
+      isSecureContext: true,
+      locks,
+      createChannel,
+      coordStorage,
+      now: () => 1_700_000_000_000,
+      graceMs: 80,
+      logoutLockTimeoutMs: 100,
+      tabId,
+    }),
+  };
+}
+
+test("H5 模式：学校登录凭据仅驻留内存，冷启动经协调静默恢复并在失败时平滑回到游客", async () => {
+  const h5Cred = {
+    kind: "active",
+    user: { id: "u-h5", nickname: "禾伙搭用户", status: "active" },
+    accessToken: "at-h5-1",
+    accessExpiresAt: "2026-10-25T12:15:00.000Z",
+    sessionExpiresAt: "2026-11-24T12:00:00.000Z",
+  };
+  const h5Prof = profile({
+    user: { id: "u-h5", nickname: "禾伙搭用户", status: "active" },
+    campus: {
+      status: "valid",
+      termId: "2026-fall",
+      verifiedAt: "2026-10-25T10:00:00.000Z",
+      validUntil: "2027-01-31T16:00:00.000Z",
+    },
+  });
+
+  const bus = createH5Env();
+  const state = initialAuthState();
+  const api = createApi();
+  const storage = createStorage();
+  const session = createAuthSession(state, api, storage, Date.now, {
+    h5: true,
+    tabSyncEnv: bus.env("tab-a"),
+  });
+
+  const loginPending = session.applySchoolLogin(h5Cred);
+  assert.equal(session.accessToken(), "at-h5-1");
+  assert.equal(storage.state.writes, 0);
+  await tick();
+  api.calls.at(-1).resolve(h5Prof);
+  await loginPending;
+  assert.equal(state.phase, "authenticated");
+  assert.equal(state.campus?.status, "valid");
+
+  // 另一标签页冷启动恢复：经 Cookie 协调刷出新访问令牌并加载资料
+  const state2 = initialAuthState();
+  const api2 = createApi();
+  const session2 = createAuthSession(state2, api2, createStorage(), Date.now, {
+    h5: true,
+    tabSyncEnv: bus.env("tab-b"),
+  });
+  const restorePending = session2.restore();
+  await tick();
+  api2.calls[0].resolve({ ...h5Cred, accessToken: "at-h5-2" });
+  await tick();
+  api2.calls[1].resolve(h5Prof);
+  await restorePending;
+  assert.equal(state2.phase, "authenticated");
+  assert.equal(session2.accessToken(), "at-h5-2");
+
+  // 刷新失败的冷启动不抛错，平滑回到游客态
+  const busFail = createH5Env();
+  const state3 = initialAuthState();
+  const api3 = createApi();
+  const session3 = createAuthSession(state3, api3, createStorage(), Date.now, {
+    h5: true,
+    tabSyncEnv: busFail.env("tab-c"),
+  });
+  const restoreFail = session3.restore();
+  await tick();
+  api3.calls[0].reject(
+    new RequestError("http", "no cookie", {
+      statusCode: 401,
+      code: "INVALID_REFRESH_TOKEN",
+    }),
+  );
+  await restoreFail;
+  assert.equal(state3.phase, "anonymous");
+  assert.equal(session3.accessToken(), null);
+  assert.equal(state3.errorMessage, null);
+});
+
+test("H5 模式：登出清除内存凭据且不依赖 Bearer，远端失败可安全重试并同步清理其他标签", async () => {
+  const bus = createH5Env();
+  const stateA = initialAuthState();
+  const apiA = createApi();
+  const sessionA = createAuthSession(stateA, apiA, createStorage(), Date.now, {
+    h5: true,
+    tabSyncEnv: bus.env("tab-a"),
+  });
+  apiA.probe = () => sessionA.accessToken();
+
+  const stateB = initialAuthState();
+  const apiB = createApi();
+  const sessionB = createAuthSession(stateB, apiB, createStorage(), Date.now, {
+    h5: true,
+    tabSyncEnv: bus.env("tab-b"),
+  });
+
+  const h5Cred = {
+    kind: "active",
+    user: { id: "u-h5", nickname: "禾伙搭用户", status: "active" },
+    accessToken: "at-1",
+    accessExpiresAt: "2026-10-25T12:15:00.000Z",
+    sessionExpiresAt: "2026-11-24T12:00:00.000Z",
+  };
+  const pA = sessionA.applySchoolLogin(h5Cred);
+  await tick();
+  apiA.calls.at(-1).resolve(profile());
+  await pA;
+
+  // B 收到同源登录广播后同步建立会话
+  await tick();
+  assert.equal(stateB.phase, "authenticated");
+  apiB.calls.at(-1)?.resolve(profile());
+  await tick();
+
+  // A 退出且远端首次失败：本地立清、B 同步清，且支持 retryRemoteLogout 重试
+  const logoutPending = sessionA.logout();
+  await tick();
+  const logoutCall = apiA.calls.at(-1);
+  assert.equal(logoutCall.label, "logout");
+  assert.equal(logoutCall.arg.token, null, "H5 退出前已清内存 Bearer，走 Cookie+CSRF");
+  logoutCall.reject(new RequestError("network", "网络中断"));
+  const res1 = await logoutPending;
+  assert.equal(res1.remoteRevoked, false);
+  assert.equal(stateA.phase, "anonymous");
+  assert.equal(stateB.phase, "anonymous");
+  assert.equal(sessionB.accessToken(), null);
+
+  const retryPending = sessionA.retryRemoteLogout();
+  await tick();
+  apiA.calls.at(-1).resolve("");
+  const res2 = await retryPending;
+  assert.equal(res2.remoteRevoked, true);
 });

@@ -204,3 +204,44 @@ test("responseRequestId 保持既有语义", () => {
   );
   assert.equal(responseRequestId({}, {}), null);
 });
+
+test("patch、withCredentials 与自定义请求头透传（H5 通道边界）", async () => {
+  const auth = authSession();
+  const p = platform(auth);
+  const patched = p.client.patch(
+    "/auth/me",
+    { nickname: "禾伙搭" },
+    isCredential,
+    {
+      withCredentials: true,
+      header: { "X-Refresh-CSRF": "1" },
+    },
+  );
+  assert.equal(p.calls[0].options.method, "PATCH");
+  assert.equal(p.calls[0].options.withCredentials, true);
+  assert.deepEqual(p.calls[0].options.header, {
+    Authorization: "Bearer token-a",
+    "X-Refresh-CSRF": "1",
+  });
+  p.respond(p.calls[0], 200, { accessToken: "ok" });
+  assert.deepEqual(await patched.promise, { accessToken: "ok" });
+});
+
+test("认证代次变化后，401 不触发旧代次刷新且迟到响应被丢弃", async () => {
+  let gen = 1;
+  const auth = {
+    ...authSession(),
+    generation: () => gen,
+  };
+  const p = platform(auth);
+  const pending = p.client.get("/auth/me", isCredential);
+  gen = 2;
+  p.respond(p.calls[0], 401, { code: "UNAUTHORIZED", message: "未授权" });
+  await assert.rejects(pending.promise, (err) => err.kind === "cancelled");
+  assert.equal(auth.state.refreshCount, 0);
+
+  const pending2 = p.client.get("/auth/me", isCredential);
+  gen = 3;
+  p.respond(p.calls[1], 200, { accessToken: "stale" });
+  await assert.rejects(pending2.promise, (err) => err.kind === "cancelled");
+});
