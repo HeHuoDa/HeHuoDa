@@ -124,7 +124,7 @@ onLoad((platformQuery) => {
 usePageLifecycle({
   show() {
     visible = true;
-    if (state.status === "idle") void load();
+    void load();
   },
   hide: leave,
 });
