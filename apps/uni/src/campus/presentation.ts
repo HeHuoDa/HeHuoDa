@@ -6,7 +6,12 @@ export function campusFailure(error: unknown): string {
   if (error.statusCode === 403) return "平台账号当前受限，暂不能认证。";
   if (error.statusCode === 404) return "原认证事务已失效，请重新认证。";
   if (error.statusCode === 429) return "尝试过于频繁，请稍后再试。";
-  const code = (error.code ?? "").replace(/^CAMPUS_/, "").toLowerCase();
+  const errorCode = (error.code ?? "").replace(/^CAMPUS_/, "").toLowerCase();
+  const code =
+    errorCode === "unsupported_verification" &&
+    error.details?.reason === "multiple_identities"
+      ? "multiple_identities"
+      : errorCode;
   const messages: Record<string, string> = {
     binding_conflict:
       "校园账号绑定存在冲突。账号申诉入口尚未开放，请勿反复尝试。",
@@ -18,7 +23,8 @@ export function campusFailure(error: unknown): string {
     credentials_failed: "学校未接受本次账号凭据，请核对后重新认证。",
     captcha_failed: "验证码未通过，请重新认证并输入新图片中的字符。",
     stale_challenge: "验证码已更换，请重新认证。",
-    unsupported_verification: "学校要求额外验证，目前暂不支持，请稍后再试。",
+    unsupported_verification: "学校返回的验证方式暂不支持，请稍后再试。",
+    multiple_identities: "学校返回多个身份，暂不支持使用此账号认证。",
     unsupported_identity: "学校返回的身份无法安全识别，暂不能认证。",
     unknown_response: "学校返回的身份信息无法安全确认，暂不能认证。",
     upstream_unavailable: "学校认证服务暂时不可用，请稍后再试。",

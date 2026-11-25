@@ -116,6 +116,9 @@ export function isProfileResponse(v: unknown): v is ProfileResponse {
     [v.campus.termId, v.campus.verifiedAt, v.campus.validUntil].every(
       (x) => x === null || typeof x === "string",
     ) &&
+    (v.campus.maskedAccountNumber === undefined ||
+      (typeof v.campus.maskedAccountNumber === "string" &&
+        /^••••\d{2}$/.test(v.campus.maskedAccountNumber))) &&
     object(v.availability) &&
     typeof v.availability.teaming === "boolean"
   );

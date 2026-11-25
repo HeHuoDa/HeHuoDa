@@ -212,6 +212,7 @@ test("H5 登录态展示服务端账号与昵称，支持 PATCH 改昵称与退�
           termId: "2026-fall",
           verifiedAt: "2026-10-25T10:00:00.000Z",
           validUntil: "2027-01-31T16:00:00.000Z",
+          maskedAccountNumber: "••••56",
         },
         availability: { teaming: false },
       },
@@ -222,6 +223,7 @@ test("H5 登录态展示服务端账号与昵称，支持 PATCH 改昵称与退�
   try {
     assert.match(view.text(), /禾伙搭用户/);
     assert.match(view.text(), /校园身份已验证/);
+    assert.match(view.text(), /校园账号 ••••56/);
     assert.equal(session.favoriteCount, 1);
 
     // 打开修改昵称弹窗并保存

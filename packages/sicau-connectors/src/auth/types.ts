@@ -15,7 +15,10 @@ export type AuthErrorCode =
   | "cancelled";
 
 export class SchoolAuthError extends Error {
-  constructor(public readonly code: AuthErrorCode) {
+  constructor(
+    public readonly code: AuthErrorCode,
+    public readonly reason?: "multiple_identities",
+  ) {
     super(code);
     this.name = "SchoolAuthError";
   }

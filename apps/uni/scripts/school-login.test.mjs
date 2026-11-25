@@ -360,4 +360,100 @@ test("取消与离页会中止在途请求，迟到响应不得恢复已取消�
     ),
     /账号当前受限/,
   );
+  assert.match(
+    schoolLoginFailureMessage(
+      new RequestError("http", "x", {
+        statusCode: 400,
+        code: "CAMPUS_UNSUPPORTED_VERIFICATION",
+        details: { reason: "multiple_identities" },
+      }),
+    ),
+    /学校返回多个身份/,
+  );
+  assert.doesNotMatch(
+    schoolLoginFailureMessage(
+      new RequestError("http", "x", {
+        statusCode: 400,
+        code: "CAMPUS_UNSUPPORTED_VERIFICATION",
+      }),
+    ),
+    /多个身份/,
+  );
+});
+
+test("仅验证码过期而事务仍有效时，提交立即清空秘密并自动刷新验证码", async () => {
+  const h = makeHarness();
+  const txExpires = "2099-01-01T00:10:00.000Z";
+  const challengeExpiredAt = new Date(1_700_000_000_000 + 60_000).toISOString();
+
+  const showP = h.controller.show();
+  await tick();
+  h.calls.at(-1).req.resolve(h.policy(1));
+  await tick();
+  h.calls.at(-1).req.resolve({
+    id: "tx-1",
+    status: "waiting",
+    expiresAt: txExpires,
+    reason: null,
+    holderToken: "ht-secret",
+    challenge: {
+      version: "c1",
+      imageDataUrl: "data:image/png;base64,AAAA",
+      expiresAt: challengeExpiredAt,
+    },
+  });
+  await showP;
+
+  h.controller.setConsented(true);
+  h.controller.edit("name", "张三");
+  h.controller.edit("account", "20240001");
+  h.controller.edit("password", "pw-secret");
+  h.controller.edit("captcha", "1234");
+  h.advanceNow(120_000);
+
+  const submitP = h.controller.submit();
+  assert.equal(h.state.password, "");
+  assert.equal(h.state.captcha, "");
+  assert.equal(h.calls.filter((c) => c.label === "submit").length, 0);
+
+  const refreshCall = h.calls.at(-1);
+  assert.equal(refreshCall.label, "refresh");
+  assert.equal(refreshCall.id, "tx-1");
+  refreshCall.req.resolve({
+    ...h.challenge("c2", txExpires),
+    holderToken: "ht-2",
+  });
+  assert.equal(await submitP, false);
+  assert.equal(h.state.transaction?.status, "waiting");
+  assert.equal(h.state.transaction?.challenge?.version, "c2");
+  assert.equal(h.state.name, "张三");
+  assert.equal(h.state.account, "20240001");
+  assert.equal(h.state.consented, true);
+  assert.match(h.state.message, /验证码已过期，已自动刷新/);
+});
+
+test("事务本身过期时，提交直接结束事务且不发起验证码刷新", async () => {
+  const h = makeHarness();
+  const expiredAt = new Date(1_700_000_000_000 + 60_000).toISOString();
+
+  const showP = h.controller.show();
+  await tick();
+  h.calls.at(-1).req.resolve(h.policy(1));
+  await tick();
+  h.calls.at(-1).req.resolve(h.challenge("c1", expiredAt));
+  await showP;
+
+  h.controller.setConsented(true);
+  h.controller.edit("name", "张三");
+  h.controller.edit("account", "20240001");
+  h.controller.edit("password", "pw-secret");
+  h.controller.edit("captcha", "1234");
+  h.advanceNow(120_000);
+
+  assert.equal(await h.controller.submit(), false);
+  assert.equal(h.state.password, "");
+  assert.equal(h.state.captcha, "");
+  assert.equal(h.state.transaction?.status, "expired");
+  assert.equal(h.calls.filter((c) => c.label === "refresh").length, 0);
+  assert.match(h.state.message, /本次登录已过期/);
 });

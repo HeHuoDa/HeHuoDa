@@ -32,6 +32,7 @@ const accountTitle = computed(() =>
 
 const authSubtitle = computed(() => {
   if (auth.authenticated) {
+    if (auth.campusStatus === "unverified") return "学校账号 · 校园身份未验证";
     return auth.campusStatus === "valid"
       ? "学校账号 · 校园身份已验证"
       : "学校账号已登录";
@@ -267,10 +268,18 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
   box-sizing: border-box;
   width: 240px;
   max-width: calc(100vw - 40px);
+  max-height: calc(
+    100vh - var(--window-top, 0px) - var(--window-bottom, 0px) - 120px
+  );
+  max-height: calc(
+    100dvh - var(--window-top, 0px) - var(--window-bottom, 0px) - 120px
+  );
   padding: 6px;
   border: 1px solid var(--hhr-color-line);
   border-radius: 14px;
   background: var(--hhr-color-surface);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   overflow-wrap: anywhere;
 }
 

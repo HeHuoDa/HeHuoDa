@@ -393,31 +393,49 @@ describe("学校认证包公开接口", () => {
           user: { id: "subject" },
         },
       },
+      "multiple_identities",
+    ],
+    [
+      "unsupported_verification",
+      {
+        code: 200,
+        msg: "登录成功",
+        data: {
+          st: "SECRET_ST",
+          tgt: "SECRET_TGT",
+          users: [{ id: "subject" }],
+          user: { id: "subject" },
+        },
+      },
     ],
     ["unknown_response", { code: 200, msg: "需要二次认证", data: null }],
-  ])("学校响应只按已验证契约判定，安全失败 %s", async (code, payload) => {
-    const transport = jest.fn<AuthTransport>(async (request) =>
-      request.method === "GET" ? captcha() : response(payload),
-    );
-    const client = new SchoolAuthClient({}, transport);
-    try {
-      const challenge = await client.createChallenge();
-      const error = await submit(client, challenge).catch(
-        (value) => value as Error,
+  ])(
+    "学校响应只按已验证契约判定，安全失败 %s",
+    async (code, payload, reason: unknown = undefined) => {
+      const transport = jest.fn<AuthTransport>(async (request) =>
+        request.method === "GET" ? captcha() : response(payload),
       );
-      expect(error).toMatchObject({ code, message: code });
-      expect(JSON.stringify(error)).not.toMatch(
-        /SECRET_|self-reported|subject|different/,
-      );
-      expect((error as Error).cause).toBeUndefined();
-      await expect(submit(client, challenge)).rejects.toMatchObject({
-        code: "invalid_session",
-      });
-      expect(transport).toHaveBeenCalledTimes(2);
-    } finally {
-      client.dispose();
-    }
-  });
+      const client = new SchoolAuthClient({}, transport);
+      try {
+        const challenge = await client.createChallenge();
+        const error = await submit(client, challenge).catch(
+          (value) => value as Error,
+        );
+        expect(error).toMatchObject({ code, message: code });
+        expect(error).toHaveProperty("reason", reason);
+        expect(JSON.stringify(error)).not.toMatch(
+          /SECRET_|self-reported|subject|different/,
+        );
+        expect((error as Error).cause).toBeUndefined();
+        await expect(submit(client, challenge)).rejects.toMatchObject({
+          code: "invalid_session",
+        });
+        expect(transport).toHaveBeenCalledTimes(2);
+      } finally {
+        client.dispose();
+      }
+    },
+  );
 
   it.each([302, 303, 307, 308, 429, 500, 503])(
     "上游 HTTP %i 不跳转或自动重放密码",

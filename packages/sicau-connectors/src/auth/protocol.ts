@@ -104,6 +104,19 @@ function identityText(value: unknown): value is string {
   );
 }
 
+function identitySubject(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || !("id" in value)) return;
+  const id = value.id;
+  // 学校会返回数字 ID；仅接受正安全整数，避免精度丢失造成主体绑定碰撞。
+  const subject =
+    typeof id === "number" && Number.isSafeInteger(id) && id > 0
+      ? String(id)
+      : id;
+  return typeof subject === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(subject)
+    ? subject
+    : undefined;
+}
+
 export function parseIdentity(envelope: Record<string, unknown>): AuthIdentity {
   if (envelope.code !== 200 || envelope.msg !== "登录成功") {
     if (envelope.msg === "验证码错误")
@@ -122,16 +135,22 @@ export function parseIdentity(envelope: Record<string, unknown>): AuthIdentity {
   )
     throw new SchoolAuthError("unknown_response");
   // 多身份分支没有可靠实测契约；不能把 users[0] 当作本次核验身份。
-  if (!Array.isArray(data.users) || data.users.length !== 0)
+  if (!Array.isArray(data.users))
     throw new SchoolAuthError("unsupported_verification");
+  if (data.users.length !== 0) {
+    const subjects = new Set([
+      identitySubject(data.user),
+      ...data.users.map(identitySubject),
+    ]);
+    subjects.delete(undefined);
+    throw new SchoolAuthError(
+      "unsupported_verification",
+      subjects.size > 1 ? "multiple_identities" : undefined,
+    );
+  }
   const user = object(data.user);
-  // 学校会返回数字 ID；仅接受正安全整数，避免精度丢失造成主体绑定碰撞。
-  const subject =
-    typeof user.id === "number" && Number.isSafeInteger(user.id) && user.id > 0
-      ? String(user.id)
-      : user.id;
-  if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject))
-    throw new SchoolAuthError("unknown_response");
+  const subject = identitySubject(user);
+  if (!subject) throw new SchoolAuthError("unknown_response");
   const accountNumber = user.number,
     name = user.name;
   if (!identityText(accountNumber) || !identityText(name))

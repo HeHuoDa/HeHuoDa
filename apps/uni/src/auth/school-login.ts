@@ -102,14 +102,20 @@ export function schoolLoginFailureMessage(error: unknown): string {
     return "原登录会话已失效，请重新获取验证码。";
   }
 
-  const code = (error.code ?? "").replace(/^CAMPUS_/, "").toLowerCase();
+  const errorCode = (error.code ?? "").replace(/^CAMPUS_/, "").toLowerCase();
+  const code =
+    errorCode === "unsupported_verification" &&
+    error.details?.reason === "multiple_identities"
+      ? "multiple_identities"
+      : errorCode;
   const messages: Record<string, string> = {
     consent_mismatch: "认证说明已更新，请重新阅读并勾选同意。",
     identity_mismatch: "验证失败，姓名与学号不匹配。",
     credentials_failed: "学校未接受本次账号凭据，请核对后重新获取验证码再试。",
     captcha_failed: "验证码未通过，请重新获取验证码并输入新图片中的字符。",
     stale_challenge: "验证码已更换，请点击“换一张”后再试。",
-    unsupported_verification: "学校要求额外验证，目前暂不支持，请稍后再试。",
+    unsupported_verification: "学校返回的验证方式暂不支持，请稍后再试。",
+    multiple_identities: "学校返回多个身份，暂不支持使用此账号登录。",
     unsupported_identity: "学校返回的身份无法安全识别，暂不能登录。",
     unknown_response: "学校返回的身份信息无法安全确认，暂不能登录。",
     verification_unavailable:
@@ -494,14 +500,26 @@ export function createSchoolLoginController(
     ) {
       return false;
     }
-    if (
-      Date.parse(tx.expiresAt) <= now() ||
-      Date.parse(tx.challenge.expiresAt) <= now()
-    ) {
+    if (Date.parse(tx.expiresAt) <= now()) {
       clearSecrets();
       holderToken = null;
       state.transaction = { ...tx, status: "expired", challenge: undefined };
-      state.message = "验证码或登录会话已过期，请重新获取验证码。";
+      state.message = "本次登录已过期，请重新获取验证码。";
+      return false;
+    }
+    if (Date.parse(tx.challenge.expiresAt) <= now()) {
+      const at = epoch;
+      const accountGen = generation();
+      clearSecrets();
+      await refresh();
+      if (
+        current(at, accountGen) &&
+        state.transaction?.status === "waiting" &&
+        state.transaction.challenge &&
+        !state.message
+      ) {
+        state.message = "验证码已过期，已自动刷新，请重新输入密码与新验证码。";
+      }
       return false;
     }
     if (state.imageFailed) {

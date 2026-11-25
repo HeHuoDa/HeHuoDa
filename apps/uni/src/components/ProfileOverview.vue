@@ -61,6 +61,7 @@ const campusStatusLabel = computed(() => {
   if (auth.campusStatus === "valid") return "学校账号 · 校园身份已验证";
   if (auth.campusStatus === "expired") return "学校账号 · 校园身份已过期";
   if (auth.campusStatus === "revoked") return "学校账号 · 校园身份已撤销";
+  if (auth.campusStatus === "unverified") return "学校账号 · 校园身份未验证";
   return "学校账号已登录";
 });
 const campusValidUntilText = computed(() => {
@@ -242,6 +243,13 @@ onBeforeUnmount(unregister);
         <view class="profile-identity-text">
           <text class="profile-name font-serif">{{ displayNickname }}</text>
           <text class="profile-account-badge">{{ campusStatusLabel }}</text>
+          <text
+            v-if="
+              auth.campus?.status === 'valid' && auth.campus.maskedAccountNumber
+            "
+            class="block mt-1 text-xs text-muted"
+            >校园账号 {{ auth.campus.maskedAccountNumber }}</text
+          >
           <text
             v-if="campusValidUntilText && campusValidUntilText !== '—'"
             class="block mt-1 text-xs text-muted"

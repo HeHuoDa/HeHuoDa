@@ -25,7 +25,7 @@ export const schoolErrorStatus: Record<AuthErrorCode, number> = {
 
 // 落库与审计的失败原因只能是安全枚举，绝不携带学校原值、密码或验证码。
 export function safeSchoolReason(error: unknown): string {
-  if (error instanceof SchoolAuthError) return error.code;
+  if (error instanceof SchoolAuthError) return error.reason ?? error.code;
   if (error instanceof HttpException) {
     const response = error.getResponse();
     if (
@@ -45,6 +45,7 @@ export function schoolApiError(error: unknown): HttpException {
       schoolErrorStatus[error.code],
       `CAMPUS_${error.code.toUpperCase()}`,
       "统一身份认证未完成，请根据状态重新发起",
+      error.reason ? { reason: error.reason } : undefined,
     );
   if (error instanceof HttpException) return error;
   return createApiError(
