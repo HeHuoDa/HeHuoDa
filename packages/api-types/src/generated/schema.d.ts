@@ -112,7 +112,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 轮换凭据；旧刷新凭据立即作废 */
+        /** 轮换凭据；旧刷新凭据立即作废（支持原生 JSON 与 H5 Cookie 通道） */
         post: operations["AuthController_refresh"];
         delete?: never;
         options?: never;
@@ -129,7 +129,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 撤销当前会话族 */
+        /** 撤销当前会话族（原生 Bearer 或 H5 Cookie 通道） */
         post: operations["AuthController_logout"];
         delete?: never;
         options?: never;
@@ -311,8 +311,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 提交姓名、学号、密码与验证码；成功时一次性签发 Bearer 会话 */
+        /** 提交姓名、学号、密码与验证码；成功时一次性签发原生 Bearer 会话 */
         post: operations["SchoolLoginController_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/school/challenges/{id}/submit/h5": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** H5 提交姓名、学号、密码与验证码；成功时通过 HttpOnly Cookie 下发刷新凭据，JSON 仅返回短期访问凭据 */
+        post: operations["SchoolLoginController_submitH5"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1223,15 +1240,6 @@ export interface components {
             notices: components["schemas"]["NoticeDto"][];
             evaluatedAt: string;
         };
-        WechatLoginRequestDto: {
-            /** @description uni.login 取得的微信临时授权码 */
-            code: string;
-            /**
-             * @description 用户已确认的平台协议版本；当前为 1
-             * @example 1
-             */
-            consentVersion: number;
-        };
         UserDto: {
             id: string;
             /** @example 禾伙搭用户 */
@@ -1258,9 +1266,35 @@ export interface components {
              */
             sessionExpiresAt: string;
         };
+        H5CredentialResponseDto: {
+            /**
+             * @description 凭据生命周期类别
+             * @enum {string}
+             */
+            kind: "active";
+            user: components["schemas"]["UserDto"];
+            /** @description 访问凭据，15 分钟有效；H5 仅内存持有 */
+            accessToken: string;
+            /** @example 2026-10-24T12:15:00.000Z */
+            accessExpiresAt: string;
+            /**
+             * @description 会话绝对期限，刷新不会延长；刷新凭据通过 HttpOnly Cookie 托管
+             * @example 2026-11-23T12:00:00.000Z
+             */
+            sessionExpiresAt: string;
+        };
         RefreshRequestDto: {
             /** @description 刷新凭据 */
             refreshToken: string;
+        };
+        WechatLoginRequestDto: {
+            /** @description uni.login 取得的微信临时授权码 */
+            code: string;
+            /**
+             * @description 用户已确认的平台协议版本；当前为 1
+             * @example 1
+             */
+            consentVersion: number;
         };
         CampusStatusDto: {
             /**
@@ -1396,8 +1430,17 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             reason: string | null;
-            /** @description 仅成功的首次登录下发一次；受限于 Bearer 通道，H5 Cookie 通道由 #218 承接 */
+            /** @description 仅成功的首次原生登录下发一次；H5 Cookie 通道请使用 /submit/h5 */
             credential?: components["schemas"]["CredentialResponseDto"];
+        };
+        SchoolLoginH5CredentialDto: {
+            id: string;
+            status: string;
+            /** Format: date-time */
+            expiresAt: string;
+            reason: string | null;
+            /** @description 仅成功的首次 H5 登录下发一次；刷新凭据通过 HttpOnly Cookie 下发，JSON 不包含 refreshToken */
+            credential?: components["schemas"]["H5CredentialResponseDto"];
         };
         SchoolLoginTransactionDto: {
             id: string;
@@ -2946,22 +2989,29 @@ export interface operations {
     AuthController_refresh: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description H5 Cookie 通道必填，固定值为 1 */
+                "X-Refresh-CSRF"?: string;
+                /** @description H5 Cookie 通道校验允许的精确 Origin（缺失时回退检查 Referer 源）；原生 JSON 通道禁止携带 */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        /** @description 原生端传 JSON refreshToken；H5 端只接受空请求体并依赖 HttpOnly Cookie */
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["RefreshRequestDto"];
+                "application/json": components["schemas"]["RefreshRequestDto"] | Record<string, never>;
             };
         };
         responses: {
+            /** @description 原生端返回含 refreshToken 的完整凭据；H5 端仅返回短期访问凭据并通过 Set-Cookie 轮换刷新令牌 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CredentialResponseDto"];
+                    "application/json": components["schemas"]["CredentialResponseDto"] | components["schemas"]["H5CredentialResponseDto"];
                 };
             };
             400: {
@@ -3009,11 +3059,21 @@ export interface operations {
     AuthController_logout: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description H5 Cookie 通道必填，固定值为 1 */
+                "X-Refresh-CSRF"?: string;
+                /** @description H5 Cookie 通道校验允许的精确 Origin（缺失时回退检查 Referer 源） */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description H5 通道只接受空请求体 */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
         responses: {
             204: {
                 headers: {
@@ -3021,7 +3081,31 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3933,6 +4017,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchoolLoginCredentialDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    SchoolLoginController_submitH5: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 固定 CSRF 防护头，值为 1 */
+                "X-Refresh-CSRF": string;
+                /** @description 精确匹配允许的 H5 Origin（缺失时回退检查 Referer 源） */
+                Origin?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchoolLoginSubmitDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolLoginH5CredentialDto"];
                 };
             };
             400: {

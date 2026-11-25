@@ -117,6 +117,7 @@ test(
     const envFile = join(directory, ".env");
     const settings = {
       ADMIN_ALLOWED_ORIGINS: "https://admin.example",
+      H5_ALLOWED_ORIGINS: "https://h5.example",
       ADMIN_SESSION_HOURS: "12",
       ADMIN_RATE_LOGIN_ACCOUNT: "5",
       ADMIN_RATE_LOGIN_SOURCE: "30",

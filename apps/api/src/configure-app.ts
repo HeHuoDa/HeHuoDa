@@ -71,10 +71,16 @@ export function configureApp(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
     .setTitle("禾伙搭 API")
     .setVersion("1.0")
+    .addBearerAuth()
     .addCookieAuth(
       "hh_admin_session",
       { type: "apiKey", in: "cookie" },
       "adminSession",
+    )
+    .addCookieAuth(
+      "hh_user_refresh",
+      { type: "apiKey", in: "cookie" },
+      "userRefresh",
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);

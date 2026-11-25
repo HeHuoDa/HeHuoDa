@@ -61,6 +61,22 @@ export class CredentialResponseDto {
   sessionExpiresAt!: string;
 }
 
+export class H5CredentialResponseDto {
+  @ApiProperty({ enum: ["active"], description: "凭据生命周期类别" })
+  kind!: "active";
+  @ApiProperty({ type: UserDto }) user!: UserDto;
+  @ApiProperty({ description: "访问凭据，15 分钟有效；H5 仅内存持有" })
+  accessToken!: string;
+  @ApiProperty({ example: "2026-10-24T12:15:00.000Z" })
+  accessExpiresAt!: string;
+  @ApiProperty({
+    example: "2026-11-23T12:00:00.000Z",
+    description:
+      "会话绝对期限，刷新不会延长；刷新凭据通过 HttpOnly Cookie 托管",
+  })
+  sessionExpiresAt!: string;
+}
+
 export class CampusStatusDto {
   @ApiProperty({
     enum: ["unverified", "valid", "expired", "revoked"],

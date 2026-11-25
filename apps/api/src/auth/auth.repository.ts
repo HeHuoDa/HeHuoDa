@@ -399,6 +399,47 @@ export class AuthRepository {
       );
   }
 
+  // H5 退出仅凭刷新凭据定位并撤销整族；即使该凭据刚被并发刷新消费，
+  // 仍能通过其 sessionId 锁定并撤销会话，确保刷新与退出竞争以撤销为准。
+  async revokeSessionByRefreshToken(
+    refreshToken: string,
+    now: Date,
+    requestId: string,
+  ): Promise<{ revoked: boolean; userId?: string; sessionId?: string }> {
+    const refreshHash = hashToken(refreshToken);
+    return this.withAccessTransaction(async (tx) => {
+      const [token] = await tx
+        .select({ sessionId: authTokens.sessionId })
+        .from(authTokens)
+        .where(eq(authTokens.refreshHash, refreshHash))
+        .for("update");
+      if (!token) return { revoked: false };
+      const [session] = await tx
+        .select({
+          id: authSessions.id,
+          userId: authSessions.userId,
+          revokedAt: authSessions.revokedAt,
+        })
+        .from(authSessions)
+        .where(eq(authSessions.id, token.sessionId))
+        .for("update");
+      if (!session || session.revokedAt) return { revoked: false };
+      await this.revokeSession(session.id, "logout", now, tx);
+      await this.recordAudit(
+        {
+          kind: "session_revoked",
+          userId: session.userId,
+          sessionId: session.id,
+          requestId,
+          metadata: { reason: "logout", channel: "h5" },
+          now,
+        },
+        tx,
+      );
+      return { revoked: true, userId: session.userId, sessionId: session.id };
+    });
+  }
+
   async assertCurrentContext(
     tx: AccessTransaction,
     access: AccessContext,

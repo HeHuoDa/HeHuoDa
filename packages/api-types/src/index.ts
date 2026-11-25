@@ -15,6 +15,8 @@ export type RefreshRequest = components["schemas"]["RefreshRequestDto"];
 export type UserAccount = components["schemas"]["UserDto"];
 export type UserStatus = UserAccount["status"];
 export type CredentialResponse = components["schemas"]["CredentialResponseDto"];
+export type H5CredentialResponse =
+  components["schemas"]["H5CredentialResponseDto"];
 export type CampusStatus = components["schemas"]["CampusStatusDto"];
 export type Availability = components["schemas"]["AvailabilityDto"];
 export type ProfileResponse = components["schemas"]["ProfileResponseDto"];
@@ -36,13 +38,19 @@ export type SchoolLoginTransaction =
   components["schemas"]["SchoolLoginTransactionDto"];
 export type SchoolLoginCredential =
   components["schemas"]["SchoolLoginCredentialDto"];
+export type SchoolLoginH5Credential =
+  components["schemas"]["SchoolLoginH5CredentialDto"];
 export type SchoolLoginChallengePath =
   paths["/api/v1/auth/school/challenges"]["post"];
 export type SchoolLoginRefreshPath =
   paths["/api/v1/auth/school/challenges/{id}/captcha"]["post"];
 export type SchoolLoginSubmitPath =
   paths["/api/v1/auth/school/challenges/{id}/submit"]["post"];
+export type SchoolLoginH5SubmitPath =
+  paths["/api/v1/auth/school/challenges/{id}/submit/h5"]["post"];
 export type SchoolLoginStatusPath =
   paths["/api/v1/auth/school/challenges/{id}/status"]["post"];
 export type SchoolLoginCancelPath =
   paths["/api/v1/auth/school/challenges/{id}"]["delete"];
+export type AuthRefreshPath = paths["/api/v1/auth/refresh"]["post"];
+export type AuthLogoutPath = paths["/api/v1/auth/logout"]["post"];

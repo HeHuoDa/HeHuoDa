@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
@@ -21,10 +22,16 @@ import {
   type UserRecord,
 } from "../auth/auth.repository.js";
 import {
+  generateH5TokenPair,
   generateToken,
   generateTokenPair,
   hashToken,
 } from "../auth/auth-token.js";
+import {
+  assertConfiguredH5Security,
+  assertNativeClientBoundary,
+  buildConfiguredH5Cookie,
+} from "../auth/h5-security.js";
 import { createApiError } from "../common/api-error.js";
 import {
   lockAccessTransaction,
@@ -478,6 +485,23 @@ export class SchoolLoginService implements OnApplicationShutdown {
     }
   }
 
+  assertH5Security(headers: IncomingHttpHeaders): void {
+    assertConfiguredH5Security(this.config, headers);
+  }
+
+  assertNativeBoundary(headers: IncomingHttpHeaders): void {
+    assertNativeClientBoundary(headers);
+  }
+
+  buildH5Cookie(refreshToken: string, sessionExpiresAt: Date): string {
+    return buildConfiguredH5Cookie(
+      this.config,
+      this.clock.now(),
+      refreshToken,
+      sessionExpiresAt,
+    );
+  }
+
   /**
    * 提交姓名、学号、密码与验证码。校方返回后先逐字比对，再进入短事务建号并签发会话；
    * 已终结的事务只回放安全状态，不重放密码，也不二次下发凭据。
@@ -488,6 +512,7 @@ export class SchoolLoginService implements OnApplicationShutdown {
     input: SchoolLoginSubmitInput,
     ip: string,
     requestId: string,
+    channel: "native" | "h5" = "native",
   ): Promise<SchoolLoginCredentialView> {
     await this.maintain();
     const holderHash = hashToken(holderToken);
@@ -553,6 +578,7 @@ export class SchoolLoginService implements OnApplicationShutdown {
         input.challengeVersion,
         identity,
         requestId,
+        channel,
       );
     } catch (error) {
       await this.fail(id, safeSchoolReason(error), requestId);
@@ -569,8 +595,10 @@ export class SchoolLoginService implements OnApplicationShutdown {
     version: string,
     identity: AuthIdentity,
     requestId: string,
+    channel: "native" | "h5",
   ): Promise<SchoolLoginCredentialView> {
-    const tokens = generateTokenPair();
+    const tokens =
+      channel === "h5" ? generateH5TokenPair() : generateTokenPair();
     const outcome = await this.transaction(async (tx) => {
       const row = await this.owned(tx, id, holderHash),
         now = this.clock.now();

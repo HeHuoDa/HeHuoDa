@@ -437,4 +437,60 @@ describe("认证数据与真实 PG 事务", () => {
         .rows[0].c,
     ).toBe(0);
   });
+
+  it("跨通道刷新凭据不可轮换，H5 退出可通过已消费刷新凭据撤销整族", async () => {
+    const native = await login("o-cross-native");
+    const crossToH5 = await failure(
+      service.refresh({ refreshToken: native.refreshToken }, CONTEXT, "h5"),
+    );
+    expect(crossToH5.getStatus()).toBe(401);
+    expect(crossToH5.getResponse()).toMatchObject({
+      code: "INVALID_REFRESH_TOKEN",
+    });
+    // 原生会话仍完整可用。
+    const nativeRotated = await service.refresh(
+      { refreshToken: native.refreshToken },
+      CONTEXT,
+      "native",
+    );
+    expect(nativeRotated.refreshToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // 模拟 H5 令牌格式、轮换后凭旧令牌触发撤销（覆盖刷新与退出竞争）。
+    const h5First = "h5_" + "A".repeat(43);
+    const h5Access = "B".repeat(43);
+    const created = await repository.createSession({
+      userId: native.user.id,
+      tokens: { accessToken: h5Access, refreshToken: h5First },
+      now: current,
+    });
+    const crossToNative = await failure(
+      service.refresh({ refreshToken: h5First }, CONTEXT, "native"),
+    );
+    expect(crossToNative.getStatus()).toBe(401);
+
+    const h5Rotated = await service.refresh(
+      { refreshToken: h5First },
+      CONTEXT,
+      "h5",
+    );
+    expect(h5Rotated.refreshToken).toMatch(/^h5_[A-Za-z0-9_-]{43}$/);
+
+    const revoked = await repository.revokeSessionByRefreshToken(
+      h5First,
+      current,
+      CONTEXT.requestId,
+    );
+    expect(revoked).toEqual({
+      revoked: true,
+      userId: native.user.id,
+      sessionId: created.id,
+    });
+    const afterLogout = await failure(
+      service.refresh({ refreshToken: h5Rotated.refreshToken }, CONTEXT, "h5"),
+    );
+    expect(afterLogout.getStatus()).toBe(401);
+    expect(
+      await repository.findActiveAccess(h5Rotated.accessToken, current),
+    ).toBeUndefined();
+  });
 });

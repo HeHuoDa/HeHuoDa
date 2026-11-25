@@ -7,12 +7,14 @@ import {
   Param,
   Post,
   Req,
+  Res,
 } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -20,12 +22,14 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { ApiErrorDto } from "../common/dto/api-error.dto.js";
 import { assertEmptyBody } from "../common/empty-body.js";
+import { toH5Credential } from "../auth/h5-security.js";
 import {
   SchoolLoginChallengeResponseDto,
   SchoolLoginCredentialDto,
+  SchoolLoginH5CredentialDto,
   SchoolLoginHolderQueryDto,
   SchoolLoginSubmitDto,
   SchoolLoginTransactionDto,
@@ -79,7 +83,7 @@ export class SchoolLoginController {
   @HttpCode(200)
   @Header("Cache-Control", "no-store")
   @ApiOperation({
-    summary: "提交姓名、学号、密码与验证码；成功时一次性签发 Bearer 会话",
+    summary: "提交姓名、学号、密码与验证码；成功时一次性签发原生 Bearer 会话",
   })
   @ApiOkResponse({ type: SchoolLoginCredentialDto })
   submit(
@@ -87,6 +91,7 @@ export class SchoolLoginController {
     @Param("id") id: string,
     @Body() body: SchoolLoginSubmitDto,
   ) {
+    this.service.assertNativeBoundary(request.headers);
     const { holderToken, ...input } = body;
     return this.service.submit(
       id,
@@ -94,7 +99,66 @@ export class SchoolLoginController {
       input,
       request.ip ?? "unknown",
       request.id,
+      "native",
     );
+  }
+
+  @Post("challenges/:id/submit/h5")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  @ApiOperation({
+    summary:
+      "H5 提交姓名、学号、密码与验证码；成功时通过 HttpOnly Cookie 下发刷新凭据，JSON 仅返回短期访问凭据",
+  })
+  @ApiHeader({
+    name: "Origin",
+    required: false,
+    description: "精确匹配允许的 H5 Origin（缺失时回退检查 Referer 源）",
+  })
+  @ApiHeader({
+    name: "X-Refresh-CSRF",
+    required: true,
+    description: "固定 CSRF 防护头，值为 1",
+  })
+  @ApiOkResponse({ type: SchoolLoginH5CredentialDto })
+  async submitH5(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Param("id") id: string,
+    @Body() body: SchoolLoginSubmitDto,
+  ): Promise<SchoolLoginH5CredentialDto> {
+    this.service.assertH5Security(request.headers);
+    const { holderToken, ...input } = body;
+    const result = await this.service.submit(
+      id,
+      holderToken,
+      input,
+      request.ip ?? "unknown",
+      request.id,
+      "h5",
+    );
+    if (!result.credential) {
+      return {
+        id: result.id,
+        status: result.status,
+        expiresAt: result.expiresAt,
+        reason: result.reason,
+      };
+    }
+    reply.header(
+      "Set-Cookie",
+      this.service.buildH5Cookie(
+        result.credential.refreshToken,
+        new Date(result.credential.sessionExpiresAt),
+      ),
+    );
+    return {
+      id: result.id,
+      status: result.status,
+      expiresAt: result.expiresAt,
+      reason: result.reason,
+      credential: toH5Credential(result.credential),
+    };
   }
 
   @Post("challenges/:id/status")

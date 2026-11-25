@@ -127,6 +127,7 @@ export async function schoolLoginFixture(
       v1: Buffer.alloc(32, 2).toString("base64"),
     }),
     CAMPUS_PROFILE_KEY_ID: "v1",
+    H5_ALLOWED_ORIGINS: "https://h5.example",
     ...overrides,
   };
   const previous = Object.fromEntries(
@@ -194,13 +195,15 @@ export async function schoolLoginFixture(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     payload?: unknown,
-    token?: string,
+    tokenOrHeaders?: string | Record<string, string>,
   ) =>
     app.inject({
       method,
       url: "/api/v1/" + path,
       headers: {
-        ...(token ? { authorization: "Bearer " + token } : {}),
+        ...(typeof tokenOrHeaders === "string"
+          ? { authorization: "Bearer " + tokenOrHeaders }
+          : tokenOrHeaders),
         ...(payload === undefined
           ? {}
           : { "content-type": "application/json" }),

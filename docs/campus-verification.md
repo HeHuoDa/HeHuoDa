@@ -30,18 +30,25 @@
 
 M2 唯一用户登录入口，**不使用 `AuthGuard`**，无需前置微信登录。匿名客户端持有事务 ID 与不可猜测的持有凭证（`holderToken`）：仅凭事务 ID 不能查询、刷新验证码或提交。服务端只保存持有凭证的 SHA-256 摘要（`school_login_transactions.holder_hash`），持有凭证只在创建与刷新验证码时下发。
 
-| 方法与路径                                | 行为                                                                          |
-| ----------------------------------------- | ----------------------------------------------------------------------------- |
-| POST /auth/school/challenges              | 空请求体；创建 5 分钟事务并返回 `holderToken`、验证码与版本（201）            |
-| POST /auth/school/challenges/{id}/captcha | `{holderToken}`；换验证码，不延长总期限、不重建持有凭证                       |
-| POST /auth/school/challenges/{id}/submit  | `{holderToken,name,account,password,captcha,challengeVersion,consentVersion}` |
-| POST /auth/school/challenges/{id}/status  | `{holderToken}`；查询原事务安全状态，不返回私人原值                           |
-| DELETE /auth/school/challenges/{id}       | `{holderToken}`；取消，已提交终态不改写                                       |
+| 方法与路径                                  | 行为                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| POST /auth/school/challenges                | 空请求体；创建 5 分钟事务并返回 `holderToken`、验证码与版本（201）                         |
+| POST /auth/school/challenges/{id}/captcha   | `{holderToken}`；换验证码，不延长总期限、不重建持有凭证                                    |
+| POST /auth/school/challenges/{id}/submit    | 原生通道：`{holderToken,name,account,password,captcha,challengeVersion,consentVersion}`    |
+| POST /auth/school/challenges/{id}/submit/h5 | H5 通道：需精确 `Origin`（缺失时 `Referer` 源）与 `X-Refresh-CSRF: 1`，Cookie 下发刷新令牌 |
+| POST /auth/school/challenges/{id}/status    | `{holderToken}`；查询原事务安全状态，不返回私人原值                                        |
+| DELETE /auth/school/challenges/{id}         | `{holderToken}`；取消，已提交终态不改写                                                    |
 
 契约边界：
 
-- 提交成功返回 `{id,status,expiresAt,reason,credential}`，`credential` 含 `user`（默认昵称 `禾伙搭用户`）、15 分钟 `accessToken`、30 天绝对上限 `refreshToken`、`accessExpiresAt`、`sessionExpiresAt`；`credential` **只在首次成功响应出现一次**，重复提交只回安全状态、不重放密码也不重复签发凭据。
-- 该 Bearer 通道供 Android 使用。浏览器**不能仅凭自报端类型**取得 Android JSON refresh token；H5 的 `HttpOnly` Refresh Cookie、`Origin` 与 `X-Refresh-CSRF` 由 #218 承接，服务端选择会话通道的边界也随该票收口。
+- 原生提交成功返回 `{id,status,expiresAt,reason,credential}`，`credential` 含 `user`（默认昵称 `禾伙搭用户`）、15 分钟 `accessToken`、30 天绝对上限 `refreshToken`、`accessExpiresAt`、`sessionExpiresAt`；`credential` **只在首次成功响应出现一次**，重复提交只回安全状态、不重放密码也不重复签发凭据。原生入口拒绝携带浏览器来源头（`Origin`、`Referer`、`Sec-Fetch-*`）或 H5 Cookie/CSRF 头的请求（返回 403），且任何未声明的自报平台字段均被严格校验拒绝（400）。
+- H5 提交（`POST /auth/school/challenges/{id}/submit/h5`）成功时通过 `Set-Cookie` 写入 `hh_user_refresh=h5_<43位base64url>`（`HttpOnly; SameSite=Lax; Path=/api/v1/auth; Max-Age=<剩余秒数>; Expires=<绝对期限>`，生产 `NODE_ENV=production` 追加 `Secure`，不设 `Domain`），响应 JSON 的 `credential` **仅包含 `kind`、`user`、`accessToken`、`accessExpiresAt`、`sessionExpiresAt`**，不含 `refreshToken`。重复提交已终结事务不重新签发、不设置 Cookie。
+- **双端刷新与退出（`POST /api/v1/auth/refresh`、`POST /api/v1/auth/logout`）**：
+  - **通道判定**：只要出现 `hh_user_refresh` Cookie（含空值、重复名称或非法值）或 `X-Refresh-CSRF` 头即强制进入 H5 通道，绝不回落原生通道；二者均未出现才进入原生通道（`refresh` 额外拒绝浏览器来源头，返回 403）。
+  - **H5 安全校验**：优先校验显式 `Origin`（非法值直接 403，不回退 `Referer`）；仅 `Origin` 缺失时解析有效 `Referer` 的源并精确匹配 `H5_ALLOWED_ORIGINS`（默认空列表安全拒绝）。同时强制要求 `X-Refresh-CSRF: 1`。403 安全校验失败不消费令牌、不撤销会话、不清除 Cookie。H5 刷新与退出只接受空请求体（`{}` 或空体）且禁止同时携带 `Authorization: Bearer` 头（否则返回 400）。
+  - **轮换、重放与 #221 并发协调约定**：服务端保持严格单次轮换与整族撤销语义，不设宽限期或明文缓存；同一旧 Cookie 并发抵达时最多一次成功（200 轮换新 Cookie），其余触发 `401 REFRESH_TOKEN_REPLAY`、原子撤销整族并清除 Cookie（`Max-Age=0`）。因此 **#221 前端必须在发送刷新前完成同源单飞协调**（如 Web Locks / `BroadcastChannel` 选主），领导页串行刷新后通知其余标签使用内存新 `accessToken` 与浏览器已更新的当前 Cookie；禁止在网络结果未明时自动重发同一旧刷新请求。
+  - **定向错误与客户端处理**：`403 FORBIDDEN`（Origin/CSRF 配置或跨站异常，保持当前状态不清理 Cookie）；`401 REFRESH_TOKEN_REPLAY` / `401 INVALID_REFRESH_TOKEN`（服务端已清 Cookie，#221 须立即清除内存会话与私人页面状态并引导重新登录）；`403 ACCOUNT_RESTRICTED`（账号受限，停止刷新并可主动触发 H5 退出清理）；`429 TOO_MANY_REQUESTS`（遵循 `details.retryAfterSeconds` 退避，不清理会话）；`503`（服务暂不可用或校方临时清理待重试，保留报错反馈）。
+  - **H5 退出**：凭通过安全校验的 `hh_user_refresh` Cookie（即使 `accessToken` 已过期或缺失）在统一权限锁内按摘要定位 `sessionId`（含刚被并发刷新消费的旧代次），原子撤销整族会话、清除 Cookie（`Max-Age=0`）并触发提交后校方会话销毁；重复退出（含无 Cookie 或已撤销 Cookie）安全返回 204 并清除 Cookie。原生 Bearer 退出与 `/auth/me` 行为保持不变。
 - 事务归属只看持有凭证摘要，不依赖平台会话；跨凭证、缺失与不存在统一 404。
 - 错误一律使用安全枚举：`CAMPUS_STALE_CHALLENGE`(409)、`CAMPUS_TRANSACTION_ENDED`(409)、`CAMPUS_TRANSACTION_BUSY`(409)、`CAMPUS_IDENTITY_MISMATCH`(400)、`CAMPUS_CONSENT_MISMATCH`(400，带 `details.currentVersion`)、`CAMPUS_RATE_LIMITED`(429)、`CAMPUS_UPSTREAM_*`/`CAMPUS_UNKNOWN_RESPONSE`(503)、`CAMPUS_UNSUPPORTED_VERIFICATION`(400)、`ACCOUNT_RESTRICTED`(403)、`CAMPUS_VERIFICATION_UNAVAILABLE`(503)。
 
@@ -107,7 +114,7 @@ CAMPUS_TERMS=[{"id":"2026-2027-1","startAt":"2026-09-07T00:00:00+08:00","endAt":
 
 该日期已同步至 `apps/api/.env.example`；实际运行仍需在 API 环境配置中设置并重启，更新模板不会自动修改已有 `.env` 或部署容器。下一学期需另行确认区间，不从月份推算；学期配置本身不会开启校园核验。
 
-首次上线保持入口关闭并先执行增量迁移。`compose.deploy.yaml` 显式从服务器受保护的 `.env` 向 API 注入核验与登录开关、学期、独立密钥及限流配置，模板见 `deploy/.env.example`；其中 `WECHAT_*` 为待 #223 下线的历史遗留项，部署控制面与安全开关验收由 #140 承接（且容器网络分段与可信代理设置由 #227 落实）。仅上传 `.env` 不会更新已有容器，必须重新创建 API，并使用同一 HMAC 键和所需资料旧键；已有受管版本的环境改动会影响配置指纹，须按维护流程验证旧配置及回退方案，不能绕过漂移检查。首期严格限单实例，五个学校操作共享在途准入，最多128个活动事务，无持久队列或密码自动重试。多副本需要专项改造会话路由、全局准入和生命周期清理，当前不支持。
+首次上线保持入口关闭并先执行增量迁移。`compose.deploy.yaml` 显式从服务器受保护的 `.env` 向 API 注入核验与登录开关、学期、独立密钥、限流配置及 `H5_ALLOWED_ORIGINS`（默认空值，开启 H5 Cookie 写操作前需填精确 HTTPS 源），模板见 `deploy/.env.example`；其中 `WECHAT_*` 为待 #223 下线的历史遗留项，部署控制面与安全开关验收由 #140 承接（且容器网络分段与可信代理设置由 #227 落实）。仅上传 `.env` 不会更新已有容器，必须重新创建 API，并使用同一 HMAC 键和所需资料旧键；`compose.deploy.yaml` 新增 `H5_ALLOWED_ORIGINS` 及共享 `.env` 变更会影响受管发布版本的有效配置指纹，须按维护流程在隔离环境比对历史指纹与回退方案，不能绕过漂移检查。首期严格限单实例，五个学校操作共享在途准入，最多128个活动事务，无持久队列或密码自动重试。多副本需要专项改造会话路由、全局准入和生命周期清理，当前不支持。
 
 直接运行 API 默认 `API_TRUSTED_PROXY_CIDRS` 为空，忽略客户端转发头；该能力保留在 `apps/api/src/config/http-adapter.ts`，只认 `hop === 0` 的可信网段。当前生产 Compose **不启用**专用网络与固定地址：db、api、web 仍同处默认网络，也不注入 `API_TRUSTED_PROXY_CIDRS`，因此 `request.ip` 是 Nginx 容器地址，`CAMPUS_RATE_*_SOURCE` 的来源预算会把全部用户合并计入同一来源。**开启校园核验前必须先完成网络分段并注入可信代理**，否则来源阈值失去区分意义。Nginx 仍以 `$remote_addr` 覆盖 `X-Forwarded-For`，客户端不能靠自报前缀切换预算。网络分段（Nginx/API 专用 `proxy` 网络、数据库独立 `internal` 网络、Nginx 固定地址）作为独立任务推进，须先提供受控维护与回滚路径，不能直接切换运行中的数据库网络；既有配置漂移门禁应继续保持拒绝自动替换。真实校园 NAT 仍共享出口预算；来源阈值独立于更严格的用户预算，应依据实际出口流量配置，不能将达到阈值解释为该出口每个账号均有违规。
 

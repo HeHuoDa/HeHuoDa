@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { IncomingHttpHeaders } from "node:http";
 import { AuthClock } from "./auth-clock.js";
 import {
   CURRENT_CONSENT_VERSION,
@@ -9,12 +10,24 @@ import {
   WECHAT_PROVIDER,
   type UserStatus,
 } from "./auth.constants.js";
+import { authenticateBearerAccess } from "./auth.guard.js";
 import {
   accessExpiry,
   AuthRepository,
   type AccessContext,
 } from "./auth.repository.js";
-import { generateTokenPair, hashToken } from "./auth-token.js";
+import {
+  generateH5TokenPair,
+  generateTokenPair,
+  hashToken,
+  isH5RefreshToken,
+  isNativeRefreshToken,
+} from "./auth-token.js";
+import {
+  assertConfiguredH5Security,
+  buildConfiguredH5Cookie,
+  clearConfiguredH5Cookie,
+} from "./h5-security.js";
 import { AuthRateLimiter, windowStart } from "./auth-rate-limiter.js";
 import type { WechatProvider } from "./wechat/wechat-provider.js";
 import { createApiError } from "../common/api-error.js";
@@ -159,8 +172,9 @@ export class AuthService {
   }
 
   async refresh(
-    input: { refreshToken: string },
+    input: { refreshToken: string | null; rejectedReason?: string },
     ctx: RequestContext,
+    channel: "native" | "h5" = "native",
   ): Promise<CredentialResult> {
     this.assertSessionChannelEnabled();
     const now = this.clock.now();
@@ -178,16 +192,35 @@ export class AuthService {
       RATE_LIMIT_DEFAULTS.refreshPerSubject,
       now,
     );
+    const rawToken = input.refreshToken;
+    const validFormat =
+      rawToken !== null &&
+      (channel === "h5"
+        ? isH5RefreshToken(rawToken)
+        : isNativeRefreshToken(rawToken));
+    if (!validFormat) {
+      await this.recordRefreshRejected(
+        ctx.requestId,
+        input.rejectedReason ?? "invalid_format",
+        now,
+      );
+      throw createApiError(
+        401,
+        "INVALID_REFRESH_TOKEN",
+        "登录状态已失效，请重新登录",
+      );
+    }
     await this.enforceRate(
       "refresh-token",
-      hashToken(input.refreshToken),
+      hashToken(rawToken),
       "AUTH_RATE_REFRESH_PER_SUBJECT",
       RATE_LIMIT_DEFAULTS.refreshPerSubject,
       now,
     );
-    const tokens = generateTokenPair();
+    const tokens =
+      channel === "h5" ? generateH5TokenPair() : generateTokenPair();
     const outcome = await this.repository.rotateWithRefresh({
-      refreshToken: input.refreshToken,
+      refreshToken: rawToken,
       tokens,
       now,
     });
@@ -241,18 +274,55 @@ export class AuthService {
         );
       }
       default: {
-        await this.repository.recordAudit({
-          kind: "refresh_rejected",
-          requestId: ctx.requestId,
-          metadata: { reason: outcome.kind },
-          now,
-        });
+        await this.recordRefreshRejected(ctx.requestId, outcome.kind, now);
         throw createApiError(
           401,
           "INVALID_REFRESH_TOKEN",
           "登录状态已失效，请重新登录",
         );
       }
+    }
+  }
+
+  assertH5Security(headers: IncomingHttpHeaders): void {
+    assertConfiguredH5Security(this.config, headers);
+  }
+
+  buildH5Cookie(refreshToken: string, sessionExpiresAt: Date): string {
+    return buildConfiguredH5Cookie(
+      this.config,
+      this.clock.now(),
+      refreshToken,
+      sessionExpiresAt,
+    );
+  }
+
+  clearH5Cookie(): string {
+    return clearConfiguredH5Cookie(this.config);
+  }
+
+  async authenticateAccess(
+    authorization: string | undefined,
+  ): Promise<AccessContext> {
+    return authenticateBearerAccess(this.repository, this.clock, authorization);
+  }
+
+  async logoutByRefresh(
+    refreshToken: string,
+    requestId: string,
+    onCommitted: () => void,
+  ): Promise<void> {
+    const result = await this.repository.revokeSessionByRefreshToken(
+      refreshToken,
+      this.clock.now(),
+      requestId,
+    );
+    onCommitted();
+    if (result.revoked && result.userId && result.sessionId) {
+      await this.lifecycle.destroySchoolSessions({
+        userId: result.userId,
+        sessionId: result.sessionId,
+      });
     }
   }
 
@@ -355,6 +425,19 @@ export class AuthService {
         },
       );
     }
+  }
+
+  private async recordRefreshRejected(
+    requestId: string,
+    reason: string,
+    now: Date,
+  ): Promise<void> {
+    await this.repository.recordAudit({
+      kind: "refresh_rejected",
+      requestId,
+      metadata: { reason },
+      now,
+    });
   }
 
   private ensureActive(access: AccessContext): void {

@@ -1,5 +1,6 @@
 import Joi from "joi";
 import { adminOrigins } from "../admin/admin-security.js";
+import { h5Origins } from "../auth/h5-security.js";
 import { campusSettings } from "../campus/campus.config.js";
 import { trustedProxy } from "./http-adapter.js";
 import { parseDnsOverrides } from "@hehuoda/sicau-connectors/notices";
@@ -11,6 +12,7 @@ import {
 
 export interface EnvironmentVariables {
   ADMIN_ALLOWED_ORIGINS: string;
+  H5_ALLOWED_ORIGINS: string;
   ADMIN_SESSION_HOURS: number;
   ADMIN_RATE_LOGIN_SOURCE: number;
   ADMIN_RATE_LOGIN_ACCOUNT: number;
@@ -51,6 +53,17 @@ const environmentSchema = Joi.object({
     .custom((value, helpers) => {
       try {
         adminOrigins(value);
+        return value;
+      } catch {
+        return helpers.error("any.invalid");
+      }
+    }),
+  H5_ALLOWED_ORIGINS: Joi.string()
+    .allow("")
+    .default("")
+    .custom((value, helpers) => {
+      try {
+        h5Origins(value);
         return value;
       } catch {
         return helpers.error("any.invalid");
@@ -211,6 +224,10 @@ export function validateEnvironment(
   campusSettings(value);
   adminOrigins(
     value.ADMIN_ALLOWED_ORIGINS as string,
+    value.NODE_ENV === "production",
+  );
+  h5Origins(
+    value.H5_ALLOWED_ORIGINS as string,
     value.NODE_ENV === "production",
   );
   return value as EnvironmentVariables;
