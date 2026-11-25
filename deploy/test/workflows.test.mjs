@@ -603,15 +603,41 @@ test("PR and non-main manual CI cannot archive or start automatic deployment", (
   }
 });
 
-function autoMerge(state, referenced = "") {
+function autoMerge(
+  state,
+  {
+    referenced = "",
+    ready = false,
+    currentHead = "a".repeat(40),
+    mergeState = "CLEAN",
+    gate = "true",
+    workflowPr = "120",
+    exitCode = 0,
+  } = {},
+) {
   const result = runBash(
     `
+      ready_retry=false
+      sleep() { ready_retry=true; echo READY_RETRY; }
       gh() {
         case "$1 $2" in
-          'pr list') echo 120 ;;
+          'pr list') printf '%s\\n' "$WORKFLOW_PR" ;;
           'repo view') echo main ;;
-          'pr merge') return 0 ;;
-          'pr view') printf '%s\\t%s\\t%s\\tfalse\\n' "$PR_STATE" "$HEAD_SHA" "$HEAD_BRANCH" ;;
+          'pr merge') printf 'MERGE:%s\\n' "$*" ;;
+          'pr view')
+            case "$*" in
+              *mergeStateStatus*)
+                merge_state=$CURRENT_MERGE_STATE
+                if [[ "$merge_state" == "UNKNOWN_ONCE" ]]; then
+                  merge_state=UNKNOWN
+                  if [[ "$ready_retry" == "true" ]]; then merge_state=CLEAN; fi
+                fi
+                printf '%s\\t%s\\n' "$CURRENT_HEAD" "$merge_state" ;;
+              *) printf '%s\\t%s\\t%s\\tfalse\\n' "$PR_STATE" "$HEAD_SHA" "$HEAD_BRANCH" ;;
+            esac ;;
+          'pr checks')
+            [[ "$READY_GATE" != "unavailable" ]] || return 1
+            printf '%s\\n' "$READY_GATE" ;;
           'workflow run') printf 'DISPATCH:%s\\n' "$*" ;;
           'api --paginate') echo fixture ;;
           *) echo "Unexpected gh call: $*" >&2; return 1 ;;
@@ -624,21 +650,121 @@ function autoMerge(state, referenced = "") {
       GH_REPO: "HeHuoDa/HeHuoDa",
       HEAD_SHA: "a".repeat(40),
       HEAD_BRANCH: "fix/example",
+      READY_PR: ready ? "120" : "",
+      CURRENT_HEAD: currentHead,
+      CURRENT_MERGE_STATE: mergeState,
+      READY_GATE: gate,
+      WORKFLOW_PR: workflowPr,
       PR_STATE: state,
       REFERENCED: referenced,
     },
   );
-  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.equal(result.status, exitCode, result.stderr || result.error?.message);
   return result.stdout;
 }
 
 test("confirmed automatic merge explicitly dispatches main CI before optional branch cleanup", () => {
   assert.match(
-    autoMerge("MERGED", "another-pr"),
+    autoMerge("MERGED", { referenced: "another-pr" }),
     /DISPATCH:workflow run ci.yml --repo HeHuoDa\/HeHuoDa --ref main/,
   );
   assert.doesNotMatch(autoMerge("OPEN"), /DISPATCH:/);
   assert.equal(workflow("auto-merge").permissions.actions, "write");
+});
+
+test("Ready uses the trusted workflow only for same-repository main PRs", () => {
+  const auto = workflow("auto-merge");
+  const repository = "HeHuoDa/HeHuoDa";
+  assert.deepEqual(workflow("ci").on.pull_request.types, [
+    "opened",
+    "synchronize",
+    "reopened",
+  ]);
+  assert.deepEqual(auto.on.pull_request_target, {
+    branches: ["main"],
+    types: ["ready_for_review"],
+  });
+  for (const event_name of ["pull_request_target", "workflow_run"]) {
+    for (const full_name of [repository, "contributor/HeHuoDa"]) {
+      const event = {
+        action: "ready_for_review",
+        pull_request: { head: { repo: { full_name } } },
+        workflow_run: {
+          conclusion: "success",
+          event: "pull_request",
+          head_repository: { full_name },
+        },
+      };
+      assert.equal(
+        condition(auto.jobs["auto-merge"].if, {
+          event_name,
+          repository,
+          event,
+        }),
+        full_name === repository,
+      );
+    }
+  }
+  for (const [conclusion, event] of [
+    ["failure", "pull_request"],
+    ["success", "push"],
+  ]) {
+    assert.equal(
+      condition(auto.jobs["auto-merge"].if, {
+        event_name: "workflow_run",
+        repository,
+        event: {
+          workflow_run: {
+            conclusion,
+            event,
+            head_repository: { full_name: repository },
+          },
+        },
+      }),
+      false,
+    );
+  }
+});
+
+test("Ready reuses a passing gate and leaves pending CI to the completion event", () => {
+  assert.doesNotMatch(autoMerge("OPEN", { workflowPr: "" }), /MERGE:/);
+  const ready = autoMerge("MERGED", { ready: true, workflowPr: "" });
+  assert.match(ready, /MERGE:pr merge 120 .*--match-head-commit a{40}/);
+  assert.match(ready, /DISPATCH:workflow run ci.yml/);
+  for (const gate of ["false", "unavailable"]) {
+    assert.doesNotMatch(
+      autoMerge("OPEN", { ready: true, gate, workflowPr: "" }),
+      /MERGE:|DISPATCH:/,
+    );
+  }
+  assert.match(autoMerge("MERGED"), /MERGE:pr merge 120 .*--match-head-commit/);
+});
+
+test("Ready leaves a stale or ineligible PR alone", () => {
+  for (const currentHead of ["", "b".repeat(40)]) {
+    assert.doesNotMatch(
+      autoMerge("OPEN", { ready: true, currentHead }),
+      /MERGE:|DISPATCH:/,
+    );
+  }
+  assert.doesNotMatch(
+    autoMerge("OPEN", { ready: true, mergeState: "BEHIND" }),
+    /READY_RETRY|MERGE:|DISPATCH:/,
+  );
+});
+
+test("Ready retries an unresolved merge state before reusing a passed gate", () => {
+  assert.match(
+    autoMerge("MERGED", { ready: true, mergeState: "UNKNOWN_ONCE" }),
+    /READY_RETRY[\s\S]*MERGE:/,
+  );
+  const unresolved = autoMerge("OPEN", {
+    ready: true,
+    mergeState: "UNKNOWN",
+    exitCode: 1,
+  });
+  assert.equal(unresolved.match(/READY_RETRY/g)?.length, 2);
+  assert.doesNotMatch(unresolved, /MERGE:|DISPATCH:/);
 });
 
 test("delayed merge recovery dispatches missing main CI once and leaves existing runs alone", () => {
@@ -682,19 +808,27 @@ test("delayed merge recovery dispatches missing main CI once and leaves existing
   }
 });
 
-test("rerunning an old SHA cannot displace newer main or PR checks", () => {
+test("new PR runs cancel older PR runs while reruns and main stay isolated by SHA", () => {
   const ci = workflow("ci");
-  const group = (sha, number) =>
+  const group = (sha, number, attempt = "1") =>
     ci.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
       condition(expression, {
         sha,
+        event_name: number ? "pull_request" : "workflow_dispatch",
+        run_attempt: attempt,
         workflow: "CI",
         ref: "refs/heads/main",
         event: { pull_request: { number } },
       }),
     );
   assert.notEqual(group("a".repeat(40)), group("b".repeat(40)));
-  assert.notEqual(group("a".repeat(40), 121), group("b".repeat(40), 121));
+  assert.equal(group("a".repeat(40), 121), group("b".repeat(40), 121));
+  assert.notEqual(group("a".repeat(40), 121), group("a".repeat(40), 122));
+  assert.notEqual(group("a".repeat(40), 121, "2"), group("b".repeat(40), 121));
+  assert.notEqual(
+    group("a".repeat(40), 121, "2"),
+    group("b".repeat(40), 121, "2"),
+  );
   assert.equal(
     condition(ci.concurrency["cancel-in-progress"], {
       event_name: "workflow_dispatch",
