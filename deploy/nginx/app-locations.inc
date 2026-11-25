@@ -21,14 +21,22 @@ location /docs/ { return 404; }
 location = /docs-json { return 404; }
 location ~ /\. { return 404; }
 location = /index.html { add_header Cache-Control "no-store" always; }
-location ~* "^/(?:assets|static)/.*[.-][a-z0-9_-]{8}\.(?:js|css|woff2?|png|jpe?g|webp|svg)$" {
+location = /admin { return 308 /admin/$is_args$args; }
+location = /admin/index.html { add_header Cache-Control "no-store" always; }
+location ~* "^/(?:assets|static|admin/assets)/.*[.-][a-z0-9_-]{8}\.(?:js|css|woff2?|png|jpe?g|webp|svg)$" {
     try_files $uri =404;
     add_header Cache-Control "public, max-age=31536000, immutable";
 }
 location /assets/ { try_files $uri =404; }
 location /static/ { try_files $uri =404; }
+location /admin/assets/ { try_files $uri =404; }
+location ~* ^/admin/.*\.html$ {
+    try_files $uri =404;
+    add_header Cache-Control "no-store" always;
+}
 location ~* \.(?:js|mjs|css|map|json|png|jpe?g|gif|svg|ico|woff2?|ttf|webp|avif|txt|xml|html)$ {
     try_files $uri =404;
     add_header Cache-Control "no-cache";
 }
+location /admin/ { try_files $uri /admin/index.html; }
 location / { try_files $uri $uri/ /index.html; }
