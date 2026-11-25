@@ -61,12 +61,23 @@ jobs:
           while IFS= read -r pr; do
             if [[ -n "$READY_PR" ]]; then
               # 使用 GitHub 当前的 PR 合并状态和必需检查，避免复用已落后于 main 的结果。
-              current_head=$(gh pr view "$pr" --repo "$GH_REPO" \
-                --json state,baseRefName,headRefOid,isDraft,isCrossRepository,mergeStateStatus \
-                --jq 'select(.state == "OPEN" and .baseRefName == "main" and
-                  .isDraft == false and .isCrossRepository == false and
-                  (.mergeStateStatus | IN("CLEAN", "BLOCKED", "HAS_HOOKS", "UNSTABLE"))) | .headRefOid')
-              if [[ "$current_head" != "$HEAD_SHA" ]]; then
+              for attempt in 1 2 3; do
+                current_pr=$(gh pr view "$pr" --repo "$GH_REPO" \
+                  --json state,baseRefName,headRefOid,isDraft,isCrossRepository,mergeStateStatus \
+                  --jq 'select(.state == "OPEN" and .baseRefName == "main" and
+                    .isDraft == false and .isCrossRepository == false)
+                    | [.headRefOid, .mergeStateStatus] | @tsv')
+                IFS=$'\t' read -r current_head merge_state <<< "$current_pr"
+                if [[ "$current_head" != "$HEAD_SHA" || "$merge_state" != "UNKNOWN" ]]; then
+                  break
+                fi
+                if [[ "$attempt" == 3 ]]; then
+                  echo "GitHub still cannot determine PR #$pr merge state." >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+              if [[ "$current_head" != "$HEAD_SHA" || ! "$merge_state" =~ ^(CLEAN|BLOCKED|HAS_HOOKS|UNSTABLE)$ ]]; then
                 echo "PR #$pr changed or is ineligible for Ready auto-merge."
                 continue
               fi

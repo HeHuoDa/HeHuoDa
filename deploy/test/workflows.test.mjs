@@ -609,12 +609,16 @@ function autoMerge(
     referenced = "",
     ready = false,
     currentHead = "a".repeat(40),
+    mergeState = "CLEAN",
     gate = "true",
     workflowPr = "120",
+    exitCode = 0,
   } = {},
 ) {
   const result = runBash(
     `
+      ready_retry=false
+      sleep() { ready_retry=true; echo READY_RETRY; }
       gh() {
         case "$1 $2" in
           'pr list') printf '%s\\n' "$WORKFLOW_PR" ;;
@@ -622,7 +626,13 @@ function autoMerge(
           'pr merge') printf 'MERGE:%s\\n' "$*" ;;
           'pr view')
             case "$*" in
-              *mergeStateStatus*) printf '%s\\n' "$CURRENT_HEAD" ;;
+              *mergeStateStatus*)
+                merge_state=$CURRENT_MERGE_STATE
+                if [[ "$merge_state" == "UNKNOWN_ONCE" ]]; then
+                  merge_state=UNKNOWN
+                  if [[ "$ready_retry" == "true" ]]; then merge_state=CLEAN; fi
+                fi
+                printf '%s\\t%s\\n' "$CURRENT_HEAD" "$merge_state" ;;
               *) printf '%s\\t%s\\t%s\\tfalse\\n' "$PR_STATE" "$HEAD_SHA" "$HEAD_BRANCH" ;;
             esac ;;
           'pr checks')
@@ -642,13 +652,14 @@ function autoMerge(
       HEAD_BRANCH: "fix/example",
       READY_PR: ready ? "120" : "",
       CURRENT_HEAD: currentHead,
+      CURRENT_MERGE_STATE: mergeState,
       READY_GATE: gate,
       WORKFLOW_PR: workflowPr,
       PR_STATE: state,
       REFERENCED: referenced,
     },
   );
-  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.equal(result.status, exitCode, result.stderr || result.error?.message);
   return result.stdout;
 }
 
@@ -736,6 +747,24 @@ test("Ready leaves a stale or ineligible PR alone", () => {
       /MERGE:|DISPATCH:/,
     );
   }
+  assert.doesNotMatch(
+    autoMerge("OPEN", { ready: true, mergeState: "BEHIND" }),
+    /READY_RETRY|MERGE:|DISPATCH:/,
+  );
+});
+
+test("Ready retries an unresolved merge state before reusing a passed gate", () => {
+  assert.match(
+    autoMerge("MERGED", { ready: true, mergeState: "UNKNOWN_ONCE" }),
+    /READY_RETRY[\s\S]*MERGE:/,
+  );
+  const unresolved = autoMerge("OPEN", {
+    ready: true,
+    mergeState: "UNKNOWN",
+    exitCode: 1,
+  });
+  assert.equal(unresolved.match(/READY_RETRY/g)?.length, 2);
+  assert.doesNotMatch(unresolved, /MERGE:|DISPATCH:/);
 });
 
 test("delayed merge recovery dispatches missing main CI once and leaves existing runs alone", () => {
