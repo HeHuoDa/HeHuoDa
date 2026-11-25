@@ -7,7 +7,10 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { CredentialResponseDto } from "../auth/auth.dto.js";
+import {
+  CredentialResponseDto,
+  H5CredentialResponseDto,
+} from "../auth/auth.dto.js";
 
 // 匿名登录没有平台会话，客户端必须同时提交事务 ID 与持有凭证。
 // 仅凭事务 ID 无法读取、刷新或提交，持有凭证只以 SHA-256 摘要落库。
@@ -104,7 +107,20 @@ export class SchoolLoginCredentialDto {
   @ApiPropertyOptional({
     type: CredentialResponseDto,
     description:
-      "仅成功的首次登录下发一次；受限于 Bearer 通道，H5 Cookie 通道由 #218 承接",
+      "仅成功的首次原生登录下发一次；H5 Cookie 通道请使用 /submit/h5",
   })
   credential?: CredentialResponseDto;
+}
+
+export class SchoolLoginH5CredentialDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() status!: string;
+  @ApiProperty({ format: "date-time" }) expiresAt!: string;
+  @ApiProperty({ type: String, nullable: true }) reason!: string | null;
+  @ApiPropertyOptional({
+    type: H5CredentialResponseDto,
+    description:
+      "仅成功的首次 H5 登录下发一次；刷新凭据通过 HttpOnly Cookie 下发，JSON 不包含 refreshToken",
+  })
+  credential?: H5CredentialResponseDto;
 }

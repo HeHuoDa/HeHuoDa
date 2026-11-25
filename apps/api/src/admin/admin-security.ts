@@ -39,24 +39,8 @@ export function sessionToken(cookie: string | undefined): string | undefined {
   return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : undefined;
 }
 
+import { parseAllowedOrigins } from "../common/allowed-origins.js";
+
 export function adminOrigins(raw: string, production = false): string[] {
-  if (!raw) return [];
-  return [
-    ...new Set(
-      raw.split(",").map((value) => {
-        const origin = value.trim();
-        const url = new URL(origin);
-        if (
-          url.hostname.includes("*") ||
-          url.origin !== origin ||
-          !["http:", "https:"].includes(url.protocol) ||
-          (production && url.protocol !== "https:")
-        )
-          throw new Error(
-            "管理员 Origin 必须是完整且无路径的来源，生产仅允许 HTTPS",
-          );
-        return origin;
-      }),
-    ),
-  ];
+  return parseAllowedOrigins(raw, production, "管理员");
 }
