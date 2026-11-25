@@ -152,18 +152,20 @@ function isCoordRecord(v: unknown): v is H5CoordRecord {
 }
 
 function browserCoordStorage(): H5CoordStorage {
-  const storage = (
-    globalThis as {
-      localStorage?: {
-        getItem(k: string): string | null;
-        setItem(k: string, v: string): void;
-      };
-    }
-  ).localStorage;
+  // 在访问器内部读取 localStorage：部分浏览器禁用存储时读取属性本身即抛 SecurityError。
+  const getStorage = () =>
+    (
+      globalThis as {
+        localStorage?: {
+          getItem(k: string): string | null;
+          setItem(k: string, v: string): void;
+        };
+      }
+    ).localStorage;
   return {
     read() {
       try {
-        const raw = storage?.getItem(H5_COORD_KEY);
+        const raw = getStorage()?.getItem(H5_COORD_KEY);
         if (!raw) return null;
         const parsed: unknown = JSON.parse(raw);
         return isCoordRecord(parsed) ? parsed : null;
@@ -173,7 +175,7 @@ function browserCoordStorage(): H5CoordStorage {
     },
     write(record) {
       try {
-        storage?.setItem(H5_COORD_KEY, JSON.stringify(record));
+        getStorage()?.setItem(H5_COORD_KEY, JSON.stringify(record));
       } catch {
         /* 协调存储不可用时不落凭据，也不阻塞本次会话。 */
       }
@@ -540,6 +542,10 @@ export function createH5TabSync(
         logoutSeq: effectiveLogoutSeq,
         updatedAt: now(),
       });
+      // 若无法共享本轮状态，后续标签拿到锁也无法判断本轮是否已刷新。
+      if (coordStorage.read()?.roundId !== roundId) {
+        return { kind: "unsupported" };
+      }
 
       try {
         const credential = await runRefresh();

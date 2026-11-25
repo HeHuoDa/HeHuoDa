@@ -369,3 +369,48 @@ test("429 限流写回退避时间窗口；403 受限广播使其他标签同步
   tabA.dispose();
   tabB.dispose();
 });
+
+test("浏览器禁止访问 localStorage 时，两标签仍可初始化且均不发起刷新", async () => {
+  const bus = createBus();
+  const prevDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    },
+  });
+  const tabs = [];
+  let requests = 0;
+  try {
+    for (const id of ["tab-a", "tab-b"]) {
+      tabs.push(
+        createH5TabSync(makeHandlers().handlers, {
+          ...bus.env(id),
+          coordStorage: undefined,
+        }),
+      );
+    }
+    const results = await Promise.all(
+      tabs.map((tab) =>
+        tab.coordinateRefresh(
+          async () => {
+            requests++;
+            return h5Cred();
+          },
+          {
+            reason: "restore",
+          },
+        ),
+      ),
+    );
+    assert.equal(requests, 0);
+    assert.deepEqual(
+      results.map(({ kind }) => kind),
+      ["unsupported", "unsupported"],
+    );
+  } finally {
+    for (const tab of tabs) tab.dispose();
+    if (prevDesc) Object.defineProperty(globalThis, "localStorage", prevDesc);
+    else delete globalThis.localStorage;
+  }
+});
