@@ -1305,6 +1305,11 @@ export interface components {
             termId?: string | null;
             verifiedAt?: string | null;
             validUntil?: string | null;
+            /**
+             * @description 仅在本人校园核验有效且校园账号编号可脱敏时返回尾两位
+             * @example ••••56
+             */
+            maskedAccountNumber?: string;
         };
         AvailabilityDto: {
             /**

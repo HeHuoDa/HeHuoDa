@@ -90,6 +90,12 @@ export class CampusStatusDto {
   verifiedAt: string | null = null;
   @ApiPropertyOptional({ type: String, nullable: true })
   validUntil: string | null = null;
+  @ApiPropertyOptional({
+    type: String,
+    example: "••••56",
+    description: "仅在本人校园核验有效且校园账号编号可脱敏时返回尾两位",
+  })
+  maskedAccountNumber?: string;
 }
 
 export class AvailabilityDto {

@@ -1,22 +1,44 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { onPageHide, onUnload } from "@dcloudio/uni-app";
 import AppIcon from "./AppIcon.vue";
 import { openPage } from "../navigation/navigate";
+import { useAuthStore } from "../stores/auth";
 
 /**
  * 个人中心标题行的账号入口。
  *
- * M1 不提供任何登录渠道：入口只说明学校统一身份认证尚未开放、
- * 当前可免登录浏览比赛，并保留修改资料与关于页入口。
- * 下拉用透明遮罩关闭：小程序没有 window 点击事件，不依赖事件冒泡。
+ * 区分游客与服务端确认的学校账号；仅展示昵称与认证状态摘要，不落真实姓名或学号。
+ * 下拉用透明遮罩关闭：不依赖页面外冒泡。
  */
-const emit = defineEmits<{ edit: []; notice: [value: string] }>();
+const emit = defineEmits<{
+  edit: [];
+  "edit-nickname": [];
+  notice: [value: string];
+}>();
 
+const auth = useAuthStore();
 const open = ref(false);
-/** 下拉顶部两行说明；拆成常量避免整块静态节点，组件宿主无需静态节点插入能力。 */
-const accountHint = "免登录浏览";
-const authHint = "统一身份认证登录即将开放";
+
+const avatarInitial = computed(() => {
+  if (!auth.authenticated) return "游";
+  const first = Array.from(auth.nickname.trim())[0];
+  return first || "禾";
+});
+
+const accountTitle = computed(() =>
+  auth.authenticated ? auth.nickname || "禾伙搭用户" : "游客浏览",
+);
+
+const authSubtitle = computed(() => {
+  if (auth.authenticated) {
+    if (auth.campusStatus === "unverified") return "学校账号 · 校园身份未验证";
+    return auth.campusStatus === "valid"
+      ? "学校账号 · 校园身份已验证"
+      : "学校账号已登录";
+  }
+  return auth.restoring ? "正在恢复登录状态…" : "未登录学校账号";
+});
 
 function toggle() {
   open.value = !open.value;
@@ -31,12 +53,23 @@ function editProfile() {
   emit("edit");
 }
 
+function editNickname() {
+  close();
+  emit("edit-nickname");
+}
+
 function openLogin() {
   close();
   emit("notice", "");
   openPage("login", undefined, () => {
     emit("notice", "暂时无法打开登录页，请重试。");
   });
+}
+
+async function runLogout() {
+  if (auth.logoutPending) return;
+  close();
+  await auth.logout();
 }
 
 function openAbout() {
@@ -55,7 +88,6 @@ onUnload(close);
 function onKeydown(event: { key?: string }) {
   if (event.key === "Escape") close();
 }
-// 用 globalThis 而非 window：小程序分支会被编译剔除，这里只服务 H5 键盘关闭。
 const host = globalThis as unknown as {
   addEventListener?: (type: string, handler: typeof onKeydown) => void;
   removeEventListener?: (type: string, handler: typeof onKeydown) => void;
@@ -76,13 +108,16 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
       role="button"
       :aria-expanded="open"
       aria-haspopup="menu"
-      :aria-label="'账号与设置'"
+      aria-label="账号与设置"
       tabindex="0"
       @click="toggle"
       @keydown.enter.prevent="toggle"
       @keydown.space.prevent="toggle"
     >
-      <AppIcon name="user" :size="24" />
+      <text v-if="auth.authenticated" class="profile-menu__initial">{{
+        avatarInitial
+      }}</text>
+      <AppIcon v-else name="user" :size="24" />
     </view>
 
     <view
@@ -95,25 +130,46 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
 
     <view v-if="open" class="profile-menu__card" role="menu">
       <view class="profile-menu__account">
-        <view class="profile-menu__avatar" aria-hidden="true">苗</view>
+        <view class="profile-menu__avatar" aria-hidden="true">{{
+          avatarInitial
+        }}</view>
         <view class="profile-menu__account-text">
-          <text class="profile-menu__nickname">{{ accountHint }}</text>
-          <text class="profile-menu__status">{{ authHint }}</text>
+          <text class="profile-menu__nickname">{{ accountTitle }}</text>
+          <text class="profile-menu__status">{{ authSubtitle }}</text>
         </view>
       </view>
-      <view
-        class="profile-menu__row"
-        role="menuitem"
-        tabindex="0"
-        @click="openLogin"
-        @keydown.enter.prevent="openLogin"
-        @keydown.space.prevent="openLogin"
-      >
-        <view class="profile-menu__text">
-          <text class="profile-menu__label">登录说明</text>
-          <text class="profile-menu__hint">学校统一身份认证尚未开放</text>
+
+      <template v-if="auth.authenticated">
+        <view
+          class="profile-menu__row"
+          role="menuitem"
+          tabindex="0"
+          @click="editNickname"
+          @keydown.enter.prevent="editNickname"
+          @keydown.space.prevent="editNickname"
+        >
+          <view class="profile-menu__text">
+            <text class="profile-menu__label">修改昵称</text>
+            <text class="profile-menu__hint">保存至服务端账号</text>
+          </view>
         </view>
-      </view>
+      </template>
+
+      <template v-else>
+        <view
+          class="profile-menu__row"
+          role="menuitem"
+          tabindex="0"
+          @click="openLogin"
+          @keydown.enter.prevent="openLogin"
+          @keydown.space.prevent="openLogin"
+        >
+          <view class="profile-menu__text">
+            <text class="profile-menu__label">使用学校账号登录</text>
+            <text class="profile-menu__hint">四川农业大学统一身份认证</text>
+          </view>
+        </view>
+      </template>
 
       <view
         class="profile-menu__row"
@@ -124,7 +180,25 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
         @keydown.space.prevent="editProfile"
       >
         <view class="profile-menu__text">
-          <text class="profile-menu__label">编辑资料</text>
+          <text class="profile-menu__label">编辑示例资料</text>
+          <text class="profile-menu__hint">仅保留在当前会话内</text>
+        </view>
+      </view>
+
+      <view
+        v-if="auth.authenticated"
+        class="profile-menu__row profile-menu__row--logout"
+        role="menuitem"
+        tabindex="0"
+        :aria-disabled="auth.logoutPending"
+        @click="runLogout"
+        @keydown.enter.prevent="runLogout"
+        @keydown.space.prevent="runLogout"
+      >
+        <view class="profile-menu__text">
+          <text class="profile-menu__label">{{
+            auth.logoutPending ? "正在退出…" : "退出登录"
+          }}</text>
         </view>
       </view>
 
@@ -146,7 +220,7 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
 
 <style scoped>
 /*
- * 与个人中心标题行同高；触控区 44px，视觉尺寸 40px。
+ * 与个人中心标题行同高；触控区 44px。
  * 间距写固定 px：uni-app H5 的根字号随视口缩放，rem 会让留白在各档宽度波动。
  */
 .profile-menu {
@@ -176,7 +250,6 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
   line-height: 1;
 }
 
-/* 遮罩盖住整页：小程序没有 window 点击事件，关闭只靠它和再次点击图标。 */
 .profile-menu__mask {
   position: fixed;
   top: 0;
@@ -195,10 +268,18 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
   box-sizing: border-box;
   width: 240px;
   max-width: calc(100vw - 40px);
+  max-height: calc(
+    100vh - var(--window-top, 0px) - var(--window-bottom, 0px) - 120px
+  );
+  max-height: calc(
+    100dvh - var(--window-top, 0px) - var(--window-bottom, 0px) - 120px
+  );
   padding: 6px;
   border: 1px solid var(--hhr-color-line);
   border-radius: 14px;
   background: var(--hhr-color-surface);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   overflow-wrap: anywhere;
 }
 
@@ -260,10 +341,6 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
   border-radius: 0;
 }
 
-.profile-menu__row--switch {
-  cursor: default;
-}
-
 .profile-menu__text {
   min-width: 0;
 }
@@ -285,23 +362,5 @@ onBeforeUnmount(() => host.removeEventListener?.("keydown", onKeydown));
 
 .profile-menu__row--logout .profile-menu__label {
   color: var(--hhr-color-danger);
-}
-
-.profile-menu__switch {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  min-height: 44px;
-}
-
-.profile-menu__notice {
-  display: block;
-  margin-top: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--hhr-color-accent-soft);
-  color: var(--hhr-color-accent-ink);
-  font-size: 11px;
-  line-height: 1.6;
 }
 </style>

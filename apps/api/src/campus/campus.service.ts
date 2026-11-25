@@ -180,10 +180,7 @@ export class CampusService implements OnApplicationShutdown {
   async profile(access: AccessContext) {
     return this.transaction(async (tx) => {
       await this.assertAccess(tx, access, this.clock.now());
-      const [row] = await tx
-        .select()
-        .from(campusProfiles)
-        .where(eq(campusProfiles.userId, access.user.id));
+      const row = await this.profileRow(tx, access.user.id);
       if (!row) return { profile: null };
       try {
         return {
@@ -201,6 +198,31 @@ export class CampusService implements OnApplicationShutdown {
         );
       }
     });
+  }
+  async maskedAccountNumber(tx: AccessTransaction, userId: string) {
+    const row = await this.profileRow(tx, userId);
+    if (!row) return undefined;
+    try {
+      const { accountNumber } = openProfile(
+        this.settings(),
+        row.userId,
+        row.source,
+        row,
+      );
+      return /^\d{4,}$/.test(accountNumber)
+        ? `••••${accountNumber.slice(-2)}`
+        : undefined;
+    } catch {
+      // 本人账号与昵称仍可读取，学校资料不可用时省略尾号。
+      return undefined;
+    }
+  }
+  private async profileRow(tx: AccessTransaction, userId: string) {
+    const [row] = await tx
+      .select()
+      .from(campusProfiles)
+      .where(eq(campusProfiles.userId, userId));
+    return row;
   }
   private requireEnabled(now: Date) {
     const settings = this.settings(),

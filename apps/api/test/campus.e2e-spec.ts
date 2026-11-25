@@ -187,7 +187,10 @@ describe("校园核验真实 HTTP 与包构建产物", () => {
       await f.request("POST", "auth/me", a.accessToken, { nickname: "新昵称" })
     ).json();
     expect(me.campus).toEqual(nickname.campus);
-    expect(status).toMatchObject(me.campus);
+    const { maskedAccountNumber, ...qualification } = me.campus;
+    expect(maskedAccountNumber).toBe("••••56");
+    expect(status).toMatchObject(qualification);
+    expect(status).not.toHaveProperty("maskedAccountNumber");
     expect(me).not.toHaveProperty("profile");
     expect(me.availability.teaming).toBe(false);
     const profile = await f.request(

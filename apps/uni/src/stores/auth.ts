@@ -1,9 +1,11 @@
+import type {
+  CredentialResponse,
+  H5CredentialResponse,
+} from "@hehuoda/api-types";
 import { defineStore } from "pinia";
 import { computed, reactive, ref, watch } from "vue";
-import { CURRENT_CONSENT_VERSION } from "../api/auth-client.ts";
 import { authApi } from "../api/auth.ts";
 import { bindAuthSession } from "../api/client.ts";
-import { RequestError } from "../api/http.ts";
 import {
   authFailureMessage,
   createAuthSession,
@@ -11,32 +13,51 @@ import {
   nicknameProblem,
 } from "../auth/auth-session.ts";
 import { platformAuthStorage } from "../auth/platform-storage.ts";
-import { WechatCodeError, requestWechatCode } from "../auth/wechat-login.ts";
 import { useSessionStore } from "./session.ts";
+
+const platformFlags = { h5: false };
+// #ifdef H5
+platformFlags.h5 = true;
+// #endif
+
+function isH5Runtime(): boolean {
+  try {
+    const name = (
+      uni.getSystemInfoSync() as { uniPlatform?: unknown } | undefined
+    )?.uniPlatform;
+    if (typeof name === "string" && name && name !== "web") return false;
+  } catch {
+    /* 忽略未注入 uni 的测试环境 */
+  }
+  return platformFlags.h5;
+}
 
 /**
  * 平台认证状态（Pinia 外壳）。
  *
- * 与业务演示会话完全独立：这里只保存真实账号、凭据与可用能力，
- * 演示学籍、联系方式与队伍记录不会写入，也不从演示会话推断身份。
- * 页面只读这里的 user/campus/availability 与 pending 状态。
+ * 与业务演示会话完全独立：这里只保存真实账号、内存访问凭据与可用能力，
+ * 校园密码、验证码、事务持有凭据与演示学籍都不会写入；退出或 401 时不清空临时收藏。
  */
 export const useAuthStore = defineStore("platform-auth", () => {
+  const h5 = isH5Runtime();
   const state = reactive(initialAuthState());
-  const session = createAuthSession(state, authApi, platformAuthStorage());
+  const session = createAuthSession(
+    state,
+    authApi,
+    platformAuthStorage(),
+    Date.now,
+    { h5 },
+  );
   // 认证客户端只读取这里的能力：页面与演示 store 都不直接拼接凭据。
   bindAuthSession({
     accessToken: session.accessToken,
     refresh: session.refresh,
+    generation: () => state.generation,
   });
 
-  /** 平台协议/隐私告知版本；服务端要求更新时以 details.currentVersion 为准。 */
-  const consentVersion = ref(CURRENT_CONSENT_VERSION);
-  const consentOutdated = ref(false);
-  const loginPending = ref(false);
-  const loginError = ref("");
   const logoutPending = ref(false);
   const logoutNotice = ref("");
+  const logoutRemoteUnconfirmed = ref(false);
   const nicknamePending = ref(false);
   const nicknameError = ref("");
 
@@ -47,7 +68,7 @@ export const useAuthStore = defineStore("platform-auth", () => {
   const campusStatus = computed(() => state.campus?.status ?? null);
   const teamingAvailable = computed(() => state.availability?.teaming === true);
 
-  // 真实昵称同步给业务会话：演示队伍里的本人也要显示账号昵称，避免同一页出现两个名字。
+  // 真实昵称同步给业务会话：不触碰临时收藏。
   const business = useSessionStore();
   watch(
     () => state.user?.nickname ?? null,
@@ -55,53 +76,48 @@ export const useAuthStore = defineStore("platform-auth", () => {
     { immediate: true },
   );
 
-  /** 用户重新确认协议后调用，清除“协议已更新”提示。 */
-  function acknowledgeConsent() {
-    consentOutdated.value = false;
-  }
-
-  async function login(): Promise<void> {
-    if (loginPending.value) return;
-    loginPending.value = true;
-    loginError.value = "";
+  async function applySchoolLogin(
+    credentials: CredentialResponse | H5CredentialResponse,
+  ): Promise<void> {
     logoutNotice.value = "";
-    try {
-      const code = await requestWechatCode();
-      await session.login(code, consentVersion.value);
-    } catch (error) {
-      if (error instanceof WechatCodeError) {
-        loginError.value = error.message;
-        return;
-      }
-      if (
-        error instanceof RequestError &&
-        error.code === "CONSENT_VERSION_MISMATCH"
-      ) {
-        const current = error.details?.currentVersion;
-        if (typeof current === "number" && Number.isFinite(current)) {
-          consentVersion.value = current;
-          consentOutdated.value = true;
-        }
-      }
-      loginError.value = authFailureMessage(error, "登录未完成，请稍后重试。");
-    } finally {
-      loginPending.value = false;
-    }
+    logoutRemoteUnconfirmed.value = false;
+    nicknameError.value = "";
+    await session.applySchoolLogin(credentials);
   }
 
-  /** 冷启动恢复：只在持有刷新凭据时尝试，失败即要求重新微信登录。 */
+  /** 冷启动恢复：H5 经多标签协调尝试静默 Cookie 恢复；失败平滑回到游客，不清空收藏。 */
   async function restore(): Promise<void> {
     await session.restore();
+    if (state.phase === "authenticated") {
+      logoutNotice.value = "";
+      logoutRemoteUnconfirmed.value = false;
+    }
   }
 
   async function logout(): Promise<void> {
     if (logoutPending.value) return;
+    const wasAuthenticated = state.phase === "authenticated";
     logoutPending.value = true;
     logoutNotice.value = "";
+    logoutRemoteUnconfirmed.value = false;
     nicknameError.value = "";
     try {
       const result = await session.logout();
       logoutNotice.value = result.message;
+      logoutRemoteUnconfirmed.value =
+        h5 && wasAuthenticated && !result.remoteRevoked;
+    } finally {
+      logoutPending.value = false;
+    }
+  }
+
+  async function retryLogout(): Promise<void> {
+    if (logoutPending.value) return;
+    logoutPending.value = true;
+    try {
+      const result = await session.retryRemoteLogout();
+      logoutNotice.value = result.message;
+      logoutRemoteUnconfirmed.value = h5 && !result.remoteRevoked;
     } finally {
       logoutPending.value = false;
     }
@@ -150,19 +166,16 @@ export const useAuthStore = defineStore("platform-auth", () => {
     accountStatus,
     campusStatus,
     teamingAvailable,
-    consentVersion,
-    consentOutdated,
-    loginPending,
-    loginError,
     logoutPending,
     logoutNotice,
+    logoutRemoteUnconfirmed,
     nicknamePending,
     nicknameError,
-    acknowledgeConsent,
-    login,
+    applySchoolLogin,
     restore,
     reloadProfile: session.reloadProfile,
     logout,
+    retryLogout,
     updateNickname,
     expireIfNeeded,
     hasStoredSession: () => session.hasStoredSession(),

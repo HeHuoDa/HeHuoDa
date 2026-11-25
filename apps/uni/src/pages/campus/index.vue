@@ -1,16 +1,34 @@
 <script setup lang="ts">
+import { ref } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
+// #ifdef H5
+import AuthBrandLayout from "../../layouts/AuthBrandLayout.vue";
+import SchoolLoginPanel from "../../components/SchoolLoginPanel.vue";
+// #endif
+// #ifndef H5
 import FormButton from "../../components/FormButton.vue";
 import { openTab } from "../../navigation/navigate";
+// #endif
+import { pageRouteQuery } from "../../navigation/h5-address";
+import { parseSingleParam } from "../../navigation/params";
+
 /**
- * 统一身份认证入口。
- *
- * M1 只说明学校统一身份认证尚未开放，当前免登录浏览比赛；
- * 页面不渲染认证表单、不读取凭据、也不发送认证请求。
- * M2（#221）在同一路由接入真实认证流程后替换本说明。
+ * 统一身份认证入口：H5 接入学校唯一登录流程；非 H5 端待对应任务接入。
  */
+const returnTo = ref("");
+
+onLoad((query) => {
+  returnTo.value = parseSingleParam(pageRouteQuery(query ?? {}).returnTo).value;
+});
 </script>
 
 <template>
+  <!-- #ifdef H5 -->
+  <AuthBrandLayout>
+    <SchoolLoginPanel entry="campus" :return-to="returnTo" />
+  </AuthBrandLayout>
+  <!-- #endif -->
+  <!-- #ifndef H5 -->
   <view class="campus-page">
     <view class="campus-pending">
       <text class="hhr-eyebrow">SICAU UNIFIED AUTH</text>
@@ -29,6 +47,7 @@ import { openTab } from "../../navigation/navigate";
       >
     </view>
   </view>
+  <!-- #endif -->
 </template>
 <style scoped>
 .campus-page {

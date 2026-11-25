@@ -7,11 +7,21 @@ import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 import { mount, textOf } from "./component-host.mjs";
 
-/**
- * 统一身份认证页在 M1 只做说明：两端都不渲染表单、不读取凭据、
- * 不发送认证请求。真实认证由 M2（#221）接入。
- */
-const clientSource = `import {createHttpClient} from './http.ts';const transport=o=>{globalThis.__campusRequestCount=(globalThis.__campusRequestCount??0)+1;return {abort(){}}};const config=()=>({baseUrl:'/api/v1',timeout:5000});export const http=createHttpClient(transport,config);export const authedHttp=http;export const bindAuthSession=()=>{};`;
+const clientSource = `
+import { createHttpClient } from './http.ts';
+const transport = (o) => {
+  globalThis.__campusRequests = globalThis.__campusRequests ?? [];
+  globalThis.__campusRequests.push(o);
+  return { abort() {} };
+};
+const config = () => ({ baseUrl: '/api/v1', timeout: 5000 });
+export const http = createHttpClient(transport, config);
+export const authedHttp = createHttpClient(transport, config, {
+  accessToken: () => globalThis.__campusToken?.() ?? null,
+  refresh: () => Promise.reject(new Error('no refresh')),
+});
+export const bindAuthSession = (s) => { globalThis.__campusToken = s.accessToken; };
+`;
 const loader = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@dcloudio/uni-app")
@@ -33,68 +43,93 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 
-function platform() {
-  globalThis.__campusRequestCount = 0;
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+function platform(uniPlatform = "mp-weixin") {
+  globalThis.__campusRequests = [];
   const calls = [];
   globalThis.uni = {
+    getSystemInfoSync: () => ({ uniPlatform }),
     switchTab: (options) => calls.push(options.url),
     navigateTo: (options) => calls.push(options.url),
     redirectTo: (options) => calls.push(options.url),
   };
   globalThis.getCurrentPages = () => [{ route: "pages/campus/index" }];
   setActivePinia(createPinia());
-  return { calls, count: () => globalThis.__campusRequestCount ?? 0 };
+  return { calls, requests: () => globalThis.__campusRequests };
 }
 
-for (const target of ["H5", "MP-WEIXIN"]) {
-  test(`${target} 认证页只说明尚未开放，不渲染凭据表单也不发请求`, async () => {
-    const p = platform();
-    const page = await mount("../src/pages/campus/index.vue", {}, target);
-    try {
-      const text = textOf(page.container);
-      assert.match(text, /统一身份认证尚未开放/);
-      assert.match(text, /免登录|不需要登录/);
-      assert.match(text, /姓名、学号、统一身份认证密码或验证码/);
-      assert.doesNotMatch(text, /微信登录|小程序提供|仅在小程序/);
-      for (const node of [
-        page.find((n) => n.type === "input"),
-        page.find((n) => n.props.type === "password"),
-        page.find((n) => n.type === "image"),
-        page.find((n) => n.props.role === "checkbox"),
-      ])
-        assert.equal(node, undefined);
-      assert.equal(p.count(), 0, "M1 认证页不发送认证请求");
-    } finally {
-      page.unmount();
-    }
-  });
+test("H5 校园认证入口接入统一学校登录流程，读取公开说明并请求匿名建码", async () => {
+  const p = platform("web");
+  const page = await mount("../src/pages/campus/index.vue", {}, "H5");
+  try {
+    await tick();
+    const reqs = p.requests();
+    assert.equal(reqs[0].url, "/api/v1/campus-verification/policy");
+    reqs[0].success({
+      statusCode: 200,
+      data: { version: 1, content: "校园身份核验与登录说明" },
+    });
+    await tick();
+    assert.equal(reqs[1].url, "/api/v1/auth/school/challenges");
+    reqs[1].success({
+      statusCode: 201,
+      data: {
+        id: "tx-campus",
+        status: "waiting",
+        expiresAt: "2099-01-01T00:10:00.000Z",
+        reason: null,
+        holderToken: "ht-campus",
+        challenge: {
+          version: "v1",
+          imageDataUrl: "data:image/png;base64,AA==",
+          expiresAt: "2099-01-01T00:05:00.000Z",
+        },
+      },
+    });
+    await tick();
+    await nextTick();
+    const text = textOf(page.container);
+    assert.match(text, /统一身份认证/);
+    assert.match(text, /校园身份核验与登录说明/);
+    assert.ok(page.find((n) => n.props.id === "school-name"));
+    assert.ok(page.find((n) => n.props.id === "school-account"));
+    assert.ok(page.find((n) => n.props.id === "school-password"));
+    assert.ok(page.find((n) => n.props.id === "school-captcha"));
+  } finally {
+    page.unmount();
+  }
+});
 
-  test(`${target} 返回个人中心按钮走主导航并可重复点击`, async () => {
-    const p = platform();
-    const page = await mount("../src/pages/campus/index.vue", {}, target);
-    try {
-      const button = page.find(
-        (n) =>
-          (n.type === "button" || n.props.role === "button") &&
-          textOf(n).includes("返回个人中心"),
-      );
-      assert.ok(button);
-      button.props.onClick();
-      await nextTick();
-      button.props.onClick();
-      await nextTick();
-      assert.deepEqual(p.calls, [
-        "/pages/profile/index",
-        "/pages/profile/index",
-      ]);
-    } finally {
-      page.unmount();
-    }
-  });
-}
+test("非 H5 端认证页保持暂缓说明且不渲染凭据表单也不发请求", async () => {
+  const p = platform("mp-weixin");
+  const page = await mount("../src/pages/campus/index.vue", {}, "MP-WEIXIN");
+  try {
+    const text = textOf(page.container);
+    assert.match(text, /统一身份认证尚未开放/);
+    assert.match(text, /免登录|不需要登录/);
+    for (const node of [
+      page.find((n) => n.type === "input"),
+      page.find((n) => n.props.role === "checkbox"),
+    ])
+      assert.equal(node, undefined);
+    assert.equal(p.requests().length, 0);
 
-test("认证相关旧模块仍可被其它任务复用，但页面不再引用密码控件", async () => {
-  // 页面结构保留给 M2 接线：controller 与面板组件仍在仓库内，且自身不偷偷发请求。
+    const button = page.find(
+      (n) =>
+        (n.type === "button" || n.props.role === "button") &&
+        textOf(n).includes("返回个人中心"),
+    );
+    assert.ok(button);
+    button.props.onClick();
+    await nextTick();
+    assert.deepEqual(p.calls, ["/pages/profile/index"]);
+  } finally {
+    page.unmount();
+  }
+});
+
+test("旧校园控制器模块保持可用，初始状态不预填密码或事务", async () => {
   const { initialCampusState } = await import("../src/campus/controller.ts");
   const state = initialCampusState();
   assert.equal(state.transaction, null);

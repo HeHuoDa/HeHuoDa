@@ -19,28 +19,35 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 
-test("登录与注册页在两端都只说明认证未开放，不渲染凭据表单", () => {
-  for (const [file, expect] of [
-    ["pages/auth/login.vue", /统一身份认证登录即将开放/],
-    ["pages/auth/register.vue", /暂不开放单独注册/],
+test("H5 登录与注册页均挂载统一学校登录面板，非 H5 保留暂缓说明且无旧微信面板", () => {
+  for (const [file, entry, nonH5Text] of [
+    ["pages/auth/login.vue", 'entry="login"', /统一身份认证登录即将开放/],
+    ["pages/auth/register.vue", 'entry="register"', /暂不开放单独注册/],
   ]) {
     const source = read(file);
-    for (const platform of ["H5", "MP-WEIXIN"]) {
-      const view = preprocess(source, platform);
-      assert.match(view, /<AuthBrandLayout>/, file);
-      assert.match(view, /<AuthPendingNotice/, file);
-      assert.match(view, expect, file);
-      // M1 不提供任何登录渠道：旧微信面板、邮箱表单都已移除。
-      assert.doesNotMatch(
-        view,
-        /AuthForm|WechatLoginPanel|<form|type="password"/,
-        file,
-      );
-    }
+    const h5View = preprocess(source, "H5");
+    assert.match(h5View, /<AuthBrandLayout>/, file);
+    assert.match(h5View, /<SchoolLoginPanel/, file);
+    assert.match(h5View, new RegExp(entry), file);
+    assert.doesNotMatch(
+      h5View,
+      /WechatLoginPanel|AuthPendingNotice|AuthForm/,
+      file,
+    );
+
+    const nativeView = preprocess(source, "MP-WEIXIN");
+    assert.match(nativeView, /<AuthBrandLayout>/, file);
+    assert.match(nativeView, /<AuthPendingNotice/, file);
+    assert.match(nativeView, nonH5Text, file);
+    assert.doesNotMatch(
+      nativeView,
+      /AuthForm|WechatLoginPanel|SchoolLoginPanel/,
+      file,
+    );
   }
 });
 
-test("认证说明组件不收集凭据，也不调用认证接口", () => {
+test("认证说明组件（非 H5 回退）不收集凭据，也不调用认证接口", () => {
   const source = read("components/AuthPendingNotice.vue");
   assert.match(source, /function goBack/);
   for (const pattern of [
@@ -52,7 +59,6 @@ test("认证说明组件不收集凭据，也不调用认证接口", () => {
     /localStorage|sessionStorage/,
   ])
     assert.doesNotMatch(source, pattern);
-  // 返回目标仍只接受注册表内页面。
   assert.match(source, /resolveReturnTarget/);
   assert.match(source, /backOrHome/);
 });

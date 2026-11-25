@@ -7738,6 +7738,11 @@
           "validUntil": {
             "type": "string",
             "nullable": true
+          },
+          "maskedAccountNumber": {
+            "type": "string",
+            "example": "••••56",
+            "description": "仅在本人校园核验有效且校园账号编号可脱敏时返回尾两位"
           }
         },
         "required": [

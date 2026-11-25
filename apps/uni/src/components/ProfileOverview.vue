@@ -7,6 +7,9 @@ import {
   type DemoProfile,
 } from "@hehuoda/client-domain/profile";
 import { colleges } from "@hehuoda/client-domain/colleges";
+import { nicknameProblem } from "../auth/auth-session";
+import { beijingTime } from "../campus/presentation";
+import { useAuthStore } from "../stores/auth";
 import { useSessionStore } from "../stores/session";
 import { useDraftForm } from "../forms/use-draft-form";
 import { openPage } from "../navigation/navigate";
@@ -17,6 +20,7 @@ import FormDialog from "./FormDialog.vue";
 import FormButton from "./FormButton.vue";
 import ProfileMenu from "./ProfileMenu.vue";
 
+const auth = useAuthStore();
 const session = useSessionStore();
 const stats = computed(() => [
   { label: "收藏比赛", count: session.favoriteCount, note: "当前会话" },
@@ -39,8 +43,32 @@ const {
   validate: validateProfile,
   save: session.saveProfile,
 });
-/** 昵称与其它资料均为会话内示例：登录未开放，不提供账号写入入口。 */
-const displayNickname = computed(() => session.profile.nickname);
+
+const nicknameOpened = ref(false);
+const nicknameDraft = ref("");
+const nicknameLocalError = ref("");
+const nicknameFocus = ref(false);
+
+const displayNickname = computed(() =>
+  auth.authenticated ? auth.nickname || "禾伙搭用户" : session.profile.nickname,
+);
+const avatarInitial = computed(() => {
+  if (!auth.authenticated) return "苗";
+  return Array.from(displayNickname.value.trim())[0] || "禾";
+});
+const campusStatusLabel = computed(() => {
+  if (!auth.authenticated) return "游客浏览 · 未登录学校账号";
+  if (auth.campusStatus === "valid") return "学校账号 · 校园身份已验证";
+  if (auth.campusStatus === "expired") return "学校账号 · 校园身份已过期";
+  if (auth.campusStatus === "revoked") return "学校账号 · 校园身份已撤销";
+  if (auth.campusStatus === "unverified") return "学校账号 · 校园身份未验证";
+  return "学校账号已登录";
+});
+const campusValidUntilText = computed(() => {
+  if (!auth.authenticated || !auth.campus?.validUntil) return "";
+  return beijingTime(auth.campus.validUntil);
+});
+
 const collegeName = computed(
   () =>
     colleges.find((c) => c.id === session.profile.collegeId)?.name ??
@@ -82,13 +110,54 @@ const links = [
     action: () => openPage("notifications"),
   },
 ];
+
+function openLogin() {
+  feedback.value = "";
+  openPage("login", undefined, () => {
+    feedback.value = "暂时无法打开登录页，请重试。";
+  });
+}
+
+async function openNicknameEditor() {
+  if (!auth.authenticated) return;
+  feedback.value = "";
+  nicknameDraft.value = auth.nickname;
+  nicknameLocalError.value = "";
+  nicknameOpened.value = true;
+  nicknameFocus.value = false;
+  await nextTick();
+  if (nicknameOpened.value) nicknameFocus.value = true;
+}
+
+function closeNicknameEditor() {
+  nicknameOpened.value = false;
+  nicknameLocalError.value = "";
+  nicknameFocus.value = false;
+}
+
+async function saveNickname() {
+  if (auth.nicknamePending) return;
+  const problem = nicknameProblem(nicknameDraft.value);
+  if (problem) {
+    nicknameLocalError.value = problem;
+    return;
+  }
+  nicknameLocalError.value = "";
+  const ok = await auth.updateNickname(nicknameDraft.value);
+  if (ok) {
+    closeNicknameEditor();
+    feedback.value = "账号昵称已更新。";
+  }
+}
+
 async function edit() {
   feedback.value = "";
   focusField.value = "";
   begin();
   await nextTick();
-  if (opened.value) focusField.value = "nickname";
+  if (opened.value) focusField.value = "major";
 }
+
 async function save() {
   focusField.value = "";
   if (submit()) {
@@ -99,15 +168,23 @@ async function save() {
   await nextTick();
   if (opened.value) focusField.value = firstError.value;
 }
-// 外部统一重置、页面切换均丢弃编辑草稿，避免旧资料再次写回。
+
 const unregister = session.registerReset("profile-editor", () => {
   cancel();
+  closeNicknameEditor();
   feedback.value = "会话已重置，示例资料回到初始状态。";
 });
+
 watch(
   () => session.profile,
   () => {
     if (!submitting.value) cancel();
+  },
+);
+watch(
+  () => auth.authenticated,
+  (authed) => {
+    if (!authed) closeNicknameEditor();
   },
 );
 onBeforeUnmount(unregister);
@@ -121,24 +198,66 @@ onBeforeUnmount(unregister);
       >
       <view class="flex flex-wrap items-center justify-between gap-3">
         <text class="profile-title font-serif font-semibold">个人中心</text>
-        <!-- 账号与设置入口：登录说明、编辑资料与关于都收在这个下拉里。 -->
-        <ProfileMenu @edit="edit" @notice="feedback = $event" />
+        <ProfileMenu
+          @edit="edit"
+          @edit-nickname="openNicknameEditor"
+          @notice="feedback = $event"
+        />
       </view>
       <text class="block mt-2 text-sm text-muted"
         >把自己介绍给伙伴，也把下一次相遇留给可能。</text
       >
     </view>
+
     <view v-if="feedback" role="status" class="hhr-notice mb-4">{{
       feedback
     }}</view>
-    <view class="profile-panel" aria-label="示例个人资料">
+
+    <view
+      v-if="auth.logoutNotice || auth.errorMessage"
+      :role="
+        auth.logoutRemoteUnconfirmed || auth.errorMessage ? 'alert' : 'status'
+      "
+      class="hhr-notice mb-4 profile-auth-banner"
+    >
+      <text class="block">{{ auth.logoutNotice || auth.errorMessage }}</text>
+      <FormButton
+        v-if="auth.logoutRemoteUnconfirmed"
+        class="profile-banner-action"
+        variant="secondary"
+        :loading="auth.logoutPending"
+        :disabled="auth.logoutPending"
+        @click="auth.retryLogout()"
+        >重试撤销远端会话</FormButton
+      >
+    </view>
+
+    <view
+      class="profile-panel"
+      :aria-label="auth.authenticated ? '学校账号与示例资料' : '游客示例资料'"
+    >
       <view class="profile-identity">
-        <view class="profile-avatar" aria-hidden="true">苗</view>
+        <view class="profile-avatar" aria-hidden="true">{{
+          avatarInitial
+        }}</view>
         <view class="profile-identity-text">
           <text class="profile-name font-serif">{{ displayNickname }}</text>
+          <text class="profile-account-badge">{{ campusStatusLabel }}</text>
+          <text
+            v-if="
+              auth.campus?.status === 'valid' && auth.campus.maskedAccountNumber
+            "
+            class="block mt-1 text-xs text-muted"
+            >校园账号 {{ auth.campus.maskedAccountNumber }}</text
+          >
+          <text
+            v-if="campusValidUntilText && campusValidUntilText !== '—'"
+            class="block mt-1 text-xs text-muted"
+            >认证有效期至 {{ campusValidUntilText }}</text
+          >
           <text class="block mt-2 text-xs text-muted"
-            >四川农业大学 · {{ session.profile.campus }} · {{ collegeName }} ·
-            {{ session.profile.grade }} 级</text
+            >会话示例：四川农业大学 · {{ session.profile.campus }} ·
+            {{ collegeName }} · {{ session.profile.grade }} 级</text
           >
           <text class="block mt-1 text-xs text-muted">{{
             session.profile.major
@@ -156,9 +275,45 @@ onBeforeUnmount(unregister);
           </view>
         </view>
       </view>
+
+      <view
+        v-if="auth.authenticated && auth.profileError"
+        class="profile-sub-alert"
+        role="alert"
+      >
+        <text class="text-xs">{{ auth.profileError }}</text>
+        <FormButton variant="soft" @click="auth.reloadProfile()"
+          >重新读取账号资料</FormButton
+        >
+      </view>
+
+      <view class="profile-account-actions">
+        <template v-if="auth.authenticated">
+          <FormButton variant="secondary" @click="openNicknameEditor"
+            >修改昵称</FormButton
+          >
+          <FormButton
+            variant="soft"
+            :loading="auth.logoutPending"
+            :disabled="auth.logoutPending"
+            @click="auth.logout()"
+            >退出登录</FormButton
+          >
+        </template>
+        <template v-else>
+          <FormButton :disabled="auth.restoring" @click="openLogin">{{
+            auth.restoring ? "正在恢复登录…" : "使用学校账号登录"
+          }}</FormButton>
+          <FormButton variant="secondary" @click="edit"
+            >编辑示例资料</FormButton
+          >
+        </template>
+      </view>
+
       <text class="block mt-5 whitespace-pre-wrap text-sm text-muted">{{
         session.profile.bio || "还没有填写简介，期待和伙伴一起成长。"
       }}</text>
+
       <view class="profile-stats" aria-label="个人业务统计，收藏为当前会话数量">
         <view v-for="stat in stats" :key="stat.label" class="profile-stat">
           <text class="profile-stat-number">{{ stat.count }}</text
@@ -167,6 +322,7 @@ onBeforeUnmount(unregister);
         </view>
       </view>
     </view>
+
     <view class="profile-shortcuts">
       <FormButton
         v-for="link in links"
@@ -186,13 +342,50 @@ onBeforeUnmount(unregister);
         >
       </FormButton>
     </view>
+
     <view class="mt-6 text-xs text-muted">
-      <text>当前免登录浏览，展示的是示例资料；编辑仅影响本次会话。</text>
+      <text v-if="auth.authenticated"
+        >账号昵称与校园身份状态来自服务端；专业、年级、技能与简介仅保留在当前会话内，收藏不会因退出或重新登录而清空。</text
+      >
+      <text v-else
+        >当前游客浏览，专业、年级、技能与简介为会话示例，编辑仅影响本次会话。</text
+      >
     </view>
+
+    <FormDialog
+      id="nickname-editor"
+      :open="nicknameOpened"
+      title="修改昵称"
+      save-label="保存昵称"
+      :saving="auth.nicknamePending"
+      :error-target="
+        nicknameLocalError || auth.nicknameError ? 'account-nickname-field' : ''
+      "
+      @save="saveNickname"
+      @cancel="closeNicknameEditor"
+    >
+      <text class="block mb-3 text-xs text-muted"
+        >昵称须为 1–20 个字，保存后将同步到服务端账号并在各页面生效。</text
+      >
+      <FormInput
+        id="account-nickname"
+        v-model="nicknameDraft"
+        label="账号昵称"
+        placeholder="请输入 1–20 个字的新昵称"
+        :maxlength="20"
+        :error="nicknameLocalError || auth.nicknameError"
+        :focus="nicknameFocus"
+        :disabled="auth.nicknamePending"
+        autocomplete="off"
+        @input="nicknameLocalError = ''"
+        @confirm="saveNickname"
+      />
+    </FormDialog>
+
     <FormDialog
       id="profile-editor"
       :open="opened"
-      title="编辑资料"
+      title="编辑示例资料"
       save-label="保存资料"
       :saving="submitting"
       :error-target="firstError ? `profile-${firstError}-field` : ''"
@@ -208,7 +401,11 @@ onBeforeUnmount(unregister);
         :model-value="displayNickname"
         label="昵称"
         disabled
-        hint="统一身份认证开放后可修改昵称。"
+        :hint="
+          auth.authenticated
+            ? '修改真实账号昵称请使用「修改昵称」按钮。'
+            : '登录学校账号后可修改真实昵称。'
+        "
       />
       <view class="profile-form">
         <FormInput
@@ -282,6 +479,42 @@ onBeforeUnmount(unregister);
   display: block;
   font-size: 24px;
 }
+.profile-account-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: var(--hhr-radius-badge);
+  background: var(--hhr-color-brand-soft);
+  color: var(--hhr-color-brand);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.profile-auth-banner {
+  display: grid;
+  gap: 10px;
+}
+.profile-banner-action {
+  width: auto;
+}
+.profile-sub-alert {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--hhr-radius-control);
+  background: var(--hhr-color-accent-soft);
+  color: var(--hhr-color-accent-ink);
+}
+.profile-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.profile-account-actions :deep(.hhr-button) {
+  width: auto;
+  flex: 1 1 132px;
+}
 .profile-panel {
   background: var(--hhr-color-surface);
   border: 1px solid var(--hhr-color-line);
@@ -296,6 +529,7 @@ onBeforeUnmount(unregister);
 }
 .profile-identity-text {
   min-width: 0;
+  flex: 1;
 }
 .profile-avatar {
   display: grid;

@@ -10,7 +10,34 @@ let platform = "mp-weixin";
 platform = "h5";
 // #endif
 
-const transport: RequestTransport = (options) => uni.request(options);
+const transport: RequestTransport = (options) => {
+  const requestOptions: UniNamespace.RequestOptions = {
+    url: options.url,
+    method: options.method as UniNamespace.RequestOptions["method"],
+    timeout: options.timeout,
+    dataType: options.dataType,
+    ...(options.data !== undefined ? { data: options.data } : {}),
+    ...(options.header ? { header: options.header } : {}),
+    success: options.success,
+    fail: options.fail,
+  };
+  // #ifdef H5
+  if (options.withCredentials) requestOptions.withCredentials = true;
+  // #endif
+  // #ifndef H5
+  if (options.method === "PATCH") {
+    throw new Error("PATCH 仅在 H5 通道使用。");
+  }
+  // #endif
+  const task = uni.request(requestOptions) as unknown as {
+    abort?: () => void;
+  };
+  return {
+    abort() {
+      task?.abort?.();
+    },
+  };
+};
 const readConfig = () =>
   resolveApiConfig({
     baseUrl: import.meta.env.VITE_API_BASE_URL,
@@ -36,4 +63,5 @@ export const authedHttp = createHttpClient(transport, readConfig, {
     if (!session) return Promise.reject(new Error("认证会话尚未注入。"));
     return session.refresh();
   },
+  generation: () => session?.generation?.() ?? 0,
 });

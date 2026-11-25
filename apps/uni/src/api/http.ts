@@ -59,16 +59,23 @@ export interface HttpClientAuth {
   accessToken(): string | null;
   /** 执行一次刷新并返回新访问凭据；客户端对并发 401 只调用一次。 */
   refresh(): Promise<string>;
+  /** 可选认证代次：请求发出、重试前与响应写入前核对，防止旧账号写回新会话。 */
+  generation?(): number;
 }
 
 /**
  * wx.request 的 method 不接受 PATCH，H5 与小程序共用 uni.request 类型，
- * 因此局部更新由后端提供 POST 别名；事务取消使用两端均支持的 DELETE。
+ * 因此非 H5 端由后端提供 POST 别名；H5 传输边界允许 PATCH。
  */
-export type RequestTransportMethod = "GET" | "POST" | "DELETE";
+export type RequestTransportMethod = "GET" | "POST" | "DELETE" | "PATCH";
 
 /** 与 uni.request 的 data 参数兼容的请求体类型。 */
 export type RequestBody = Record<string, unknown> | string;
+
+export interface RequestCallOptions {
+  withCredentials?: boolean;
+  header?: Record<string, string>;
+}
 
 /** 仅依赖本票所用的 uni.request 回调子集，平台替身也走此入口。 */
 export type RequestTransport = (options: {
@@ -78,6 +85,7 @@ export type RequestTransport = (options: {
   dataType: "json";
   data?: RequestBody;
   header?: Record<string, string>;
+  withCredentials?: boolean;
   success(response: {
     statusCode: number;
     data: unknown;
@@ -135,6 +143,7 @@ export function createHttpClient(
     path: string,
     validate: (data: unknown) => data is T,
     body?: RequestBody,
+    options?: RequestCallOptions,
   ): PendingRequest<T> {
     // uni.request 默认发 JSON；无参数写请求也须有合法 JSON，避免空正文被拒绝。
     const data = body ?? (method === "GET" ? undefined : {});
@@ -162,9 +171,24 @@ export function createHttpClient(
         );
         return;
       }
-      const attempt = (retry: boolean) => {
+      const attempt = (retry: boolean, initialGeneration: number | null) => {
         if (settled) return;
+        const currentGen = auth?.generation ? auth.generation() : null;
+        if (
+          initialGeneration !== null &&
+          currentGen !== null &&
+          currentGen !== initialGeneration
+        ) {
+          fail(new RequestError("cancelled", "登录状态已变化，请重试。"));
+          return;
+        }
+        const genAtAttempt = initialGeneration ?? currentGen;
         const token = auth?.accessToken() ?? null;
+        const mergedHeader: Record<string, string> = {
+          ...(options?.header ?? {}),
+          ...(token !== null ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const hasHeader = Object.keys(mergedHeader).length > 0;
         const finishHttpFailure = (
           statusCode: number,
           data: unknown,
@@ -196,9 +220,8 @@ export function createHttpClient(
             timeout: settings.timeout,
             dataType: "json",
             ...(data !== undefined ? { data } : {}),
-            ...(token !== null
-              ? { header: { Authorization: `Bearer ${token}` } }
-              : {}),
+            ...(hasHeader ? { header: mergedHeader } : {}),
+            ...(options?.withCredentials ? { withCredentials: true } : {}),
             success(response) {
               if (settled) return;
               const requestId = responseRequestId(
@@ -215,9 +238,22 @@ export function createHttpClient(
                 );
                 return;
               }
+              const generationChanged = () =>
+                genAtAttempt !== null &&
+                auth?.generation !== undefined &&
+                auth.generation() !== genAtAttempt;
+              if (generationChanged()) {
+                fail(
+                  new RequestError(
+                    "cancelled",
+                    "登录状态已变化，已丢弃过期响应。",
+                    { requestId },
+                  ),
+                );
+                return;
+              }
               // 仅“已带凭据却被明确拒绝”的 401 才刷新重发一次：
-              // 无凭据的 401（如登录 code 无效）与未知结果（超时/网络）都不重试，
-              // 写请求也不会在业务可能已执行的情况下自动重放。
+              // 无凭据的 401 与未知结果（超时/网络）都不重试，写请求也不会自动重放。
               if (
                 response.statusCode === 401 &&
                 token !== null &&
@@ -227,7 +263,20 @@ export function createHttpClient(
                 const refreshed = sharedRefresh();
                 if (refreshed) {
                   refreshed.then(
-                    () => attempt(true),
+                    () => {
+                      if (settled) return;
+                      if (generationChanged()) {
+                        fail(
+                          new RequestError(
+                            "cancelled",
+                            "登录状态已变化，已取消重试。",
+                            { requestId },
+                          ),
+                        );
+                        return;
+                      }
+                      attempt(true, genAtAttempt);
+                    },
                     () =>
                       finishHttpFailure(
                         response.statusCode,
@@ -275,7 +324,7 @@ export function createHttpClient(
           fail(new RequestError("network", "暂时无法连接服务，请稍后重试。"));
         }
       };
-      attempt(false);
+      attempt(false, null);
     });
     // 401 协调会把拒绝推迟到刷新微任务，调用方的 handler 可能晚于拒绝
     // 本身挂接；预挂观察者避免虚假的未处理拒绝告警，拒绝仍照常传播。
@@ -300,21 +349,33 @@ export function createHttpClient(
     delete<T>(
       path: string,
       validate: (data: unknown) => data is T,
+      body?: RequestBody,
+      options?: RequestCallOptions,
     ): PendingRequest<T> {
-      return request("DELETE", path, validate);
+      return request("DELETE", path, validate, body, options);
     },
     get<T>(
       path: string,
       validate: (data: unknown) => data is T,
+      options?: RequestCallOptions,
     ): PendingRequest<T> {
-      return request("GET", path, validate);
+      return request("GET", path, validate, undefined, options);
     },
     post<T>(
       path: string,
       body: RequestBody | undefined,
       validate: (data: unknown) => data is T,
+      options?: RequestCallOptions,
     ): PendingRequest<T> {
-      return request("POST", path, validate, body);
+      return request("POST", path, validate, body, options);
+    },
+    patch<T>(
+      path: string,
+      body: RequestBody | undefined,
+      validate: (data: unknown) => data is T,
+      options?: RequestCallOptions,
+    ): PendingRequest<T> {
+      return request("PATCH", path, validate, body, options);
     },
   };
 }

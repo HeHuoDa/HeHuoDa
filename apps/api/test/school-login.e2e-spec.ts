@@ -235,6 +235,18 @@ describe("学校唯一登录：匿名事务边界与凭据保护", () => {
     const response = await f.submitChallenge(t);
     expect(response.statusCode).toBe(400);
     expect(response.json().code).toBe("CAMPUS_UNSUPPORTED_VERIFICATION");
+    expect(response.json().details).toEqual({ reason: "multiple_identities" });
+    const status = await f.request(
+      "POST",
+      `auth/school/challenges/${t.id}/status`,
+      {
+        holderToken: t.holderToken,
+      },
+    );
+    expect(status.json()).toMatchObject({
+      status: "failed",
+      reason: "multiple_identities",
+    });
     expect(await count("users")).toBe(0);
     expect(await count("auth_sessions")).toBe(0);
   });
@@ -280,6 +292,20 @@ describe("学校唯一登录：匿名事务边界与凭据保护", () => {
     expect(again.statusCode).toBe(200);
     expect(again.json().credential).toBeUndefined();
     expect(f.counts.post).toBe(1);
+  });
+
+  it("登录后的本人接口只返回脱敏校园账号", async () => {
+    const login = await f.submitChallenge(await f.createChallenge());
+    const token = login.json().credential.accessToken;
+    for (const response of [
+      await f.request("GET", "auth/me", undefined, token),
+      await f.request("PATCH", "auth/me", { nickname: "新昵称" }, token),
+    ]) {
+      expect(response.statusCode).toBe(200);
+      expect(response.json().campus.maskedAccountNumber).toBe("••••56");
+      expect(response.body).not.toContain(loginCredentials.account);
+      expect(response.body).not.toContain(loginCredentials.name);
+    }
   });
 
   it("入口关闭时匿名挑战明确不可用，公开接口不受影响", async () => {

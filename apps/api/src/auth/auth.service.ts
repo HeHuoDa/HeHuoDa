@@ -55,6 +55,7 @@ export interface ProfileResult {
     termId: string | null;
     verifiedAt: string | null;
     validUntil: string | null;
+    maskedAccountNumber?: string;
   };
   availability: { teaming: false };
 }
@@ -448,6 +449,10 @@ export class AuthService {
     return this.repository.withAccessTransaction(async (tx) => {
       await this.repository.assertCurrentContext(tx, access, this.clock.now());
       const summary = await this.campus.summary(tx, access.user.id);
+      const maskedAccountNumber =
+        summary.status === "valid"
+          ? await this.campus.maskedAccountNumber(tx, access.user.id)
+          : undefined;
       return {
         user: {
           id: access.user.id,
@@ -459,6 +464,7 @@ export class AuthService {
           termId: summary.termId,
           verifiedAt: summary.verifiedAt,
           validUntil: summary.validUntil,
+          ...(maskedAccountNumber ? { maskedAccountNumber } : {}),
         },
         availability: { teaming: false },
       };
