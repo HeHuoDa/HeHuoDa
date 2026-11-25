@@ -307,24 +307,60 @@
     "/api/v1/auth/refresh": {
       "post": {
         "operationId": "AuthController_refresh",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "X-Refresh-CSRF",
+            "in": "header",
+            "description": "H5 Cookie 通道必填，固定值为 1",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "H5 Cookie 通道校验允许的精确 Origin（缺失时回退检查 Referer 源）；原生 JSON 通道禁止携带",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
-          "required": true,
+          "required": false,
+          "description": "原生端传 JSON refreshToken；H5 端只接受空请求体并依赖 HttpOnly Cookie",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshRequestDto"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshRequestDto"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {}
+                  }
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "原生端返回含 refreshToken 的完整凭据；H5 端仅返回短期访问凭据并通过 Set-Cookie 轮换刷新令牌",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CredentialResponseDto"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CredentialResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/H5CredentialResponseDto"
+                    }
+                  ]
                 }
               }
             }
@@ -380,7 +416,7 @@
             }
           }
         },
-        "summary": "轮换凭据；旧刷新凭据立即作废",
+        "summary": "轮换凭据；旧刷新凭据立即作废（支持原生 JSON 与 H5 Cookie 通道）",
         "tags": [
           "认证"
         ]
@@ -389,12 +425,74 @@
     "/api/v1/auth/logout": {
       "post": {
         "operationId": "AuthController_logout",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "X-Refresh-CSRF",
+            "in": "header",
+            "description": "H5 Cookie 通道必填，固定值为 1",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "H5 Cookie 通道校验允许的精确 Origin（缺失时回退检查 Referer 源）",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "H5 通道只接受空请求体",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
             "description": "",
             "content": {
               "application/json": {
@@ -407,10 +505,13 @@
         },
         "security": [
           {
+            "userRefresh": []
+          },
+          {
             "bearer": []
           }
         ],
-        "summary": "撤销当前会话族",
+        "summary": "撤销当前会话族（原生 Bearer 或 H5 Cookie 通道）",
         "tags": [
           "认证"
         ]
@@ -1678,7 +1779,126 @@
             }
           }
         },
-        "summary": "提交姓名、学号、密码与验证码；成功时一次性签发 Bearer 会话",
+        "summary": "提交姓名、学号、密码与验证码；成功时一次性签发原生 Bearer 会话",
+        "tags": [
+          "统一身份认证登录"
+        ]
+      }
+    },
+    "/api/v1/auth/school/challenges/{id}/submit/h5": {
+      "post": {
+        "operationId": "SchoolLoginController_submitH5",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Refresh-CSRF",
+            "in": "header",
+            "description": "固定 CSRF 防护头，值为 1",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "精确匹配允许的 H5 Origin（缺失时回退检查 Referer 源）",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchoolLoginSubmitDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolLoginH5CredentialDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "H5 提交姓名、学号、密码与验证码；成功时通过 HttpOnly Cookie 下发刷新凭据，JSON 仅返回短期访问凭据",
         "tags": [
           "统一身份认证登录"
         ]
@@ -6849,10 +7069,20 @@
   "servers": [],
   "components": {
     "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
       "adminSession": {
         "type": "apiKey",
         "in": "cookie",
         "name": "hh_admin_session"
+      },
+      "userRefresh": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "hh_user_refresh"
       }
     },
     "schemas": {
@@ -7350,26 +7580,6 @@
           "evaluatedAt"
         ]
       },
-      "WechatLoginRequestDto": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "description": "uni.login 取得的微信临时授权码",
-            "maxLength": 512
-          },
-          "consentVersion": {
-            "type": "number",
-            "description": "用户已确认的平台协议版本；当前为 1",
-            "minimum": 1,
-            "example": 1
-          }
-        },
-        "required": [
-          "code",
-          "consentVersion"
-        ]
-      },
       "UserDto": {
         "type": "object",
         "properties": {
@@ -7436,6 +7646,41 @@
           "sessionExpiresAt"
         ]
       },
+      "H5CredentialResponseDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "active"
+            ],
+            "description": "凭据生命周期类别"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserDto"
+          },
+          "accessToken": {
+            "type": "string",
+            "description": "访问凭据，15 分钟有效；H5 仅内存持有"
+          },
+          "accessExpiresAt": {
+            "type": "string",
+            "example": "2026-10-24T12:15:00.000Z"
+          },
+          "sessionExpiresAt": {
+            "type": "string",
+            "example": "2026-11-23T12:00:00.000Z",
+            "description": "会话绝对期限，刷新不会延长；刷新凭据通过 HttpOnly Cookie 托管"
+          }
+        },
+        "required": [
+          "kind",
+          "user",
+          "accessToken",
+          "accessExpiresAt",
+          "sessionExpiresAt"
+        ]
+      },
       "RefreshRequestDto": {
         "type": "object",
         "properties": {
@@ -7447,6 +7692,26 @@
         },
         "required": [
           "refreshToken"
+        ]
+      },
+      "WechatLoginRequestDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "uni.login 取得的微信临时授权码",
+            "maxLength": 512
+          },
+          "consentVersion": {
+            "type": "number",
+            "description": "用户已确认的平台协议版本；当前为 1",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "code",
+          "consentVersion"
         ]
       },
       "CampusStatusDto": {
@@ -7936,10 +8201,43 @@
             "nullable": true
           },
           "credential": {
-            "description": "仅成功的首次登录下发一次；受限于 Bearer 通道，H5 Cookie 通道由 #218 承接",
+            "description": "仅成功的首次原生登录下发一次；H5 Cookie 通道请使用 /submit/h5",
             "allOf": [
               {
                 "$ref": "#/components/schemas/CredentialResponseDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "expiresAt",
+          "reason"
+        ]
+      },
+      "SchoolLoginH5CredentialDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "credential": {
+            "description": "仅成功的首次 H5 登录下发一次；刷新凭据通过 HttpOnly Cookie 下发，JSON 不包含 refreshToken",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/H5CredentialResponseDto"
               }
             ]
           }
