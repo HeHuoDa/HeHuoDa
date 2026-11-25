@@ -47,8 +47,14 @@ COPY packages ./packages
 ENV VITE_API_BASE_URL=/api/v1 UNI_RELEASE=false
 RUN pnpm --filter @hehuoda/uni check:toolchain && pnpm --filter @hehuoda/uni build:h5
 
+FROM dependencies AS admin-build
+COPY apps/admin ./apps/admin
+COPY packages/api-types ./packages/api-types
+RUN pnpm --filter @hehuoda/admin build
+
 FROM nginx:1.30.0-alpine AS web
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY deploy/nginx/app-locations.inc /etc/nginx/app-locations.inc
 COPY --from=h5-build /workspace/apps/uni/dist/build/h5 /usr/share/nginx/html
+COPY --from=admin-build /workspace/apps/admin/dist /usr/share/nginx/html/admin
 EXPOSE 80

@@ -11,10 +11,15 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { colleges } from "../packages/client-domain/src/colleges.ts";
+import {
+  verifyAdminCompetition,
+  verifyAdminRoutes,
+} from "./test/admin-smoke.mjs";
 
 const temporary = mkdtempSync(join(tmpdir(), "hehuoda-image-smoke-"));
 const project = `hehuoda-smoke-${randomBytes(6).toString("hex")}`;
 const password = randomBytes(24).toString("hex");
+const adminOrigin = "https://admin-smoke.invalid";
 Object.assign(process.env, {
   COMPOSE_PROJECT_NAME: project,
   POSTGRES_USER: "smoke",
@@ -24,6 +29,7 @@ Object.assign(process.env, {
   HTTP_BIND: "127.0.0.1",
   HTTP_PORT: "0",
   INGESTION_ENABLED: "false",
+  ADMIN_ALLOWED_ORIGINS: adminOrigin,
   DEPLOY_TLS: "false",
   DEPLOY_PUBLIC_URL: "",
   IMAGE_PREFIX: process.env.IMAGE_PREFIX || "hehuoda-local",
@@ -68,6 +74,7 @@ try {
       "dist-openapi/scripts/migrate.js",
     ]);
   compose(["up", "-d", "--wait", "--wait-timeout", "180", "api", "web"]);
+  compose(["exec", "-T", "web", "nginx", "-t"]);
   // Exercise the deployed package rather than workspace source or host dist.
   compose([
     "exec",
@@ -311,6 +318,7 @@ try {
   );
   for (const path of ["/api/v1/absent", "/api/v1/absent.js"])
     await json(path, 404);
+  await verifyAdminRoutes(base, html);
 
   const dump = backup();
   assert.deepEqual(verifyBackup(dump), {
@@ -323,6 +331,10 @@ try {
   });
   console.log(
     "PASS: H5, assets, cache, deep links, JSON routing, real queries and isolated backup restore",
+  );
+  await verifyAdminCompetition(base, adminOrigin, compose, fixture);
+  console.log(
+    "PASS: admin routes and HTTP protocol smoke (HTTPS Origin, explicit Secure cookie, CSRF, draft/publish/hide, logout)",
   );
 
   // Exercise actual replacement and failure recovery against the isolated stack.

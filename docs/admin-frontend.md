@@ -16,7 +16,7 @@ pnpm --filter @hehuoda/admin test:unit
 pnpm format:check
 ```
 
-默认地址为 `http://127.0.0.1:5183/`，与用户端及 API 互不改变本地开发端口。管理端独立产物为 `apps/admin/dist`；History 路由部署需将应用路径回退到管理端 `index.html`，生产环境将按 #215 统一配置 Vite base 与 Vue Router history base 为 `/admin/` 并与 H5、API 同源部署。`apps/admin/.env.example` 提供可选的用户端链接，不涉及认证配置。
+默认开发地址为 `http://127.0.0.1:5183/`。生产构建和 Vite preview 使用 `/admin/`，Vue Router 从 Vite 的 `BASE_URL` 读取基址，路由定义与登录回跳继续使用应用内路径。`apps/admin/dist` 被复制到 Web 镜像的 `/usr/share/nginx/html/admin`。管理端深路由刷新由 Nginx 回退到管理端入口，管理 API 始终请求同源 `/api/v1/admin`。`apps/admin/.env.example` 提供可选的用户端链接。
 
 ## 页面与交付边界
 

@@ -4,7 +4,7 @@
 
 ## 初始化与配置
 
-先通过现有 `db:migrate` 入口应用增量迁移，再在受控服务器的交互终端运行 `pnpm --filter @hehuoda/api admin:init`。它依次询问用户名、显示名、密码和确认密码，密码不回显；不接受命令参数、不提供默认密码、不会覆盖重复账号。数据库连接只从既有私有 `DATABASE_URL` 读取。不要把密码放进命令行、Git、日志或示例配置。
+源码开发环境先运行现有 `db:migrate` 入口，再在交互终端运行 `pnpm --filter @hehuoda/api admin:init`。初始化命令依次询问用户名、显示名、密码和确认密码，密码不回显。命令不接受参数、不提供默认密码、不会覆盖重复账号。数据库连接只从既有私有 `DATABASE_URL` 读取。不要把密码放进命令行、Git、日志或示例配置。
 
 用户名为大小写敏感的 1–64 位 ASCII 字母、数字、点、下划线或连字符；显示名 trim 后非空且最多 80 字符；初始化密码为 12–256 字符。密码使用 Node 内置异步 scrypt，固定 N=32768、r=8、p=3、输出64字节、maxmem=64MiB，每账号随机16字节盐，验证时做恒时摘要比较。此配置对应 [OWASP scrypt 参数档位](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt)，不新增密码算法依赖；以后变更参数须连同已有摘要迁移，不能直接改常量。
 
@@ -18,7 +18,11 @@
 
 Origin 包含协议、主机和必要端口，不含路径或结尾斜杠，不接受通配符、`null`、用户信息。生产只接受 HTTPS Origin。开发可按实际管理服务端口配置 `http://localhost:端口`；页面和 API 应尽量同源或同站，`SameSite=Lax` 不支持跨站携带 Cookie，不通过改成通配 CORS 或削弱 Cookie 属性解决跨站问题。
 
-容器部署从受保护的部署目录 `.env` 读取上述配置，`compose.deploy.yaml` 显式透传到 API；样例默认保持空 Origin，不自动开放管理员登录。`apps/admin` 将由 #215 以 `/admin/` 子路径整合进 Web Nginx 镜像部署，`ADMIN_ALLOWED_ORIGINS` 须配置为精确 `https://<正式域名>`（不含 `/admin/` 路径与通配符）。初始化命令需要包含本票脚本的新镜像和交互终端；在 API 容器的 `/app` 工作目录直接运行 `node dist-openapi/scripts/admin-init.js`，不在生产镜像内使用 pnpm 编译。仅填部署配置不会创建管理员账号。
+容器部署从受保护的部署目录 `.env` 读取上述配置，`compose.deploy.yaml` 显式透传到 API。样例保持空 Origin。管理端位于 `/admin/`，`ADMIN_ALLOWED_ORIGINS` 填该页面的精确 HTTPS Origin，例如 `https://<正式域名>`。启用前先评估共享 `.env` 对历史发布指纹的影响，见[发布恢复](deployment.md#成功历史更新失败与回滚)。
+
+首次上线时，确认当前 API 已迁移且没有可用管理员，再从受控交互终端用当前版本的 Compose 项目执行 `exec api node dist-openapi/scripts/admin-init.js`（保留 TTY，API 工作目录为 `/app`）。操作成功后，在管理端操作记录核对 `account.create` 成功审计。生产镜像已包含编译产物。
+
+排查登录时先核对浏览器实际 Origin 和 HTTPS 证书。登录或写操作 403 时检查 Origin，已登录的写操作同时核对会话 CSRF。会话接口 401 时检查请求是否在同源 `/api/v1/admin` 下且浏览器接受并发送了 Secure Cookie。记录状态码和请求 ID，避免导出 Cookie、CSRF 和密码。
 
 三个预算均为 PostgreSQL 持久化的60秒固定窗口；失败同样计数，跨窗口边界最多可能出现双倍瞬时预算。先检查全局预算，再分配账号／来源键，避免随机用户名无限增加窗口行；旧管理员窗口在下次登录时清理，保留约1小时。管理员键有独立前缀，不与学生键混用。来源取 Fastify `request.ip`，仅 `API_TRUSTED_PROXY_CIDRS` 明确允许的最近一跳代理可提供转发来源；不能无条件相信 `X-Forwarded-For`。
 

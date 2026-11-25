@@ -18,7 +18,7 @@ TCR 推送的有限重试和状态诊断避免了无限等待，但最近一次 
 → 成功记录版本；失败恢复旧应用
 ```
 
-CI 重用冒烟后的同一份 API 与 uni H5 镜像，不重新构建；artifact 按提交 SHA 和 CI attempt 命名，保留 **7 天**。清单绑定仓库、SHA、CI run/attempt、平台、归档 SHA-256 与字节长度、API/Web 完整标签及 image ID。服务器最多保留 **三个成功版本**（当前版和前两个成功版本）。新 CI 不再向 GHCR/TCR 上传镜像；旧镜像与 digest 清单保留供旧版本兼容恢复。PostgreSQL `17.10-bookworm` 仍是单独镜像依赖，缺失时显式准备，版本与数据卷不变。
+CI 直接归档通过冒烟的 API 与 Web 两个镜像，Web 内含 H5 和管理端。artifact 按提交 SHA 和 CI attempt 命名，保留 **7 天**。清单绑定仓库、SHA、CI run/attempt、平台、归档 SHA-256 与字节长度、API/Web 完整标签及 image ID。服务器最多保留 **三个成功版本**（当前版和前两个成功版本）。新 CI 不再向 GHCR/TCR 上传镜像；旧镜像与 digest 清单保留供旧版本兼容恢复。PostgreSQL `17.10-bookworm` 仍是单独镜像依赖，缺失时显式准备，版本与数据卷不变。
 
 ## 主机准备与首次演练
 
@@ -95,6 +95,8 @@ gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
 
 新受信控制器与目标版本配置分离：以新控制器解释 `current.json`，使用目标版本的 Compose/Nginx/TLS 配置启动对应镜像。旧 `current.json` 若只有单个 previous SHA，先核实真实运行容器、镜像、历史配置和清单；不能把目录直接列为成功历史。证据不足时维持当前应用并停止自动更新。
 
+候选版本的镜像冒烟检查 `/admin/`，历史镜像按该版本的 H5 和 API 健康契约恢复。若共享 `.env` 的 `ADMIN_ALLOWED_ORIGINS` 从空值调整为正式 Origin，旧版本的 Compose 也会读取新值，可能改变已登记的有效配置指纹。变更前在隔离环境用历史版本目录和计划配置比较指纹。如果漂移，停止常规发布，先审阅主机维护方案，核实当前运行配置、数据库与备份，以及历史版本的可恢复性。保留配置指纹门禁与历史记录。
+
 ## HTTP 与 HTTPS
 
 ### 统一身份认证、管理端与 Android 环境变量配置
@@ -107,6 +109,16 @@ gh workflow run deploy.yml --repo HeHuoDa/HeHuoDa --ref main \
 - **Android APK 与 H5 API 基址**：H5 由 Nginx 同源 `/api/v1/` 代理并提供静态回退，`/admin/` 深路由回退至管理端 `index.html`（静态资源缺失返回 404，#215 验收）。**Android APK 正式构建的 `VITE_API_BASE_URL` 必须是服务器完整 HTTPS API 地址**（禁止关闭 TLS 校验或使用相对地址）；正式 APK 通过独立 HTTPS 入口分发并校验 SHA-256 摘要（#228）。
 
 HTTP 测试与正式 HTTPS 分开验收。证书置于主机受控目录，通过 `.env` 的 `TLS_CERT_DIR`、`HTTP_PORT`、`HTTPS_PORT` 配置；Deploy 使用 `DEPLOY_TLS=true` 与 HTTPS 的 `DEPLOY_PUBLIC_URL` 选择 TLS Compose。Nginx 挂载证书只读，以 TLS 1.2/1.3 终止 HTTPS 并将 HTTP 308 跳转。证书在镜像外申请和续期，禁止把私钥烘焙进镜像。续期后先运行 `nginx -t` 再 reload 并检查公开入口；不以跳过 TLS 校验或自签证书代替正式验收。
+
+### 管理端候选版本与实站验证
+
+Web 镜像内的 H5 入口为 `/usr/share/nginx/html/index.html`，管理端入口为同一目录下的 `admin/index.html`。HTTP 与 TLS 共用应用路由规则。`/admin` 跳转到 `/admin/`，管理入口及深链 HTML 使用 `no-store`。带内容哈希的资源长期缓存，缺失资源返回 404。
+
+1. 获准操作实站后，先确认 #58 的正式域名、可信证书与管理员条件，按 #227 核对正式开放的网络与可信代理前置，并按 #143 确认归档接收路径。使用已过镜像冒烟的同一提交 SHA 的归档，记录 SHA 和两镜像身份。
+2. 通过现有发布流程准备、校验并激活。运行 `nginx -t`，核对跳转、管理入口与深链刷新、HTML 缓存头、资源 404，确认 H5 和公开 API 仍可用。
+3. 核对管理员是否已存在。需初始化时按[认证说明](admin-auth.md#初始化与配置)使用已迁移的当前 API 容器和交互终端，确认创建审计。
+4. 在管理端登录，创建受控测试比赛草稿。在独立匿名窗口核对 H5 首页无此记录、详情不可见。发布后复查首页和详情，隐藏后再次核对两处不可见。退出后刷新管理深链，确认要求重新登录。
+5. 保留脱敏证据和部署 SHA，记录发布、隐藏和退出结果，结束时确认测试项保持隐藏。
 
 ## 数据库备份与日常运维
 
