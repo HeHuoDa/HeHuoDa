@@ -117,8 +117,7 @@ export function createDiscoveryController(
       };
       return load();
     },
-    resume() {
-      return state.status === "idle" ? load() : Promise.resolve();
-    },
+    // 返回保留筛选条件的页面时重新查公开状态，学院目录仍在页面内复用。
+    resume: load,
   };
 }

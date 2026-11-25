@@ -167,3 +167,39 @@ test("实际页面等待 onReady 和详情渲染后定位；定位失败仍保�
     globalThis.uni = original;
   }
 });
+
+test("从收藏返回已打开的详情时重新查询，隐藏后显示未找到", async () => {
+  const original = globalThis.uni;
+  const requests = [];
+  globalThis.uni = {
+    request(options) {
+      requests.push(options);
+      return { abort() {} };
+    },
+  };
+  Object.values(hooks).forEach((list) => {
+    list.length = 0;
+  });
+  const scope = effectScope();
+  setActivePinia(createPinia());
+  const page = scope.run(() => Page.setup({}, { expose() {} }));
+  try {
+    hooks.load.forEach((fn) => fn({ id: "competition-a" }));
+    hooks.show.forEach((fn) => fn());
+    requests[0].success({ statusCode: 200, data: detail() });
+    await flush();
+    assert.equal(page.state.status, "ready");
+
+    hooks.hide.forEach((fn) => fn());
+    hooks.show.forEach((fn) => fn());
+    assert.equal(requests.length, 2);
+    requests[1].success({ statusCode: 404, data: { code: "NOT_FOUND" } });
+    await flush();
+    assert.equal(page.state.status, "missing");
+    assert.equal(page.competition.value, null);
+  } finally {
+    hooks.unload.forEach((fn) => fn());
+    scope.stop();
+    globalThis.uni = original;
+  }
+});
