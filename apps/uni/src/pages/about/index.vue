@@ -100,13 +100,13 @@ const steps = [
           >
         </view>
         <view class="about-capability">
-          <text class="about-status about-status--pending">M2 开放</text>
+          <text class="about-status">H5 已开放</text>
           <text class="about-item-title">统一身份认证登录</text>
           <text class="about-copy"
-            >登录将只使用四川农业大学统一身份认证，首次认证时创建账号，默认昵称为「禾伙搭用户」。开放前不需要注册，也不会收集邮箱、密码或验证码。</text
+            >H5 端已接入四川农业大学统一身份认证唯一登录，首次登录自动创建账号，默认昵称为「禾伙搭用户」，并可在个人中心修改并持久化保存昵称。</text
           >
           <text class="about-copy"
-            >当前无需登录即可浏览公开比赛信息；登录开放后会另行说明告知版本与资料保存范围。</text
+            >不登录也可以继续浏览公开比赛信息与使用会话内临时收藏；密码与验证码仅用于当次向学校校验，不在本地存储。</text
           >
         </view>
       </view>
@@ -116,7 +116,7 @@ const steps = [
           >把联系方式的选择权留给你</text
         >
         <text class="about-copy"
-          >当前版本不收集、不展示任何联系方式，也不提供联系方式授权开关。登录与组队开放前，请通过比赛官方通知中的渠道联系组织单位。</text
+          >当前版本不收集、不展示任何联系方式，也不提供联系方式授权开关。组队能力开放前，请通过比赛官方通知中的渠道联系组织单位。</text
         >
       </view>
 

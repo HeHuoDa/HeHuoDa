@@ -8,6 +8,15 @@ import { nextTick } from "vue";
 import { mount, textOf } from "./component-host.mjs";
 import { useNavigationStore } from "../src/stores/navigation.ts";
 
+const CLIENT_DOUBLE = `
+import { createHttpClient } from "./http.ts";
+const transport = () => ({ abort() {} });
+const readConfig = () => ({ baseUrl: "/api/v1", timeout: 5000 });
+export const http = createHttpClient(transport, readConfig);
+export const authedHttp = createHttpClient(transport, readConfig);
+export function bindAuthSession() {}
+`;
+
 const loader = registerHooks({
   resolve(specifier, context, next) {
     if (specifier.startsWith(".") && !extname(specifier)) {
@@ -16,10 +25,15 @@ const loader = registerHooks({
     }
     return next(specifier, context);
   },
+  load(url, context, next) {
+    if (url.endsWith("/src/api/client.ts"))
+      return { format: "module", shortCircuit: true, source: CLIENT_DOUBLE };
+    return next(url, context);
+  },
 });
 after(() => loader.deregister());
 
-test("关于页公开展示真实查询、会话保留、暂缓组队与统一认证未开放，Logo 失败仍可阅读", async () => {
+test("关于页公开展示真实查询、会话保留、暂缓组队与 H5 统一身份认证已开放，Logo 失败仍可阅读", async () => {
   setActivePinia(createPinia());
   const app = await mount("../src/pages/about/index.vue");
   try {
@@ -34,6 +48,7 @@ test("关于页公开展示真实查询、会话保留、暂缓组队与统一�
       /刷新.*清空/s,
       /暂缓开放/,
       /组队与招募/,
+      /H5 已开放/,
       /统一身份认证/,
       /禾伙搭用户/,
       /不收集、不展示任何联系方式/,
@@ -116,14 +131,18 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
     const originalPages = globalThis.getCurrentPages;
     const destinations = [];
     globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
-    globalThis.uni = { navigateTo: ({ fail }) => fail() };
+    globalThis.uni = {
+      getSystemInfoSync: () => ({
+        uniPlatform: platform === "H5" ? "web" : "mp-weixin",
+      }),
+      navigateTo: ({ fail }) => fail(),
+    };
     const app = await mount(
       "../src/components/ProfileOverview.vue",
       {},
       platform,
     );
     const activate = async () => {
-      // 关于入口已收进账号下拉：先点图标，再点条目。
       const trigger = app.find(
         (node) =>
           node.props.role === "button" &&
@@ -142,7 +161,12 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
     try {
       await activate();
       assert.match(textOf(app.container), /暂时无法打开关于页面，请重试/);
-      globalThis.uni = { navigateTo: ({ url }) => destinations.push(url) };
+      globalThis.uni = {
+        getSystemInfoSync: () => ({
+          uniPlatform: platform === "H5" ? "web" : "mp-weixin",
+        }),
+        navigateTo: ({ url }) => destinations.push(url),
+      };
       await activate();
       assert.deepEqual(destinations, ["/pages/about/index"]);
       assert.doesNotMatch(textOf(app.container), /暂时无法打开关于页面/);
