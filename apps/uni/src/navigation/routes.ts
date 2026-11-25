@@ -53,7 +53,7 @@ export const routeRegistry = {
     status: "baseline",
     source: null,
     description:
-      "M1 统一身份认证尚未开放；本页只说明当前免登录浏览范围与后续开放计划。",
+      "H5 接入学校统一身份认证统一登录流程；非 H5 端待对应任务接入。",
   },
   "source-webview": {
     name: "source-webview",
@@ -89,7 +89,7 @@ export const routeRegistry = {
     kind: "tab",
     status: "baseline",
     source: "/profile",
-    description: "查看免登录示例资料与收藏入口，了解统一身份认证开放计划。",
+    description: "查看学校账号状态与昵称设置，并管理本地临时收藏。",
   },
   "competition-detail": {
     name: "competition-detail",
@@ -152,7 +152,7 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/login",
-    description: "学校统一身份认证即将开放，当前免登录浏览比赛信息。",
+    description: "H5 通过学校统一身份认证登录；不登录也可继续浏览公开比赛。",
   },
   register: {
     name: "register",
@@ -161,7 +161,7 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: "/register",
-    description: "不开放单独注册，后续只通过学校统一身份认证首次登录自动建号。",
+    description: "不开放单独注册，H5 直接通过学校统一身份认证首次登录自动建号。",
   },
   "not-found": {
     name: "not-found",

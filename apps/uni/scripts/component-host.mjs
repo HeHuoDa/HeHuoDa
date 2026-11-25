@@ -53,6 +53,7 @@ export async function component(file, platform = "MP-WEIXIN") {
     inlineTemplate: true,
     templateOptions: {
       compilerOptions: {
+        hoistStatic: false,
         isCustomElement: (tag) =>
           [
             "view",
@@ -102,6 +103,7 @@ export async function mount(file, props = {}, platform = "MP-WEIXIN") {
     props: {},
     children: [],
     parent: null,
+    focus() {},
   });
   const renderer = createRenderer({
     createElement: create,
@@ -129,6 +131,17 @@ export async function mount(file, props = {}, platform = "MP-WEIXIN") {
         0,
         node,
       );
+    },
+    insertStaticContent(content, parent, anchor) {
+      const node = create("#static", content);
+      node.parent = parent;
+      const index = anchor ? parent.children.indexOf(anchor) : -1;
+      parent.children.splice(
+        index < 0 ? parent.children.length : index,
+        0,
+        node,
+      );
+      return [node, node];
     },
     remove(node) {
       node.parent.children.splice(node.parent.children.indexOf(node), 1);

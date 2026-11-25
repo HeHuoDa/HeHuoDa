@@ -9,9 +9,8 @@ import { mount, textOf } from "./component-host.mjs";
 import { resolveReturnTarget } from "../src/navigation/return-target.ts";
 
 /**
- * 登录面板测试：用平台替身替换请求传输与微信登录，验证用户可见行为。
- * client.ts 在 Vite 构建时读取 import.meta.env，Node 测试下没有该对象，
- * 因此这里把共享客户端替换成固定配置的等价实现，其余链路保持真实。
+ * 学校唯一登录面板组件测试（H5）：用平台替身替换底层传输，验证表单交互、
+ * Cookie+CSRF 提交、内存凭据、告知版本变化与平台存储隔离。
  */
 const CLIENT_DOUBLE = `
 import { createHttpClient } from "./http.ts";
@@ -21,10 +20,12 @@ export const http = createHttpClient(transport, readConfig);
 export const authedHttp = createHttpClient(transport, readConfig, {
   accessToken: () => globalThis.__authAccessToken?.() ?? null,
   refresh: () => globalThis.__authRefresh?.(),
+  generation: () => globalThis.__authGeneration?.() ?? 0,
 });
 export function bindAuthSession(session) {
   globalThis.__authAccessToken = session.accessToken;
   globalThis.__authRefresh = session.refresh;
+  globalThis.__authGeneration = session.generation;
 }
 `;
 
@@ -46,43 +47,46 @@ after(() => loader.deregister());
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-const credential = {
+const h5Credential = {
   kind: "active",
-  user: { id: "u1", nickname: "微信用户", status: "active" },
-  accessToken: "at-1",
-  refreshToken: "rt-1",
-  accessExpiresAt: "2026-10-25T12:15:00.000Z",
-  sessionExpiresAt: "2026-11-24T12:00:00.000Z",
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
+  accessToken: "at-school-1",
+  accessExpiresAt: "2099-01-01T00:15:00.000Z",
+  sessionExpiresAt: "2099-02-01T00:00:00.000Z",
 };
 const profile = {
-  user: { id: "u1", nickname: "微信用户", status: "active" },
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
   campus: {
-    status: "unverified",
-    termId: null,
-    verifiedAt: null,
-    validUntil: null,
+    status: "valid",
+    termId: "2026-fall",
+    verifiedAt: "2026-10-25T10:00:00.000Z",
+    validUntil: "2027-01-31T16:00:00.000Z",
   },
   availability: { teaming: false },
 };
+const challengePayload = (version = "c1") => ({
+  id: "tx-1",
+  status: "waiting",
+  expiresAt: "2099-01-01T00:10:00.000Z",
+  reason: null,
+  holderToken: "ht-1",
+  challenge: {
+    version,
+    imageDataUrl: "data:image/png;base64,AA==",
+    expiresAt: "2099-01-01T00:05:00.000Z",
+  },
+});
 
-/** 平台替身：记录请求、模拟微信登录结果与小程序存储。 */
-function installPlatform({ login = "ok", platform = "mp-weixin" } = {}) {
+function installPlatform({ platform = "web" } = {}) {
   const requests = [];
   const storage = new Map();
-  const calls = { login: 0, switchTab: 0, redirect: 0 };
+  const calls = { switchTab: 0, redirect: 0 };
   globalThis.__uniRequest = (options) => {
     requests.push(options);
     return { abort() {} };
   };
   globalThis.uni = {
     getSystemInfoSync: () => ({ uniPlatform: platform }),
-    login(options) {
-      calls.login += 1;
-      if (login === "ok") options.success({ code: "wx-code" });
-      else if (login === "cancel")
-        options.fail({ errMsg: "login:fail cancel" });
-      else options.fail({ errMsg: "login:fail system error" });
-    },
     getStorageSync: (key) => storage.get(key) ?? "",
     setStorageSync: (key, value) => storage.set(key, value),
     removeStorageSync: (key) => storage.delete(key),
@@ -100,126 +104,161 @@ function installPlatform({ login = "ok", platform = "mp-weixin" } = {}) {
   return { requests, storage, calls };
 }
 
-async function openPanel(props = {}) {
+async function openPanel(props = {}, platform = installPlatform()) {
   setActivePinia(createPinia());
-  const app = await mount("../src/components/WechatLoginPanel.vue", props);
+  const app = await mount("../src/components/SchoolLoginPanel.vue", props, "H5");
+  await tick();
+  // policy + challenge
+  assert.equal(platform.requests[0].url, "/api/v1/campus-verification/policy");
+  platform.requests[0].success({
+    statusCode: 200,
+    data: { version: 2, content: "学校统一身份认证隐私说明" },
+  });
+  await tick();
+  assert.equal(platform.requests[1].url, "/api/v1/auth/school/challenges");
+  platform.requests[1].success({
+    statusCode: 201,
+    data: challengePayload("c1"),
+  });
+  await tick();
+  await nextTick();
+
   const text = () => textOf(app.container);
   const button = (label) => {
     const node = app.find(
-      (n) => n.type === "button" && textOf(n).includes(label),
+      (n) =>
+        (n.type === "button" || n.props.role === "button") &&
+        textOf(n).includes(label),
     );
     assert.ok(node, `找不到按钮：${label}`);
     return node;
   };
   const consent = () =>
     app.find((node) => node.props.role === "checkbox") ??
-    assert.fail("找不到协议勾选");
-  return { app, text, button, consent };
+    assert.fail("找不到说明勾选框");
+  const input = async (id, value) => {
+    const node = app.find((n) => n.type === "input" && n.props.id === id);
+    assert.ok(node, `找不到输入框：${id}`);
+    node.props.onInput({ target: { value } });
+    await nextTick();
+  };
+  return { app, text, button, consent, input, platform };
 }
 
-test("未勾选协议时登录按钮不可用，勾选后才允许发起微信登录", async () => {
-  const platform = installPlatform();
+test("缺字段或未勾选说明时禁止提交，补齐且勾选后才允许提交", async () => {
   const panel = await openPanel();
-  assert.equal(panel.button("微信一键登录").props.disabled, true);
-  assert.match(panel.text(), /勾选同意后可登录/);
-  assert.equal(platform.calls.login, 0);
+  try {
+    const submitBtn = panel.button("学校账号登录");
+    assert.equal(submitBtn.props["aria-disabled"], true);
 
-  panel.consent().props.onClick();
-  await nextTick();
-  assert.equal(panel.button("微信一键登录").props.disabled, false);
-  assert.equal(platform.calls.login, 0);
-  assert.equal(platform.requests.length, 0);
+    await panel.input("school-name", " 张三 ");
+    await panel.input("school-account", " 20240001 ");
+    await panel.input("school-password", "pw-123");
+    await panel.input("school-captcha", "abcd");
+    assert.equal(
+      panel.button("学校账号登录").props["aria-disabled"],
+      true,
+      "未勾选仍禁用",
+    );
+
+    panel.consent().props.onClick();
+    await nextTick();
+    assert.equal(panel.button("学校账号登录").props["aria-disabled"], false);
+  } finally {
+    panel.app.unmount();
+  }
 });
 
-test("登录成功只保存刷新凭据并显示真实账号昵称", async () => {
-  const platform = installPlatform();
+test("H5 学校登录带 withCredentials+CSRF、密码不写入存储并刷新资料后回跳", async () => {
   const panel = await openPanel();
-  panel.consent().props.onClick();
-  await nextTick();
-  panel.button("微信一键登录").props.onClick();
-  await tick();
+  try {
+    await panel.input("school-name", " 张三 ");
+    await panel.input("school-account", " 20240001 ");
+    await panel.input("school-password", "  pw-secret  ");
+    await panel.input("school-captcha", "1234");
+    panel.consent().props.onClick();
+    await nextTick();
 
-  assert.equal(platform.calls.login, 1);
-  assert.equal(platform.requests.length, 1);
-  assert.equal(platform.requests[0].method, "POST");
-  assert.equal(platform.requests[0].url, "/api/v1/auth/wechat/login");
-  assert.deepEqual(platform.requests[0].data, {
-    code: "wx-code",
-    consentVersion: 1,
-  });
+    panel.button("学校账号登录").props.onClick();
+    await tick();
+    await nextTick();
 
-  platform.requests[0].success({ statusCode: 200, data: credential });
-  await tick();
-  assert.equal(platform.requests[1].method, "GET");
-  assert.equal(platform.requests[1].url, "/api/v1/auth/me");
-  platform.requests[1].success({ statusCode: 200, data: profile });
-  await tick();
-  await nextTick();
+    // 提交后页面密码与验证码立即清空
+    assert.equal(
+      panel.app.find((n) => n.props.id === "school-password")?.props.value ?? "",
+      "",
+    );
+    assert.equal(
+      panel.app.find((n) => n.props.id === "school-captcha")?.props.value ?? "",
+      "",
+    );
 
-  assert.equal(platform.storage.get("hehuoda.auth.refresh"), "rt-1");
-  assert.equal([...platform.storage.keys()].length, 1, "只保存刷新凭据");
-  assert.match(panel.text(), /已登录：微信用户/);
-  // 返回上一页：登录页是栈底时回首页，不跳到任意地址。
-  assert.equal(platform.calls.switchTab, 1);
+    const submitReq = panel.platform.requests[2];
+    assert.equal(submitReq.method, "POST");
+    assert.equal(
+      submitReq.url,
+      "/api/v1/auth/school/challenges/tx-1/submit/h5",
+    );
+    assert.equal(submitReq.withCredentials, true);
+    assert.equal(submitReq.header["X-Refresh-CSRF"], "1");
+    assert.equal(submitReq.header.Authorization, undefined);
+    assert.deepEqual(submitReq.data, {
+      holderToken: "ht-1",
+      name: "张三",
+      account: "20240001",
+      password: "  pw-secret  ",
+      captcha: "1234",
+      challengeVersion: "c1",
+      consentVersion: 2,
+    });
+
+    submitReq.success({
+      statusCode: 200,
+      data: {
+        id: "tx-1",
+        status: "succeeded",
+        expiresAt: "2099-01-01T00:10:00.000Z",
+        reason: null,
+        credential: h5Credential,
+      },
+    });
+    await tick();
+
+    const meReq = panel.platform.requests[3];
+    assert.equal(meReq.method, "GET");
+    assert.equal(meReq.url, "/api/v1/auth/me");
+    assert.equal(meReq.header.Authorization, "Bearer at-school-1");
+    meReq.success({ statusCode: 200, data: profile });
+    await tick();
+    await nextTick();
+
+    assert.equal(panel.platform.storage.size, 0, "H5 不向本地存储写任何凭据");
+    assert.match(panel.text(), /已登录：禾伙搭用户/);
+    assert.equal(panel.platform.calls.switchTab, 1);
+  } finally {
+    panel.app.unmount();
+  }
 });
 
-test("连点只发一次登录请求，进行中按钮不可再次触发", async () => {
-  const platform = installPlatform();
+test("点击换一张刷新验证码并清除旧验证码输入", async () => {
   const panel = await openPanel();
-  panel.consent().props.onClick();
-  await nextTick();
-  const submit = panel.button("微信一键登录");
-  submit.props.onClick();
-  submit.props.onClick();
-  await tick();
-  assert.equal(platform.calls.login, 1);
-  assert.equal(platform.requests.length, 1);
-});
+  try {
+    await panel.input("school-captcha", "old1");
+    panel.button("换一张").props.onClick();
+    await tick();
+    await nextTick();
 
-test("取消微信授权给出真实状态且不发起请求", async () => {
-  const platform = installPlatform({ login: "cancel" });
-  const panel = await openPanel();
-  panel.consent().props.onClick();
-  await nextTick();
-  panel.button("微信一键登录").props.onClick();
-  await tick();
-  assert.equal(platform.requests.length, 0);
-  assert.match(panel.text(), /已取消微信登录/);
-});
-
-test("限流与服务关闭按公开错误码反馈，不假装成功", async () => {
-  const limited = installPlatform();
-  const panel = await openPanel();
-  panel.consent().props.onClick();
-  await nextTick();
-  panel.button("微信一键登录").props.onClick();
-  await tick();
-  limited.requests[0].success({
-    statusCode: 429,
-    data: {
-      code: "TOO_MANY_REQUESTS",
-      message: "请求过于频繁",
-      details: { retryAfterSeconds: 30 },
-    },
-  });
-  await tick();
-  await nextTick();
-  assert.match(panel.text(), /请求过于频繁，请 30 秒后再试/);
-
-  const closed = installPlatform();
-  const second = await openPanel();
-  second.consent().props.onClick();
-  await nextTick();
-  second.button("微信一键登录").props.onClick();
-  await tick();
-  closed.requests[0].success({
-    statusCode: 503,
-    data: { code: "WECHAT_LOGIN_UNAVAILABLE", message: "未开放" },
-  });
-  await tick();
-  await nextTick();
-  assert.match(second.text(), /微信登录暂未开放/);
-  assert.equal(closed.storage.size, 0);
+    assert.equal(
+      panel.app.find((n) => n.props.id === "school-captcha").props.value,
+      "",
+    );
+    const refreshReq = panel.platform.requests[2];
+    assert.equal(refreshReq.url, "/api/v1/auth/school/challenges/tx-1/captcha");
+    refreshReq.success({ statusCode: 200, data: challengePayload("c2") });
+    await tick();
+  } finally {
+    panel.app.unmount();
+  }
 });
 
 test("只有微信小程序分支保存刷新凭据，H5 使用空存储", async () => {
