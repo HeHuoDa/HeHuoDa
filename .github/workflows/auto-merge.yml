@@ -1,25 +1,33 @@
 name: Auto-merge
 
 on:
+  pull_request_target:
+    branches: [main]
+    types: [ready_for_review]
   workflow_run:
     workflows: [CI]
     types: [completed]
 
 permissions:
   actions: write
+  checks: read
   contents: write
   pull-requests: write
-
-concurrency:
-  group: auto-merge-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
+  statuses: read
 
 jobs:
   auto-merge:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    concurrency:
+      group: auto-merge-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -28,30 +36,56 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          READY_PR: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
           set -euo pipefail
 
-          prs=$(gh pr list --repo "$GH_REPO" --base main \
-            --head "$HEAD_BRANCH" --state open \
-            --json number,headRefOid,isDraft,isCrossRepository \
-            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\" and .isDraft == false and .isCrossRepository == false) | .number")
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if [[ -n "$READY_PR" ]]; then
+            prs=$READY_PR
+          else
+            prs=$(gh pr list --repo "$GH_REPO" --base main \
+              --head "$HEAD_BRANCH" --state open \
+              --json number,headRefOid,isDraft,isCrossRepository \
+              --jq ".[] | select(.headRefOid == \"$HEAD_SHA\" and .isDraft == false and .isCrossRepository == false) | .number")
+          fi
 
           if [[ -z "$prs" ]]; then
             echo "No eligible PR for this verified commit."
             exit 0
           fi
 
-          default_branch=$(gh repo view "$GH_REPO" --json defaultBranchRef \
-            --jq '.defaultBranchRef.name')
-
           while IFS= read -r pr; do
+            if [[ -n "$READY_PR" ]]; then
+              # 使用 GitHub 当前的 PR 合并状态和必需检查，避免复用已落后于 main 的结果。
+              current_head=$(gh pr view "$pr" --repo "$GH_REPO" \
+                --json state,baseRefName,headRefOid,isDraft,isCrossRepository,mergeStateStatus \
+                --jq 'select(.state == "OPEN" and .baseRefName == "main" and
+                  .isDraft == false and .isCrossRepository == false and
+                  (.mergeStateStatus | IN("CLEAN", "BLOCKED", "HAS_HOOKS", "UNSTABLE"))) | .headRefOid')
+              if [[ "$current_head" != "$HEAD_SHA" ]]; then
+                echo "PR #$pr changed or is ineligible for Ready auto-merge."
+                continue
+              fi
+
+              if ! gate_passed=$(gh pr checks "$pr" --repo "$GH_REPO" --required \
+                  --json name,workflow,state \
+                  --jq 'map(select(.name == "ci-gate" and .workflow == "CI"))
+                    | length > 0 and all(.state == "SUCCESS")') || [[ "$gate_passed" != "true" ]]; then
+                echo "PR #$pr has no verified required CI gate yet."
+                continue
+              fi
+            fi
+
             gh pr merge "$pr" --repo "$GH_REPO" --auto --merge \
               --match-head-commit "$HEAD_SHA"
 
             # --auto 可能只启用等待合并；未实际合并时必须保留来源分支。
+            default_branch=$(gh repo view "$GH_REPO" --json defaultBranchRef \
+              --jq '.defaultBranchRef.name')
             pr_info=$(gh pr view "$pr" --repo "$GH_REPO" \
               --json state,headRefOid,headRefName,isCrossRepository \
               --jq '[.state, .headRefOid, .headRefName, .isCrossRepository] | @tsv')
