@@ -94,6 +94,9 @@ pnpm --filter @hehuoda/uni dev:app
 
 - 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`、`build:mp-weixin`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。
 - 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（`CompetitionSourceAction.vue` 目前只有 H5 与 MP-WEIXIN 分支）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
+- #83 新增 `APP-PLUS` 组件宿主断言时发现 `FormButton` 只有 `#ifdef H5` 与 `#ifdef MP-WEIXIN` 两个分支，App-Plus 下按钮整体不渲染（暂缓页主要操作在 Android 上不可见）。已把 H5 分支改为 `#ifndef MP-WEIXIN`，因为 H5 与 App-Plus 都是 webview 渲染、共用同一套键盘可达写法；微信分支不动。
+- 上述 `FormButton` 改动是 #83 门禁建设过程中发现的既有阻断缺陷，不是主动的视觉改版：**H5 端渲染结果与改动前完全相同，无 UI 视觉变更，H5 视口与交互验收仍归 #84**；Android（App-Plus）端从“按钮完全不渲染”变为渲染 `.hhr-button` 视图按钮，但该效果**未经真机验证**（本机无 Android 设备），当前仅有组件宿主替身中的节点与 `onClick` 断言。Android 真机上的 320/375/390/430px 布局、至少 44px 触控区域、各状态与长文本换行，以及硬件返回键与安全区，统一归 #226 真机矩阵验收，本任务不以编译通过或组件宿主测试替代真机证据。
+- 同类缺陷尚未修复：`FormInput`、`FormPicker`、`FormDialog` 的 H5 分支同样在 App-Plus 下不生效，需要 Android 侧适配实现，超出 #83 范围，归 #226 或 #220 处理；#83 不修改这三个组件的条件编译分支。
 - 开屏目前使用 DCloud 默认启动主题（`app-plus.splashscreen.autoclose`），只有 160×160 的产品 Logo（`src/static/hehuoda-logo.png`，4 倍密度的 40px 场景），**没有**按各密度准备的原生启动图与图标，不在本阶段伪造。
 
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）

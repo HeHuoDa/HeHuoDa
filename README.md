@@ -132,6 +132,37 @@ pnpm --filter @hehuoda/uni preview:h5   # 监听 127.0.0.1:5176，仅托管静�
 
 样式基线页为 `/#/pages/style/index`，健康页为 `/#/pages/health/index`，关于页为 `/#/pages/about/index`。
 
+#### 双端构建门禁本地复跑（#83）
+
+CI 的 `quality` 作业实际编译 H5 与 App-Plus 两端资源，不依赖微信 AppID、HBuilderX 或 Android SDK。本地用同一组命令复跑（PowerShell，先清掉本机残留变量，避免旧 `.env.local` 干扰）：
+
+```powershell
+Remove-Item Env:UNI_MP_WEIXIN_APPID -ErrorAction SilentlyContinue
+$env:VITE_API_BASE_URL = '/api/v1'
+pnpm build                                        # 递归构建，含 H5
+$env:VITE_API_BASE_URL = 'https://api.hehuoda.test/api/v1'
+$env:VITE_API_TIMEOUT_MS = '15000'
+$env:UNI_RELEASE = 'false'
+$env:UNI_ANDROID_PACKAGE_NAME = 'com.example.hehuoda'
+pnpm --filter @hehuoda/uni build:app
+```
+
+Bash（与 CI 步骤级 `env` 等价）：
+
+```bash
+env -u UNI_MP_WEIXIN_APPID VITE_API_BASE_URL=/api/v1 pnpm build
+env -u UNI_MP_WEIXIN_APPID VITE_API_BASE_URL=https://api.hehuoda.test/api/v1 \
+  VITE_API_TIMEOUT_MS=15000 UNI_RELEASE=false UNI_ANDROID_PACKAGE_NAME=com.example.hehuoda \
+  pnpm --filter @hehuoda/uni build:app
+```
+
+- **所需变量**：H5 只用同源 `VITE_API_BASE_URL=/api/v1`；App-Plus 额外要求完整 HTTPS `VITE_API_BASE_URL`、可选 `VITE_API_TIMEOUT_MS`（`1–60000`）与 `UNI_ANDROID_PACKAGE_NAME`。`api.hehuoda.test` 是保留测试域，仅用于编译，不连通、也不是正式服务。
+- **产物**：H5 为 `apps/uni/dist/build/h5/index.html`，App-Plus 资源为 `apps/uni/dist/build/app/manifest.json` 与 `app-service.js`（**不是 APK**）。两者共用生成的 `apps/uni/src/manifest.json`，必须**顺序**执行、不要并发；生成目录与 manifest 均在 `.gitignore` 中，不提交。
+- **失败路径**：把 App 的 `VITE_API_BASE_URL` 改成 `/api/v1`，或把 `VITE_API_TIMEOUT_MS` 改成 `60001`，`build:app` 会非零退出并指出变量名与约束；错误时旧产物可能仍留在磁盘，成功与否只看退出码。
+- **默认构建链**：`pnpm --filter @hehuoda/uni build` 现在只跑工具链预检 + H5；App-Plus 由 CI 下一步和上面的本地命令独立编译。`build:mp-weixin` 仍是显式命令，但已不是默认门禁的一部分。
+- **工具链检查分层**：`check:toolchain` 默认只校验 H5、App-Plus 与共用依赖；微信专用包与 `uni-mp-vue` 内嵌运行时改由 `pnpm --filter @hehuoda/uni check:toolchain --include-legacy-weixin` 显式校验（#224 清理目标）。
+- **静态防退化规则**：`pnpm lint` 用 `no-restricted-syntax`（脚本与 Vue 模板）与 `no-restricted-imports` 拦截生产源码直接使用 `localStorage`/`sessionStorage`、`uni.*Storage*` 明文存储、微信全局 `wx` 与 `uni.login`/`*Weixin*` 入口，以及导入旧微信登录适配器或 `@dcloudio/uni-mp-weixin`。受控例外只有三处：`src/auth/h5-tab-sync.ts`（协调元数据）、`src/auth/platform-storage.ts`（遗留端适配器）、`src/auth/wechat-login.ts`（`uni.login`）；规则回归测试见 `apps/uni/scripts/cross-platform-lint.test.mjs`。
+
 ### 管理端（`apps/admin`）
 
 - 仅面向桌面浏览器（1024px / 1440px）使用；Cookie 会话（`hh_admin_session`）、`Origin`、`X-CSRF-Token` 及同源 `BroadcastChannel` 跨标签失效机制见[管理员认证说明](docs/admin-auth.md)与[管理端前端说明](docs/admin-frontend.md)。

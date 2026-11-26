@@ -57,7 +57,19 @@ jobs:
       - run: pnpm api:generate
       - run: git diff --exit-code -- apps/api/openapi.json packages/api-types/src/generated/schema.d.ts
       - run: pnpm typecheck
-      - run: pnpm build
+      # H5 使用同源 API（部署契约），与 Android 的完整 HTTPS 分开注入，避免两目标互相污染。
+      - name: Build workspace including the H5 client
+        env:
+          VITE_API_BASE_URL: /api/v1
+        run: pnpm build
+      # 顺序执行：同一工作区共用生成的 manifest，两个目标不能并发构建。
+      - name: Build the Android App-Plus resources
+        env:
+          VITE_API_BASE_URL: https://api.hehuoda.test/api/v1
+          VITE_API_TIMEOUT_MS: "15000"
+          UNI_RELEASE: "false"
+          UNI_ANDROID_PACKAGE_NAME: com.example.hehuoda
+        run: pnpm --filter @hehuoda/uni build:app
       - run: pnpm test:unit
       - run: pnpm test:integration
       - run: pnpm test:e2e

@@ -53,7 +53,7 @@ function button(page, label) {
   );
 }
 
-for (const target of ["H5", "MP-WEIXIN"]) {
+for (const target of ["H5", "MP-WEIXIN", "APP-PLUS"]) {
   test(`站内通知页 ${target} 只说明暂缓，不展示演示通知与已读交互`, async () => {
     const calls = platform();
     const session = useSessionStore();
@@ -101,22 +101,28 @@ for (const target of ["H5", "MP-WEIXIN"]) {
   });
 }
 
-test("站内通知暂缓页在主导航失败时给出可重试提示", async () => {
-  globalThis.uni = {
-    switchTab: (options) => options.fail?.(),
-    reLaunch: (options) => options.fail?.(),
-  };
-  globalThis.getCurrentPages = () => [{}];
-  setActivePinia(createPinia());
-  const page = await mount("../src/pages/notifications/index.vue", {}, "H5");
-  try {
-    button(page, "返回个人中心").props.onClick();
-    await new Promise((resolve) => setImmediate(resolve));
-    await nextTick();
-    assert.match(textOf(page.container), /暂时无法回到个人中心/);
-  } finally {
-    page.unmount();
-    delete globalThis.uni;
-    delete globalThis.getCurrentPages;
-  }
-});
+for (const target of ["H5", "APP-PLUS"]) {
+  test(`站内通知暂缓页 ${target} 在主导航失败时给出可重试提示`, async () => {
+    globalThis.uni = {
+      switchTab: (options) => options.fail?.(),
+      reLaunch: (options) => options.fail?.(),
+    };
+    globalThis.getCurrentPages = () => [{}];
+    setActivePinia(createPinia());
+    const page = await mount(
+      "../src/pages/notifications/index.vue",
+      {},
+      target,
+    );
+    try {
+      button(page, "返回个人中心").props.onClick();
+      await new Promise((resolve) => setImmediate(resolve));
+      await nextTick();
+      assert.match(textOf(page.container), /暂时无法回到个人中心/);
+    } finally {
+      page.unmount();
+      delete globalThis.uni;
+      delete globalThis.getCurrentPages;
+    }
+  });
+}

@@ -111,6 +111,83 @@ test("无效地址与超时配置拒绝：协议相对地址、凭据、查询�
   }
 });
 
+test("Android 端运行期纯函数：正式构建走完整 HTTPS 并归一尾斜杠", () => {
+  assert.deepEqual(
+    resolveApiConfig({
+      baseUrl: "https://api.example.com/api/v1/",
+      development: false,
+      platform: "app",
+      timeout: "15000",
+    }),
+    { baseUrl: "https://api.example.com/api/v1", timeout: 15000 },
+  );
+  // H5 同源同级地址作为对照：相对地址只有 H5 能通过。
+  assert.throws(
+    () =>
+      resolveApiConfig({
+        baseUrl: "/api/v1",
+        development: false,
+        platform: "app",
+      }),
+    /VITE_API_BASE_URL/,
+  );
+  // 正式 App 拒绝明文；开发模式的额外拒绝由 app-platform.test.mjs 与编译期预检守护（纯函数不重复）。
+  assert.throws(
+    () =>
+      resolveApiConfig({
+        baseUrl: "http://api.example.com/api/v1",
+        development: false,
+        platform: "app",
+      }),
+    /HTTPS/,
+  );
+  for (const development of [false, true]) {
+    assert.throws(
+      () =>
+        resolveApiConfig({
+          baseUrl: "/api/v1",
+          development,
+          platform: "app",
+        }),
+      /VITE_API_BASE_URL/,
+      String(development),
+    );
+  }
+  // 缺省地址在 App 端一律拒绝，不回退到 H5 的开发默认值。
+  assert.throws(
+    () => resolveApiConfig({ development: true, platform: "app" }),
+    /VITE_API_BASE_URL/,
+  );
+});
+
+test("超时边界：恰好 1 与 60000 毫秒被接受", () => {
+  for (const [value, expected] of [
+    ["1", 1],
+    ["60000", 60000],
+  ]) {
+    assert.deepEqual(
+      resolveApiConfig({
+        baseUrl: "https://api.example.com/api/v1",
+        development: false,
+        platform: "app",
+        timeout: value,
+      }),
+      { baseUrl: "https://api.example.com/api/v1", timeout: expected },
+      value,
+    );
+  }
+  // 空白与省略等价于默认 5000。
+  assert.equal(
+    resolveApiConfig({
+      baseUrl: "https://api.example.com/api/v1",
+      development: false,
+      platform: "app",
+      timeout: "   ",
+    }).timeout,
+    5000,
+  );
+});
+
 test("统一 GET 入口使用配置，返回经校验的类型化健康响应", async () => {
   const p = platform();
   const request = p.request();

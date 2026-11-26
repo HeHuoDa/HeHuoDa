@@ -24,8 +24,8 @@ function keydown(event: {
 </script>
 
 <template>
-  <!-- H5 uni-button 默认不可键盘聚焦，view 显式承担按钮角色和键盘操作。 -->
-  <!-- #ifdef H5 -->
+  <!-- H5 与 App-Plus 均为 webview 渲染，uni-button 默认不可键盘聚焦，view 显式承担按钮角色和键盘操作。 -->
+  <!-- #ifndef MP-WEIXIN -->
   <view
     role="button"
     :tabindex="disabled || loading ? -1 : 0"

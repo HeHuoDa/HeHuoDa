@@ -291,6 +291,65 @@ test("只有微信小程序分支保存刷新凭据，H5 使用空存储", async
   assert.deepEqual(writes, [["mp-weixin", "hehuoda.auth.refresh", "rt-2"]]);
 });
 
+test("H5、Android 与未知端均为空存储：预置旧令牌也不读、不写、不清", async () => {
+  const { platformAuthStorage } =
+    await import("../src/auth/platform-storage.ts");
+  // 预置遗留刷新令牌：空适配器必须不读回它，也不触碰平台存储。
+  const STALE = "rt-stale-from-weixin";
+  for (const platform of ["web", "app", "app-plus", "", "mp-alipay"]) {
+    const touched = [];
+    globalThis.uni = {
+      getSystemInfoSync: () => ({ uniPlatform: platform }),
+      getStorageSync: (key) => {
+        touched.push(["read", key]);
+        return STALE;
+      },
+      setStorageSync: (key) => touched.push(["write", key]),
+      removeStorageSync: (key) => touched.push(["clear", key]),
+    };
+    const storage = platformAuthStorage();
+    assert.equal(storage.read(), null, `${platform || "空串"} read`);
+    storage.write("rt-next");
+    storage.clear();
+    assert.deepEqual(touched, [], `${platform || "空串"} 未触碰平台存储`);
+  }
+  // 平台探测本身抛错时同样降级为空存储，不阻断本次会话。
+  const touched = [];
+  globalThis.uni = {
+    getSystemInfoSync: () => {
+      throw new Error("platform probe unavailable");
+    },
+    getStorageSync: () => touched.push("read"),
+    setStorageSync: () => touched.push("write"),
+    removeStorageSync: () => touched.push("clear"),
+  };
+  const fallback = platformAuthStorage();
+  assert.equal(fallback.read(), null);
+  fallback.write("rt-next");
+  fallback.clear();
+  assert.deepEqual(touched, []);
+  // 遗留端保留既有读写语义（归 #224 清理）。
+  const weixinTouched = [];
+  globalThis.uni = {
+    getSystemInfoSync: () => ({ uniPlatform: "mp-weixin" }),
+    getStorageSync: (key) => {
+      weixinTouched.push(["read", key]);
+      return STALE;
+    },
+    setStorageSync: (key, value) => weixinTouched.push(["write", key, value]),
+    removeStorageSync: (key) => weixinTouched.push(["clear", key]),
+  };
+  const weixin = platformAuthStorage();
+  assert.equal(weixin.read(), STALE);
+  weixin.write("rt-2");
+  weixin.clear();
+  assert.deepEqual(weixinTouched, [
+    ["read", "hehuoda.auth.refresh"],
+    ["write", "hehuoda.auth.refresh", "rt-2"],
+    ["clear", "hehuoda.auth.refresh"],
+  ]);
+});
+
 test("返回目标只接受注册表内的平台页面", () => {
   assert.equal(resolveReturnTarget("team-new"), "team-new");
   assert.equal(resolveReturnTarget("/pages/teams/new"), "team-new");
