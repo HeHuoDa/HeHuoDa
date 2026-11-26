@@ -116,30 +116,82 @@ test("拒绝输入时不回显原值，错误信息只说明变量与约束", ()
 });
 
 test("合法地址归一化为与运行期一致的基址", () => {
-  assert.equal(parseAppApiBaseUrl(HTTPS, false), HTTPS);
+  const parse = (value, development = false, timeout = "5000") =>
+    parseAppApiBaseUrl(value, { development, timeout });
+  assert.equal(parse(HTTPS).baseUrl, HTTPS);
+  // 未显式传入超时时沿用运行期默认值，而不是读 process.env。
+  assert.equal(parse(HTTPS).timeout, 5000);
   assert.equal(
-    parseAppApiBaseUrl("https://API.Example.TEST/api/v1/", false),
+    parse("https://API.Example.TEST/api/v1/").baseUrl,
+    "https://api.example.test/api/v1",
+  );
+  // 主机与协议大小写不敏感是解析器的正常归一，不算"纠正"。
+  assert.equal(
+    parse("HTTPS://API.Example.TEST/api/v1").baseUrl,
     "https://api.example.test/api/v1",
   );
   assert.equal(
-    parseAppApiBaseUrl("https://api.example.test:8443/api/v1", false),
+    parse("https://api.example.test:8443/api/v1").baseUrl,
     "https://api.example.test:8443/api/v1",
   );
-  // 协议与主机名大小写不敏感，统一归一化为小写后再校验。
   assert.equal(
-    parseAppApiBaseUrl("HTTPS://API.Example.TEST/api/v1", false),
-    "https://api.example.test/api/v1",
-  );
-  assert.equal(
-    parseAppApiBaseUrl("https://api.example.test", false),
+    parse("https://api.example.test").baseUrl,
     "https://api.example.test",
   );
   // 开发模式同样是 HTTPS 要求，只改变 mode 标记。
-  assert.equal(parseAppApiBaseUrl(HTTPS, true), HTTPS);
-  assert.throws(
-    () => parseAppApiBaseUrl("http://api.example.test", true),
-    /https/,
+  assert.equal(parse(HTTPS, true).baseUrl, HTTPS);
+  assert.throws(() => parse("http://api.example.test", true), /https/);
+});
+
+test("超时取自同一份合并 env，非法值在预检阶段就拒绝", () => {
+  const plan = (env) => platformConfig(env, "app");
+  // 空白值等同未设置（运行时纯函数已如此），非法值必须在预检阶段拒绝。
+  for (const invalid of ["abc", "0", "-1", "60001", "1.5", "5000ms"]) {
+    assert.throws(
+      () => plan({ VITE_API_BASE_URL: HTTPS, VITE_API_TIMEOUT_MS: invalid }),
+      /VITE_API_TIMEOUT_MS/,
+      JSON.stringify(invalid),
+    );
+  }
+  assert.equal(
+    plan({ VITE_API_BASE_URL: HTTPS, VITE_API_TIMEOUT_MS: " 8000 " }).timeout,
+    8000,
   );
+  assert.equal(plan({ VITE_API_BASE_URL: HTTPS }).timeout, 5000);
+  // 纯函数不读 process.env：环境变量无法绕过显式入参。
+  process.env.VITE_API_TIMEOUT_MS = "abc";
+  try {
+    assert.equal(plan({ VITE_API_BASE_URL: HTTPS }).timeout, 5000);
+  } finally {
+    delete process.env.VITE_API_TIMEOUT_MS;
+  }
+  assert.throws(
+    () =>
+      plan({
+        VITE_API_BASE_URL: "https://user:pw@api.example.test/api",
+        VITE_API_TIMEOUT_MS: "999999",
+      }),
+    (error) => {
+      assert.doesNotMatch(error.message, /999999|super-secret/u);
+      return true;
+    },
+  );
+});
+
+test("合法地址的结构化字段与运行期一致：解析器改写过的输入拒绝", () => {
+  // 这些输入在 JSON/URL 解析器中会被静默纠正，必须在预检阶段拒绝，而不是接受纠正后的结果。
+  for (const [value, pattern] of [
+    ["https://api.example.test:65536/api", /端口|改写/],
+    ["https://api.example.test:/api", /主机/],
+    ["https://api.example.test./api", /多级 DNS/],
+    ["https://api.example.test/\u0000api", /控制字符/],
+  ]) {
+    assert.throws(
+      () => parseAppApiBaseUrl(value, { development: false }),
+      pattern,
+      value,
+    );
+  }
 });
 
 test("Android 包名：占位可用于本地编译，正式构建必须显式注入受控包名", () => {
@@ -206,6 +258,7 @@ test("正式 Android 构建必须显式注入包名，不能沿用示例 ID", ()
     appid: "",
     release: true,
     apiBaseUrl: HTTPS,
+    timeout: 5000,
     packagename: "cn.edu.sicau.hehuoda",
   });
 });

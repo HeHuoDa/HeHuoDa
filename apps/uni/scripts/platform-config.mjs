@@ -8,12 +8,31 @@ function appUrlProblem(constraint) {
   throw new Error(`VITE_API_BASE_URL 不符合 Android 构建要求：${constraint}。`);
 }
 
+/** 超时与地址同属编译期预检：调用运行期纯函数校验范围，错误只报变量名与约束。 */
+const TIMEOUT_PROBE_URL = "https://api.example.test/api/v1";
+/** 接受字符串或已解析的毫秒数；非字符串值按十进制字符串交给运行时纯函数复核。 */
+export function parseAppTimeout(value) {
+  try {
+    return resolveApiConfig({
+      baseUrl: TIMEOUT_PROBE_URL,
+      timeout: typeof value === "number" ? String(value) : value,
+      development: false,
+      platform: "app",
+    }).timeout;
+  } catch {
+    throw new Error("VITE_API_TIMEOUT_MS 须为 1–60000 的整数（毫秒）。");
+  }
+}
+
 /**
- * Android 使用标准 URL 解析前先做词法限制。
- * 解析器会「纠正」`https:///host`、反斜线等写法，这类输入无法确认真实意图，直接拒绝。
- * 返回值与 `resolveApiConfig` 归一化后的运行期地址一致，编译期与运行期共用同一份判定。
+ * Android 基址判定分两层：
+ * 1. 词法层按**原始输入**判定，先挡掉 `https:///host`、反斜线、`..`、前导零端口等会被解析器
+ *    静默「纠正」的写法，这类输入无法确认真实意图，直接拒绝。
+ * 2. 结构化层用 Node `new URL()` 取协议、凭据、主机、端口、路径与查询字段，并回验解析结果与
+ *    原始输入一致——解析器一旦改写（主机大小写归一以外的任何差异）同样拒绝。
+ * 返回值与 `resolveApiConfig` 归一化后的运行期地址、超时一致，编译期与运行期共用同一份判定。
  */
-export function parseAppApiBaseUrl(value, development) {
+export function parseAppApiBaseUrl(value, { development, timeout } = {}) {
   if (typeof value !== "string" || value.trim() === "") {
     appUrlProblem("必须显式配置完整 HTTPS 地址");
   }
@@ -28,12 +47,49 @@ export function parseAppApiBaseUrl(value, development) {
   const rest = value.slice("https://".length);
   const slash = rest.indexOf("/");
   const authority = slash === -1 ? rest : rest.slice(0, slash);
-  const path = slash === -1 ? "" : rest.slice(slash);
+  const rawPath = slash === -1 ? "" : rest.slice(slash);
   // 解析器会把 `https:///host` 这类输入"纠正"成合法地址；这里直接当缺失主机拒绝。
   if (authority === "") appUrlProblem("主机须为多级 DNS 名称，不接受空主机");
-  const match = /^([a-z0-9.-]+)(?::([0-9]{1,5}))?$/i.exec(authority);
+  const match = /^([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?$/.exec(authority);
   if (!match) appUrlProblem("主机只能是 ASCII DNS 名称加可选端口");
-  const hostname = match[1].toLowerCase();
+  const [, rawHost, rawPort = ""] = match;
+  if (rawPort) {
+    if (rawPort.length > 1 && rawPort[0] === "0")
+      appUrlProblem("端口不接受前导零");
+    if (Number(rawPort) < 1 || Number(rawPort) > 65535) {
+      appUrlProblem("端口须在 1–65535");
+    }
+  }
+  if (rawPath && !/^\/[A-Za-z0-9._~/-]*$/.test(rawPath)) {
+    appUrlProblem("路径只接受 /、字母、数字与 . _ ~ -");
+  }
+  if (rawPath.includes("//") || rawPath.split("/").includes("..")) {
+    appUrlProblem("路径不接受重复斜杠或上级目录");
+  }
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    appUrlProblem("必须是可解析的完整 HTTPS 地址");
+  }
+  // 词法层已挡住凭据、查询与片段；这里用结构化字段复核，防止解析器把它们挪到别处。
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  ) {
+    appUrlProblem("必须是无凭据、无查询与片段的 HTTPS 基址");
+  }
+  const hostname = rawHost.toLowerCase();
+  // 主机大小写归一是解析器的正常行为；其他任何差异都说明它纠正过原始输入。
+  if (parsed.hostname !== hostname || parsed.port !== rawPort) {
+    appUrlProblem("主机与端口不接受解析器改写");
+  }
+  if ((rawPath || "/") !== parsed.pathname) {
+    appUrlProblem("路径不接受解析器改写");
+  }
   const labels = hostname.split(".");
   if (
     hostname.length > 253 ||
@@ -46,25 +102,15 @@ export function parseAppApiBaseUrl(value, development) {
     // 同时排除 IP 字面量、单标签内网名与空标签（含 `https:///host`）。
     appUrlProblem("主机须为多级 DNS 名称，不接受 IP 字面量或单标签主机");
   }
-  const port = match[2] ?? "";
-  if (port) {
-    if (port.length > 1 && port[0] === "0") appUrlProblem("端口不接受前导零");
-    if (Number(port) < 1 || Number(port) > 65535)
-      appUrlProblem("端口须在 1–65535");
-  }
-  if (path && !/^\/[A-Za-z0-9._~/-]*$/.test(path)) {
-    appUrlProblem("路径只接受 /、字母、数字与 . _ ~ -");
-  }
-  if (path.includes("//") || path.split("/").includes("..")) {
-    appUrlProblem("路径不接受重复斜杠或上级目录");
-  }
-  const normalized = `https://${hostname}${port ? `:${port}` : ""}${path.replace(/\/+$/, "")}`;
+  const normalized = `https://${hostname}${rawPort ? `:${rawPort}` : ""}${rawPath.replace(/\/+$/, "")}`;
+  const parsedTimeout = parseAppTimeout(timeout);
   let runtime;
   try {
+    // 超时来自同一份合并 env，纯函数内部不读 process.env。
     runtime = resolveApiConfig({
       baseUrl: normalized,
-      timeout: process.env.VITE_API_TIMEOUT_MS,
-      development,
+      timeout: String(parsedTimeout),
+      development: development === true,
       platform: "app",
     });
   } catch (error) {
@@ -74,7 +120,7 @@ export function parseAppApiBaseUrl(value, development) {
   if (runtime.baseUrl !== normalized) {
     appUrlProblem("归一化结果与运行期解析不一致");
   }
-  return normalized;
+  return { baseUrl: normalized, timeout: runtime.timeout };
 }
 
 /** 包名只做编译期格式与占位守卫；正式归属与命名仍属 #58/#219 后续验收。 */
@@ -134,9 +180,13 @@ export function platformConfig(env, target = "mp-weixin") {
 /** Android 目标不读取 UNI_MP_WEIXIN_APPID：发行配置与微信 AppID 互不依赖。 */
 function appConfig(env, release) {
   // DEV 与 Release 都要求 HTTPS；mode 只影响 Vite 的 NODE_ENV 与运行期 DEV 标记。
-  const apiBaseUrl = parseAppApiBaseUrl(
+  const { baseUrl: apiBaseUrl, timeout } = parseAppApiBaseUrl(
     env.VITE_API_BASE_URL,
-    env.NODE_ENV !== "production",
+    {
+      development: env.NODE_ENV !== "production",
+      // 先单独校验超时，使非法值报的是 VITE_API_TIMEOUT_MS 而不是地址。
+      timeout: parseAppTimeout(env.VITE_API_TIMEOUT_MS),
+    },
   );
   const packagename =
     env.UNI_ANDROID_PACKAGE_NAME === undefined ||
@@ -145,7 +195,7 @@ function appConfig(env, release) {
         ? validateAndroidPackageName("", { release })
         : ANDROID_PLACEHOLDER_PACKAGENAME
       : validateAndroidPackageName(env.UNI_ANDROID_PACKAGE_NAME, { release });
-  return { appid: "", release, apiBaseUrl, packagename };
+  return { appid: "", release, apiBaseUrl, timeout, packagename };
 }
 
 /**

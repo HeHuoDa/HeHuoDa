@@ -73,25 +73,27 @@ pnpm --filter @hehuoda/uni dev:app
 ```
 
 - 平台标识为 DCloud 普通 uni-app 的 `app`（`-p app`），由 `@dcloudio/uni-app-plus`（与其余 DCloud 包同版 `3.0.0-5020420260813003`）驱动。
-- 实际产物目录由 DCloud CLI 依据平台与 `NODE_ENV` 推导：`apps/uni/dist/build/app`（build/production）与 `apps/uni/dist/dev/app`（dev/development）。脚本在编译前清空该目录，避免把旧产物误认成新构建。
+- 实际产物目录由 DCloud CLI 依据平台与 `NODE_ENV` 推导：`apps/uni/dist/build/app`（build/production）与 `apps/uni/dist/dev/app`（dev/development）。脚本把 `-p app`、`-m production|development` 与 `UNI_INPUT_DIR`/`UNI_OUTPUT_DIR` 固定为自己的值，拒绝额外 CLI 参数与同名环境变量覆盖，所以报告的输出目录就是真实产物目录；成功与否只看退出码，预检失败的启动会保留上次成功构建的产物。
+- 一次只运行一个会写 `src/manifest.json` 的构建（`build:app`/`dev:app`/`build:h5`/`build:mp-weixin` 共用该文件）。
 - 产物内容为 `app-service.js`、`app-config-service.js`、`app.css`、`manifest.json`、`static/`、`pages/` 等 HBuilderX/离线打包所需的资源，**不是 APK**。
 - `manifest.json` 中 `plus.distribute.google`（DCloud 对 Android 的既有键名）承载 `packagename`、`minSdkVersion`、`targetSdkVersion` 与权限清单；`app-service.js` 内含编译期 `VITE_API_BASE_URL` 与 `platform:"app"`。
 
 ### 配置边界
 
 - `scripts/platform-config.mjs` 按目标隔离：`app` 目标**不读取** `UNI_MP_WEIXIN_APPID`，`mp-weixin` 目标保持原语义（本地编译不要求 AppID，`UNI_RELEASE=true` 才要求）。
-- Android 的 `VITE_API_BASE_URL` 在编译前用标准 `URL` 之外先做词法限制，再交由 `src/api/config.ts` 的同一纯函数复核，两次结果必须完全一致。拒绝：缺失/空白、非 `https://`、相对与协议相对、`https:///host` 与反斜杠等解析器会自动纠正的输入、凭据、查询串、片段、非法/前导零端口、IP 字面量、单标签与空主机、路径中的重复斜杠与 `..`。错误信息只说明变量与约束，不回显原值。
+- Android 的 `VITE_API_BASE_URL` 先按**原始输入**做词法限制，再用 Node `new URL()` 取协议、凭据、主机、端口、路径与查询等结构化字段，并回验解析结果未被改写（大小写以外的任何归一化都拒绝）；最后交由 `src/api/config.ts` 的同一纯函数复核，两次结果必须完全一致。拒绝：缺失/空白、非 `https://`、相对与协议相对、`https:///host` 与反斜杠等解析器会自动纠正的输入、凭据、查询串、片段、非法/前导零端口、IP 字面量、单标签与空主机、路径中的重复斜杠与 `..`。错误信息只说明变量与约束，不回显原值。
+- `VITE_API_TIMEOUT_MS` 与地址来自同一份合并 env（`.env` + 进程环境，进程优先）并在预检中校验：非法值直接拒绝启动；子进程拿到校验后的同一份超时，未配置时沿用运行期默认 5000。该纯函数不读 `process.env`。
 - 运行时 `src/api/client.ts` 通过 `#ifdef APP-PLUS` 将 platform 标为 `app`，并保留最小 App-only HTTPS 防护；不关闭证书校验，不做其它平台的运行期校验变更。
 - `UNI_ANDROID_PACKAGE_NAME` 控制包名。留空时资源编译使用占位 `com.example.hehuoda`（仅本地资源构建），`UNI_RELEASE=true` 必须显式注入受控包名，并拒绝示例段、DCloud/Android 保留前缀。正式包名归属仍属 #58/#219 后续验收。
 
 ### 构建文档
 
-签名 APK 路径与核验清单见 [Android 资源构建与签名打包说明](../android-app-build.md)。推荐首轮走**与 DCloud SDK 匹配的离线 Android Studio/Gradle 打包**（有利于 #87 自动化），DCloud 云打包需要 HBuilderX 与 DCloud 账号，二者均**未在本任务验证**。
+签名 APK 路径与核验清单见 [Android 资源构建与签名打包说明](../android-app-build.md)。推荐首轮走**与 DCloud 离线 SDK 匹配的本机 Android Studio/Gradle 打包**（有利于 #87 自动化，且不会把签名证书交给云端打包服务器）；但 3.1.10 起的离线 SDK **同样必须用 DCloud 开发者账号申请 AppKey**（绑定应用 AppID、Android 包名与签名证书 SHA-1），账号属 #58 外部条件。DCloud 云打包同样需要 HBuilderX 与账号。两条路径均**未在本任务验证**。
 
 ### 本阶段验证与剩余项
 
-- 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`、`build:mp-weixin`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限与 API 基址真正编入产物；缺配置时 `build:app` 拒绝执行且不产生目录。
-- 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（`CompetitionSourceAction.vue` 目前只有 H5 与 MP-WEIXIN 分支）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
+- 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`、`build:mp-weixin`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。
+- 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（`CompetitionSourceAction.vue` 目前只有 H5 与 MP-WEIXIN 分支）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
 - 开屏目前使用 DCloud 默认启动主题（`app-plus.splashscreen.autoclose`），只有 160×160 的产品 Logo（`src/static/hehuoda-logo.png`，4 倍密度的 40px 场景），**没有**按各密度准备的原生启动图与图标，不在本阶段伪造。
 
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）
