@@ -7,7 +7,7 @@
     "dev:h5": "node scripts/run-uni.mjs dev h5",
     "dev:app": "node scripts/run-uni.mjs dev app",
     "dev:mp-weixin": "node scripts/run-uni.mjs dev mp-weixin",
-    "build": "pnpm check:toolchain && pnpm build:h5 && pnpm build:mp-weixin",
+    "build": "pnpm check:toolchain && pnpm build:h5",
     "build:h5": "node scripts/run-uni.mjs build h5",
     "build:app": "node scripts/run-uni.mjs build app",
     "build:mp-weixin": "node scripts/run-uni.mjs build mp-weixin",
