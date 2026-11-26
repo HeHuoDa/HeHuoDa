@@ -82,6 +82,8 @@ test("Android 只接受完整 HTTPS 基址，缺省/相对/协议相对一律拒
     [{ VITE_API_BASE_URL: "https://api.example.test:0/api" }, /端口/],
     [{ VITE_API_BASE_URL: "https://api.example.test:65536/api" }, /端口/],
     [{ VITE_API_BASE_URL: "https://api.example.test:0443/api" }, /前导零/],
+    [{ VITE_API_BASE_URL: "https://api.example.test:/api" }, /主机/],
+    [{ VITE_API_BASE_URL: "https://api.example.test:8443:443/api" }, /主机/],
     [{ VITE_API_BASE_URL: "https://api.example.test/\napi" }, /控制字符|空白/],
     [{ VITE_API_BASE_URL: "https://api.example.test/api//v1" }, /重复斜杠/],
     [{ VITE_API_BASE_URL: "https://api.example.test/../api" }, /上级目录/],
@@ -137,6 +139,16 @@ test("合法地址归一化为与运行期一致的基址", () => {
   assert.equal(
     parse("https://api.example.test").baseUrl,
     "https://api.example.test",
+  );
+  // 默认端口 443 由 WHATWG URL 归一为无端口，预检必须接受并与解析结果一致。
+  assert.equal(parse("https://api.example.test:443/api/v1").baseUrl, HTTPS);
+  assert.equal(
+    parse("https://api.example.test:443").baseUrl,
+    "https://api.example.test",
+  );
+  assert.equal(
+    parse("https://API.Example.TEST:443/api/v1/").baseUrl,
+    "https://api.example.test/api/v1",
   );
   // 开发模式同样是 HTTPS 要求，只改变 mode 标记。
   assert.equal(parse(HTTPS, true).baseUrl, HTTPS);

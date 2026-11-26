@@ -3,6 +3,9 @@ import { resolveApiConfig } from "../src/api/config.ts";
 /** Android 包名占位值：仅用于本地资源编译，不是已选定的正式 ID。 */
 export const ANDROID_PLACEHOLDER_PACKAGENAME = "com.example.hehuoda";
 
+/** HTTPS 默认端口；WHATWG URL 解析时会把 `:443` 归一为无端口。 */
+const DEFAULT_HTTPS_PORT = "443";
+
 /** 错误信息只说变量和约束，不回显原值，避免把凭据写进构建日志。 */
 function appUrlProblem(constraint) {
   throw new Error(`VITE_API_BASE_URL 不符合 Android 构建要求：${constraint}。`);
@@ -29,7 +32,8 @@ export function parseAppTimeout(value) {
  * 1. 词法层按**原始输入**判定，先挡掉 `https:///host`、反斜线、`..`、前导零端口等会被解析器
  *    静默「纠正」的写法，这类输入无法确认真实意图，直接拒绝。
  * 2. 结构化层用 Node `new URL()` 取协议、凭据、主机、端口、路径与查询字段，并回验解析结果与
- *    原始输入一致——解析器一旦改写（主机大小写归一以外的任何差异）同样拒绝。
+ *    原始输入一致——解析器一旦改写同样拒绝；仅两处已知归一例外：主机名小写化，以及默认端口
+ *    `443` 被剥成空端口（此时基址统一不带端口，非默认端口原样保留）。
  * 返回值与 `resolveApiConfig` 归一化后的运行期地址、超时一致，编译期与运行期共用同一份判定。
  */
 export function parseAppApiBaseUrl(value, { development, timeout } = {}) {
@@ -83,8 +87,10 @@ export function parseAppApiBaseUrl(value, { development, timeout } = {}) {
     appUrlProblem("必须是无凭据、无查询与片段的 HTTPS 基址");
   }
   const hostname = rawHost.toLowerCase();
+  // WHATWG URL 会剥掉默认端口 443，因此预期结构化端口按空串比较；其它端口差异仍视为改写。
+  const expectedPort = rawPort === DEFAULT_HTTPS_PORT ? "" : rawPort;
   // 主机大小写归一是解析器的正常行为；其他任何差异都说明它纠正过原始输入。
-  if (parsed.hostname !== hostname || parsed.port !== rawPort) {
+  if (parsed.hostname !== hostname || parsed.port !== expectedPort) {
     appUrlProblem("主机与端口不接受解析器改写");
   }
   if ((rawPath || "/") !== parsed.pathname) {
@@ -102,7 +108,8 @@ export function parseAppApiBaseUrl(value, { development, timeout } = {}) {
     // 同时排除 IP 字面量、单标签内网名与空标签（含 `https:///host`）。
     appUrlProblem("主机须为多级 DNS 名称，不接受 IP 字面量或单标签主机");
   }
-  const normalized = `https://${hostname}${rawPort ? `:${rawPort}` : ""}${rawPath.replace(/\/+$/, "")}`;
+  // 基址用解析后的 origin 拼接：默认端口统一省略，非默认合法端口原样保留。
+  const normalized = `${parsed.origin}${rawPath.replace(/\/+$/, "")}`;
   const parsedTimeout = parseAppTimeout(timeout);
   let runtime;
   try {

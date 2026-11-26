@@ -57,9 +57,9 @@ VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni dev
 ### 路径 A（推荐首轮）：DCloud 离线 SDK 的本机 Android Studio/Gradle 打包
 
 1. 从 DCloud 官方离线 SDK（[App 离线 SDK 文档](https://nativesupport.dcloud.net.cn/AppDocs/)）取得与本仓库编译层（`5.24` / `3.0.0-5020420260813003`）**匹配**的 Android SDK，或按该版本说明在 Android Studio 中打开官方离线工程模板。
-2. **申请 AppKey（3.1.10 及以后的离线 SDK 同样必须）**：用 DCloud 开发者账号在开发者中心「应用管理 → 各平台信息 → 新增 Android」申请离线 AppKey，登记 DCloud 应用 AppID、Android 包名与签名证书 SHA-1/SHA-256（[申请 Appkey](https://nativesupport.dcloud.net.cn/AppDocs/usesdk/appkey)）。三者在打包后必须与实际产物一致，否则运行时报「未配置AppKey或配置错误」。这一步依赖 DCloud 账号，属 #58 外部条件，本任务未执行。
+2. **申请 AppKey（3.1.10 及以后的离线 SDK 同样必须）**：用 DCloud 开发者账号在开发者中心「应用管理 → 各平台信息 → 新增 Android」申请离线 AppKey，登记 DCloud 应用 AppID、Android 包名与签名证书 **SHA-1**（[申请 Appkey](https://nativesupport.dcloud.net.cn/AppDocs/usesdk/appkey)）。三者在打包后必须与实际产物一致，否则运行时报「未配置AppKey或配置错误」。这一步依赖 DCloud 账号，属 #58 外部条件，本任务未执行。
 3. 将 `apps/uni/dist/build/app` 作为 www 资源放入工程（各 SDK 版本目录名不同，需按该版本官方文档核对）。
-4. 核对包名：用 `UNI_ANDROID_PACKAGE_NAME` 注入并编译，再回读生成的 `apps/uni/src/manifest.json`（以及产物 `dist/build/app/manifest.json`）的 `app-plus.distribute.android.packagename`，把该值写入原生工程 `applicationId`（同时对齐 `AndroidManifest.xml` 的 `package`）。`manifest.template.json` 里的 `com.example.hehuoda` **只是占位**，不是已选定包名。
+4. 核对包名：用 `UNI_ANDROID_PACKAGE_NAME` 注入并编译，再回读生成的两份 manifest——`apps/uni/src/manifest.json` 的 `app-plus.distribute.android.packagename`，以及 App 资源 `apps/uni/dist/build/app/manifest.json` 的 `plus.distribute.google.packagename`（两个键是同一段配置的生成前/生成后形态）。把该值写入原生工程 `applicationId`（同时对齐 `AndroidManifest.xml` 的 `package`）。`manifest.template.json` 里的 `com.example.hehuoda` **只是占位**，不是已选定包名。
 5. 配置 `versionCode`/`versionName` 与产物 `manifest.json` 一致。
 6. 用自有 Keystore 签名：`./gradlew assembleRelease`（keystore 与口令只放在本机或 CI 密钥，不入库）。
 
@@ -75,9 +75,9 @@ VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni dev
 | -------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 包名           | `aapt2 dump badging app-release.apk` 或 `apkanalyzer manifest application-id` | 与 `UNI_ANDROID_PACKAGE_NAME` 注入并写入生成 manifest 的包名、原生工程 `applicationId`、申请 AppKey 时登记的包名四者一致 |
 | 版本           | 同上 `versionCode` / `versionName`                                            | 与提交内的 `manifest.template.json` 一致且 `versionCode` 递增                                                            |
-| 签名           | `apksigner verify --print-certs app-release.apk`                              | 证书 SHA-1/SHA-256 与申请离线 AppKey 时登记的值一致，未使用调试证书                                                      |
+| 签名           | `apksigner verify --print-certs app-release.apk`                              | 证书 SHA-1 与申请离线 AppKey 时登记的值一致，未使用调试证书                                                              |
 | 权限           | `aapt2 dump permissions app-release.apk`                                      | 只有实际需要的权限；出现定位/存储/相机等即需解释                                                                         |
-| 摘要           | `Get-FileHash app-release.apk -Algorithm SHA256`                              | 记录到交付说明，供下载页与追溯（#86/#87/#228）                                                                           |
+| 摘要           | `Get-FileHash app-release.apk -Algorithm SHA256`                              | APK 文件本身的 SHA-256，记录到交付说明，供下载页与追溯（#86/#87/#228）；与证书指纹和 AppKey 登记无关                     |
 | 安装           | `adb install -r app-release.apk`                                              | 覆盖安装成功，`versionCode` 递增生效                                                                                     |
 | 冷启动         | 首次安装后强制停止再启动                                                      | 无白屏卡死，开屏正常关闭，且不提示「未配置AppKey或配置错误」（AppID、包名、证书 SHA-1 需与登记值一致）                   |
 | API 连通       | 受控测试域名                                                                  | 只走 HTTPS，无明文与证书忽略                                                                                             |
