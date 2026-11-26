@@ -161,6 +161,31 @@ test("H5 构建保持原行为：不打 App 标记、不改写 API 地址", () =
   assert.equal(relative.env.VITE_API_BASE_URL, "/api/v1");
 });
 
+test("H5 构建在正式开关与遗留 AppID 存在时仍能生成编译计划", () => {
+  // 缺陷复现：H5 曾落入微信 AppID 校验，正式构建被已退役平台卡死。
+  const result = plan("build", "h5", {
+    UNI_RELEASE: "true",
+    UNI_MP_WEIXIN_APPID: "touristappid",
+    VITE_API_BASE_URL: "/api/v1",
+  });
+  assert.equal(result.config.appid, "");
+  assert.equal(result.config.release, true);
+  assert.equal(result.manifest["mp-weixin"].appid, "");
+  assert.equal(result.env.VITE_API_BASE_URL, "/api/v1");
+});
+
+test("App 构建忽略无效的遗留微信 AppID", () => {
+  const result = appPlan("build", {
+    UNI_MP_WEIXIN_APPID: "touristappid",
+    UNI_ANDROID_PACKAGE_NAME: "cn.edu.sicau.hehuoda",
+  });
+  assert.equal(result.config.appid, "");
+  assert.equal(
+    result.manifest["app-plus"].distribute.android.packagename,
+    "cn.edu.sicau.hehuoda",
+  );
+});
+
 test("微信 release 回归：仍要求 UNI_MP_WEIXIN_APPID，App 目标接受同一环境", () => {
   assert.throws(
     () => plan("build", "mp-weixin", { UNI_RELEASE: "true" }),

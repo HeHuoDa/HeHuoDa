@@ -44,6 +44,31 @@ test("格式有效不等于账号验收，配置仅透传受控 AppID", () => {
   );
 });
 
+test("H5 目标不读取、不校验微信 AppID", () => {
+  // 微信端已按 ADR 0011 退役，H5 是主交付端：正式构建不再被遗留 AppID 卡住。
+  assert.deepEqual(platformConfig({ UNI_RELEASE: "true" }, "h5"), {
+    appid: "",
+    release: true,
+  });
+  // 本机残留的无效 AppID 与 H5 无关，不拒绝也不透传。
+  assert.deepEqual(
+    platformConfig(
+      { UNI_MP_WEIXIN_APPID: "touristappid", VITE_API_BASE_URL: "/api/v1" },
+      "h5",
+    ),
+    { appid: "", release: false },
+  );
+  assert.deepEqual(
+    platformConfig({ UNI_MP_WEIXIN_APPID: "wx1234567890abcdef" }, "h5"),
+    { appid: "", release: false },
+  );
+  // 含糊的 UNI_RELEASE 是共享开关，H5 同样拒绝。
+  assert.throws(
+    () => platformConfig({ UNI_RELEASE: "yes" }, "h5"),
+    /true 或 false/,
+  );
+});
+
 test("Android 目标不读取微信 AppID，也不因此阻断编译", () => {
   const config = platformConfig({ VITE_API_BASE_URL: HTTPS }, "app");
   assert.equal(config.appid, "");
@@ -332,4 +357,16 @@ test("生成配置按目标隔离：Android 只改包名，微信只改 AppID", 
     ANDROID_PLACEHOLDER_PACKAGENAME,
   );
   assert.equal(weixinManifest.appid, "");
+});
+
+test("H5 生成配置是模板副本，不写入任何平台专属字段", () => {
+  const templateManifest = template();
+  const config = platformConfig(
+    { UNI_MP_WEIXIN_APPID: "wx1234567890abcdef" },
+    "h5",
+  );
+  const h5Manifest = applyPlatformManifest(templateManifest, "h5", config);
+  // 不落微信 AppID，也不改 Android 包名。
+  assert.deepEqual(h5Manifest, templateManifest);
+  assert.notEqual(h5Manifest, templateManifest, "必须返回副本而非改模板");
 });
