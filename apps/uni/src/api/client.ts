@@ -9,6 +9,9 @@ let platform = "mp-weixin";
 // #ifdef H5
 platform = "h5";
 // #endif
+// #ifdef APP-PLUS
+platform = "app";
+// #endif
 
 const transport: RequestTransport = (options) => {
   const requestOptions: UniNamespace.RequestOptions = {
@@ -38,13 +41,21 @@ const transport: RequestTransport = (options) => {
     },
   };
 };
-const readConfig = () =>
-  resolveApiConfig({
+const readConfig = () => {
+  const config = resolveApiConfig({
     baseUrl: import.meta.env.VITE_API_BASE_URL,
     timeout: import.meta.env.VITE_API_TIMEOUT_MS,
     development: import.meta.env.DEV,
     platform,
   });
+  // #ifdef APP-PLUS
+  // Android 端开发与正式构建都只接受完整 HTTPS；不关闭证书校验，也不降级明文。
+  if (!config.baseUrl.startsWith("https://")) {
+    throw new Error("Android 客户端 API 地址必须使用 HTTPS。");
+  }
+  // #endif
+  return config;
+};
 
 /** 公开请求客户端：不携带凭据，也不参与 401 刷新协调。 */
 export const http = createHttpClient(transport, readConfig);

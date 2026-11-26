@@ -7,5 +7,22 @@
   "vueVersion": "3",
   "h5": { "router": { "mode": "hash" } },
   "mp-weixin": { "appid": "", "setting": { "urlCheck": true } },
+  "app-plus": {
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "autoclose": true,
+      "androidStyle": "default"
+    },
+    "distribute": {
+      "android": {
+        "packagename": "com.example.hehuoda",
+        "minSdkVersion": 23,
+        "targetSdkVersion": 34,
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>"
+        ]
+      }
+    }
+  },
   "uniStatistics": { "enable": false }
 }
