@@ -94,6 +94,7 @@ pnpm --filter @hehuoda/uni dev:app
 
 - 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`、`build:mp-weixin`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。
 - 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（`CompetitionSourceAction.vue` 目前只有 H5 与 MP-WEIXIN 分支）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
+- #83 新增 `APP-PLUS` 组件宿主断言时发现 `FormButton` 只有 `#ifdef H5` 与 `#ifdef MP-WEIXIN` 两个分支，App-Plus 下按钮整体不渲染（暂缓页主要操作在 Android 上不可见）。已把 H5 分支改为 `#ifndef MP-WEIXIN`，因为 H5 与 App-Plus 都是 webview 渲染、共用同一套键盘可达写法；微信分支不动。其余表单控件（`FormInput`、`FormPicker`、`FormDialog`）的 `#ifdef H5` 分支仍在 App-Plus 下不生效，属 #219 后续与 #226 真机适配范围，本轮不越界修改。
 - 开屏目前使用 DCloud 默认启动主题（`app-plus.splashscreen.autoclose`），只有 160×160 的产品 Logo（`src/static/hehuoda-logo.png`，4 倍密度的 40px 场景），**没有**按各密度准备的原生启动图与图标，不在本阶段伪造。
 
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）

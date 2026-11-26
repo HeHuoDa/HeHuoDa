@@ -54,7 +54,7 @@ for (const [file, label] of [
   ["../src/pages/teams/new.vue", "旧发布招募直达页"],
   ["../src/pages/teams/detail.vue", "旧队伍详情直达页"],
 ]) {
-  for (const target of ["H5", "MP-WEIXIN"]) {
+  for (const target of ["H5", "MP-WEIXIN", "APP-PLUS"]) {
     test(`${label} ${target} 只说明暂缓，无展示队伍、表单与演示写操作`, async () => {
       const calls = platform();
       const session = useSessionStore();
@@ -104,22 +104,24 @@ for (const [file, label] of [
   }
 }
 
-test("暂缓页在主导航失败时给出可重试提示，不静默失败", async () => {
-  globalThis.uni = {
-    switchTab: (options) => options.fail?.(),
-    reLaunch: (options) => options.fail?.(),
-  };
-  globalThis.getCurrentPages = () => [{}];
-  setActivePinia(createPinia());
-  const page = await mount("../src/pages/teams/index.vue", {}, "H5");
-  try {
-    button(page, "回首页浏览比赛").props.onClick();
-    await new Promise((resolve) => setImmediate(resolve));
-    await nextTick();
-    assert.match(textOf(page.container), /暂时无法回到首页/);
-  } finally {
-    page.unmount();
-    delete globalThis.uni;
-    delete globalThis.getCurrentPages;
-  }
-});
+for (const target of ["H5", "APP-PLUS"]) {
+  test(`暂缓页 ${target} 在主导航失败时给出可重试提示，不静默失败`, async () => {
+    globalThis.uni = {
+      switchTab: (options) => options.fail?.(),
+      reLaunch: (options) => options.fail?.(),
+    };
+    globalThis.getCurrentPages = () => [{}];
+    setActivePinia(createPinia());
+    const page = await mount("../src/pages/teams/index.vue", {}, target);
+    try {
+      button(page, "回首页浏览比赛").props.onClick();
+      await new Promise((resolve) => setImmediate(resolve));
+      await nextTick();
+      assert.match(textOf(page.container), /暂时无法回到首页/);
+    } finally {
+      page.unmount();
+      delete globalThis.uni;
+      delete globalThis.getCurrentPages;
+    }
+  });
+}
