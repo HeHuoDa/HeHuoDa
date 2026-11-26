@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import { invocation, runConfig } from "./run-config.mjs";
 
+const fakeRoot = resolve("/repo/apps/uni");
 const template = readFileSync(
   new URL("../manifest.template.json", import.meta.url),
   "utf8",
@@ -11,7 +13,7 @@ const plan = (command, platform, env) =>
   runConfig({
     command,
     platform,
-    root: "C:/repo/apps/uni",
+    root: fakeRoot,
     env: { manifestTemplate: template, ...env },
   });
 const appPlan = (command = "build", env = {}) =>
@@ -42,11 +44,8 @@ test("App 构建使用 production mode、App-Plus 资源目录与校验后的 HT
   assert.equal(result.mode, "production");
   assert.equal(result.env.NODE_ENV, "production");
   assert.equal(result.env.VITE_API_BASE_URL, "https://api.example.test/api/v1");
-  assert.equal(
-    result.outDir.replaceAll("\\", "/"),
-    "C:/repo/apps/uni/dist/build/app",
-  );
-  assert.equal(result.inDir.replaceAll("\\", "/"), "C:/repo/apps/uni/src");
+  assert.equal(result.outDir, resolve(fakeRoot, "dist", "build", "app"));
+  assert.equal(result.inDir, resolve(fakeRoot, "src"));
   assert.equal(
     result.manifest["app-plus"].distribute.android.packagename,
     "com.example.hehuoda",
@@ -57,10 +56,7 @@ test("App 开发同样要求 HTTPS，只切换 mode 与产物目录", () => {
   const result = appPlan("dev");
   assert.equal(result.mode, "development");
   assert.equal(result.env.NODE_ENV, "development");
-  assert.equal(
-    result.outDir.replaceAll("\\", "/"),
-    "C:/repo/apps/uni/dist/dev/app",
-  );
+  assert.equal(result.outDir, resolve(fakeRoot, "dist", "dev", "app"));
   assert.throws(
     () =>
       plan("dev", "app", { VITE_API_BASE_URL: "http://api.example.test/api" }),
@@ -86,11 +82,8 @@ test("App 子进程的实际参数与 env：平台、mode 与输入/输出目录
   );
   // 参数里不得出现可覆盖平台/mode 以外的项目，且平台与 mode 由脚本写入。
   assert.deepEqual(args, ["build", "-p", "app", "-m", "production"]);
-  assert.equal(env.UNI_INPUT_DIR.replaceAll("\\", "/"), "C:/repo/apps/uni/src");
-  assert.equal(
-    env.UNI_OUTPUT_DIR.replaceAll("\\", "/"),
-    "C:/repo/apps/uni/dist/build/app",
-  );
+  assert.equal(env.UNI_INPUT_DIR, resolve(fakeRoot, "src"));
+  assert.equal(env.UNI_OUTPUT_DIR, resolve(fakeRoot, "dist", "build", "app"));
   assert.equal(env.NODE_ENV, "production");
   assert.equal(env.VITE_API_BASE_URL, "https://api.example.test/api/v1");
   // 预检与子进程使用同一份超时（默认沿用运行期默认 5000）。
@@ -104,10 +97,7 @@ test("App 子进程的实际参数与 env：平台、mode 与输入/输出目录
     { VITE_API_BASE_URL: "https://api.example.test/api/v1" },
   );
   assert.deepEqual(dev.args, ["-p", "app", "-m", "development"]);
-  assert.equal(
-    dev.env.UNI_OUTPUT_DIR.replaceAll("\\", "/"),
-    "C:/repo/apps/uni/dist/dev/app",
-  );
+  assert.equal(dev.env.UNI_OUTPUT_DIR, resolve(fakeRoot, "dist", "dev", "app"));
 });
 
 test("App 入口拒绝额外 CLI 参数与环境覆盖，避免报告目录与真实产物不一致", () => {
