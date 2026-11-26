@@ -190,10 +190,10 @@ export default tseslint.config(
   },
   {
     // 生产客户端脚本与 SFC：限定跨平台 API 与存储边界。
+    // 同时覆盖 ESLint 可解析的 js/mjs/cjs/tsx/jsx：目录下新增这些脚本也必须受同一约束。
     files: [
-      "apps/uni/src/**/*.ts",
-      "apps/uni/src/**/*.vue",
-      "packages/client-domain/src/**/*.ts",
+      "apps/uni/src/**/*.{ts,tsx,js,mjs,cjs,jsx,vue}",
+      "packages/client-domain/src/**/*.{ts,tsx,js,mjs,cjs,jsx}",
     ],
     rules: {
       "no-restricted-syntax": restrictedSyntax(...ALL_GROUPS),

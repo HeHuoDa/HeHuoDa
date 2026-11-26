@@ -229,3 +229,28 @@ test("规则不覆盖测试替身与脚本目录，避免误伤夹具", async ()
     JSON.stringify(messages),
   );
 });
+
+test("生产源目录下 ESLint 可解析的脚本扩展名都受同一规则约束", async () => {
+  // 回归守卫：规则 files 若被改回只匹配 ts/vue，这些扩展就会静默漏过。
+  const code = `export const bad = () => globalThis.localStorage.setItem("probe", "x");`;
+  for (const filePath of [
+    "apps/uni/src/extension-probe.ts",
+    "apps/uni/src/extension-probe.js",
+    "apps/uni/src/extension-probe.mjs",
+    "apps/uni/src/extension-probe.cjs",
+    "apps/uni/src/extension-probe.tsx",
+    "apps/uni/src/extension-probe.jsx",
+    "packages/client-domain/src/extension-probe.ts",
+    "packages/client-domain/src/extension-probe.mjs",
+    "packages/client-domain/src/extension-probe.tsx",
+  ]) {
+    const messages = await diagnostics(code, filePath);
+    assert.ok(
+      messages.some(
+        (message) =>
+          message.severity === 2 && /localStorage/.test(message.message ?? ""),
+      ),
+      `${filePath} 应被 localStorage 规则拦截，实际 ${JSON.stringify(messages)}`,
+    );
+  }
+});
