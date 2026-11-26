@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createH5TabSync } from "../src/auth/h5-tab-sync.ts";
+import { H5_COORD_KEY, createH5TabSync } from "../src/auth/h5-tab-sync.ts";
 import { RequestError } from "../src/api/http.ts";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -368,6 +368,116 @@ test("429 限流写回退避时间窗口；403 受限广播使其他标签同步
 
   tabA.dispose();
   tabB.dispose();
+});
+
+test("省略 coordStorage 时默认 H5 适配器只写固定键与白名单字段，且不含令牌或身份", async () => {
+  const bus = createBus();
+  bus.setCoord(null);
+  // 默认适配器在访问器内部读取 globalThis.localStorage，故必须替换为可控替身并记录每次写入。
+  const writes = [];
+  const bucket = new Map();
+  const prevDesc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) {
+        return bucket.has(key) ? bucket.get(key) : null;
+      },
+      setItem(key, value) {
+        writes.push([key, value]);
+        bucket.set(String(key), String(value));
+      },
+    },
+  });
+
+  const h = makeHandlers();
+  let tab = null;
+  const loginToken = "at-login-token";
+  const refreshToken = "at-refresh-token";
+  try {
+    // 刻意不传 coordStorage，走 createH5TabSync 内建的默认 localStorage 适配器。
+    const env = bus.env("tab-default");
+    delete env.coordStorage;
+    tab = createH5TabSync(h.handlers, env);
+    assert.equal(tab.isSupported(), true);
+
+    // 1) 登录广播落盘
+    h.state.token = loginToken;
+    tab.notifyLogin(h5Cred(loginToken));
+    await tick();
+
+    // 2) 刷新成功落盘（running → succeeded 两次写入）
+    const okResult = await tab.coordinateRefresh(
+      async () => h5Cred(refreshToken),
+      { reason: "restore" },
+    );
+    assert.equal(okResult.kind, "refreshed");
+    h.state.token = refreshToken;
+
+    // 3) 刷新失败落盘（429 带 retryUntil，覆盖可选字段）
+    const limitedResult = await tab.coordinateRefresh(
+      () =>
+        Promise.reject(
+          new RequestError("http", "limited", {
+            statusCode: 429,
+            code: "TOO_MANY_REQUESTS",
+            details: { retryAfterSeconds: 20 },
+          }),
+        ),
+      { reason: "retry", failedAccessToken: refreshToken },
+    );
+    assert.equal(limitedResult.kind, "rate-limited");
+
+    // 4) 退出落盘
+    await tab.coordinateLogout(async () => undefined);
+
+    assert.ok(writes.length >= 5, `预期至少 5 次落盘，实际 ${writes.length}`);
+
+    const allowedKeys = new Set([
+      "seq",
+      "roundId",
+      "status",
+      "ownerTabId",
+      "logoutSeq",
+      "updatedAt",
+      "retryUntil",
+    ]);
+    const statuses = [];
+    for (const [key, raw] of writes) {
+      assert.equal(key, H5_COORD_KEY, "只允许写入固定协调键");
+      assert.equal(key, "hehuoda.auth.h5.coord.v1");
+      const parsed = JSON.parse(raw);
+      for (const field of Object.keys(parsed)) {
+        assert.ok(allowedKeys.has(field), `协调记录出现白名单外字段：${field}`);
+      }
+      statuses.push(parsed.status);
+      for (const secret of [loginToken, refreshToken, "u1", "禾伙搭用户"]) {
+        assert.ok(
+          !raw.includes(secret),
+          `协调记录不得包含令牌或用户标识：${secret}`,
+        );
+      }
+    }
+    for (const expected of [
+      "succeeded",
+      "running",
+      "rate_limited",
+      "logged_out",
+    ]) {
+      assert.ok(
+        statuses.includes(expected),
+        `未覆盖状态 ${expected}，实际：${statuses.join(",")}`,
+      );
+    }
+    assert.ok(
+      writes.some(([, raw]) => "retryUntil" in JSON.parse(raw)),
+      "429 落盘应带 retryUntil",
+    );
+  } finally {
+    tab?.dispose();
+    if (prevDesc) Object.defineProperty(globalThis, "localStorage", prevDesc);
+    else delete globalThis.localStorage;
+  }
 });
 
 test("浏览器禁止访问 localStorage 时，两标签仍可初始化且均不发起刷新", async () => {
