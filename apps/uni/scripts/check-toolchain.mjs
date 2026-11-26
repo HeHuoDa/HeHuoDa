@@ -16,6 +16,7 @@ const expected = {
   vite: "5.2.8",
   "vue-router": "4.4.4",
   "@dcloudio/uni-app": "3.0.0-5020420260813003",
+  "@dcloudio/uni-app-plus": "3.0.0-5020420260813003",
   "@dcloudio/uni-h5": "3.0.0-5020420260813003",
   "@dcloudio/uni-mp-weixin": "3.0.0-5020420260813003",
   "@dcloudio/vite-plugin-uni": "3.0.0-5020420260813003",
@@ -44,18 +45,30 @@ for (const owner of [
     `${owner} renderer peer`,
   );
 }
-for (const runtime of ["uni-h5-vue", "uni-mp-vue"]) {
+for (const runtime of ["uni-h5-vue", "uni-app-vue", "uni-mp-vue"]) {
   const owner =
-    runtime === "uni-h5-vue" ? "@dcloudio/uni-h5" : "@dcloudio/uni-mp-weixin";
+    runtime === "uni-h5-vue"
+      ? "@dcloudio/uni-h5"
+      : runtime === "uni-app-vue"
+        ? "@dcloudio/uni-app-plus"
+        : "@dcloudio/uni-mp-weixin";
   const ownerRequire = createRequire(require.resolve(`${owner}/package.json`));
+  // App 端渲染层只提供按环境拆分的 prod/dev 产物，采用与正式构建一致的 prod 文件。
   const entry = resolve(
     dirname(ownerRequire.resolve(`@dcloudio/${runtime}/package.json`)),
-    "dist/vue.runtime.esm.js",
+    runtime === "uni-app-vue"
+      ? "dist/vue.runtime.esm.prod.js"
+      : "dist/vue.runtime.esm.js",
   );
   const source = readFileSync(entry, "utf8");
   assert.match(source, /(?:const|var) version = ["']3\.4\.21["']/);
+  assert.equal(
+    packageVersion(ownerRequire, `@dcloudio/${runtime}`),
+    expected["@dcloudio/uni-app"],
+    `${runtime} 须与 DCloud 编译层同版`,
+  );
   console.info(`DCloud 内嵌 ${runtime}: 3.4.21（区别于应用依赖 Vue 3.5.42）`);
 }
 console.info(
-  "工具链版本与 DCloud 内部 renderer 配套检查通过；不代表微信实际运行或完整 Vue 3.5 API 支持。",
+  "工具链版本与 DCloud 内部 renderer 配套检查通过；不代表微信实际运行、Android 真机或完整 Vue 3.5 API 支持。",
 );

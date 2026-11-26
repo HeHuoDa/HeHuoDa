@@ -3,7 +3,7 @@ export interface ApiConfig {
   timeout: number;
 }
 
-/** 不依赖浏览器 URL/location；小程序与 H5 使用相同校验。 */
+/** 不依赖浏览器 URL/location；H5、Android App 与小程序使用相同校验。 */
 export function resolveApiConfig(env: {
   baseUrl?: string;
   timeout?: string;
@@ -20,7 +20,7 @@ export function resolveApiConfig(env: {
   );
   if (!baseUrl || (!absolute && !(relative && env.platform === "h5"))) {
     throw new Error(
-      "请配置有效的 VITE_API_BASE_URL。小程序须使用完整 API 地址。",
+      "请配置有效的 VITE_API_BASE_URL。H5 以外须使用完整 API 地址。",
     );
   }
   if (!env.development && absolute && !baseUrl.startsWith("https://")) {

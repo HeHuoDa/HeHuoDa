@@ -4,54 +4,79 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "vite";
-import { platformConfig } from "./platform-config.mjs";
+import { invocation, runConfig } from "./run-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const [command, platform, ...args] = process.argv.slice(2);
 if (
   !["dev", "build"].includes(command) ||
-  !["h5", "mp-weixin"].includes(platform)
+  !["h5", "mp-weixin", "app"].includes(platform)
 ) {
-  throw new Error("用法：run-uni.mjs dev|build h5|mp-weixin");
+  throw new Error("用法：run-uni.mjs dev|build h5|mp-weixin|app");
 }
-const env = {
-  ...loadEnv(command === "build" ? "production" : "development", root, ""),
-  ...process.env,
-};
-const config = platformConfig(env);
-const manifest = JSON.parse(
-  readFileSync(resolve(root, "manifest.template.json"), "utf8"),
-);
-manifest["mp-weixin"].appid = config.appid;
-writeFileSync(
-  resolve(root, "src/manifest.json"),
-  JSON.stringify(manifest, null, 2) + "\n",
-);
+// 生产/开发各自使用正确的 Vite mode；进程环境优先于 .env 文件。
+const mode = command === "build" ? "production" : "development";
+const plan = runConfig({
+  command,
+  platform,
+  root,
+  env: {
+    ...loadEnv(mode, root, ""),
+    ...process.env,
+    manifestTemplate: readFileSync(
+      resolve(root, "manifest.template.json"),
+      "utf8",
+    ),
+  },
+});
+const { config, manifest, outDir } = plan;
+// App 由脚本固定平台、mode、编译输入与产物目录；H5/小程序沿用原参数透传与进程环境。
+const { args: cliArgs, env: childEnv } = invocation({
+  command,
+  platform,
+  mode,
+  args,
+  plan,
+  processEnv: process.env,
+});
 if (platform === "mp-weixin" && !config.appid) {
   console.info(
     "[本地编译] 未配置 AppID；DCloud 会生成 touristappid，仅用于编译检查，不用于平台运行或发布。",
   );
 }
+if (platform === "app") {
+  // 资源构建产物（App-Plus www 资源）不等于 APK；签名与原生工程仍属后续验收。
+  console.info(
+    `[App 资源编译] API 基址 ${config.apiBaseUrl}；超时 ${config.timeout}ms；包名 ${config.packagename}。`,
+  );
+}
+writeFileSync(
+  resolve(root, "src/manifest.json"),
+  JSON.stringify(manifest, null, 2) + "\n",
+);
 const require = createRequire(import.meta.url);
 const cli = resolve(
   dirname(require.resolve("@dcloudio/vite-plugin-uni/package.json")),
   "bin/uni.js",
 );
-const child = spawn(
-  process.execPath,
-  [cli, ...(command === "build" ? ["build"] : []), "-p", platform, ...args],
-  {
-    cwd: root,
-    stdio: "inherit",
-    env: process.env,
-  },
-);
+// 脚本不预清理产物目录：DCloud/Vite 在编译开始时才清空 outDir，
+// 因此配置预检失败的启动会保留上一次成功构建的产物，成功与否只以退出码为准。
+const child = spawn(process.execPath, [cli, ...cliArgs], {
+  cwd: root,
+  stdio: "inherit",
+  env: childEnv,
+});
 child.on("error", (error) => {
   console.error(error.message);
   process.exitCode = 1;
 });
 child.on("exit", (code) => {
   process.exitCode = code ?? 1;
+  if (platform === "app" && code === 0 && outDir) {
+    console.info(
+      `[App 资源编译] 输出目录 ${outDir}；生成签名 APK 的后续步骤见 docs/android-app-build.md。`,
+    );
+  }
 });
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));

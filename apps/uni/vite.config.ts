@@ -17,9 +17,9 @@ export default defineConfig(({ command, mode }) => {
         cssOptions: { rem2rpx: true },
       }),
     ],
-    // uni-app H5 保留软链路径，devtools 的传递依赖因此丢失包边界。
-    // 只将 H5 devtools 入口指向真实路径；小程序继续使用 DCloud 的平台适配。
-    ...(process.env.UNI_PLATFORM === "h5"
+    // uni-app H5/App 保留软链路径，devtools 的传递依赖因此丢失包边界。
+    // 只将 H5 与 App devtools 入口指向真实路径；小程序继续使用 DCloud 的平台适配。
+    ...(process.env.UNI_PLATFORM === "h5" || process.env.UNI_PLATFORM === "app"
       ? {
           resolve: {
             alias: {
