@@ -26,7 +26,12 @@ export function preprocess(source, platform) {
     .join("\n");
 }
 const modules = new Map();
-export async function component(file, platform = "MP-WEIXIN") {
+/**
+ * 组件宿主默认平台为 H5（现行主交付端）。
+ * 双端差异用例显式传入 "APP-PLUS"（Android 资源编译）；微信小程序已按 ADR 0011 退役，
+ * 不再作为默认宿主或断言目标。
+ */
+export async function component(file, platform = "H5") {
   const url = file instanceof URL ? file : new URL(file, import.meta.url);
   const key = `${url.href}:${platform}`;
   if (modules.has(key)) return modules.get(key);
@@ -95,7 +100,7 @@ export async function component(file, platform = "MP-WEIXIN") {
   return target;
 }
 
-export async function mount(file, props = {}, platform = "MP-WEIXIN") {
+export async function mount(file, props = {}, platform = "H5") {
   const Component = (await import(await component(file, platform))).default;
   const create = (type, text = "") => ({
     type,

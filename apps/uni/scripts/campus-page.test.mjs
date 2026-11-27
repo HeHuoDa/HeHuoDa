@@ -45,7 +45,7 @@ after(() => loader.deregister());
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function platform(uniPlatform = "mp-weixin") {
+function platform(uniPlatform = "app") {
   globalThis.__campusRequests = [];
   const calls = [];
   globalThis.uni = {
@@ -101,9 +101,9 @@ test("H5 校园认证入口接入统一学校登录流程，读取公开说明�
   }
 });
 
-test("非 H5 端认证页保持暂缓说明且不渲染凭据表单也不发请求", async () => {
-  const p = platform("mp-weixin");
-  const page = await mount("../src/pages/campus/index.vue", {}, "MP-WEIXIN");
+test("非 H5（Android App-Plus）认证页保持暂缓说明且不渲染凭据表单也不发请求", async () => {
+  const p = platform("app");
+  const page = await mount("../src/pages/campus/index.vue", {}, "APP-PLUS");
   try {
     const text = textOf(page.container);
     assert.match(text, /统一身份认证尚未开放/);

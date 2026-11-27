@@ -18,7 +18,7 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     // uni-app H5/App 保留软链路径，devtools 的传递依赖因此丢失包边界。
-    // 只将 H5 与 App devtools 入口指向真实路径；小程序继续使用 DCloud 的平台适配。
+    // 只将 H5 与 App devtools 入口指向真实路径，不改动 DCloud 的平台适配链。
     ...(process.env.UNI_PLATFORM === "h5" || process.env.UNI_PLATFORM === "app"
       ? {
           resolve: {

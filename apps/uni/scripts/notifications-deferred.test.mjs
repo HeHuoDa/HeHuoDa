@@ -53,7 +53,7 @@ function button(page, label) {
   );
 }
 
-for (const target of ["H5", "MP-WEIXIN", "APP-PLUS"]) {
+for (const target of ["H5", "APP-PLUS"]) {
   test(`站内通知页 ${target} 只说明暂缓，不展示演示通知与已读交互`, async () => {
     const calls = platform();
     const session = useSessionStore();

@@ -80,7 +80,7 @@ test("关于页公开展示真实查询、会话保留、暂缓组队与 H5 统�
   }
 });
 
-for (const platform of ["H5", "MP-WEIXIN"]) {
+for (const platform of ["H5", "APP-PLUS"]) {
   test(`${platform} 关于页有栈/空栈均返回个人资料，双重导航失败可重试且不残留意图`, async () => {
     setActivePinia(createPinia());
     const originalUni = globalThis.uni;
@@ -133,7 +133,7 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
     globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
     globalThis.uni = {
       getSystemInfoSync: () => ({
-        uniPlatform: platform === "H5" ? "web" : "mp-weixin",
+        uniPlatform: platform === "H5" ? "web" : "app",
       }),
       navigateTo: ({ fail }) => fail(),
     };
@@ -163,7 +163,7 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
       assert.match(textOf(app.container), /暂时无法打开关于页面，请重试/);
       globalThis.uni = {
         getSystemInfoSync: () => ({
-          uniPlatform: platform === "H5" ? "web" : "mp-weixin",
+          uniPlatform: platform === "H5" ? "web" : "app",
         }),
         navigateTo: ({ url }) => destinations.push(url),
       };

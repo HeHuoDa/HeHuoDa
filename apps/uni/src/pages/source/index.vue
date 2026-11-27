@@ -3,12 +3,16 @@ import { pageRouteQuery } from "../../navigation/h5-address";
 import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import CompetitionSourceAction from "../../components/CompetitionSourceAction.vue";
-import { resolveWebViewSource } from "../../source/policy";
 
+/**
+ * 官方来源直达页。
+ *
+ * 按 ADR 0011，小程序内嵌 web-view 承载已退役；本页只保留可执行的回退：
+ * H5 用安全外链新窗口打开，Android 提供复制与系统浏览器路径（真机打开归 #226）。
+ * 地址仍由来源组件按公开 HTTPS 规则重新判定，路由参数不能当作允许标记。
+ */
 const rawUrl = ref("");
 const title = ref("官方原文");
-const embeddedUrl = ref("");
-const failed = ref(false);
 const notice = computed(() => ({
   id: "source",
   title: title.value,
@@ -22,33 +26,17 @@ onLoad((platformQuery) => {
   rawUrl.value = typeof url === "string" ? url : "";
   title.value =
     typeof query?.title === "string" && query.title ? query.title : "官方原文";
-  failed.value = false;
-  embeddedUrl.value = "";
-  // #ifdef MP-WEIXIN
-  embeddedUrl.value = resolveWebViewSource(url) || "";
-  // #endif
 });
 </script>
 
 <template>
-  <view>
-    <!-- #ifdef MP-WEIXIN -->
-    <web-view
-      v-if="embeddedUrl && !failed"
-      :src="embeddedUrl"
-      @error="failed = true"
-    />
-    <!-- #endif -->
-    <view v-if="!embeddedUrl || failed" class="hhr-page">
-      <view class="hhr-page__inner hhr-panel p-6">
-        <text class="source-title">{{ title }}</text>
-        <text class="source-explanation">{{
-          failed
-            ? "原文加载失败，可能因域名配置、网络或隐私限制暂不可用。请复制链接到浏览器核对。"
-            : "此地址当前不在应用内打开，请使用下方原文入口或复制链接到浏览器核对。"
-        }}</text>
-        <CompetitionSourceAction :notice="notice" copy-only />
-      </view>
+  <view class="hhr-page">
+    <view class="hhr-page__inner hhr-panel p-6">
+      <text class="source-title">{{ title }}</text>
+      <text class="source-explanation"
+        >此地址不在应用内嵌入打开，请使用下方原文入口或复制链接到浏览器核对。</text
+      >
+      <CompetitionSourceAction :notice="notice" copy-only />
     </view>
   </view>
 </template>

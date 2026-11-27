@@ -1,6 +1,3 @@
-import { approvedWebViewHosts } from "./config.ts";
-export { approvedWebViewHosts } from "./config.ts";
-
 export interface SourceUrl {
   url: string;
   protocol: string;
@@ -10,9 +7,12 @@ export interface SourceUrl {
 }
 
 /**
- * 两端共用保守的 HTTP(S) DNS 地址子集，不依赖微信未保证提供的全局 URL。
+ * 保守的 HTTP(S) DNS 地址子集，不依赖运行时未保证提供的全局 URL。
  * 不修复空白、反斜杠、userinfo、编码主机、端口或破损转义，避免浏览器二次解释。
  * 官方来源使用 ASCII DNS 主机；IP / 国际化主机需先独立评估后扩展。
+ *
+ * 现行交付端（H5 与 Android）之间可执行地址的判定见 `./public-url.ts` 的
+ * `resolvePublicSourceUrl`，它与管理端手工录入通道共用同一套规则。
  */
 export function parseSourceUrl(value: unknown): SourceUrl | null {
   if (
@@ -54,24 +54,3 @@ export function parseSourceUrl(value: unknown): SourceUrl | null {
 
 /** H5 公开外链规则见 `./public-url.ts`；它与管理端手工录入通道共用同一份判定。 */
 export { resolvePublicSourceUrl } from "./public-url.ts";
-
-/**
- * 仅核准主机的 HTTPS 静态通知可嵌入；带 query/hash 的地址统一复制，
- * 不尝试猜测各站的跳转参数名，防止编码和站点私有跳转参数绕过。
- * 承载页必须再次调用，路由传参不能视为可信。
- */
-export function resolveWebViewSource(
-  value: unknown,
-  allowedHosts: readonly string[] = approvedWebViewHosts,
-): string | null {
-  const source = parseSourceUrl(value);
-  if (
-    !source ||
-    source.protocol !== "https" ||
-    (source.port !== "" && source.port !== "443") ||
-    !allowedHosts.includes(source.hostname) ||
-    /[?#]/.test(source.suffix)
-  )
-    return null;
-  return source.url;
-}

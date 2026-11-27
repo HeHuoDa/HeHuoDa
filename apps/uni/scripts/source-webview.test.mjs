@@ -6,15 +6,9 @@ import { after, test } from "node:test";
 import { nextTick } from "vue";
 import { mount, textOf } from "./component-host.mjs";
 
-// 仅核准环境配置用替身；页面、策略、导航和剪贴板包装器均运行真实源码。
-const config = `data:text/javascript,export const approvedWebViewHosts = Object.freeze(['news.example.edu.cn']);`;
+// 页面、策略、导航与剪贴板包装器均运行真实源码。
 const loader = registerHooks({
   resolve(name, context, next) {
-    if (
-      name.endsWith("/config.ts") &&
-      context.parentURL?.endsWith("/source/policy.ts")
-    )
-      return { url: config, shortCircuit: true };
     if (name.startsWith(".") && !extname(name)) {
       const url = new URL(`${name}.ts`, context.parentURL);
       if (existsSync(url)) return next(url.href, context);
@@ -24,7 +18,7 @@ const loader = registerHooks({
 });
 after(() => loader.deregister());
 
-test("核准地址进入真实 web-view；加载失效后卸载控件并复制，不重开失败原文", async () => {
+test("旧核准域名直达地址落到可操作回退：不再加载 web-view，只保留复制与系统浏览器路径", async () => {
   const original = globalThis.uni,
     oldHooks = globalThis.__pageLoadHooks;
   globalThis.__pageLoadHooks = [];
@@ -40,25 +34,29 @@ test("核准地址进入真实 web-view；加载失效后卸载控件并复制�
       options.success();
     },
   };
-  const app = await mount("../src/pages/source/index.vue");
+  const app = await mount("../src/pages/source/index.vue", {}, "APP-PLUS");
   try {
     globalThis.__pageLoadHooks[0]({
       url: "https://news.example.edu.cn/a",
       title: "通知",
     });
     await nextTick();
-    const webview = app.find((node) => node.type === "web-view");
-    assert.equal(webview.props.src, "https://news.example.edu.cn/a");
-    webview.props.onError({ detail: { errMsg: "domain invalid" } });
-    await nextTick();
+    // web-view 内嵌承载已按 ADR 0011 退役：页面必须没有任何 web-view 节点。
     assert.equal(
       app.find((node) => node.type === "web-view"),
       undefined,
     );
-    assert.match(textOf(app.container), /加载失败/);
-    app.find((node) => node.type === "button").props.onClick();
+    assert.match(textOf(app.container), /不在应用内嵌入打开/);
+    app
+      .find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("复制官方链接"),
+      )
+      .props.onClick();
     await new Promise((r) => setImmediate(r));
     await nextTick();
+    // 直达页自身只提供复制，不再向下一个承载页跳转。
     assert.deepEqual(navigations, []);
     assert.deepEqual(copies, ["https://news.example.edu.cn/a"]);
   } finally {

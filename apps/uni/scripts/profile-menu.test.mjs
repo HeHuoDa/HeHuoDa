@@ -126,9 +126,9 @@ async function mountOverview(platform = "H5") {
   };
 }
 
-for (const platform of ["MP-WEIXIN", "H5"]) {
+for (const platform of ["APP-PLUS", "H5"]) {
   test(`${platform} 游客态区分游客与学校账号，无微信登录与联系方式授权`, async () => {
-    installPlatform(platform === "H5" ? "web" : "mp-weixin");
+    installPlatform(platform === "H5" ? "web" : "app");
     setActivePinia(createPinia());
     const view = await mountOverview(platform);
     try {
@@ -288,10 +288,10 @@ test("H5 登录态展示服务端账号与昵称，支持 PATCH 改昵称与退�
 });
 
 test("示例资料保存只影响当前会话，昵称保持只读且不写账号", async () => {
-  installPlatform("mp-weixin");
+  installPlatform("app");
   setActivePinia(createPinia());
   const session = useSessionStore();
-  const view = await mountOverview("MP-WEIXIN");
+  const view = await mountOverview("APP-PLUS");
   try {
     assert.doesNotMatch(textOf(view.app.container), /待接入|微信用户/);
     assert.match(textOf(view.app.container), /收藏比赛/);

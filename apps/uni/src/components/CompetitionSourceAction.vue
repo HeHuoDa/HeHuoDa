@@ -7,19 +7,12 @@ import {
   type SourcePorts,
   type SourceResult,
 } from "../source/actions";
-import {
-  approvedWebViewHosts,
-  parseSourceUrl,
-  resolveWebViewSource,
-} from "../source/policy";
-// #ifdef H5
 import { resolvePublicSourceUrl } from "../source/policy";
-// #endif
 // #ifdef H5
 import SourceLink from "./SourceLink.h5.vue";
 import { writeH5Clipboard } from "../source/clipboard-h5";
 // #endif
-// #ifdef MP-WEIXIN
+// #ifndef H5
 import { openPage } from "../navigation/navigate";
 // #endif
 
@@ -29,15 +22,12 @@ const props = defineProps<{
     "id" | "title" | "publisher" | "url"
   >;
   compact?: boolean;
+  /** 来源直达页自身只提供复制，不再向下一个承载页跳转。 */
   copyOnly?: boolean;
 }>();
-// H5 按 ADR 0011 接受公开 HTTPS；小程序仍按原规则解析并受承载页主机白名单约束。
-let acceptSource: typeof parseSourceUrl = parseSourceUrl;
-// #ifdef H5
-acceptSource = resolvePublicSourceUrl;
-// #endif
+// 现行交付端（H5 与 Android）都按 ADR 0011 接受公开 HTTPS 外链。
+const acceptSource = resolvePublicSourceUrl;
 const source = computed(() => acceptSource(props.notice.url));
-const embeddable = computed(() => resolveWebViewSource(props.notice.url));
 const feedback = ref<SourceResult | null>(null);
 const busy = ref(false);
 let generation = 0;
@@ -53,7 +43,8 @@ const ports: SourcePorts = {};
 // #ifdef H5
 ports.writeClipboard = writeH5Clipboard;
 // #endif
-// #ifdef MP-WEIXIN
+// #ifndef H5
+// App-Plus 走 uni 通用剪贴板 API（非平台专有接口）；失败仍转为可取选地址的手动路径。
 ports.writeClipboard = (url) =>
   new Promise<void>((resolve, reject) => {
     uni.setClipboardData({
@@ -62,31 +53,40 @@ ports.writeClipboard = (url) =>
       fail: reject,
     });
   });
-ports.openWebView = (url) =>
-  new Promise<void>((resolve, reject) => {
-    openPage(
-      "source-webview",
-      { url, title: props.notice.title },
-      () => reject(new Error("navigation failed")),
-      resolve,
-    );
-  });
 // #endif
-const actions = createSourceActions(ports, approvedWebViewHosts, acceptSource);
+const actions = createSourceActions(ports, acceptSource);
 
-async function activate(open = false) {
+/**
+ * 复制当前 Notice 的官方链接。
+ * 小程序内嵌承载已按 ADR 0011 退役，这里不再发起 web-view 导航；
+ * Android 的系统浏览器打开由 #226 在真机侧实测。
+ */
+async function copySource() {
   if (busy.value) return;
   const current = ++generation;
-  const isCurrent = () => generation === current;
   busy.value = true;
   feedback.value = null;
-  const url = props.notice.url;
-  const result = open
-    ? await actions.openWeixin(url, isCurrent)
-    : await actions.copy(url);
-  if (!isCurrent()) return;
+  const result = await actions.copy(props.notice.url);
+  if (generation !== current) return;
   feedback.value = result;
   busy.value = false;
+}
+
+/** 非 H5（Android）保留来源直达页作为可执行入口，参数仍由承载页重新校验。 */
+function openSourcePage() {
+  const target = source.value;
+  if (!target) return;
+  openPage(
+    "source-webview",
+    { url: target.url, title: props.notice.title },
+    () => {
+      feedback.value = {
+        status: "manual",
+        message: "暂时无法打开原文页面，请先复制链接到浏览器核对。",
+        url: target.url,
+      };
+    },
+  );
 }
 </script>
 
@@ -110,12 +110,12 @@ async function activate(open = false) {
         :variant="compact ? 'reveal' : 'secondary'"
         :loading="busy"
         class="source-button"
-        @click="activate()"
+        @click="copySource"
       >
         {{ compact ? "复制链接" : "复制官方链接" }}
       </FormButton>
       <!-- #endif -->
-      <!-- #ifdef MP-WEIXIN -->
+      <!-- #ifndef H5 -->
       <text
         v-if="!compact"
         :selectable="true"
@@ -124,13 +124,21 @@ async function activate(open = false) {
         >{{ notice.url }}</text
       >
       <FormButton
+        v-if="!copyOnly"
         :variant="compact ? 'reveal' : 'secondary'"
         :loading="busy"
         class="source-button"
-        @click="activate(!copyOnly)"
+        @click="openSourcePage"
       >
-        {{ compact ? notice.publisher + "原文 · " : ""
-        }}{{ embeddable && !copyOnly ? "查看原文" : "复制官方链接" }}
+        {{ compact ? notice.publisher + "原文" : "查看官方原文" }}
+      </FormButton>
+      <FormButton
+        variant="secondary"
+        :loading="busy"
+        class="source-button"
+        @click="copySource"
+      >
+        {{ compact ? "复制链接" : "复制官方链接" }}
       </FormButton>
       <!-- #endif -->
     </template>

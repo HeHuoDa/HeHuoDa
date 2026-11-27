@@ -41,14 +41,17 @@ test("列表按需读取当前赛段真实 Notice；失败可重试，切换条�
       options.success();
     },
   };
-  const app = await mount("../src/components/CompetitionSources.vue", {
-    competitionId: "competition-a",
-    stageId: "stage-a",
-  });
+  const app = await mount(
+    "../src/components/CompetitionSources.vue",
+    { competitionId: "competition-a", stageId: "stage-a" },
+    "APP-PLUS",
+  );
   try {
     const button = (label) =>
       app.find(
-        (node) => node.type === "button" && textOf(node).includes(label),
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes(label),
       );
     assert.equal(requests.length, 0);
     button("查看官方来源").props.onClick();
@@ -60,7 +63,8 @@ test("列表按需读取当前赛段真实 Notice；失败可重试，切换条�
     button("重试来源").props.onClick();
     requests[1].success({ statusCode: 200, data: detail() });
     await flush();
-    button("复制官方链接").props.onClick();
+    // compact 来源在非 H5 端的主操作是「复制链接」，与 H5 安全外链区分。
+    button("复制链接").props.onClick();
     await flush();
     assert.deepEqual(copies, [detail().notices[0].url]);
     app.render({ competitionId: "competition-b", stageId: "stage-a" });
@@ -87,19 +91,28 @@ const flush = async () => {
   await nextTick();
 };
 
-test("微信来源组件操作当前 Notice，失败保留可选择地址；切换与卸载清理迟到反馈", async () => {
+test("App-Plus 来源组件操作当前 Notice，失败保留可选择地址；切换与卸载清理迟到反馈", async () => {
   const original = globalThis.uni;
   const calls = [];
-  globalThis.uni = { setClipboardData: (options) => calls.push(options) };
+  globalThis.uni = {
+    setClipboardData: (options) => calls.push(options),
+    navigateTo: (options) => options.success?.(),
+  };
   const notice = detail().notices[0];
-  const app = await mount("../src/components/CompetitionSourceAction.vue", {
-    notice,
-    compact: true,
-  });
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
   try {
-    const click = () =>
-      app.find((node) => node.type === "button").props.onClick();
-    click();
+    const copyButton = () =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("复制链接"),
+      );
+    copyButton().props.onClick();
+    await flush();
     assert.equal(calls[0].data, notice.url);
     assert.doesNotMatch(textOf(app.container), /已复制/);
     const next = {
@@ -112,7 +125,8 @@ test("微信来源组件操作当前 Notice，失败保留可选择地址；切�
     calls[0].success();
     await flush();
     assert.doesNotMatch(textOf(app.container), /已复制/);
-    click();
+    copyButton().props.onClick();
+    await flush();
     assert.equal(calls[1].data, next.url);
     calls[1].fail({ errMsg: "privacy denied" });
     await flush();
@@ -121,9 +135,9 @@ test("微信来源组件操作当前 Notice，失败保留可选择地址；切�
     assert.ok(
       app.find((node) => node.type === "text" && node.props.selectable),
     );
-    click();
+    copyButton().props.onClick();
     app.unmount();
-    calls[2].success();
+    calls[2]?.success();
     await flush();
   } finally {
     app.unmount();
@@ -171,7 +185,7 @@ test("H5 完整和 compact 来源使用安全原生链接，危险地址没有�
   }
 });
 
-test("承载页直达不能用路由参数绕过空允许列表，仍提供当前链接和可操作回退", async () => {
+test("来源直达页不使用路由参数绕过校验，仍提供当前链接和可操作回退", async () => {
   const original = globalThis.uni;
   const originalHooks = globalThis.__pageLoadHooks;
   globalThis.__pageLoadHooks = [];
@@ -181,18 +195,21 @@ test("承载页直达不能用路由参数绕过空允许列表，仍提供当�
       copied = options.data;
       options.fail();
     },
+    navigateTo: (options) => options.success?.(),
   };
-  const app = await mount("../src/pages/source/index.vue");
+  const app = await mount("../src/pages/source/index.vue", {}, "APP-PLUS");
   try {
     const load = globalThis.__pageLoadHooks[0];
     load({ url: "https://news.example.edu.cn/a", title: "真实通知标题" });
     await nextTick();
-    assert.equal(
-      app.find((node) => node.type === "web-view"),
-      undefined,
-    );
     assert.match(textOf(app.container), /真实通知标题/);
-    app.find((node) => node.type === "button").props.onClick();
+    app
+      .find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("复制官方链接"),
+      )
+      .props.onClick();
     await flush();
     assert.equal(copied, "https://news.example.edu.cn/a");
     assert.match(textOf(app.container), /手动复制/);
@@ -203,11 +220,11 @@ test("承载页直达不能用路由参数绕过空允许列表，仍提供当�
       load({ url });
       await nextTick();
       assert.equal(
-        app.find((node) => node.type === "web-view"),
-        undefined,
-      );
-      assert.equal(
-        app.find((node) => node.type === "button"),
+        app.find(
+          (node) =>
+            (node.type === "button" || node.props.role === "button") &&
+            textOf(node).includes("复制官方链接"),
+        ),
         undefined,
       );
       assert.match(textOf(app.container), /地址无效/);

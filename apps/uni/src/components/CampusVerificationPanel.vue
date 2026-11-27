@@ -7,7 +7,7 @@ import FormButton from "./FormButton.vue";
 import FormInput from "./FormInput.vue";
 
 const props = withDefaults(defineProps<{ state?: CampusState }>(), {
-  // 小程序首次 attached 时属性可能尚未到达，先保持加载态。
+  // 原生端首次 attached 时属性可能尚未到达，先保持加载态。
   state: () => ({ ...initialCampusState(), pending: "loading" }),
 });
 const emit = defineEmits<{
