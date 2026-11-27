@@ -94,9 +94,15 @@ const flush = async () => {
 test("App-Plus 来源组件操作当前 Notice，失败保留可选择地址；切换与卸载清理迟到反馈", async () => {
   const original = globalThis.uni;
   const calls = [];
+  const navigations = [];
+  let failNextNavigation = false;
   globalThis.uni = {
     setClipboardData: (options) => calls.push(options),
-    navigateTo: (options) => options.success?.(),
+    navigateTo: (options) => {
+      navigations.push(options);
+      if (failNextNavigation) options.fail?.({ errMsg: "navigateTo:fail" });
+      else options.success?.();
+    },
   };
   const notice = detail().notices[0];
   const app = await mount(
@@ -135,6 +141,31 @@ test("App-Plus 来源组件操作当前 Notice，失败保留可选择地址；�
     assert.ok(
       app.find((node) => node.type === "text" && node.props.selectable),
     );
+    // 非 H5 端的「原文」入口走本地来源直达页，而不是内嵌承载。
+    const openButton = () =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("原文"),
+      );
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    assert.equal(
+      navigations[0].url,
+      `/pages/source/index?url=${encodeURIComponent(next.url)}&title=${encodeURIComponent(next.title)}`,
+    );
+    // 导航失败必须落到可取选地址的手动回退，不留空白或死链。
+    failNextNavigation = true;
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 2);
+    assert.match(textOf(app.container), /暂时无法打开原文页面/);
+    assert.match(
+      textOf(app.container),
+      /https:\/\/news\.example\.edu\.cn\/new/,
+    );
+    failNextNavigation = false;
     copyButton().props.onClick();
     app.unmount();
     calls[2]?.success();

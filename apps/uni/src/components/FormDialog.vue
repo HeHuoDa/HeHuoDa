@@ -55,8 +55,9 @@ watch(
     });
     // #endif
     // #ifdef APP-PLUS
-    // Android 原生层没有 DOM 适配器：用当前窗口高度与安全区作最小可用的尺寸基准。
-    // 软键盘遮挡、返回键与安全区的真实行为归 #220/#226 真机验收。
+    // Android 原生层没有 DOM 适配器：用当前窗口高度作最小可用的尺寸基准。
+    // 底部安全区由样式中的 env(safe-area-inset-bottom, 0px) 默认承担，这里不读取安全区。
+    // 软键盘遮挡、返回键与真机安全区的真实行为归 #220/#226 验收。
     const update = () => {
       if (generation !== current) return;
       const info = uni.getWindowInfo();

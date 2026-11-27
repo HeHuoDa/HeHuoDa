@@ -24,6 +24,17 @@ test("账号未就绪时允许本地编译，不伪造任何平台 AppID", () =>
 test("含糊的正式构建开关被拒绝", () => {
   assert.throws(() => platformConfig({ UNI_RELEASE: "yes" }), /true 或 false/);
 });
+test("未知构建目标显式报错，不静默按 H5 处理", () => {
+  for (const target of ["mp-weixin", "MP-WEIXIN", "web", "", null]) {
+    assert.throws(
+      () => platformConfig({}, target),
+      /ADR 0011|h5 \| app/u,
+      String(target),
+    );
+  }
+  // 默认参数行为不变：仍按 H5 返回。
+  assert.deepEqual(platformConfig({}), { appid: "", release: false });
+});
 test("已退役的微信 AppID 环境变量不再被读取或校验", () => {
   // 本机残留的无效 AppID 既不应阻断构建，也不应被透传到生成配置。
   for (const appid of ["touristappid", "wx1234567890abcdef", ""]) {

@@ -167,6 +167,11 @@ export function validateAndroidPackageName(value, { release }) {
 }
 
 export function platformConfig(env, target = "h5") {
+  if (target !== "h5" && target !== "app") {
+    throw new Error(
+      `未知的构建目标 ${String(target)}：微信小程序（mp-weixin）已按 ADR 0011 退役，有效目标只有 h5 | app。`,
+    );
+  }
   if (env.UNI_RELEASE && !["true", "false"].includes(env.UNI_RELEASE)) {
     throw new Error("UNI_RELEASE 只接受 true 或 false。");
   }
