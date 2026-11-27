@@ -35,7 +35,7 @@ test("H5 登录与注册页均挂载统一学校登录面板，非 H5 保留暂�
       file,
     );
 
-    const nativeView = preprocess(source, "MP-WEIXIN");
+    const nativeView = preprocess(source, "APP-PLUS");
     assert.match(nativeView, /<AuthBrandLayout>/, file);
     assert.match(nativeView, /<AuthPendingNotice/, file);
     assert.match(nativeView, nonH5Text, file);

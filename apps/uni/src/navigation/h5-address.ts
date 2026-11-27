@@ -45,7 +45,7 @@ export function canonicalH5Query(name: RouteName, raw: RouteQuery): RouteQuery {
   return query;
 }
 
-/** H5 链路保留合法附加参数；小程序仍以显式参数与一次性交接为准。 */
+/** H5 链路保留合法附加参数；非 H5 端以显式参数与一次性交接为准。 */
 export function currentH5Query(): RouteQuery {
   // #ifdef H5
   if (typeof globalThis.location !== "undefined")

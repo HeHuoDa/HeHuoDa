@@ -25,7 +25,6 @@ function keydown(event: {
 
 <template>
   <!-- H5 与 App-Plus 均为 webview 渲染，uni-button 默认不可键盘聚焦，view 显式承担按钮角色和键盘操作。 -->
-  <!-- #ifndef MP-WEIXIN -->
   <view
     role="button"
     :tabindex="disabled || loading ? -1 : 0"
@@ -40,18 +39,6 @@ function keydown(event: {
     @keydown="keydown"
     ><slot
   /></view>
-  <!-- #endif -->
-  <!-- #ifdef MP-WEIXIN -->
-  <button
-    :disabled="disabled || loading"
-    :loading="loading"
-    class="hhr-button"
-    :class="[`hhr-button--${variant}`, { 'is-disabled': disabled || loading }]"
-    @click="activate"
-  >
-    <slot />
-  </button>
-  <!-- #endif -->
 </template>
 
 <style scoped>

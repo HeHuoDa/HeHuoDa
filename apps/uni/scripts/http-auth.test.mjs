@@ -61,7 +61,7 @@ const isCredential = (data) =>
 test("POST 携带方法、请求体与认证头；无令牌时不带认证头", async () => {
   const p = platform(authSession());
   const posted = p.client.post(
-    "/auth/wechat/login",
+    "/auth/school/challenges",
     { code: "c" },
     isCredential,
   );
@@ -73,7 +73,7 @@ test("POST 携带方法、请求体与认证头；无令牌时不带认证头", 
 
   const noAuth = platform();
   const plain = noAuth.client.post(
-    "/auth/wechat/login",
+    "/auth/school/challenges",
     { code: "c" },
     isCredential,
   );
@@ -81,7 +81,7 @@ test("POST 携带方法、请求体与认证头；无令牌时不带认证头", 
   noAuth.respond(noAuth.calls[0], 200, { accessToken: "t" });
   await plain.promise;
 
-  // 昵称修改走 POST 别名：wx.request 不接受 PATCH，客户端不发明第三种方法。
+  // 昵称修改走 POST 别名：非 H5 传输不接受 PATCH，客户端不发明第三种方法。
   const renamed = p.client.post(
     "/auth/me",
     { nickname: "新昵称" },
@@ -150,18 +150,18 @@ test("刷新失败以原 401 拒绝；重发后仍 401 不再刷新", async () =
   assert.equal(auth2.state.refreshCount, 1);
 });
 
-test("未带认证头的 401（登录码无效）不触发刷新；网络与超时错误不重发", async () => {
+test("未带认证头的 401（凭据无效）不触发刷新；网络与超时错误不重发", async () => {
   const auth = authSession({ token: null });
   const p = platform(auth);
-  const login = p.client.post(
-    "/auth/wechat/login",
-    { code: "bad" },
-    isCredential,
-  );
-  p.respond(p.calls[0], 401, { code: "WECHAT_CODE_INVALID", message: "无效" });
+  // 公开刷新端点自身返回 401 时不得递归刷新。
+  const refresh = p.client.post("/auth/refresh", {}, isCredential);
+  p.respond(p.calls[0], 401, {
+    code: "INVALID_REFRESH_TOKEN",
+    message: "无效",
+  });
   await assert.rejects(
-    login.promise,
-    (error) => error.code === "WECHAT_CODE_INVALID",
+    refresh.promise,
+    (error) => error.code === "INVALID_REFRESH_TOKEN",
   );
   assert.equal(auth.state.refreshCount, 0);
 

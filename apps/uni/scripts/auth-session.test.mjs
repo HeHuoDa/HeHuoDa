@@ -12,7 +12,7 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 const credential = (overrides = {}) => ({
   kind: "active",
-  user: { id: "u1", nickname: "微信用户", status: "active" },
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
   accessToken: "at-1",
   refreshToken: "rt-1",
   accessExpiresAt: "2026-10-25T12:15:00.000Z",
@@ -21,7 +21,7 @@ const credential = (overrides = {}) => ({
 });
 
 const profile = (overrides = {}) => ({
-  user: { id: "u1", nickname: "微信用户", status: "active" },
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
   campus: {
     status: "unverified",
     termId: null,
@@ -58,9 +58,6 @@ function createApi() {
       };
       calls.push(call);
       return call;
-    },
-    wechatLogin(code, consentVersion) {
-      return api.pending("login", { code, consentVersion });
     },
     refresh(token) {
       return api.pending("refresh", token);
@@ -103,25 +100,27 @@ function setup(initialRefresh = null) {
   return { state, api, storage, session };
 }
 
-/** 完成一次登录：结算登录请求与随后的资料请求。 */
+/** 完成一次学校登录：结算随后的资料请求。 */
 async function loginOk(ctx, cred = credential(), prof = profile()) {
-  const pending = ctx.session.login("wx-code", 1);
-  ctx.api.calls.at(-1).resolve(cred);
+  const pending = ctx.session.applySchoolLogin(cred);
   await tick();
   ctx.api.calls.at(-1).resolve(prof);
   await pending;
 }
 
-test("登录只把刷新凭据写入存储，访问凭据仅在内存并提升代次", async () => {
+test("学校登录只把刷新凭据写入存储，访问凭据仅在内存并提升代次", async () => {
   const ctx = setup();
   await loginOk(ctx);
   assert.equal(ctx.storage.state.value, "rt-1");
   assert.equal(ctx.session.accessToken(), "at-1");
   assert.equal(ctx.state.phase, "authenticated");
-  assert.equal(ctx.state.user.nickname, "微信用户");
+  assert.equal(ctx.state.user.nickname, "禾伙搭用户");
   assert.equal(ctx.state.generation, 1);
-  const login = ctx.api.calls.find((call) => call.label === "login");
-  assert.deepEqual(login.arg, { code: "wx-code", consentVersion: 1 });
+  // 登录不再经过任何平台登录兑换请求，只读取学校登录成功后的账号资料。
+  assert.deepEqual(
+    ctx.api.calls.map((call) => call.label),
+    ["profile"],
+  );
 });
 
 test("冷启动只用刷新凭据恢复；无凭据时不发任何请求", async () => {
@@ -205,15 +204,13 @@ test("退出无论远端结果都清本地；远端失败如实返回状态不�
 
 test("账号切换后旧账号的迟到响应不写入新账号", async () => {
   const ctx = setup();
-  const first = ctx.session.login("code-a", 1);
-  ctx.api.calls[0].resolve(credential());
+  const first = ctx.session.applySchoolLogin(credential());
   await tick();
-  const lateProfile = ctx.api.calls[1];
+  const lateProfile = ctx.api.calls[0];
   // 旧资料请求不被取消，模拟平台迟到回调。
   lateProfile.cancel = () => {};
 
-  const second = ctx.session.login("code-b", 1);
-  ctx.api.calls[2].resolve(
+  const second = ctx.session.applySchoolLogin(
     credential({
       user: { id: "u2", nickname: "第二位", status: "active" },
       accessToken: "at-2",
@@ -221,7 +218,7 @@ test("账号切换后旧账号的迟到响应不写入新账号", async () => {
     }),
   );
   await tick();
-  ctx.api.calls[3].resolve(
+  ctx.api.calls[1].resolve(
     profile({ user: { id: "u2", nickname: "第二位", status: "active" } }),
   );
   await second;
@@ -288,10 +285,10 @@ test("错误映射只使用公开状态与错误码，不回显原始 message", 
     authFailureMessage(
       new RequestError("http", "关闭", {
         statusCode: 503,
-        code: "WECHAT_LOGIN_UNAVAILABLE",
+        code: "SERVICE_UNAVAILABLE",
       }),
     ),
-    "微信登录暂未开放，当前可先浏览公开内容。",
+    "服务暂时不可用，请稍后重试。",
   );
   assert.equal(
     authFailureMessage(

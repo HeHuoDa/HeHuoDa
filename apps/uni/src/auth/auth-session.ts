@@ -21,10 +21,6 @@ import { createH5TabSync, type H5TabSyncEnv } from "./h5-tab-sync.ts";
 
 /** 认证接口只依赖会话使用的动作，页面测试与平台替身共用同一形状。 */
 export interface AuthApi {
-  wechatLogin?(
-    code: string,
-    consentVersion: number,
-  ): PendingRequest<CredentialResponse>;
   refresh(
     refreshToken?: string,
   ): PendingRequest<CredentialResponse | H5CredentialResponse>;
@@ -33,7 +29,7 @@ export interface AuthApi {
   updateNickname(nickname: string): PendingRequest<ProfileResponse>;
 }
 
-/** 刷新凭据存储：小程序写入平台存储，H5 使用空实现，不落任何凭据。 */
+/** 刷新凭据存储：H5 与 Android 都使用空实现，不落任何凭据。 */
 export interface AuthStorage {
   read(): string | null;
   write(value: string): void;
@@ -112,12 +108,6 @@ export function authFailureMessage(
   if (error.kind === "network") return "暂时无法连接服务，请稍后重试。";
   if (error.kind === "invalid-response") return "服务响应异常，请稍后重试。";
   switch (error.code) {
-    case "WECHAT_LOGIN_UNAVAILABLE":
-      return "微信登录暂未开放，当前可先浏览公开内容。";
-    case "WECHAT_UPSTREAM_UNAVAILABLE":
-      return "微信登录服务暂时不可用，请稍后重试。";
-    case "WECHAT_CODE_INVALID":
-      return "微信登录凭证已失效，请重新点击登录。";
     case "CONSENT_VERSION_MISMATCH":
       return "平台协议已更新，请重新确认后登录。";
     case "ACCOUNT_RESTRICTED":
@@ -429,33 +419,6 @@ export function createAuthSession(
     }
   }
 
-  async function login(code: string, consentVersion: number): Promise<void> {
-    if (!api.wechatLogin) {
-      throw new Error("当前端不支持微信登录。");
-    }
-    if (!code.trim()) throw new Error("未能取得微信登录凭证，请重试。");
-    const at = advance();
-    forgetCredentials();
-    state.phase = "authenticating";
-    state.errorMessage = null;
-    state.profileError = null;
-    try {
-      const credentials = await api.wechatLogin(code, consentVersion).promise;
-      if (at !== state.generation)
-        throw new RequestError("cancelled", "登录状态已变化，已丢弃过期结果。");
-      applyCredentials(credentials);
-      const outcome = await loadProfile(at);
-      if (outcome === "stale")
-        throw new RequestError("cancelled", "登录状态已变化，已丢弃过期结果。");
-    } catch (error) {
-      if (at === state.generation) {
-        state.phase = "anonymous";
-        state.errorMessage = authFailureMessage(error);
-      }
-      throw error;
-    }
-  }
-
   /** 冷启动恢复：H5 经多标签协调最多尝试一次静默 Cookie 恢复；失败平滑回到游客。 */
   async function restore(): Promise<void> {
     if (state.phase === "authenticating") return;
@@ -633,7 +596,6 @@ export function createAuthSession(
         ? loadProfile(state.generation)
         : Promise.resolve("failed" as const),
     refresh,
-    login,
     applySchoolLogin,
     restore,
     logout,

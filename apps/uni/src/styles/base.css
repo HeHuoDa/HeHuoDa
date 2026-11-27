@@ -12,16 +12,16 @@
  * 用户端基础样式与可复用组件类。
  *
  * 只写页面级语义：page 根节点、.hhr-page 容器与 .hhr-* 组件类。
- * 不写 body 与浏览器 reset，H5 由 uni-app 注入的框架样式负责，小程序只有 page 节点。
+ * 不写 body 与浏览器 reset，H5 由 uni-app 注入的框架样式负责，App-Plus 只有 page 节点。
  * 布局、间距与尺寸继续用 Tailwind 工具类；组件类放在 components 层，
  * 工具类始终可以覆盖它们（例如 hhr-panel p-6）。
  *
- * 单位：间距与宽高写 rem，构建时由 weapp-tailwindcss 换算成小程序 rpx；
+ * 单位：间距与宽高写 rem，构建时由 weapp-tailwindcss 换算成 App-Plus 的响应式单位；
  * 字号、触控下限、边框与圆角写 px，保证可读性、44px 触控与控件外观不缩水。
  * 详见 docs/student-ui-style.md。
  */
 
-/* page 是两端共同的页面根节点：H5 编译为 uni-page-body，小程序保留 page。 */
+/* page 是两端共同的页面根节点：H5 编译为 uni-page-body，App-Plus 保留 page。 */
 page {
   box-sizing: border-box;
   background-color: var(--hhr-color-page);
@@ -52,7 +52,7 @@ page {
 
   /*
    * 底部主导航占位。H5 的 tabBar 是固定层，用 uni 注入的 --window-bottom
-   * 让正文不被遮挡；小程序 tabBar 在 webview 之外，该变量为 0。
+   * 让正文不被遮挡；App-Plus 的 tabBar 在 webview 之外，该变量为 0。
    */
   .hhr-page.hhr-page--tab {
     padding-bottom: calc(
@@ -132,7 +132,7 @@ page {
   }
 
   /*
-   * 主要按钮。小程序 button 自带背景、圆角、内边距与 ::after 边框，
+   * 主要按钮。原生 button 自带背景、圆角、内边距与 ::after 边框，
    * 这里逐项覆盖，避免两端外观不一致。
    * 禁用态同时匹配 [disabled] 与 .is-disabled：非原生按钮用类名表达。
    */
@@ -190,7 +190,7 @@ page {
 
   /*
    * 禁用态：H5 把 button 渲染成 uni-button 自定义元素，:disabled 伪类不匹配，
-   * 因此用 [disabled] 属性选择器（小程序原生 button 同样支持）。
+   * 因此用 [disabled] 属性选择器（App-Plus 原生 button 同样支持）。
    * 两端框架都会给 [disabled] 套灰色底和浅色字，且框架选择器
    * （uni-button[disabled]:not([type])）比单个类名更具体，这里重复类名提升优先级，
    * 按变体还原品牌配色，只用透明度表达不可用。

@@ -54,7 +54,7 @@ for (const [file, label] of [
   ["../src/pages/teams/new.vue", "旧发布招募直达页"],
   ["../src/pages/teams/detail.vue", "旧队伍详情直达页"],
 ]) {
-  for (const target of ["H5", "MP-WEIXIN", "APP-PLUS"]) {
+  for (const target of ["H5", "APP-PLUS"]) {
     test(`${label} ${target} 只说明暂缓，无展示队伍、表单与演示写操作`, async () => {
       const calls = platform();
       const session = useSessionStore();

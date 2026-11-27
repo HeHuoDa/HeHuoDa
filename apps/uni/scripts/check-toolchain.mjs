@@ -4,20 +4,19 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
 /**
- * 工具链检查默认只覆盖现行交付目标 H5 与 App-Plus 及其共用依赖。
- * 微信端已按 ADR 0011 退役，专用包与内嵌运行时版本改由
- * `--include-legacy-weixin` 显式校验，避免已退役平台阻塞默认门禁。
+ * 工具链检查只覆盖现行交付目标 H5 与 App-Plus 及其共用依赖。
+ * 微信端已按 ADR 0011 退役：遗留开关与遗留平台包都不再接受，
+ * 传入即非零退出，避免把已退役平台误当现行门禁。
  */
-const LEGACY_WEIXIN_FLAG = "--include-legacy-weixin";
-const unknown = process.argv
-  .slice(2)
-  .filter((arg) => arg !== LEGACY_WEIXIN_FLAG);
-if (unknown.length) {
+const RETIRED_FLAG = "--include-legacy-weixin";
+if (process.argv.slice(2).length) {
+  const unknown = process.argv.slice(2);
   throw new Error(
-    `未知参数 ${unknown.join(" ")}；仅支持 ${LEGACY_WEIXIN_FLAG}。`,
+    unknown.includes(RETIRED_FLAG)
+      ? `未知参数 ${RETIRED_FLAG}：微信小程序已按 ADR 0011 退役，工具链只校验 H5 与 App-Plus。`
+      : `未知参数 ${unknown.join(" ")}；check-toolchain 不接受任何参数（现行目标为 H5 与 App-Plus）。`,
   );
 }
-const includeLegacyWeixin = process.argv.includes(LEGACY_WEIXIN_FLAG);
 
 const require = createRequire(import.meta.url);
 const packageVersion = (request, name) =>
@@ -28,7 +27,7 @@ const expected = {
   "@vue/runtime-core": "3.5.42",
   pinia: "3.0.4",
   tailwindcss: "4.3.3",
-  // 两端共用同一套 Vite 插件链，包括只在微信构建里读取的 Tailwind 适配插件。
+  // 两端共用同一套 Vite 插件链，包括由 vite.config.ts 注册的 Tailwind 适配插件。
   "weapp-tailwindcss": "5.6.3",
   vite: "5.2.8",
   "vue-router": "4.4.4",
@@ -37,15 +36,11 @@ const expected = {
   "@dcloudio/uni-h5": "3.0.0-5020420260813003",
   "@dcloudio/vite-plugin-uni": "3.0.0-5020420260813003",
 };
-if (includeLegacyWeixin) {
-  expected["@dcloudio/uni-mp-weixin"] = "3.0.0-5020420260813003";
-}
 for (const [name, version] of Object.entries(expected)) {
   assert.equal(packageVersion(require, name), version, name);
 }
 
 const runtimes = ["uni-h5-vue", "uni-app-vue"];
-if (includeLegacyWeixin) runtimes.push("uni-mp-vue");
 for (const owner of [
   "@dcloudio/uni-cli-shared",
   "@dcloudio/uni-h5",
@@ -70,7 +65,6 @@ for (const owner of [
 const owners = {
   "uni-h5-vue": "@dcloudio/uni-h5",
   "uni-app-vue": "@dcloudio/uni-app-plus",
-  "uni-mp-vue": "@dcloudio/uni-mp-weixin",
 };
 for (const runtime of runtimes) {
   const ownerRequire = createRequire(
@@ -93,5 +87,5 @@ for (const runtime of runtimes) {
   console.info(`DCloud 内嵌 ${runtime}: 3.4.21（区别于应用依赖 Vue 3.5.42）`);
 }
 console.info(
-  `工具链版本与 DCloud 内部 renderer 配套检查通过（${includeLegacyWeixin ? "含" : "不含"}遗留微信平台）；不代表微信实际运行、Android 真机或完整 Vue 3.5 API 支持。`,
+  "工具链版本与 DCloud 内部 renderer 配套检查通过（H5 与 App-Plus，不含已退役的微信小程序）；不代表 Android 真机或完整 Vue 3.5 API 支持。",
 );

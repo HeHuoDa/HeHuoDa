@@ -6,7 +6,7 @@ import { deadlineInstant } from "@hehuoda/client-domain/team";
 import { readFileSync, readdirSync } from "node:fs";
 import { preprocess } from "./component-host.mjs";
 
-test("小程序可达源码排除 H5 DOM 适配器，公共组件无浏览器弹层与滚动锁", () => {
+test("App-Plus 可达源码排除 H5 DOM 适配器，公共组件无浏览器弹层与滚动锁", () => {
   const root = new URL("../src/", import.meta.url);
   for (const file of readdirSync(root, { recursive: true })) {
     const normalized = file.replaceAll("\\", "/");
@@ -19,38 +19,56 @@ test("小程序可达源码排除 H5 DOM 适配器，公共组件无浏览器弹
     const source = readFileSync(new URL(normalized, root), "utf8");
     if (normalized.endsWith(".h5.vue") || normalized === "forms/dialog-h5.ts")
       continue;
-    const weixin = preprocess(source, "MP-WEIXIN")
+    const app = preprocess(source, "APP-PLUS")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/[^\n]*/g, "");
     assert.doesNotMatch(
-      weixin,
+      app,
       /(?:NativePicker\.h5|NativeTextControl\.h5|dialog-h5)/,
       normalized,
     );
     assert.doesNotMatch(
-      weixin,
+      app,
       /\b(?:document|window)\s*\.|HTMLDialogElement|\.showModal\(|querySelector|body\.style/,
       normalized,
     );
   }
 });
 
-test("输入组件传递密码原值，显隐不提交，禁用及错误关联有效", async () => {
+test("生产源码不再包含小程序条件编译分支", () => {
+  const root = new URL("../src/", import.meta.url);
+  for (const file of readdirSync(root, { recursive: true })) {
+    const normalized = file.replaceAll("\\", "/");
+    if (!/\.(vue|ts|css)$/.test(file)) continue;
+    const source = readFileSync(new URL(normalized, root), "utf8");
+    assert.doesNotMatch(
+      source,
+      /#(?:ifdef|ifndef)\s+MP-WEIXIN/,
+      `${normalized} 不应再有微信条件编译分支`,
+    );
+  }
+});
+
+test("App-Plus 输入组件渲染 uni 原生输入控件并传递密码原值", async () => {
   const values = [];
-  const app = await mount("../src/components/FormInput.vue", {
-    id: "password",
-    label: "密码",
-    modelValue: "  pass  ",
-    secret: true,
-    error: "请输入密码",
-    "onUpdate:modelValue": (value) => values.push(value),
-  });
+  const app = await mount(
+    "../src/components/FormInput.vue",
+    {
+      id: "password",
+      label: "密码",
+      modelValue: "  pass  ",
+      secret: true,
+      error: "请输入密码",
+      "onUpdate:modelValue": (value) => values.push(value),
+    },
+    "APP-PLUS",
+  );
   const input = () => app.find((node) => node.type === "input");
   assert.equal(input().props.password, true);
   input().props.onInput({ detail: { value: "  secret  " } });
   assert.deepEqual(values, ["  secret  "]);
   assert.equal(input().props["aria-describedby"], "password-error");
-  app.find((node) => node.type === "button").props.onClick();
+  app.find((node) => node.props.role === "button").props.onClick();
   await nextTick();
   assert.equal(input().props.password, false);
   assert.deepEqual(values, ["  secret  "]);
@@ -58,6 +76,7 @@ test("输入组件传递密码原值，显隐不提交，禁用及错误关联�
     id: "password",
     label: "密码",
     modelValue: "",
+    secret: true,
     disabled: true,
     "onUpdate:modelValue": (value) => values.push(value),
   });
@@ -67,7 +86,36 @@ test("输入组件传递密码原值，显隐不提交，禁用及错误关联�
   app.unmount();
 });
 
-test("微信按钮禁用与加载态用类名表达，组件 WXSS 不包含属性选择器", async () => {
+test("H5 输入组件传递密码原值，显隐不提交，禁用及错误关联有效", async () => {
+  const values = [];
+  const app = await mount(
+    "../src/components/FormInput.vue",
+    {
+      id: "password",
+      label: "密码",
+      modelValue: "  pass  ",
+      secret: true,
+      error: "请输入密码",
+      "onUpdate:modelValue": (value) => values.push(value),
+    },
+    "H5",
+  );
+  const input = () => app.find((node) => node.type === "input");
+  // H5 适配器把 secret 映射为原生 type=password，不靠平台属性。
+  assert.equal(input().props.type, "password");
+  assert.equal(input().props.value, "  pass  ");
+  input().props.onInput({ target: { value: "  secret  " } });
+  await nextTick();
+  assert.deepEqual(values, ["  secret  "]);
+  assert.equal(input().props["aria-describedby"], "password-error");
+  app.find((node) => node.props.role === "button").props.onClick();
+  await nextTick();
+  assert.equal(input().props.type, "text");
+  assert.deepEqual(values, ["  secret  "]);
+  app.unmount();
+});
+
+test("表单组件 WXSS 不依赖属性选择器，禁用与加载态由类名表达", async () => {
   const source = readFileSync(
     new URL("../src/components/FormButton.vue", import.meta.url),
     "utf8",
@@ -75,19 +123,23 @@ test("微信按钮禁用与加载态用类名表达，组件 WXSS 不包含属�
   const style = source.match(/<style scoped>([\s\S]*?)<\/style>/)[1];
   assert.doesNotMatch(style, /\[[^\]]+\]/);
   let clicks = 0;
-  const page = await mount("../src/components/FormButton.vue", {
-    variant: "reveal",
-    onClick: () => clicks++,
-  });
-  const button = () => page.find((node) => node.type === "button");
+  const page = await mount(
+    "../src/components/FormButton.vue",
+    {
+      variant: "reveal",
+      onClick: () => clicks++,
+    },
+    "APP-PLUS",
+  );
+  const button = () => page.find((node) => node.props.role === "button");
   try {
     button().props.onClick();
     assert.equal(clicks, 1);
     for (const state of [{ disabled: true }, { loading: true }]) {
       page.render({ ...state, variant: "reveal", onClick: () => clicks++ });
       await nextTick();
-      assert.equal(button().props.disabled, true);
-      assert.match(button().props.class, /is-disabled/);
+      assert.equal(button().props["aria-disabled"], true);
+      assert.match(button().props.class, /is-disabled|is-loading/);
       button().props.onClick();
       assert.equal(clicks, 1);
     }
@@ -139,7 +191,7 @@ test("H5 选择器的空值业务选项不会被占位选项遮挡", async () =>
   app.unmount();
 });
 
-test("微信选择器按稳定值返回，取消/禁用不改变值", async () => {
+test("App-Plus 选择器按稳定值返回，取消/禁用不改变值", async () => {
   const values = [];
   let cancels = 0;
   const props = {
@@ -153,7 +205,11 @@ test("微信选择器按稳定值返回，取消/禁用不改变值", async () =
     "onUpdate:modelValue": (value) => values.push(value),
     onCancel: () => cancels++,
   };
-  const app = await mount("../src/components/FormPicker.vue", props);
+  const app = await mount(
+    "../src/components/FormPicker.vue",
+    props,
+    "APP-PLUS",
+  );
   const picker = () => app.find((node) => node.type === "picker");
   picker().props.onCancel();
   assert.equal(cancels, 1);
@@ -177,7 +233,11 @@ test("日期与时间分开输入，按北京时间跨 UTC 日期边界组合并
       value = next;
     },
   });
-  const app = await mount("../src/components/FormDateTime.vue", props());
+  const app = await mount(
+    "../src/components/FormDateTime.vue",
+    props(),
+    "APP-PLUS",
+  );
   app
     .find((node) => node.type === "picker" && node.props.mode === "date")
     .props.onChange({ detail: { value: "2026-10-20" } });
@@ -196,160 +256,90 @@ test("日期与时间分开输入，按北京时间跨 UTC 日期边界组合并
   app.unmount();
 });
 
-test("微信弹层使用键盘高度、固定滚动区及显式取消，卸载恢复平台资源", async () => {
-  let listener;
-  let removed;
-  let hides = 0;
-  let shows = 0;
+test("H5 弹层用视口高度、固定滚动区及显式取消，卸载后解除监听", async () => {
+  // H5 适配器直接操作 DOM；宿主替身下 document 不存在，适配器应安全降级为空实现。
   let cancels = 0;
-  globalThis.uni = {
-    getWindowInfo: () => ({ windowHeight: 671 }),
-    onKeyboardHeightChange: (callback) => {
-      listener = callback;
-    },
-    offKeyboardHeightChange: (callback) => {
-      removed = callback;
-    },
-    onWindowResize() {},
-    offWindowResize() {},
-    hideTabBar: () => hides++,
-    showTabBar: () => shows++,
-  };
-  globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
-  try {
-    const app = await mount("../src/components/FormDialog.vue", {
+  const app = await mount(
+    "../src/components/FormDialog.vue",
+    {
       id: "edit",
       open: true,
       title: "编辑资料",
       onCancel: () => cancels++,
-    });
-    assert.equal(hides, 1);
-    listener({ height: 300 });
-    await nextTick();
-    assert.equal(
-      app.find((node) => node.props.role === "dialog").props.style.height,
-      "371px",
-    );
-    assert.equal(
-      app.find((node) => node.type === "scroll-view").props["scroll-y"],
-      "",
-    );
-    app
-      .find((node) => node.type === "button" && textOf(node).includes("取消"))
-      .props.onClick();
-    assert.equal(cancels, 1);
-    app.unmount();
-    assert.equal(removed, listener);
-    assert.equal(shows, 1);
-  } finally {
-    delete globalThis.uni;
-    delete globalThis.getCurrentPages;
-  }
+    },
+    "H5",
+  );
+  const dialog = () => app.find((node) => node.props.role === "dialog");
+  assert.ok(dialog());
+  assert.equal(dialog().props["aria-modal"], "true");
+  assert.equal(
+    app.find((node) => node.type === "scroll-view").props["scroll-y"],
+    "",
+  );
+  app
+    .find(
+      (node) => node.props.role === "button" && textOf(node).includes("取消"),
+    )
+    .props.onClick();
+  assert.equal(cancels, 1);
+  app.unmount();
 });
 
-test("微信弹层在旋转及键盘收起后使用当前窗口，隐藏后移除监听且忽略迟到事件", async () => {
-  let keyboard;
+test("App-Plus 弹层用当前窗口高度并响应窗口变化，隐藏后解除监听且忽略迟到事件", async () => {
   let resize;
-  let windowHeight = 700;
-  let bottom = 34;
-  let removedKeyboard;
   let removedResize;
-  let shows = 0;
+  let windowHeight = 700;
   globalThis.__formPageHooks = [];
   globalThis.uni = {
-    getWindowInfo: () => ({ windowHeight, safeAreaInsets: { bottom } }),
-    onKeyboardHeightChange: (callback) => (keyboard = callback),
-    offKeyboardHeightChange: (callback) => (removedKeyboard = callback),
+    getWindowInfo: () => ({ windowHeight }),
     onWindowResize: (callback) => (resize = callback),
     offWindowResize: (callback) => (removedResize = callback),
-    hideTabBar() {},
-    showTabBar: () => shows++,
   };
-  globalThis.getCurrentPages = () => [{ route: "pages/profile/index" }];
-  const app = await mount("../src/components/FormDialog.vue", {
-    id: "resize",
-    open: true,
-    title: "编辑资料",
-  });
+  const app = await mount(
+    "../src/components/FormDialog.vue",
+    { id: "resize", open: true, title: "编辑资料" },
+    "APP-PLUS",
+  );
   const height = () =>
     app.find((node) => node.props.role === "dialog").props.style.height;
   try {
-    assert.equal(
-      app.find((node) => node.props.role === "dialog").props.style[
-        "--hhr-dialog-safe-bottom"
-      ],
-      "34px",
-    );
-    keyboard({ height: 200 });
-    await nextTick();
-    assert.equal(height(), "500px");
-    assert.equal(
-      app.find((node) => node.props.role === "dialog").props.style[
-        "--hhr-dialog-safe-bottom"
-      ],
-      "0px",
-    );
+    assert.equal(height(), "700px");
     windowHeight = 450;
-    bottom = 21;
     assert.equal(typeof resize, "function");
     resize({ size: { windowWidth: 700, windowHeight } });
     await nextTick();
-    assert.equal(height(), "250px");
-    keyboard({ height: 0 });
-    await nextTick();
     assert.equal(height(), "450px");
-    assert.equal(
-      app.find((node) => node.props.role === "dialog").props.style[
-        "--hhr-dialog-safe-bottom"
-      ],
-      "21px",
-    );
-    keyboard({ height: 600 });
-    await nextTick();
-    assert.equal(height(), "0px");
-    keyboard({ height: 0 });
-    await nextTick();
     globalThis.__formPageHooks[0]();
-    assert.equal(removedKeyboard, keyboard);
     assert.equal(removedResize, resize);
-    assert.equal(shows, 1);
-    keyboard({ height: 300 });
+    windowHeight = 900;
     resize({ size: { windowHeight: 900 } });
     await nextTick();
     assert.equal(height(), "450px");
-    app.unmount();
-    assert.equal(shows, 1);
   } finally {
     app.unmount();
     delete globalThis.uni;
-    delete globalThis.getCurrentPages;
     delete globalThis.__formPageHooks;
   }
 });
 
-test("微信弹层关闭重开不重复绑定，旧回调不能改写新窗口且非 tab 页不操作 tabBar", async () => {
-  const keyboards = new Set();
+test("App-Plus 弹层关闭重开不重复绑定，旧回调不能改写新窗口", async () => {
   const windows = new Set();
   let windowHeight = 700;
-  let tabCalls = 0;
   globalThis.uni = {
     getWindowInfo: () => ({ windowHeight }),
-    onKeyboardHeightChange: (callback) => keyboards.add(callback),
-    offKeyboardHeightChange: (callback) => keyboards.delete(callback),
     onWindowResize: (callback) => windows.add(callback),
     offWindowResize: (callback) => windows.delete(callback),
-    hideTabBar: () => tabCalls++,
-    showTabBar: () => tabCalls++,
   };
-  globalThis.getCurrentPages = () => [{ route: "pages/teams/detail" }];
   const props = { id: "reopen", open: true, title: "申请加入" };
-  const app = await mount("../src/components/FormDialog.vue", props);
+  const app = await mount(
+    "../src/components/FormDialog.vue",
+    props,
+    "APP-PLUS",
+  );
   try {
-    const oldKeyboard = [...keyboards][0];
     const oldResize = [...windows][0];
     app.render({ ...props, open: false });
     await nextTick();
-    assert.equal(keyboards.size, 0);
     assert.equal(windows.size, 0);
     assert.equal(
       app.find((node) => node.props.role === "dialog"),
@@ -359,39 +349,33 @@ test("微信弹层关闭重开不重复绑定，旧回调不能改写新窗口�
     app.render(props);
     await nextTick();
     await nextTick();
-    assert.equal(keyboards.size, 1);
     assert.equal(windows.size, 1);
-    oldKeyboard({ height: 300 });
     oldResize({ size: { windowHeight: 900 } });
     await nextTick();
     assert.equal(
       app.find((node) => node.props.role === "dialog").props.style.height,
       "480px",
     );
-    app.unmount();
-    assert.equal(keyboards.size, 0);
-    assert.equal(windows.size, 0);
-    assert.equal(tabCalls, 0);
   } finally {
     app.unmount();
     delete globalThis.uni;
-    delete globalThis.getCurrentPages;
   }
 });
 
-test("完整微信表单 fixture：取消复原、错误不写回、保存防重及页面隐藏丢弃", async () => {
+test("完整 App-Plus 表单 fixture：取消复原、错误不写回、保存防重及页面隐藏丢弃", async () => {
   globalThis.__formPageHooks = [];
   globalThis.uni = {
     getWindowInfo: () => ({ windowHeight: 671 }),
-    onKeyboardHeightChange() {},
-    offKeyboardHeightChange() {},
     onWindowResize() {},
     offWindowResize() {},
   };
-  globalThis.getCurrentPages = () => [{ route: "pages/style/index" }];
-  const app = await mount("./fixtures/FormFixture.vue");
+  const app = await mount("./fixtures/FormFixture.vue", {}, "APP-PLUS");
   const button = (label) =>
-    app.find((node) => node.type === "button" && textOf(node).trim() === label);
+    app.find(
+      (node) =>
+        (node.type === "button" || node.props.role === "button") &&
+        textOf(node).trim() === label,
+    );
   const input = () =>
     app.find(
       (node) => node.type === "input" && node.props.id === "fixture-nickname",
@@ -439,7 +423,6 @@ test("完整微信表单 fixture：取消复原、错误不写回、保存防重
   } finally {
     app.unmount();
     delete globalThis.uni;
-    delete globalThis.getCurrentPages;
     delete globalThis.__formPageHooks;
   }
 });

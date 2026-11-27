@@ -116,7 +116,8 @@ function blur(event: unknown) {
         @confirm="emit('confirm')"
       />
       <!-- #endif -->
-      <!-- #ifdef MP-WEIXIN -->
+      <!-- #ifndef H5 -->
+      <!-- App-Plus 无浏览器 DOM 适配器，沿用 uni 原生 input/textarea；微信小程序已按 ADR 0011 退役。 -->
       <textarea
         v-if="multiline"
         :id="id"

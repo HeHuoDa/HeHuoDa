@@ -1,24 +1,26 @@
-import {
-  approvedWebViewHosts,
-  parseSourceUrl,
-  resolveWebViewSource,
-} from "./policy.ts";
+import { parseSourceUrl } from "./policy.ts";
 
 export interface SourceResult {
-  status: "copied" | "manual" | "invalid" | "opened" | "cancelled";
+  status: "copied" | "manual" | "invalid";
   message: string;
   url: string;
 }
 
 export interface SourcePorts {
   writeClipboard?: (url: string) => Promise<void>;
-  openWebView?: (url: string) => Promise<void>;
 }
 
+/**
+ * 来源动作只保留复制。
+ *
+ * H5 由 `SourceLink.h5.vue` 承担真实 `<a>` 新窗口打开（公开 HTTPS 规则），
+ * 复制是打开不可用或失败时的可执行回退；Android 的系统浏览器打开归 #226 实测。
+ * 旧小程序内嵌 web-view 承载已按 ADR 0011 退役，不再保留对应的导航端口。
+ *
+ * `accept` 是可操作地址的接受规则：H5 传公开 HTTPS 规则，默认沿用保守解析。
+ */
 export function createSourceActions(
   ports: SourcePorts,
-  allowedHosts: readonly string[] = approvedWebViewHosts,
-  /** 可操作地址的接受规则：H5 传公开 HTTPS 规则，小程序沿用原解析。 */
   accept: (value: unknown) => unknown = parseSourceUrl,
 ) {
   async function copy(value: unknown): Promise<SourceResult> {
@@ -46,31 +48,5 @@ export function createSourceActions(
       };
     }
   }
-  async function openWeixin(
-    value: unknown,
-    isCurrent = () => true,
-  ): Promise<SourceResult> {
-    const source = parseSourceUrl(value);
-    if (!source) return copy(value);
-    const target = resolveWebViewSource(source.url, allowedHosts);
-    if (target && ports.openWebView) {
-      try {
-        await ports.openWebView(target);
-        return {
-          status: "opened",
-          message: "已打开官方原文。",
-          url: source.url,
-        };
-      } catch {
-        // 导航或业务域名不可用时仍提供可执行的复制路径。
-      }
-    }
-    if (!isCurrent()) return { status: "cancelled", message: "", url: "" };
-    const result = await copy(source.url);
-    return {
-      ...result,
-      message: `当前无法在小程序内打开此原文。${result.message}`,
-    };
-  }
-  return { copy, openWeixin };
+  return { copy };
 }

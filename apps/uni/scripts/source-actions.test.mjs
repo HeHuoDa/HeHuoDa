@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   parseSourceUrl,
   resolvePublicSourceUrl,
-  resolveWebViewSource,
 } from "../src/source/policy.ts";
 import { createSourceActions } from "../src/source/actions.ts";
 
@@ -68,27 +67,11 @@ test("复制仅回调成功才报成功；隐私拒绝、不支持、同步异�
   assert.equal(copied, undefined);
 });
 
-test("承载页重新校验精确业务主机，默认关闭，跳转参数和协议不能绕过", () => {
-  const url = "https://news.example.edu.cn/info/2026.htm";
-  assert.equal(resolveWebViewSource(url), null);
-  assert.equal(resolveWebViewSource(url, ["news.example.edu.cn"]), url);
-  for (const candidate of [
-    "http://news.example.edu.cn/a",
-    "https://news.example.edu.cn:8443/a",
-    "https://news.example.edu.cn.evil.test/a",
-    "https://evilnews.example.edu.cn/a",
-    "https://user@news.example.edu.cn/a",
-    "https://news.example.edu.cn/a?redirect=https://evil.test",
-    "https://news.example.edu.cn/a?%75rl=%2f%2fevil.test",
-    "https://news.example.edu.cn/a#https://evil.test",
-    [url, "https://evil.test"],
-  ]) {
-    assert.equal(
-      resolveWebViewSource(candidate, ["news.example.edu.cn"]),
-      null,
-      String(candidate),
-    );
-  }
+test("来源动作只公开复制，内嵌承载能力已随小程序退役", async () => {
+  const actions = createSourceActions({ writeClipboard: async () => {} });
+  assert.deepEqual(Object.keys(actions), ["copy"]);
+  assert.equal(actions.openWebView, undefined);
+  assert.equal(actions.openWeixin, undefined);
 });
 
 test("H5 公开外链与管理端手工通道判定一致，管理端能保存的外链在 H5 一定可打开", () => {
@@ -136,7 +119,6 @@ test("H5 复制只在地址合法时生效，拒绝地址既不写入也不提�
   const copied = [];
   const h5 = createSourceActions(
     { writeClipboard: async (url) => copied.push(url) },
-    [],
     resolvePublicSourceUrl,
   );
   assert.equal(
@@ -149,73 +131,27 @@ test("H5 复制只在地址合法时生效，拒绝地址既不写入也不提�
   assert.deepEqual(copied, ["https://events.other-university.org/race"]);
 });
 
-test("微信空/未允许域名直接复制；核准域名打开，失效或导航失败回退复制", async () => {
-  const url = "https://news.example.edu.cn/info/2026.htm";
-  const calls = [];
-  const ports = {
-    writeClipboard: async (value) => {
-      calls.push(["copy", value]);
-    },
-    openWebView: async (value) => {
-      calls.push(["open", value]);
-    },
-  };
-  assert.equal(
-    (await createSourceActions(ports).openWeixin(url)).status,
-    "copied",
-  );
-  assert.deepEqual(calls, [["copy", url]]);
-  calls.length = 0;
-  assert.equal(
-    (await createSourceActions(ports, ["news.example.edu.cn"]).openWeixin(url))
-      .status,
-    "opened",
-  );
-  assert.deepEqual(calls, [["open", url]]);
-  calls.length = 0;
-  const failed = createSourceActions(
-    {
-      ...ports,
-      openWebView: async () => {
-        throw new Error("domain expired");
-      },
-    },
-    ["news.example.edu.cn"],
-  );
-  assert.equal((await failed.openWeixin(url)).status, "copied");
-  assert.deepEqual(calls, [["copy", url]]);
-  calls.length = 0;
-  assert.equal(
-    (await failed.openWeixin("data:text/html,evil")).status,
-    "invalid",
-  );
-  assert.deepEqual(calls, []);
-});
-
-test("旧 Notice 的迟到导航失败不能触发复制，新动作不受影响", async () => {
-  let reject,
-    current = true;
+test("切换 Notice 后迟到的复制结果不写回旧条目", async () => {
+  const pendingResolvers = [];
   const copied = [];
-  const actions = createSourceActions(
-    {
-      writeClipboard: async (url) => {
-        copied.push(url);
-      },
-      openWebView: () =>
-        new Promise((_, fail) => {
-          reject = fail;
-        }),
-    },
-    ["news.example.edu.cn"],
-  );
-  const old = actions.openWeixin(
+  const actions = createSourceActions({
+    writeClipboard: (url) =>
+      new Promise((resolve) => {
+        pendingResolvers.push(() => {
+          copied.push(url);
+          resolve();
+        });
+      }),
+  });
+  const first = actions.copy("https://news.example.edu.cn/a");
+  const second = actions.copy("https://news.example.edu.cn/b");
+  // 组件侧以代次丢弃迟到结果；这里确认动作本身不缓存或复用上一个 Notice 的地址。
+  pendingResolvers[0]();
+  pendingResolvers[1]();
+  assert.equal((await first).url, "https://news.example.edu.cn/a");
+  assert.equal((await second).url, "https://news.example.edu.cn/b");
+  assert.deepEqual(copied, [
     "https://news.example.edu.cn/a",
-    () => current,
-  );
-  current = false;
-  reject(new Error("navigation failed"));
-  assert.equal((await old).status, "cancelled");
-  assert.deepEqual(copied, []);
-  await actions.copy("https://news.example.edu.cn/b");
-  assert.deepEqual(copied, ["https://news.example.edu.cn/b"]);
+    "https://news.example.edu.cn/b",
+  ]);
 });

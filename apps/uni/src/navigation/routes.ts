@@ -62,7 +62,7 @@ export const routeRegistry = {
     kind: "page",
     status: "baseline",
     source: null,
-    description: "核准业务域名的原文承载页，未核准地址提供复制回退。",
+    description: "官方来源直达页，提供公开外链跳转或复制回退。",
   },
   home: {
     name: "home",

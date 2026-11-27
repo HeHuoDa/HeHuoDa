@@ -1,7 +1,12 @@
 import { resolve } from "node:path";
 import { applyPlatformManifest, platformConfig } from "./platform-config.mjs";
 
-export const PLATFORMS = ["h5", "mp-weixin", "app"];
+export const PLATFORMS = ["h5", "app"];
+
+/** 微信小程序（mp-weixin）已按 ADR 0011 退役，保留旧目标仅用于给出明确拒绝信息。 */
+export const RETIRED_PLATFORMS = ["mp-weixin"];
+
+const USAGE = "用法：run-uni.mjs dev|build h5|app";
 
 /**
  * App 入口由脚本独占控制平台、mode、编译输入目录与产物目录。
@@ -22,7 +27,11 @@ export const APP_ENV_OVERRIDES = [
  */
 export function runConfig({ command, platform, env, root }) {
   if (!["dev", "build"].includes(command) || !PLATFORMS.includes(platform)) {
-    throw new Error("用法：run-uni.mjs dev|build h5|mp-weixin|app");
+    throw new Error(
+      RETIRED_PLATFORMS.includes(platform)
+        ? `${USAGE}；${platform} 已按 ADR 0011 退役，请改用 h5 或 app。`
+        : USAGE,
+    );
   }
   // 生产/开发各自使用正确的 Vite mode；进程环境优先于 .env 文件。
   const mode = command === "build" ? "production" : "development";
@@ -33,7 +42,7 @@ export function runConfig({ command, platform, env, root }) {
     platform,
     config,
   );
-  // App 回填校验后的归一化地址与超时，保证编译期校验与产物一致；H5/微信保持原样。
+  // App 回填校验后的归一化地址与超时，保证编译期校验与产物一致；H5 保持原样。
   const apiBaseUrl = config.apiBaseUrl ?? merged.VITE_API_BASE_URL ?? "";
   const app = platform === "app";
   return {
@@ -60,7 +69,7 @@ export function runConfig({ command, platform, env, root }) {
 /**
  * 生成 DCloud CLI 的子进程参数与环境。
  * App 固定 `-p`/`-m`/`UNI_INPUT_DIR`/`UNI_OUTPUT_DIR` 并拒绝外部覆盖；
- * H5 与遗留小程序保持原有 CLI 参数透传和进程环境优先级（不从默认 mode 读出的 env 反向覆盖）。
+ * H5 保持原有 CLI 参数透传和进程环境优先级（不从默认 mode 读出的 env 反向覆盖）。
  */
 export function invocation({
   command,

@@ -26,7 +26,7 @@ test("展示资源目录与共享业务目录顺序、名称完全一致", () =>
   );
 });
 
-for (const platform of ["H5", "MP-WEIXIN"]) {
+for (const platform of ["H5", "APP-PLUS"]) {
   for (const compact of [false, true]) {
     test(`${platform} ${compact ? "紧凑" : "常规"}：受控三态、全选切换、父级恢复、逐个选满`, async () => {
       let value = "all";
@@ -216,7 +216,7 @@ test("H5：学院按钮可用 Enter/Space 操作，无重复的实例 ID", async
   app.unmount();
 });
 
-for (const platform of ["H5", "MP-WEIXIN"]) {
+for (const platform of ["H5", "APP-PLUS"]) {
   test(`${platform}：白色院徽失败后恢复浅底和首字，普通展示仍保留指定尺寸`, async () => {
     const app = await mount(
       "../src/components/CollegeEmblem.vue",
@@ -229,7 +229,7 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
     const resource = app.find((node) =>
       String(node.props.class).includes("resource-image"),
     );
-    // 子组件内部必须有确定像素尺寸，不能依赖小程序额外宿主的百分比高度。
+    // 子组件内部必须有确定像素尺寸，不能依赖父级壳的百分比高度。
     assert.equal(resource.props.style["--resource-image-size"], "40px");
     assert.equal(resource.props.style["--resource-image-small-size"], "28px");
     app.find((node) => node.type === "image").props.onError();
@@ -273,10 +273,9 @@ for (const platform of ["H5", "MP-WEIXIN"]) {
       2,
     );
     const buttons = () =>
-      nodes(app.container, (node) =>
-        platform === "H5"
-          ? node.props.role === "button"
-          : node.type === "button",
+      nodes(
+        app.container,
+        (node) => node.type === "button" || node.props.role === "button",
       );
     buttons()
       .find((node) => textOf(node) === "外层操作 0")

@@ -73,7 +73,8 @@ function platformChange(event: { detail: { value: string | number } }) {
       @change="change"
     />
     <!-- #endif -->
-    <!-- #ifdef MP-WEIXIN -->
+    <!-- #ifndef H5 -->
+    <!-- App-Plus 无浏览器原生选择器，沿用 uni 原生 picker；微信小程序已按 ADR 0011 退役。 -->
     <picker
       :id="id"
       :mode="mode"

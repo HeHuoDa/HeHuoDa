@@ -89,7 +89,7 @@ function update(value: CollegeSelection) {
 function select(id: CollegeId) {
   update(toggleCollegeSelection(selection.value, id));
 }
-// H5 的 uni-button 需要显式键盘行为；小程序直接使用同节点的原生 button。
+// H5 与 App-Plus 都用可聚焦 view 承担按钮角色，统一补显式键盘行为。
 function keydown(
   event: { key: string; repeat?: boolean; preventDefault: () => void },
   action: CollegeId | "reset" | "retry",

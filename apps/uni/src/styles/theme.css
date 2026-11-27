@@ -70,7 +70,7 @@
 /*
  * 字号刻度与断点。字号写 px 而不是 rem：uni-app H5 会按视口宽度缩放根字号，
  * rem 字号在 320px 宽会缩到约 12px；固定 px 保证两端字号一致且不缩水。
- * 断点同样固定 px。尺寸与间距继续用 rem，由 weapp-tailwindcss 换算成小程序 rpx。
+ * 断点同样固定 px。尺寸与间距继续用 rem，由 weapp-tailwindcss 换算成 App-Plus 的响应式单位。
  */
 @theme {
   --breakpoint-sm: 640px;

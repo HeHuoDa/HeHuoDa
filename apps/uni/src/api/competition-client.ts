@@ -137,7 +137,7 @@ export function isCompetitionDetail(v: unknown): v is CompetitionDetail {
     )
   );
 }
-/** 不使用 URLSearchParams，H5 与微信通过相同 uni.request 入口发送。 */
+/** 不使用 URLSearchParams，H5 与 Android 通过相同 uni.request 入口发送。 */
 export function createCompetitionApi(http: HttpClient) {
   return {
     detail(id: string) {

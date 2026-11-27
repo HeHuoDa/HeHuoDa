@@ -2,7 +2,6 @@
 import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { onPageHide, onUnload } from "@dcloudio/uni-app";
 import FormButton from "./FormButton.vue";
-import { routePath, tabRoutes } from "../navigation/routes";
 // #ifdef H5
 import { attachH5Dialog } from "../forms/dialog-h5";
 // #endif
@@ -21,7 +20,6 @@ const emit = defineEmits<{ cancel: []; save: [] }>();
 const root = ref();
 const height = ref<number>();
 const top = ref(0);
-const safeBottom = ref<number>();
 const scrollTarget = ref("");
 let dispose = () => {};
 let generation = 0;
@@ -50,48 +48,31 @@ watch(
     await nextTick();
     if (generation !== current || !props.open) return;
     // #ifdef H5
+    // 浏览器特有焦点/键盘/viewport 能力全部集中在 H5 适配器。
     dispose = attachH5Dialog(root.value, cancel, (value, offset) => {
       height.value = value;
       top.value = offset;
     });
     // #endif
-    // #ifdef MP-WEIXIN
-    let windowHeight = uni.getWindowInfo().windowHeight;
-    let keyboardHeight = 0;
+    // #ifdef APP-PLUS
+    // Android 原生层没有 DOM 适配器：用当前窗口高度作最小可用的尺寸基准。
+    // 底部安全区由样式中的 env(safe-area-inset-bottom, 0px) 默认承担，这里不读取安全区。
+    // 软键盘遮挡、返回键与真机安全区的真实行为归 #220/#226 验收。
     const update = () => {
       if (generation !== current) return;
       const info = uni.getWindowInfo();
-      height.value = Math.max(0, windowHeight - keyboardHeight);
-      safeBottom.value =
-        keyboardHeight > 0 ? 0 : (info.safeAreaInsets?.bottom ?? 0);
+      height.value = Math.max(0, info.windowHeight);
     };
-    const keyboard = (event: { height: number }) => {
-      if (generation !== current) return;
-      keyboardHeight = Math.max(0, event.height);
-      update();
-    };
-    const resize = (event: { size: { windowHeight: number } }) => {
-      if (generation !== current) return;
-      windowHeight = event.size.windowHeight;
-      update();
-    };
-    uni.onKeyboardHeightChange(keyboard);
-    uni.onWindowResize(resize);
+    uni.onWindowResize(update);
     update();
-    // 原生 tabBar 在页面视图之外，弹层打开期间隐藏，关闭后恢复。
-    const route = getCurrentPages().at(-1)?.route;
-    const tab = tabRoutes.some(({ name }) => routePath(name) === `/${route}`);
-    if (tab) uni.hideTabBar({ animation: false });
     dispose = () => {
-      uni.offKeyboardHeightChange(keyboard);
-      uni.offWindowResize(resize);
-      if (tab) uni.showTabBar({ animation: false });
+      uni.offWindowResize(update);
     };
     // #endif
   },
   { immediate: true },
 );
-// 微信原生返回无法拦截。页面隐藏/卸载即丢弃，由父层处理草稿；不伪造 onBackPress。
+// 原生返回无法拦截。页面隐藏/卸载即丢弃，由父层处理草稿；不伪造 onBackPress。
 function leave() {
   stop();
   if (props.open) emit("cancel");
@@ -109,8 +90,6 @@ onBeforeUnmount(stop);
     :style="{
       height: height === undefined ? undefined : `${height}px`,
       top: `${top}px`,
-      '--hhr-dialog-safe-bottom':
-        safeBottom === undefined ? undefined : `${safeBottom}px`,
     }"
     role="dialog"
     aria-modal="true"

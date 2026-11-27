@@ -266,37 +266,20 @@ test("点击换一张刷新验证码并清除旧验证码输入", async () => {
   }
 });
 
-test("只有微信小程序分支保存刷新凭据，H5 使用空存储", async () => {
-  const { platformAuthStorage } =
-    await import("../src/auth/platform-storage.ts");
-  const writes = [];
-  const install = (platform) => {
-    globalThis.uni = {
-      getSystemInfoSync: () => ({ uniPlatform: platform }),
-      getStorageSync: () => "",
-      setStorageSync: (key, value) => writes.push([platform, key, value]),
-      removeStorageSync: () => {},
-    };
-  };
-
-  install("web");
-  const h5 = platformAuthStorage();
-  h5.write("rt-1");
-  assert.equal(h5.read(), null);
-  assert.equal(writes.length, 0, "H5 不写小程序刷新凭据");
-
-  install("mp-weixin");
-  const weixin = platformAuthStorage();
-  weixin.write("rt-2");
-  assert.deepEqual(writes, [["mp-weixin", "hehuoda.auth.refresh", "rt-2"]]);
-});
-
-test("H5、Android 与未知端均为空存储：预置旧令牌也不读、不写、不清", async () => {
+test("H5 与 Android 均为空存储：预置旧令牌也不读、不写、不清", async () => {
   const { platformAuthStorage } =
     await import("../src/auth/platform-storage.ts");
   // 预置遗留刷新令牌：空适配器必须不读回它，也不触碰平台存储。
-  const STALE = "rt-stale-from-weixin";
-  for (const platform of ["web", "app", "app-plus", "", "mp-alipay"]) {
+  const STALE = "rt-stale-from-retired-platform";
+  for (const platform of [
+    "web",
+    "h5",
+    "app",
+    "app-plus",
+    "",
+    "mp-weixin",
+    "mp-alipay",
+  ]) {
     const touched = [];
     globalThis.uni = {
       getSystemInfoSync: () => ({ uniPlatform: platform }),
@@ -328,26 +311,6 @@ test("H5、Android 与未知端均为空存储：预置旧令牌也不读、不�
   fallback.write("rt-next");
   fallback.clear();
   assert.deepEqual(touched, []);
-  // 遗留端保留既有读写语义（归 #224 清理）。
-  const weixinTouched = [];
-  globalThis.uni = {
-    getSystemInfoSync: () => ({ uniPlatform: "mp-weixin" }),
-    getStorageSync: (key) => {
-      weixinTouched.push(["read", key]);
-      return STALE;
-    },
-    setStorageSync: (key, value) => weixinTouched.push(["write", key, value]),
-    removeStorageSync: (key) => weixinTouched.push(["clear", key]),
-  };
-  const weixin = platformAuthStorage();
-  assert.equal(weixin.read(), STALE);
-  weixin.write("rt-2");
-  weixin.clear();
-  assert.deepEqual(weixinTouched, [
-    ["read", "hehuoda.auth.refresh"],
-    ["write", "hehuoda.auth.refresh", "rt-2"],
-    ["clear", "hehuoda.auth.refresh"],
-  ]);
 });
 
 test("返回目标只接受注册表内的平台页面", () => {

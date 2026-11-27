@@ -12,7 +12,7 @@ import { createHttpClient, RequestError } from "../src/api/http.ts";
 
 const credential = {
   kind: "active",
-  user: { id: "u1", nickname: "微信用户", status: "active" },
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
   accessToken: "at",
   refreshToken: "rt",
   accessExpiresAt: "2026-10-25T12:15:00.000Z",
@@ -26,7 +26,7 @@ const h5Credential = {
   sessionExpiresAt: "2026-11-24T12:00:00.000Z",
 };
 const profile = {
-  user: { id: "u1", nickname: "微信用户", status: "active" },
+  user: { id: "u1", nickname: "禾伙搭用户", status: "active" },
   campus: {
     status: "unverified",
     termId: null,
@@ -82,23 +82,15 @@ test("资料读取和昵称更新接受后端真实校园资格状态", async ()
   }
 });
 
-test("原生端登录与刷新走公开客户端；会话请求走认证客户端且路径与请求体正确", async () => {
+test("原生端刷新走公开客户端；会话请求走认证客户端且路径与请求体正确", async () => {
   const { calls, api } = makeApi();
-  const pending = [api.wechatLogin("code-1", 1), api.refresh("rt-1")];
+  const pending = [api.refresh("rt-1")];
   assert.deepEqual(
-    calls.slice(0, 2).map((c) => [c.label, c.options.method, c.options.url]),
-    [
-      ["bare", "POST", "/api/v1/auth/wechat/login"],
-      ["bare", "POST", "/api/v1/auth/refresh"],
-    ],
+    calls.slice(0, 1).map((c) => [c.label, c.options.method, c.options.url]),
+    [["bare", "POST", "/api/v1/auth/refresh"]],
   );
-  assert.deepEqual(calls[0].options.data, {
-    code: "code-1",
-    consentVersion: 1,
-  });
-  assert.deepEqual(calls[1].options.data, { refreshToken: "rt-1" });
+  assert.deepEqual(calls[0].options.data, { refreshToken: "rt-1" });
   calls[0].options.success({ statusCode: 200, data: credential });
-  calls[1].options.success({ statusCode: 200, data: credential });
   await Promise.all(pending.map((p) => p.promise));
 
   const sessionCalls = [
@@ -107,17 +99,17 @@ test("原生端登录与刷新走公开客户端；会话请求走认证客户�
     api.updateNickname("新名"),
   ];
   assert.deepEqual(
-    calls.slice(2).map((c) => [c.label, c.options.method, c.options.url]),
+    calls.slice(1).map((c) => [c.label, c.options.method, c.options.url]),
     [
       ["authed", "POST", "/api/v1/auth/logout"],
       ["authed", "GET", "/api/v1/auth/me"],
       ["authed", "POST", "/api/v1/auth/me"],
     ],
   );
-  assert.deepEqual(calls[4].options.data, { nickname: "新名" });
-  calls[2].options.success({ statusCode: 204, data: "" });
+  assert.deepEqual(calls[3].options.data, { nickname: "新名" });
+  calls[1].options.success({ statusCode: 204, data: "" });
+  calls[2].options.success({ statusCode: 200, data: profile });
   calls[3].options.success({ statusCode: 200, data: profile });
-  calls[4].options.success({ statusCode: 200, data: profile });
   await Promise.all(sessionCalls.map((p) => p.promise));
 });
 
@@ -268,7 +260,7 @@ test("凭据与资料守卫拒绝畸形响应及 H5 响应含 refreshToken", asy
   );
   assert.equal(isProfileResponse(profile), true);
 
-  const pending = api.wechatLogin("c", 1);
+  const pending = api.refresh("rt-1");
   calls[0].options.success({ statusCode: 200, data: bad[0] });
   await assert.rejects(
     pending.promise,

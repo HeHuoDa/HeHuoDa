@@ -52,26 +52,26 @@ test("无参数写请求发送合法 JSON 空对象，GET 不附带请求体", a
   );
 });
 
-test("H5 开发默认使用代理；小程序与正式环境缺配置明确失败", () => {
+test("H5 开发默认使用代理；非 H5 与正式环境缺配置明确失败", () => {
   assert.deepEqual(resolveApiConfig({ development: true, platform: "h5" }), {
     baseUrl: "/api/v1",
     timeout: 5000,
   });
-  for (const platform of ["h5", "mp-weixin"]) {
+  for (const platform of ["h5", "app"]) {
     assert.throws(
       () => resolveApiConfig({ development: false, platform }),
       /VITE_API_BASE_URL/,
     );
   }
   assert.throws(
-    () => resolveApiConfig({ development: true, platform: "mp-weixin" }),
+    () => resolveApiConfig({ development: true, platform: "app" }),
     /完整 API/,
   );
   assert.deepEqual(
     resolveApiConfig({
       baseUrl: "https://api.example.com/api/v1/",
       development: false,
-      platform: "mp-weixin",
+      platform: "app",
       timeout: "1000",
     }),
     { baseUrl: "https://api.example.com/api/v1", timeout: 1000 },
@@ -83,7 +83,7 @@ test("H5 开发默认使用代理；小程序与正式环境缺配置明确失�
   );
 });
 
-test("无效地址与超时配置拒绝：协议相对地址、凭据、查询、生产明文、小程序相对地址", () => {
+test("无效地址与超时配置拒绝：协议相对地址、凭据、查询、生产明文、非 H5 相对地址", () => {
   for (const baseUrl of [
     "//example.com/api",
     "https://user:pass@example.com/api",
@@ -94,7 +94,7 @@ test("无效地址与超时配置拒绝：协议相对地址、凭据、查询�
     "https://example.com\\evil",
   ]) {
     assert.throws(() =>
-      resolveApiConfig({ baseUrl, development: false, platform: "mp-weixin" }),
+      resolveApiConfig({ baseUrl, development: false, platform: "app" }),
     );
   }
   for (const timeout of ["0", "NaN", "-1", "1.5", "60001", "Infinity"]) {
