@@ -67,10 +67,11 @@
 
 ### 本阶段验证与记录
 
-- 单测从基线 313 项变为 312 项（删/改对应行为见 PR 与交付报告）；`lint`、`format:check`、`typecheck`、`check:toolchain` 均通过。
+- 单测最终 **315 项全部通过**（基线 `origin/main` 313 项）：清理阶段降到 312 项，`f80319f` 补 1 条平台目标校验用例回到 313 项，本轮为来源直达入口的迟到导航回调新增 2 条交错时序回归用例到 315 项，净变化 +2（删/改对应行为见 PR 与交付报告）；`lint`、`format:check`、`typecheck`、`check:toolchain` 均通过。
+- 来源直达入口反馈按代次归属：`CompetitionSourceAction` 非 H5 分支的导航失败回调会校验 `generation`，迟到的失败既不会覆盖后来的复制成功，也不会把旧地址挂到切换后的 Notice 下；复制与导航各用独立在途状态，导航未决时复制仍可用，导航成功后显式复位按钮 loading。
 - H5 与 App-Plus 已分别真实构建：H5 产物 `apps/uni/dist/build/h5`（约 0.9 MB / 87 文件），App-Plus 资源 `apps/uni/dist/build/app`（约 1.47 MB / 65 文件）；生成的 `src/manifest.json` 不再包含 `mp-weixin` 键，残留 `UNI_MP_WEIXIN_APPID` 对两端构建均无影响。
 - 负向用例实测：`node scripts/run-uni.mjs build mp-weixin` 与 `node scripts/check-toolchain.mjs --include-legacy-weixin` 均非零退出并提示现行入口。
-- 视觉证据层级：本任务无设计改动，H5 预处理结构、类名与 ARIA 属于等价重构；**四个宽度（320/375/390/430px）的样式契约静态核对，浏览器视口未实测**，截图项不适用。真实设备键盘、安全区、系统浏览器与 Android 原生返回仍归 #220/#226。
+- 视觉证据层级：来源直达页（`pages/source/index.vue`）**有包装层与可见文案的实际调整**（删除嵌入状态与 `web-view` 后的直达页结构与回退文案），不是纯等价重构；已完成 **320/375/390/430px 的 Chrome 窄屏模拟**：无横向溢出、长标题与长 URL 正常换行、登录页空字段禁用、个人中心弹层底部操作在视口内、失败态文案与手动复制地址可读、重复 URL 参数显示「来源地址无效」。真实软键盘、物理安全区、系统浏览器与 Android 真机（含原生返回）仍归 #220/#226。
 - 已知但未修的既有 App-Plus 缺口：`FormInput`/`FormPicker`/来源按钮在 Android 上的软键盘遮挡、安全区、系统浏览器打开与长文本换行均未经真机验证，归 #220/#226；本任务只完成资源编译。
 - 正式验收仍依赖 #223（服务端微信登录下线与并发首次学校登录集成证据）与 #83（覆盖本次提交的双端门禁记录），因此 #224 继续保持开放。
 

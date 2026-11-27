@@ -29,12 +29,16 @@ const props = defineProps<{
 const acceptSource = resolvePublicSourceUrl;
 const source = computed(() => acceptSource(props.notice.url));
 const feedback = ref<SourceResult | null>(null);
+/** 剪贴板动作在途；驱动复制按钮 loading 并阻止重复复制。 */
 const busy = ref(false);
+/** 来源直达页导航在途；与剪贴板分开，导航未决时复制仍然可用。 */
+const opening = ref(false);
 let generation = 0;
 function reset() {
   generation += 1;
   feedback.value = null;
   busy.value = false;
+  opening.value = false;
 }
 watch(() => [props.notice.id, props.notice.url], reset, { flush: "sync" });
 onBeforeUnmount(reset);
@@ -72,19 +76,33 @@ async function copySource() {
   busy.value = false;
 }
 
-/** 非 H5（Android）保留来源直达页作为可执行入口，参数仍由承载页重新校验。 */
+/**
+ * 非 H5（Android）保留来源直达页作为可执行入口，参数仍由承载页重新校验。
+ * 与 `copySource` 一样按代次归属反馈：导航回调可能在复制成功或 Notice 切换之后才交付，
+ * 无代次校验会把旧失败覆盖新结果，或把旧地址挂到新 Notice 下显示。
+ */
 function openSourcePage() {
+  if (opening.value) return;
   const target = source.value;
   if (!target) return;
+  const current = ++generation;
+  opening.value = true;
+  feedback.value = null;
   openPage(
     "source-webview",
     { url: target.url, title: props.notice.title },
     () => {
+      opening.value = false;
+      if (generation !== current) return;
       feedback.value = {
         status: "manual",
         message: "暂时无法打开原文页面，请先复制链接到浏览器核对。",
         url: target.url,
       };
+    },
+    // 导航成功后组件仍在页面栈内，用户返回时不会走 onBeforeUnmount，必须显式复位。
+    () => {
+      opening.value = false;
     },
   );
 }
@@ -126,7 +144,7 @@ function openSourcePage() {
       <FormButton
         v-if="!copyOnly"
         :variant="compact ? 'reveal' : 'secondary'"
-        :loading="busy"
+        :loading="opening"
         class="source-button"
         @click="openSourcePage"
       >

@@ -176,6 +176,97 @@ test("App-Plus 来源组件操作当前 Notice，失败保留可选择地址；�
   }
 });
 
+test("App-Plus 迟到导航失败不得覆盖新的复制成功反馈", async () => {
+  const original = globalThis.uni;
+  const calls = [];
+  const navigations = [];
+  globalThis.uni = {
+    setClipboardData: (options) => calls.push(options),
+    // 截留导航回调，模拟失败结果在复制成功之后才交付。
+    navigateTo: (options) => navigations.push(options),
+  };
+  const notice = detail().notices[0];
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
+  try {
+    const button = (label) =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes(label),
+      );
+    button("原文").props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    assert.equal(
+      navigations[0].url,
+      `/pages/source/index?url=${encodeURIComponent(notice.url)}&title=${encodeURIComponent(notice.title)}`,
+    );
+    button("复制链接").props.onClick();
+    await flush();
+    assert.deepEqual(
+      calls.map((call) => call.data),
+      [notice.url],
+    );
+    calls[0].success();
+    await flush();
+    assert.match(textOf(app.container), /官方链接已复制/);
+    navigations[0].fail({ errMsg: "navigateTo:fail" });
+    await flush();
+    assert.match(textOf(app.container), /官方链接已复制/);
+    assert.doesNotMatch(textOf(app.container), /暂时无法打开原文页面/);
+  } finally {
+    app.unmount();
+    globalThis.uni = original;
+  }
+});
+
+test("App-Plus 迟到导航失败不得把旧地址挂到切换后的 Notice 下", async () => {
+  const original = globalThis.uni;
+  const navigations = [];
+  globalThis.uni = {
+    setClipboardData: () => {},
+    // 截留导航回调，模拟同一条 Notice 换地址之后才交付旧失败。
+    navigateTo: (options) => navigations.push(options),
+  };
+  const notice = detail().notices[0];
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
+  try {
+    app
+      .find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("原文"),
+      )
+      .props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    assert.equal(
+      navigations[0].url,
+      `/pages/source/index?url=${encodeURIComponent(notice.url)}&title=${encodeURIComponent(notice.title)}`,
+    );
+    app.render({
+      notice: { ...notice, url: "https://news.example.edu.cn/new" },
+      compact: true,
+    });
+    await nextTick();
+    navigations[0].fail({ errMsg: "navigateTo:fail" });
+    await flush();
+    assert.doesNotMatch(textOf(app.container), /example\.edu\.cn\/news/);
+    assert.doesNotMatch(textOf(app.container), /暂时无法打开原文页面/);
+  } finally {
+    app.unmount();
+    globalThis.uni = original;
+  }
+});
+
 test("H5 完整和 compact 来源使用安全原生链接，危险地址没有可点击链接", async () => {
   const notice = detail().notices[0];
   for (const compact of [false, true]) {
