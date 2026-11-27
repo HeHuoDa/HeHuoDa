@@ -8,11 +8,14 @@ import { invocation, runConfig } from "./run-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const [command, platform, ...args] = process.argv.slice(2);
-if (
-  !["dev", "build"].includes(command) ||
-  !["h5", "mp-weixin", "app"].includes(platform)
-) {
-  throw new Error("用法：run-uni.mjs dev|build h5|mp-weixin|app");
+const USAGE =
+  "用法：run-uni.mjs dev|build h5|app。微信小程序（mp-weixin）已按 ADR 0011 退役，不再接受该目标。";
+if (!["dev", "build"].includes(command) || !["h5", "app"].includes(platform)) {
+  throw new Error(
+    platform === "mp-weixin"
+      ? `${USAGE} 本次收到 ${platform}，请改用 pnpm build:h5 或 pnpm build:app。`
+      : USAGE,
+  );
 }
 // 生产/开发各自使用正确的 Vite mode；进程环境优先于 .env 文件。
 const mode = command === "build" ? "production" : "development";
@@ -30,7 +33,7 @@ const plan = runConfig({
   },
 });
 const { config, manifest, outDir } = plan;
-// App 由脚本固定平台、mode、编译输入与产物目录；H5/小程序沿用原参数透传与进程环境。
+// App 由脚本固定平台、mode、编译输入与产物目录；H5 沿用原参数透传与进程环境。
 const { args: cliArgs, env: childEnv } = invocation({
   command,
   platform,
@@ -39,11 +42,6 @@ const { args: cliArgs, env: childEnv } = invocation({
   plan,
   processEnv: process.env,
 });
-if (platform === "mp-weixin" && !config.appid) {
-  console.info(
-    "[本地编译] 未配置 AppID；DCloud 会生成 touristappid，仅用于编译检查，不用于平台运行或发布。",
-  );
-}
 if (platform === "app") {
   // 资源构建产物（App-Plus www 资源）不等于 APK；签名与原生工程仍属后续验收。
   console.info(

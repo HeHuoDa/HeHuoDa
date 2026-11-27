@@ -131,7 +131,7 @@ test("App 入口拒绝额外 CLI 参数与环境覆盖，避免报告目录与�
   }
 });
 
-test("H5 与遗留小程序保持旧入口的参数透传与进程 env 优先级", () => {
+test("H5 保持旧入口的参数透传与进程 env 优先级", () => {
   const h5 = spawnFor("build", "h5", ["--outDir", "custom"], {
     VITE_API_BASE_URL: "/api/v1",
   });
@@ -141,12 +141,16 @@ test("H5 与遗留小程序保持旧入口的参数透传与进程 env 优先级
   assert.equal(h5.env, h5.processEnv);
   assert.equal("UNI_OUTPUT_DIR" in h5.env, false);
   assert.equal("UNI_INPUT_DIR" in h5.env, false);
+});
 
-  const weixin = spawnFor("dev", "mp-weixin", [], {
-    VITE_API_BASE_URL: "http://127.0.0.1:3001/api",
-  });
-  assert.deepEqual(weixin.args, ["-p", "mp-weixin"]);
-  assert.equal(weixin.plan.mode, "development");
+test("已退役的 mp-weixin 目标被拒绝，并提示现行有效入口", () => {
+  for (const command of ["build", "dev"]) {
+    assert.throws(
+      () => plan(command, "mp-weixin", {}),
+      /已按 ADR 0011 退役|用法：run-uni\.mjs dev\|build h5\|app/,
+      command,
+    );
+  }
 });
 
 test("H5 构建保持原行为：不打 App 标记、不改写 API 地址", () => {
@@ -156,22 +160,25 @@ test("H5 构建保持原行为：不打 App 标记、不改写 API 地址", () =
   assert.equal(result.inDir, "");
   // 未配置时不再向子进程注入空字符串（那会覆盖 .env 之外的默认行为）。
   assert.equal("VITE_API_BASE_URL" in result.env, false);
-  assert.equal(result.manifest["mp-weixin"].appid, "");
+  // 生成 manifest 不包含任何小程序段。
+  assert.equal(result.manifest["mp-weixin"], undefined);
   const relative = plan("build", "h5", { VITE_API_BASE_URL: "/api/v1" });
   assert.equal(relative.env.VITE_API_BASE_URL, "/api/v1");
 });
 
-test("H5 构建在正式开关与遗留 AppID 存在时仍能生成编译计划", () => {
-  // 缺陷复现：H5 曾落入微信 AppID 校验，正式构建被已退役平台卡死。
-  const result = plan("build", "h5", {
-    UNI_RELEASE: "true",
-    UNI_MP_WEIXIN_APPID: "touristappid",
-    VITE_API_BASE_URL: "/api/v1",
-  });
-  assert.equal(result.config.appid, "");
-  assert.equal(result.config.release, true);
-  assert.equal(result.manifest["mp-weixin"].appid, "");
-  assert.equal(result.env.VITE_API_BASE_URL, "/api/v1");
+test("H5 构建在遗留 AppID 与正式开关同时存在时仍能生成编译计划", () => {
+  // 回归守卫：H5 曾落入微信 AppID 校验，正式构建被已退役平台卡死。
+  for (const release of ["true", "false"]) {
+    const result = plan("build", "h5", {
+      UNI_RELEASE: release,
+      UNI_MP_WEIXIN_APPID: "touristappid",
+      VITE_API_BASE_URL: "/api/v1",
+    });
+    assert.equal(result.config.appid, "");
+    assert.equal(result.config.release, release === "true");
+    assert.equal(result.manifest["mp-weixin"], undefined);
+    assert.equal(result.env.VITE_API_BASE_URL, "/api/v1");
+  }
 });
 
 test("App 构建忽略无效的遗留微信 AppID", () => {
@@ -186,23 +193,20 @@ test("App 构建忽略无效的遗留微信 AppID", () => {
   );
 });
 
-test("微信 release 回归：仍要求 UNI_MP_WEIXIN_APPID，App 目标接受同一环境", () => {
-  assert.throws(
-    () => plan("build", "mp-weixin", { UNI_RELEASE: "true" }),
-    /缺少/,
-  );
-  const weixin = plan("build", "mp-weixin", {
-    UNI_RELEASE: "true",
-    UNI_MP_WEIXIN_APPID: "wx1234567890abcdef",
-  });
-  assert.equal(weixin.manifest["mp-weixin"].appid, "wx1234567890abcdef");
+test("微信 release 残留不再影响任何现行目标，App 目标接受同一环境", () => {
   const app = plan("build", "app", {
     UNI_RELEASE: "true",
+    UNI_MP_WEIXIN_APPID: "touristappid",
     VITE_API_BASE_URL: "https://api.example.test/api/v1",
     UNI_ANDROID_PACKAGE_NAME: "cn.edu.sicau.hehuoda",
   });
   assert.equal(app.config.release, true);
   assert.equal(app.config.appid, "");
+  assert.equal(app.manifest["mp-weixin"], undefined);
+  assert.equal(
+    app.manifest["app-plus"].distribute.android.packagename,
+    "cn.edu.sicau.hehuoda",
+  );
 });
 
 test("不支持的命令与平台被拒绝", () => {

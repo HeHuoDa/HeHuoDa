@@ -18,34 +18,27 @@ const releaseEnv = (extra = {}) => ({
   ...extra,
 });
 
-test("账号未就绪时允许本地编译，不伪造 AppID", () => {
+test("账号未就绪时允许本地编译，不伪造任何平台 AppID", () => {
   assert.deepEqual(platformConfig({}), { appid: "", release: false });
 });
-test("正式平台构建缺少 AppID 时拒绝执行", () => {
-  assert.throws(() => platformConfig({ UNI_RELEASE: "true" }), /缺少/);
-});
-test("拒绝游客 AppID 和含糊的正式构建开关", () => {
-  assert.throws(
-    () => platformConfig({ UNI_MP_WEIXIN_APPID: "touristappid" }),
-    /AppID/,
-  );
+test("含糊的正式构建开关被拒绝", () => {
   assert.throws(() => platformConfig({ UNI_RELEASE: "yes" }), /true 或 false/);
 });
-test("格式有效不等于账号验收，配置仅透传受控 AppID", () => {
-  assert.deepEqual(
-    platformConfig({
-      UNI_RELEASE: "true",
-      UNI_MP_WEIXIN_APPID: " wx1234567890abcdef ",
-    }),
-    {
-      appid: "wx1234567890abcdef",
-      release: true,
-    },
-  );
+test("已退役的微信 AppID 环境变量不再被读取或校验", () => {
+  // 本机残留的无效 AppID 既不应阻断构建，也不应被透传到生成配置。
+  for (const appid of ["touristappid", "wx1234567890abcdef", ""]) {
+    for (const target of [undefined, "h5", "app"]) {
+      const env =
+        target === "app"
+          ? { VITE_API_BASE_URL: HTTPS, UNI_MP_WEIXIN_APPID: appid }
+          : { UNI_MP_WEIXIN_APPID: appid };
+      const config = platformConfig(env, target);
+      assert.equal(config.appid, "", `${target}: ${appid}`);
+    }
+  }
 });
 
-test("H5 目标不读取、不校验微信 AppID", () => {
-  // 微信端已按 ADR 0011 退役，H5 是主交付端：正式构建不再被遗留 AppID 卡住。
+test("H5 目标不读取、不校验微信 AppID，也不再因遗留 AppID 阻止正式构建", () => {
   assert.deepEqual(platformConfig({ UNI_RELEASE: "true" }, "h5"), {
     appid: "",
     release: true,
@@ -75,14 +68,17 @@ test("Android 目标不读取微信 AppID，也不因此阻断编译", () => {
   assert.equal(config.apiBaseUrl, HTTPS);
   assert.equal(config.packagename, ANDROID_PLACEHOLDER_PACKAGENAME);
   assert.equal(config.release, false);
-  // 微信目标保留原语义：本地编译不要求 AppID，正式构建才要求。
-  assert.deepEqual(platformConfig({ VITE_API_BASE_URL: HTTPS }), {
-    appid: "",
-    release: false,
-  });
-  assert.throws(
-    () => platformConfig({ UNI_RELEASE: "true" }, "mp-weixin"),
-    /缺少/,
+  // 旧开关对 Android 无影响：正式构建仍需显式包名，但不看任何 AppID。
+  assert.equal(
+    platformConfig(
+      {
+        VITE_API_BASE_URL: HTTPS,
+        UNI_MP_WEIXIN_APPID: "touristappid",
+        UNI_ANDROID_PACKAGE_NAME: "cn.edu.sicau.hehuoda",
+      },
+      "app",
+    ).packagename,
+    "cn.edu.sicau.hehuoda",
   );
 });
 
@@ -305,13 +301,15 @@ const template = () =>
     readFileSync(new URL("../manifest.template.json", import.meta.url), "utf8"),
   );
 
-test("受跟踪模板已声明 Android 应用名、包名、版本、SDK 与仅 INTERNET 权限", () => {
+test("受跟踪模板不含小程序段，Android 应用名、包名、版本、SDK 与仅 INTERNET 权限保持", () => {
   const manifest = template();
   assert.equal(manifest.name, "禾伙搭");
   assert.equal(manifest.versionName, "0.0.0");
   assert.equal(manifest.versionCode, "1");
   // DCloud 顶层 appid 是另一身份，不能被写成包名或伪造 AppID。
   assert.equal(manifest.appid, "");
+  // 小程序目标已按 ADR 0011 退役：模板不再声明 mp-weixin 段。
+  assert.equal(manifest["mp-weixin"], undefined);
   const android = manifest["app-plus"].distribute.android;
   assert.equal(android.packagename, ANDROID_PLACEHOLDER_PACKAGENAME);
   assert.equal(android.minSdkVersion, 23);
@@ -328,7 +326,7 @@ test("受跟踪模板已声明 Android 应用名、包名、版本、SDK 与仅 
   assert.equal(manifest["app-plus"].splashscreen.autoclose, true);
 });
 
-test("生成配置按目标隔离：Android 只改包名，微信只改 AppID", () => {
+test("生成配置按目标隔离：Android 只改包名，不新增任何小程序键", () => {
   const templateManifest = template();
   const appManifest = applyPlatformManifest(templateManifest, "app", {
     appid: "",
@@ -340,33 +338,23 @@ test("生成配置按目标隔离：Android 只改包名，微信只改 AppID", 
     appManifest["app-plus"].distribute.android.packagename,
     "cn.edu.sicau.hehuoda",
   );
-  assert.equal(appManifest["mp-weixin"].appid, "");
+  assert.equal(appManifest["mp-weixin"], undefined);
   assert.equal(appManifest.appid, "");
   assert.equal(
     templateManifest["app-plus"].distribute.android.packagename,
     ANDROID_PLACEHOLDER_PACKAGENAME,
   );
-
-  const weixinManifest = applyPlatformManifest(templateManifest, "mp-weixin", {
-    appid: "wx1234567890abcdef",
-    release: true,
-  });
-  assert.equal(weixinManifest["mp-weixin"].appid, "wx1234567890abcdef");
-  assert.equal(
-    weixinManifest["app-plus"].distribute.android.packagename,
-    ANDROID_PLACEHOLDER_PACKAGENAME,
-  );
-  assert.equal(weixinManifest.appid, "");
 });
 
-test("H5 生成配置是模板副本，不写入任何平台专属字段", () => {
+test("H5 生成配置是模板副本，不新增任何平台专属字段", () => {
   const templateManifest = template();
   const config = platformConfig(
     { UNI_MP_WEIXIN_APPID: "wx1234567890abcdef" },
     "h5",
   );
   const h5Manifest = applyPlatformManifest(templateManifest, "h5", config);
-  // 不落微信 AppID，也不改 Android 包名。
+  // 不落任何 AppID，也不改 Android 包名，更不新增小程序段。
   assert.deepEqual(h5Manifest, templateManifest);
+  assert.equal(h5Manifest["mp-weixin"], undefined);
   assert.notEqual(h5Manifest, templateManifest, "必须返回副本而非改模板");
 });

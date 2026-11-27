@@ -166,27 +166,17 @@ export function validateAndroidPackageName(value, { release }) {
   return value;
 }
 
-export function platformConfig(env, target = "mp-weixin") {
+export function platformConfig(env, target = "h5") {
   if (env.UNI_RELEASE && !["true", "false"].includes(env.UNI_RELEASE)) {
     throw new Error("UNI_RELEASE 只接受 true 或 false。");
   }
   const release = env.UNI_RELEASE === "true";
   if (target === "app") return appConfig(env, release);
-  // H5 是现行主交付端，与已退役的微信 AppID 彻底解耦：不读取、不校验、不透传。
-  if (target === "h5") return { appid: "", release };
-  const appid = (env.UNI_MP_WEIXIN_APPID || "").trim();
-  if (appid && !/^wx[0-9a-f]{16}$/i.test(appid)) {
-    throw new Error(
-      "UNI_MP_WEIXIN_APPID 须为 wx 开头的 18 位 AppID，不接受 touristappid。",
-    );
-  }
-  if (release && !appid) {
-    throw new Error("正式平台构建缺少 UNI_MP_WEIXIN_APPID；请先完成 #58。");
-  }
-  return { appid, release };
+  // H5 是现行主交付端，不读取、不校验、不透传任何平台 AppID。
+  return { appid: "", release };
 }
 
-/** Android 目标不读取 UNI_MP_WEIXIN_APPID：发行配置与微信 AppID 互不依赖。 */
+/** Android 目标不读取任何平台 AppID：发行配置与已退役的小程序身份互不依赖。 */
 function appConfig(env, release) {
   // DEV 与 Release 都要求 HTTPS；mode 只影响 Vite 的 NODE_ENV 与运行期 DEV 标记。
   const { baseUrl: apiBaseUrl, timeout } = parseAppApiBaseUrl(
@@ -208,8 +198,8 @@ function appConfig(env, release) {
 }
 
 /**
- * 只写入本阶段需要的平台字段：Android 包名、微信 AppID。
- * H5 使用克隆后的模板，不写任何平台专属字段。
+ * 只写入本阶段需要的平台字段：Android 包名。
+ * H5 与 App 都使用克隆后的模板，不写小程序段或 AppID。
  * 不写签名、证书、密码或渠道字段；资源构建无法证明最终 APK 的权限与签名。
  */
 export function applyPlatformManifest(manifest, target, config) {
@@ -221,10 +211,6 @@ export function applyPlatformManifest(manifest, target, config) {
         "manifest.template.json 缺少 app-plus.distribute.android。",
       );
     android.packagename = config.packagename;
-    return next;
   }
-  // 只有遗留小程序目标写 AppID；H5 模板副本原样返回。
-  if (target !== "mp-weixin") return next;
-  next["mp-weixin"].appid = config.appid;
   return next;
 }
