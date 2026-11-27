@@ -5,12 +5,10 @@ import {
   type RequestTransport,
 } from "./http.ts";
 
-let platform = "mp-weixin";
+// 现行交付端只有 H5 与 Android（App-Plus）；平台值只用于地址规则与凭据模式。
+let platform = "app";
 // #ifdef H5
 platform = "h5";
-// #endif
-// #ifdef APP-PLUS
-platform = "app";
 // #endif
 
 const transport: RequestTransport = (options) => {

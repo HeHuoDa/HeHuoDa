@@ -6,7 +6,11 @@ import {
 } from "../src/campus/controller.ts";
 import { RequestError } from "../src/api/http.ts";
 import { campusReturnTarget } from "../src/navigation/campus-return.ts";
-import { beijingTime, renewalDue } from "../src/campus/presentation.ts";
+import {
+  beijingTime,
+  campusFailure,
+  renewalDue,
+} from "../src/campus/presentation.ts";
 
 const status = {
   status: "unverified",
@@ -510,6 +514,14 @@ test("学期时间固定显示北京时间，只有有效期前七天提醒", ()
   assert.equal(renewalDue("2027-01-31T16:00:00Z", now), true);
   assert.equal(renewalDue("2027-02-02T00:00:00Z", now), false);
   assert.equal(renewalDue("2027-01-24T00:00:00Z", now), false);
+});
+
+test("401 安全反馈改用学校账号登录语义，不再指向已退役的微信登录", () => {
+  const message = campusFailure(
+    new RequestError("http", "未授权", { statusCode: 401 }),
+  );
+  assert.equal(message, "登录已过期，请重新使用学校账号登录。");
+  assert.doesNotMatch(message, /微信/);
 });
 
 test("绑定冲突的安全反馈不被后续通用终态覆盖", async () => {

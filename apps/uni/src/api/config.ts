@@ -3,7 +3,7 @@ export interface ApiConfig {
   timeout: number;
 }
 
-/** 不依赖浏览器 URL/location；H5、Android App 与小程序使用相同校验。 */
+/** 不依赖浏览器 URL/location；H5 与 Android App 使用相同校验。 */
 export function resolveApiConfig(env: {
   baseUrl?: string;
   timeout?: string;

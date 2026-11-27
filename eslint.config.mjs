@@ -9,7 +9,7 @@ import prettier from "eslint-config-prettier/flat";
  *
  * 用 AST 匹配代码用法（注释与字符串字面量不参与），只覆盖约定的存储与微信 API 访问方式；
  * 运行期构造属性、跨模块数据流和第三方依赖内部仍靠代码审查与行为测试守护。
- * 唯一的三处受控例外见下方 `CROSS_PLATFORM_EXCEPTIONS`。
+ * 唯一的受控例外见下方 `CROSS_PLATFORM_EXCEPTIONS`。
  */
 const localMessage =
   "禁止直接使用 localStorage 持久化客户端数据；H5 协调元数据只能经 auth/h5-tab-sync.ts 的适配器写入。";
@@ -20,7 +20,7 @@ const uniStorageMessage =
 const wxMessage =
   "禁止直接使用微信专有全局 wx 接口；H5 与 Android 只使用共享的 uni API。";
 const uniLoginMessage =
-  "禁止直接调用 uni.login；微信登录入口收敛在 auth/wechat-login.ts，现行交付端不使用。";
+  "禁止直接调用 uni.login；微信端已按 ADR 0011 退役，现行交付端不使用平台登录。";
 const weixinMemberMessage =
   "禁止使用带 Weixin 成员的平台专有入口；微信端已按 ADR 0011 退役。";
 
@@ -67,7 +67,7 @@ const ALL_GROUPS = [
   group(weixinMemberMessage, weixinMemberSelectors),
 ];
 
-/** 受控例外：每个文件只放开它历史上必须使用的那一组选择器。 */
+/** 受控例外：仅允许 H5 多标签协调元数据写入浏览器存储。 */
 const CROSS_PLATFORM_EXCEPTIONS = [
   {
     files: ["apps/uni/src/auth/h5-tab-sync.ts"],
@@ -84,30 +84,6 @@ const CROSS_PLATFORM_EXCEPTIONS = [
         group(uniStorageMessage, uniStorageSelectors),
         group(wxMessage, wxSelectors),
         group(uniLoginMessage, uniLoginSelectors),
-        group(weixinMemberMessage, weixinMemberSelectors),
-      ),
-    },
-  },
-  {
-    files: ["apps/uni/src/auth/platform-storage.ts"],
-    rules: {
-      "no-restricted-syntax": restrictedSyntax(
-        group(localMessage, localSelectors),
-        group(sessionMessage, sessionSelectors),
-        group(wxMessage, wxSelectors),
-        group(uniLoginMessage, uniLoginSelectors),
-        group(weixinMemberMessage, weixinMemberSelectors),
-      ),
-    },
-  },
-  {
-    files: ["apps/uni/src/auth/wechat-login.ts"],
-    rules: {
-      "no-restricted-syntax": restrictedSyntax(
-        group(localMessage, localSelectors),
-        group(sessionMessage, sessionSelectors),
-        group(uniStorageMessage, uniStorageSelectors),
-        group(wxMessage, wxSelectors),
         group(weixinMemberMessage, weixinMemberSelectors),
       ),
     },

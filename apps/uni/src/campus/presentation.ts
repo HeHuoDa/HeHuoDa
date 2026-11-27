@@ -2,7 +2,7 @@ import { RequestError } from "../api/http.ts";
 
 export function campusFailure(error: unknown): string {
   if (!(error instanceof RequestError)) return "操作未完成，请稍后重试。";
-  if (error.statusCode === 401) return "平台登录已过期，请重新微信登录。";
+  if (error.statusCode === 401) return "登录已过期，请重新使用学校账号登录。";
   if (error.statusCode === 403) return "平台账号当前受限，暂不能认证。";
   if (error.statusCode === 404) return "原认证事务已失效，请重新认证。";
   if (error.statusCode === 429) return "尝试过于频繁，请稍后再试。";
@@ -39,7 +39,7 @@ export function campusFailure(error: unknown): string {
   return "服务暂时无法完成认证，请稍后重试。";
 }
 
-/** 手工固定 UTC+8，避免设备时区及小程序 Intl 支持差异。 */
+/** 手工固定 UTC+8，避开设备时区与运行时 Intl 支持差异。 */
 export function beijingTime(raw: string | null | undefined): string {
   if (!raw || !Number.isFinite(Date.parse(raw))) return "—";
   const d = new Date(Date.parse(raw) + 8 * 60 * 60 * 1000);

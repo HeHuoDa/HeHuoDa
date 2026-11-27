@@ -64,7 +64,7 @@ export interface HttpClientAuth {
 }
 
 /**
- * wx.request 的 method 不接受 PATCH，H5 与小程序共用 uni.request 类型，
+ * 非 H5 传输不支持 PATCH，H5 与原生端共用 uni.request 类型，
  * 因此非 H5 端由后端提供 POST 别名；H5 传输边界允许 PATCH。
  */
 export type RequestTransportMethod = "GET" | "POST" | "DELETE" | "PATCH";

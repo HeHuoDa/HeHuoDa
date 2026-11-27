@@ -130,9 +130,6 @@ function acceptsNoContent(data: unknown): data is unknown {
   return true;
 }
 
-/** 与后端 CURRENT_CONSENT_VERSION 对齐；不匹配时以错误 details.currentVersion 为准更新。 */
-export const CURRENT_CONSENT_VERSION = 1;
-
 const H5_COOKIE_OPTIONS = {
   withCredentials: true,
   header: { "X-Refresh-CSRF": "1" },
@@ -190,13 +187,6 @@ export function createAuthApi(
         isSchoolLoginTransaction,
       );
     },
-    wechatLogin(code: string, consentVersion: number) {
-      return bare.post(
-        "/auth/wechat/login",
-        { code, consentVersion },
-        isCredentialResponse,
-      );
-    },
     refresh(refreshToken?: string) {
       if (h5) {
         return bare.post(
@@ -226,7 +216,7 @@ export function createAuthApi(
       if (h5) {
         return authed.patch("/auth/me", { nickname }, isProfileResponse);
       }
-      // wx.request 不支持 PATCH；POST /auth/me 是后端为微信小程序提供的别名。
+      // 非 H5 传输不支持 PATCH；POST /auth/me 是后端为原生端提供的别名。
       return authed.post("/auth/me", { nickname }, isProfileResponse);
     },
   };

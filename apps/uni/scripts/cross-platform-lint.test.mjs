@@ -165,18 +165,6 @@ export const value = raw;`,
       [/localStorage/],
     ],
     [
-      "platform-storage 的遗留适配器",
-      `export const read = () => uni.getStorageSync("hehuoda.auth.refresh");`,
-      "apps/uni/src/auth/platform-storage.ts",
-      [/uni 明文存储/, /wx/],
-    ],
-    [
-      "wechat-login 的 uni.login",
-      `export const login = () => uni.login({ provider: "weixin" });`,
-      "apps/uni/src/auth/wechat-login.ts",
-      [/uni\.login/],
-    ],
-    [
       "普通共享 uni API",
       `export const go = () => uni.switchTab({ url: "/pages/index/index" });
 export const fetchIt = () => uni.request({ url: "/api/v1/health" });`,
@@ -204,6 +192,38 @@ export const note = "禁止明文持久化刷新令牌";`,
   }
 });
 
+test("退役适配器路径重新受限：原例外文件不再放行明文存储与平台登录", async () => {
+  // #224 删除 `platform-storage.ts` 与 `wechat-login.ts` 的受控例外后，
+  // 同名路径必须回到公共规则下，不允许靠历史文件名再拿到豁免。
+  const storageInFormerException = await diagnostics(
+    `export const read = () => uni.getStorageSync("hehuoda.auth.refresh");`,
+    "apps/uni/src/auth/platform-storage.ts",
+  );
+  assertError(
+    storageInFormerException,
+    /uni 明文存储/,
+    "platform-storage 的明文存储",
+  );
+  const loginInFormerException = await diagnostics(
+    `export const login = () => uni.login({ provider: "weixin" });`,
+    "apps/uni/src/auth/wechat-login.ts",
+  );
+  assertError(
+    loginInFormerException,
+    /uni\.login/,
+    "wechat-login 的 uni.login",
+  );
+  const localInFormerException = await diagnostics(
+    `export const probe = localStorage.getItem("k");`,
+    "apps/uni/src/auth/platform-storage.ts",
+  );
+  assertError(
+    localInFormerException,
+    /localStorage/,
+    "platform-storage 的 localStorage",
+  );
+});
+
 test("h5-tab-sync 仍受 sessionStorage 限制，例外不外溢到其他文件", async () => {
   const inSyncFile = await diagnostics(
     `export const probe = sessionStorage.getItem("k");`,
@@ -211,10 +231,14 @@ test("h5-tab-sync 仍受 sessionStorage 限制，例外不外溢到其他文件"
   );
   assertError(inSyncFile, /sessionStorage/, "h5-tab-sync 的 sessionStorage");
   const elsewhere = await diagnostics(
-    `export const probe = localStorage.getItem("k");`,
-    "apps/uni/src/auth/platform-storage.ts",
+    `export const probe = sessionStorage.getItem("k");`,
+    "apps/uni/src/pages/index/probe.ts",
   );
-  assertError(elsewhere, /localStorage/, "例外文件不得共享 localStorage 豁免");
+  assertError(
+    elsewhere,
+    /sessionStorage/,
+    "例外文件不得共享 sessionStorage 豁免",
+  );
 });
 
 test("规则不覆盖测试替身与脚本目录，避免误伤夹具", async () => {
