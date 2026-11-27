@@ -14,7 +14,7 @@
 
 技术栈沿 [README](../../README.md) 与 `apps/uni/package.json`：Vue/runtime-core 3.5.42（DCloud 内嵌运行时为 3.4.21）、Pinia 3.0.4、Tailwind 4.3.3、DCloud 3.0.0-5020420260813003 / Vite 5.2.8；依赖声明和 H5 编译不等于 Android 原生运行时或真机行为兼容。
 
-`source/config.ts` 当前核准 web-view 主机列表为空，且依据 ADR 0011 与 #214/#219，公开外链在 H5 采用新标签安全打开，在 Android 采用调用系统浏览器（不依赖小程序业务域名或 web-view）。H5 使用同源 `/api/v1`，**Android 正式包必须显式配置受控 HTTPS 完整 API 基址且严禁跳过 TLS 校验**。
+`source/public-url.ts` 的判定与 H5 `<a>` 打开均保留；小程序内嵌 web-view 承载与 `source/config.ts` 白名单已按 #224 删除。H5 使用同源 `/api/v1`，**Android 正式包必须显式配置受控 HTTPS 完整 API 基址且严禁跳过 TLS 校验**。
 
 部署与运行记录见[部署状态](../deployment.md)。以下前三节为**现行 H5 + Android 跨端协作规则与待办**；后半部分 `## 历史迁移记录` 保留 2026-10 迁移阶段按旧 Issue（含 `mp-weixin`、`#85`/`#89` 与 `#132`/`#151`）留存的技术事实与检验记录，其中涉及微信小程序、微信登录或微信开发者工具的要求**已被 ADR 0011 替代，不再作为现行约束**。
 
@@ -44,7 +44,35 @@
 | 官方比赛外链打开（`source/policy.ts`、`source/actions.ts`）               | 渲染真实 `<a>` 新标签页打开（仅允许无凭据、无非默认端口的公开 `https://` DNS 链接）           | 验证通过原生能力调用系统浏览器打开外链及复制回退，保留长链接换行与失败提示                                                                        | 低   |
 | 原生导航、硬件返回与系统 UI（`pages.json`、`navigation/`、#220）          | 保留原生标题与三栏 tabBar（方案 B 暂缓提示）；`h5-router` 维持历史同步                        | 核对启动白屏、状态栏高度、底部手势/导航安全区、`onBackPress` 与系统返回键对弹窗/页面栈的行为，避免空栈误退出                                      | 中   |
 | 表单输入、日期/时间选择器与弹层（`forms/`、`FormDialog`、`FormDateTime`） | H5 原生控件适配器、Escape、Tab 循环、背景 `inert` 与 `visualViewport`                         | 验证 Android 原生软键盘弹出对弹窗/输入框的遮挡、`adjustPosition` 策略、系统大字号与长文本换行                                                     | 中   |
-| Android 打包配置、签名与遗留清理（#219/#224/#228）                        | 清理残留 `#ifdef MP-WEIXIN` 后回归 H5 构建与页面                                              | `run-uni.mjs`/`platform-config.mjs`/`manifest.template.json` 的 App 资源构建入口已落地；签名 APK、覆盖升级、系统浏览器外链与真机仍待验收          | 中   |
+| Android 打包配置、签名与遗留清理（#219/#228）                             | #224 已删除残留 `#ifdef MP-WEIXIN` 分支，H5 构建与页面已回归                                  | `run-uni.mjs`/`platform-config.mjs`/`manifest.template.json` 的 App 资源构建入口已落地；签名 APK、覆盖升级、系统浏览器外链与真机仍待验收          | 中   |
+
+## Issue #224：`apps/uni` 微信小程序遗留清理（现行，2026-12）
+
+#224 只处理 `apps/uni` 客户端残留、微信专属构建入口与依赖、相关 lint 例外、受影响测试与使用说明。服务端微信登录下线归 #223，`apps/web` 退役归 #90，APK 签名与真机归 #219/#226。
+
+### 已删除的能力
+
+- **认证**：`src/auth/wechat-login.ts`（临时 code 与 `uni.login`）整文件删除；`auth-session` 的 `wechatLogin` 接口、`login()` 动作与三个微信错误码映射删除，学校登录只走 `applySchoolLogin`。`api/auth-client.ts` 不再提供 `POST /auth/wechat/login`。
+- **明文存储**：`src/auth/platform-storage.ts` 收敛为恒定空适配器（读恒 null、写与清为空操作），不再读写 `hehuoda.auth.refresh`，也不再探测平台名。
+- **条件编译**：生产源码已无 `#ifdef MP-WEIXIN`/`#ifndef MP-WEIXIN`。`FormButton` 只有单一可聚焦 `view`；`FormInput`/`FormPicker` 的非 H5 分支改为 `#ifndef H5`，因此 App-Plus 的输入与选择器模板**从“不生效”变为按 uni 原生控件渲染**；`FormDialog` 删除键盘高度、窗口变化、tabBar 隐藏等小程序专有副作用，App-Plus 仅按 `uni.getWindowInfo().windowHeight` 设高度基准。
+- **来源嵌入**：`source/actions.ts` 只暴露 `copy`，`openWeixin` 与 `openWebView` 端口删除；`source/policy.ts` 删除 `resolveWebViewSource` 与 `approvedWebViewHosts`，`source/config.ts` 删除；`pages/source/index.vue` 删除嵌入状态与 web-view 模板，只保留直达页与安全回退（H5 新窗口 `<a>`、复制、可选中地址）。`public-url.ts` 判定未变，管理端能保存的外链在 H5 仍能打开或复制。
+- **构建与依赖**：`run-uni.mjs`/`run-config.mjs` 平台白名单只有 `h5`/`app`，`mp-weixin` 传入即非零退出；`platform-config.mjs` 不再解析 `UNI_MP_WEIXIN_APPID`、不再写手 `mp-weixin` 段；`check-toolchain.mjs` 删除 `--include-legacy-weixin` 与 `uni-mp-vue` 校验，旧开关改为明确拒绝；`manifest.template.json` 与 `.env.example` 删除微信段与旧 AppID；`package.json` 删除 `dev:mp-weixin`/`build:mp-weixin` 与 `@dcloudio/uni-mp-weixin` 直接依赖，锁文件由 pnpm 更新（减少 74 个包）。
+- **静态规则**：`eslint.config.mjs` 删除 `platform-storage.ts` 与 `wechat-login.ts` 两处受控例外，只保留 `auth/h5-tab-sync.ts` 的 H5 协调元数据例外；`wx`、`uni.login`、`*Weixin*`、旧包与旧适配器导入、明文存储等负向规则全部继续生效，并新增“退役例外路径重新受限”回归。
+
+### 保留的能力
+
+- H5 Cookie 会话（`withCredentials` + `X-Refresh-CSRF` + 内存 accessToken）、非 H5 的 PATCH 限制、Android 完整 HTTPS 运行期校验与编译期预检、包名写入 `manifest.template.json` 的 `app-plus` 段。
+- `weapp-tailwindcss` 仍由 `vite.config.ts` 注册并服务 `src/app.css` 的 Tailwind 入口，工具链检查继续校验其版本。
+- H5 平台适配器（`forms/*.h5.vue`、`dialog-h5.ts`、`SourceLink.h5.vue`、`source/clipboard-h5.ts`）与 `#ifdef H5` 分支。
+
+### 本阶段验证与记录
+
+- 单测从基线 313 项变为 312 项（删/改对应行为见 PR 与交付报告）；`lint`、`format:check`、`typecheck`、`check:toolchain` 均通过。
+- H5 与 App-Plus 已分别真实构建：H5 产物 `apps/uni/dist/build/h5`（约 0.9 MB / 87 文件），App-Plus 资源 `apps/uni/dist/build/app`（约 1.47 MB / 65 文件）；生成的 `src/manifest.json` 不再包含 `mp-weixin` 键，残留 `UNI_MP_WEIXIN_APPID` 对两端构建均无影响。
+- 负向用例实测：`node scripts/run-uni.mjs build mp-weixin` 与 `node scripts/check-toolchain.mjs --include-legacy-weixin` 均非零退出并提示现行入口。
+- 视觉证据层级：本任务无设计改动，H5 预处理结构、类名与 ARIA 属于等价重构；**四个宽度（320/375/390/430px）的样式契约静态核对，浏览器视口未实测**，截图项不适用。真实设备键盘、安全区、系统浏览器与 Android 原生返回仍归 #220/#226。
+- 已知但未修的既有 App-Plus 缺口：`FormInput`/`FormPicker`/来源按钮在 Android 上的软键盘遮挡、安全区、系统浏览器打开与长文本换行均未经真机验证，归 #220/#226；本任务只完成资源编译。
+- 正式验收仍依赖 #223（服务端微信登录下线与并发首次学校登录集成证据）与 #83（覆盖本次提交的双端门禁记录），因此 #224 继续保持开放。
 
 ## Issue #214：M1 暂缓收口（现行边界）
 
@@ -54,10 +82,10 @@
 - **详情与个人中心收口**：`pages/home/competition.vue` 移除「查看关联演示招募」，摘要把「收藏与组队」改为「收藏」，并改为说明收藏只在本次会话内保留；`components/ProfileOverview.vue` 只保留收藏统计与收藏/通知快捷入口，昵称在统一身份认证开放前只读，移除联系方式授权开关、重置示例与只读队伍区；`pages/profile/index.vue` 对旧 `section=teams|applications`、`/my/teams`、`/my/applications` 与旧通知交接只显示暂缓说明。
 - **站内通知一并暂缓**：`pages/notifications/index.vue` 改为暂缓说明（回首页浏览比赛／返回个人中心），不再渲染 `stores/notification-session.ts` 的会话种子通知与标记已读交互；已删除 `components/NotificationList.vue` 与 `navigation/notification-target.ts`（通知已无目标可跳转）。通知状态、事件映射与 `stores/session.ts` 的接线保留，供 M2 组队恢复后重新接线。
 - **M1 认证入口**：`pages/auth/login.vue`、`register.vue` 用 `components/AuthPendingNotice.vue` 说明「学校统一身份认证即将开放、当前免登录浏览」，不再提供任何可提交的凭据表单；`pages/campus/index.vue` 两端统一为「统一身份认证尚未开放」说明，无表单、无认证请求，保留 `#221` 接线结构。
-- **H5 公开外链**：`source/public-url.ts` 的 `resolvePublicSourceUrl()`（由 `source/policy.ts` 转出）与管理端手工通道 `apps/api/src/competitions/source-url.ts` 使用同一套判定：`URL` 解析归一化端口与国际化域名，拒绝 `http://`、userinfo、IP 字面量、单标签内网名、保留后缀（含 `.onion`／`.corp`／`.localdomain`）、非默认端口、空白与反斜杠。`CompetitionSourceAction` 在 H5 用它门控 `<a target="_blank" rel="noopener noreferrer">` 与复制，所以管理端能保存的外链在 H5 一定能打开或复制；`parseSourceUrl`／`resolveWebViewSource` 与 `source/config.ts` 白名单边界保持不变。
-- 删除随之失效的演示实现与测试：四位团队控制器（`team-list/team-publish/team-detail/profile-team`）、`ProfileTeams/ProfileApplications/ProfileTeamEditor/ProfileTeamConfirmDialog/ProfileTeamsReadOnly`、`AuthForm` ＋ `forms/auth-form.ts`、`navigation/team-query.ts`，以及对应的控制器级与页面级测试；`navigation/navigate.ts` 删除 `returnToTeams`，`openTabWithQuery` 与 `stores/navigation.ts` 的 `pendingTabQueries` 只保留 `home`。新增 `scripts/teams-deferred.test.mjs`（三处暂缓页面）与 `scripts/notifications-deferred.test.mjs`（站内通知暂缓页），均在 H5 与 mp-weixin 双平台断言暂缓文案、无表单无演示数据、返回入口与导航失败提示。
-- 跨端影响：H5 与 Android 共用同一套暂缓页面和外链策略；Android 侧仍需实测系统浏览器打开外链与硬件返回键（#220/#226）。`mp-weixin` 分支仍可编译，#224 才清理遗留条件编译。
-- 验证边界：单测、`typecheck`、`lint`、`build:h5`、`build`（含 mp-weixin）与 H5 浏览器模拟（320/375/390/430/1440px）在本任务完成；Android 真机与真实官方站点内容分别归 #226 与 #84。
+- **H5 公开外链**：`source/public-url.ts` 的 `resolvePublicSourceUrl()`（由 `source/policy.ts` 转出）与管理端手工通道 `apps/api/src/competitions/source-url.ts` 使用同一套判定：`URL` 解析归一化端口与国际化域名，拒绝 `http://`、userinfo、IP 字面量、单标签内网名、保留后缀（含 `.onion`／`.corp`／`.localdomain`）、非默认端口、空白与反斜杠。`CompetitionSourceAction` 在 H5 用它门控 `<a target="_blank" rel="noopener noreferrer">` 与复制，所以管理端能保存的外链在 H5 一定能打开或复制；`parseSourceUrl` 仍保留，#224 已删除当时提及的 `resolveWebViewSource` 与 `source/config.ts` 白名单。
+- 删除随之失效的演示实现与测试：四位团队控制器（`team-list/team-publish/team-detail/profile-team`）、`ProfileTeams/ProfileApplications/ProfileTeamEditor/ProfileTeamConfirmDialog/ProfileTeamsReadOnly`、`AuthForm` ＋ `forms/auth-form.ts`、`navigation/team-query.ts`，以及对应的控制器级与页面级测试；`navigation/navigate.ts` 删除 `returnToTeams`，`openTabWithQuery` 与 `stores/navigation.ts` 的 `pendingTabQueries` 只保留 `home`。新增 `scripts/teams-deferred.test.mjs`（三处暂缓页面）与 `scripts/notifications-deferred.test.mjs`（站内通知暂缓页），分别在 H5 与 App-Plus 双平台断言暂缓文案、无表单无演示数据、返回入口与导航失败提示（#224 已把当时的 mp-weixin 平台迁到 APP-PLUS）。
+- 跨端影响：H5 与 Android 共用同一套暂缓页面和外链策略；Android 侧仍需实测系统浏览器打开外链与硬件返回键（#220/#226）。`mp-weixin` 分支已由 #224 清理，两端只剩 H5 与 App-Plus 条件分支。
+- 验证边界：单测、`typecheck`、`lint`、`build:h5`、`build` 与 H5 浏览器模拟（320/375/390/430/1440px）在本任务完成；Android 真机与真实官方站点内容分别归 #226 与 #84。#224 清理后 mp-weixin 已不在验证范围内。
 
 ## Issue #219：Android 本地资源构建（现行，2026-11-26）
 
@@ -74,13 +102,13 @@ pnpm --filter @hehuoda/uni dev:app
 
 - 平台标识为 DCloud 普通 uni-app 的 `app`（`-p app`），由 `@dcloudio/uni-app-plus`（与其余 DCloud 包同版 `3.0.0-5020420260813003`）驱动。
 - 实际产物目录由 DCloud CLI 依据平台与 `NODE_ENV` 推导：`apps/uni/dist/build/app`（build/production）与 `apps/uni/dist/dev/app`（dev/development）。脚本把 `-p app`、`-m production|development` 与 `UNI_INPUT_DIR`/`UNI_OUTPUT_DIR` 固定为自己的值，拒绝额外 CLI 参数与同名环境变量覆盖，所以报告的输出目录就是真实产物目录；成功与否只看退出码，预检失败的启动会保留上次成功构建的产物。
-- 一次只运行一个会写 `src/manifest.json` 的构建（`build:app`/`dev:app`/`build:h5`/`build:mp-weixin` 共用该文件）。
+- 一次只运行一个会写 `src/manifest.json` 的构建（`build:app`/`dev:app`/`build:h5` 共用该文件）。
 - 产物内容为 `app-service.js`、`app-config-service.js`、`app.css`、`manifest.json`、`static/`、`pages/` 等 HBuilderX/离线打包所需的资源，**不是 APK**。
 - `manifest.json` 中 `plus.distribute.google`（DCloud 对 Android 的既有键名）承载 `packagename`、`minSdkVersion`、`targetSdkVersion` 与权限清单；`app-service.js` 内含编译期 `VITE_API_BASE_URL` 与 `platform:"app"`。
 
 ### 配置边界
 
-- `scripts/platform-config.mjs` 按目标隔离：`app` 目标**不读取** `UNI_MP_WEIXIN_APPID`，`mp-weixin` 目标保持原语义（本地编译不要求 AppID，`UNI_RELEASE=true` 才要求）。
+- `scripts/platform-config.mjs` 按目标隔离：`app` 与 `h5` 目标都不读取任何平台 AppID（#224 删除 `mp-weixin` 目标与 `UNI_MP_WEIXIN_APPID` 解析）。
 - Android 的 `VITE_API_BASE_URL` 先按**原始输入**做词法限制，再用 Node `new URL()` 取协议、凭据、主机、端口、路径与查询等结构化字段，并回验解析结果未被改写（大小写以外的任何归一化都拒绝）；最后交由 `src/api/config.ts` 的同一纯函数复核，两次结果必须完全一致。拒绝：缺失/空白、非 `https://`、相对与协议相对、`https:///host` 与反斜杠等解析器会自动纠正的输入、凭据、查询串、片段、非法/前导零端口、IP 字面量、单标签与空主机、路径中的重复斜杠与 `..`。错误信息只说明变量与约束，不回显原值。
 - `VITE_API_TIMEOUT_MS` 与地址来自同一份合并 env（`.env` + 进程环境，进程优先）并在预检中校验：非法值直接拒绝启动；子进程拿到校验后的同一份超时，未配置时沿用运行期默认 5000。该纯函数不读 `process.env`。
 - 运行时 `src/api/client.ts` 通过 `#ifdef APP-PLUS` 将 platform 标为 `app`，并保留最小 App-only HTTPS 防护；不关闭证书校验，不做其它平台的运行期校验变更。
@@ -92,11 +120,11 @@ pnpm --filter @hehuoda/uni dev:app
 
 ### 本阶段验证与剩余项
 
-- 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`、`build:mp-weixin`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。
-- 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（`CompetitionSourceAction.vue` 目前只有 H5 与 MP-WEIXIN 分支）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
+- 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。`build:mp-weixin` 已在 #224 移除。
+- 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（#224 后 `CompetitionSourceAction.vue` 在 App-Plus 提供「查看官方原文」进入来源直达页与复制，系统浏览器行为仍未实测）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
 - #83 新增 `APP-PLUS` 组件宿主断言时发现 `FormButton` 只有 `#ifdef H5` 与 `#ifdef MP-WEIXIN` 两个分支，App-Plus 下按钮整体不渲染（暂缓页主要操作在 Android 上不可见）。已把 H5 分支改为 `#ifndef MP-WEIXIN`，因为 H5 与 App-Plus 都是 webview 渲染、共用同一套键盘可达写法；微信分支不动。
 - 上述 `FormButton` 改动是 #83 门禁建设过程中发现的既有阻断缺陷，不是主动的视觉改版：**H5 端渲染结果与改动前完全相同，无 UI 视觉变更，H5 视口与交互验收仍归 #84**；Android（App-Plus）端从“按钮完全不渲染”变为渲染 `.hhr-button` 视图按钮，但该效果**未经真机验证**（本机无 Android 设备），当前仅有组件宿主替身中的节点与 `onClick` 断言。Android 真机上的 320/375/390/430px 布局、至少 44px 触控区域、各状态与长文本换行，以及硬件返回键与安全区，统一归 #226 真机矩阵验收，本任务不以编译通过或组件宿主测试替代真机证据。
-- 同类缺陷尚未修复：`FormInput`、`FormPicker`、`FormDialog` 的 H5 分支同样在 App-Plus 下不生效，需要 Android 侧适配实现，超出 #83 范围，归 #226 或 #220 处理；#83 不修改这三个组件的条件编译分支。
+- 同类缺陷（#224 已部分减轻）：`FormInput`、`FormPicker` 的 H5 分支在 App-Plus 下不生效；#224 已把非 H5 模板改由 `#ifndef H5` 覆盖，因此这两类控件在 App-Plus 现在会渲染 uni 原生控件，但软键盘、安全区与真机布局仍未验证，归 #220/#226。`FormDialog` 在 App-Plus 只按当前窗口高度设尺寸基准，键盘高度监听已随小程序分支删除。
 - 开屏目前使用 DCloud 默认启动主题（`app-plus.splashscreen.autoclose`），只有 160×160 的产品 Logo（`src/static/hehuoda-logo.png`，4 倍密度的 40px 场景），**没有**按各密度准备的原生启动图与图标，不在本阶段伪造。
 
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）

@@ -113,7 +113,7 @@ pnpm dev:admin
 ```
 
 - 根目录 `pnpm dev` 仍同时启动 `@hehuoda/api` 与保留作历史对照的 `@hehuoda/web`（`http://localhost:5173`），不用于新端交付。
-- `apps/uni` 中的 `dev:mp-weixin` / `build:mp-weixin` 为迁移过渡期遗留脚本（将在 #224 移除），不再作为目标发布端；Android 资源构建已由 `dev:app` / `build:app` 提供，签名 APK 与真机调试仍归 #219 后续。
+- `apps/uni` 的构建入口只有 `dev:h5`/`build:h5` 与 `dev:app`/`build:app`（#224 已移除 `dev:mp-weixin`/`build:mp-weixin`）；Android 资源构建已由 `dev:app`/`build:app` 提供，签名 APK 与真机调试仍归 #219 后续。
 
 ## 各端关键边界与规则
 
@@ -121,7 +121,7 @@ pnpm dev:admin
 
 - **导航与暂缓策略（方案 B）**：保留三栏原生 `tabBar`（首页 / 找队友 / 我的）与 [ADR 0005](docs/adr/0005-uni-navigation-shell.md) 导航注册表（`src/navigation/routes.ts` 与 `pages.json`）。按 #214 收口方向，「找队友」及演示招募/互动入口在 M1 收口为温和暂缓提示；`pages/my/favorites` 维持仅本次内存会话有效的临时收藏，刷新或冷启动清空并明示说明。
 - **编译期配置**：`apps/uni/.env` 严禁填入凭据。H5 开发留空 `VITE_API_BASE_URL` 走同源 `/api/v1`（由 `UNI_DEV_API_TARGET` 代理到后端）；**Android APK 正式构建必须显式配置受控 HTTPS 完整 API 地址**，禁止关闭 TLS 校验或使用相对路径；`VITE_API_TIMEOUT_MS` 默认 `5000`（允许 `1–60000`）。
-- **认证演进**：当前基线代码仍存在微信过渡入口与 `#ifdef MP-WEIXIN` 分支；M2（#128、#217–#225）将切换为川农统一身份认证唯一登录（首次建号默认昵称 **`禾伙搭用户`**），H5 使用内存 Access Token + `HttpOnly` Refresh Cookie（配 `Origin` 与 `X-Refresh-CSRF` 校验），Android 使用内存 Access Token + Android Keystore 加密存储适配。
+- **认证（#224 清理后）**：客户端已无微信登录入口与 `#ifdef MP-WEIXIN` 分支，川农统一身份认证是唯一登录（首次建号默认昵称 **`禾伙搭用户`**）。H5 使用内存 Access Token + `HttpOnly` Refresh Cookie（配 `Origin` 与 `X-Refresh-CSRF` 校验）；Android 同样只用内存 Access Token，Keystore 加密存储适配归 #220。服务端微信登录下线与并发建号证据归 #223。
 - **Android 资源构建（#219 阶段一）**：`pnpm --filter @hehuoda/uni build:app` / `pnpm --filter @hehuoda/uni dev:app` 生成 App-Plus 资源（`apps/uni/dist/build/app`、`apps/uni/dist/dev/app`），**不是 APK**；DEV 与 Release 均要求完整 HTTPS `VITE_API_BASE_URL`，包名由 `UNI_ANDROID_PACKAGE_NAME` 控制。签名、真机与外链仍待验收，详见 [Android 资源构建与签名打包说明](docs/android-app-build.md)。
 - **H5 独立构建与预览**：
 
@@ -134,10 +134,10 @@ pnpm --filter @hehuoda/uni preview:h5   # 监听 127.0.0.1:5176，仅托管静�
 
 #### 双端构建门禁本地复跑（#83）
 
-CI 的 `quality` 作业实际编译 H5 与 App-Plus 两端资源，不依赖微信 AppID、HBuilderX 或 Android SDK。本地用同一组命令复跑（PowerShell，先清掉本机残留变量，避免旧 `.env.local` 干扰）：
+CI 的 `quality` 作业实际编译 H5 与 App-Plus 两端资源，不依赖微信 AppID、HBuilderX 或 Android SDK。本地用同一组命令复跑（PowerShell）：
 
 ```powershell
-Remove-Item Env:UNI_MP_WEIXIN_APPID -ErrorAction SilentlyContinue
+# 两端顺序执行：先 H5，再 App-Plus
 $env:VITE_API_BASE_URL = '/api/v1'
 pnpm build                                        # 递归构建，含 H5
 $env:VITE_API_BASE_URL = 'https://api.hehuoda.test/api/v1'
@@ -150,8 +150,8 @@ pnpm --filter @hehuoda/uni build:app
 Bash（与 CI 步骤级 `env` 等价）：
 
 ```bash
-env -u UNI_MP_WEIXIN_APPID VITE_API_BASE_URL=/api/v1 pnpm build
-env -u UNI_MP_WEIXIN_APPID VITE_API_BASE_URL=https://api.hehuoda.test/api/v1 \
+VITE_API_BASE_URL=/api/v1 pnpm build
+VITE_API_BASE_URL=https://api.hehuoda.test/api/v1 \
   VITE_API_TIMEOUT_MS=15000 UNI_RELEASE=false UNI_ANDROID_PACKAGE_NAME=com.example.hehuoda \
   pnpm --filter @hehuoda/uni build:app
 ```
@@ -159,9 +159,9 @@ env -u UNI_MP_WEIXIN_APPID VITE_API_BASE_URL=https://api.hehuoda.test/api/v1 \
 - **所需变量**：H5 只用同源 `VITE_API_BASE_URL=/api/v1`；App-Plus 额外要求完整 HTTPS `VITE_API_BASE_URL`、可选 `VITE_API_TIMEOUT_MS`（`1–60000`）与 `UNI_ANDROID_PACKAGE_NAME`。`api.hehuoda.test` 是保留测试域，仅用于编译，不连通、也不是正式服务。
 - **产物**：H5 为 `apps/uni/dist/build/h5/index.html`，App-Plus 资源为 `apps/uni/dist/build/app/manifest.json` 与 `app-service.js`（**不是 APK**）。两者共用生成的 `apps/uni/src/manifest.json`，必须**顺序**执行、不要并发；生成目录与 manifest 均在 `.gitignore` 中，不提交。
 - **失败路径**：把 App 的 `VITE_API_BASE_URL` 改成 `/api/v1`，或把 `VITE_API_TIMEOUT_MS` 改成 `60001`，`build:app` 会非零退出并指出变量名与约束；错误时旧产物可能仍留在磁盘，成功与否只看退出码。
-- **默认构建链**：`pnpm --filter @hehuoda/uni build` 现在只跑工具链预检 + H5；App-Plus 由 CI 下一步和上面的本地命令独立编译。`build:mp-weixin` 仍是显式命令，但已不是默认门禁的一部分。
-- **工具链检查分层**：`check:toolchain` 默认只校验 H5、App-Plus 与共用依赖；微信专用包与 `uni-mp-vue` 内嵌运行时改由 `pnpm --filter @hehuoda/uni check:toolchain --include-legacy-weixin` 显式校验（#224 清理目标）。
-- **静态防退化规则**：`pnpm lint` 用 `no-restricted-syntax`（脚本与 Vue 模板）与 `no-restricted-imports` 拦截生产源码直接使用 `localStorage`/`sessionStorage`、`uni.*Storage*` 明文存储、微信全局 `wx` 与 `uni.login`/`*Weixin*` 入口，以及导入旧微信登录适配器或 `@dcloudio/uni-mp-weixin`。受控例外只有三处：`src/auth/h5-tab-sync.ts`（协调元数据）、`src/auth/platform-storage.ts`（遗留端适配器）、`src/auth/wechat-login.ts`（`uni.login`）；规则回归测试见 `apps/uni/scripts/cross-platform-lint.test.mjs`。
+- **默认构建链**：`pnpm --filter @hehuoda/uni build` 只跑工具链预检 + H5；App-Plus 由 CI 下一步和上面的本地命令独立编译。旧 `build:mp-weixin` 脚本与 `mp-weixin` 目标已在 #224 移除，`node scripts/run-uni.mjs build mp-weixin` 会非零退出并提示现行入口。
+- **工具链检查**：`check:toolchain` 只校验 H5、App-Plus 与共用依赖（含 `weapp-tailwindcss` 与 renderer peer）。遗留开关 `--include-legacy-weixin` 已在 #224 删除，传入即非零退出。
+- **静态防退化规则**：`pnpm lint` 用 `no-restricted-syntax`（脚本与 Vue 模板）与 `no-restricted-imports` 拦截生产源码直接使用 `localStorage`/`sessionStorage`、`uni.*Storage*` 明文存储、微信全局 `wx` 与 `uni.login`/`*Weixin*` 入口，以及导入旧微信登录适配器或 `@dcloudio/uni-mp-weixin`。受控例外只剩 `src/auth/h5-tab-sync.ts`（H5 多标签协调元数据）；`platform-storage.ts` 与已删除的 `wechat-login.ts` 不再享有例外，回归测试见 `apps/uni/scripts/cross-platform-lint.test.mjs`。
 
 ### 管理端（`apps/admin`）
 
