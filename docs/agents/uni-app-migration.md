@@ -67,8 +67,8 @@
 
 ### 本阶段验证与记录
 
-- 单测最终 **315 项全部通过**（基线 `origin/main` 313 项）：清理阶段降到 312 项，`f80319f` 补 1 条平台目标校验用例回到 313 项，本轮为来源直达入口的迟到导航回调新增 2 条交错时序回归用例到 315 项，净变化 +2（删/改对应行为见 PR 与交付报告）；`lint`、`format:check`、`typecheck`、`check:toolchain` 均通过。
-- 来源直达入口反馈按代次归属：`CompetitionSourceAction` 非 H5 分支的导航失败回调会校验 `generation`，迟到的失败既不会覆盖后来的复制成功，也不会把旧地址挂到切换后的 Notice 下；复制与导航各用独立在途状态，导航未决时复制仍可用，导航成功后显式复位按钮 loading。
+- 单测最终 **318 项全部通过**（基线 `origin/main` 313 项）：清理阶段降到 312 项，`f80319f` 补 1 条平台目标校验用例回到 313 项，`7788ad5` 为来源直达入口的迟到导航回调新增 2 条交错时序回归用例到 315 项，本轮又为复制／导航在途状态解耦补 3 条交错时序回归用例到 318 项，净变化 +5（删/改对应行为见 PR 与交付报告）；`lint`、`format:check`、`typecheck`、`check:toolchain` 均通过。
+- 来源直达入口把反馈归属与在途状态彻底解耦：`generation` 只决定结果能否写进 `feedback`（迟到的复制／导航结果既不覆盖后来的结果，也不会把旧地址挂到切换后的 Notice 下）；复制与导航各用独立 token（`copyToken`／`openToken`）控制自己的在途状态复位，只有本次动作仍是最新时才复位。因此复制在途时点原文，剪贴板返回后复制按钮必定恢复可点，旧导航的迟到 `fail`／`success` 也不会清掉新导航的 `opening`；导航成功后显式复位按钮 loading。
 - H5 与 App-Plus 已分别真实构建：H5 产物 `apps/uni/dist/build/h5`（约 0.9 MB / 87 文件），App-Plus 资源 `apps/uni/dist/build/app`（约 1.47 MB / 65 文件）；生成的 `src/manifest.json` 不再包含 `mp-weixin` 键，残留 `UNI_MP_WEIXIN_APPID` 对两端构建均无影响。
 - 负向用例实测：`node scripts/run-uni.mjs build mp-weixin` 与 `node scripts/check-toolchain.mjs --include-legacy-weixin` 均非零退出并提示现行入口。
 - 视觉证据层级：来源直达页（`pages/source/index.vue`）**有包装层与可见文案的实际调整**（删除嵌入状态与 `web-view` 后的直达页结构与回退文案），不是纯等价重构；已完成 **320/375/390/430px 的 Chrome 窄屏模拟**：无横向溢出、长标题与长 URL 正常换行、登录页空字段禁用、个人中心弹层底部操作在视口内、失败态文案与手动复制地址可读、重复 URL 参数显示「来源地址无效」。真实软键盘、物理安全区、系统浏览器与 Android 真机（含原生返回）仍归 #220/#226。

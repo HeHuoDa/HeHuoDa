@@ -33,9 +33,16 @@ const feedback = ref<SourceResult | null>(null);
 const busy = ref(false);
 /** 来源直达页导航在途；与剪贴板分开，导航未决时复制仍然可用。 */
 const opening = ref(false);
+/** 反馈归属代次：只决定结果能否写进 `feedback`，不再控制任何在途状态复位。 */
 let generation = 0;
+/** 复制动作 token：只有本次复制仍是最新时才有权复位 `busy`。 */
+let copyToken = 0;
+/** 导航动作 token：只有本次导航仍是最新时才有权复位 `opening`。 */
+let openToken = 0;
 function reset() {
   generation += 1;
+  copyToken += 1;
+  openToken += 1;
   feedback.value = null;
   busy.value = false;
   opening.value = false;
@@ -68,31 +75,35 @@ const actions = createSourceActions(ports, acceptSource);
 async function copySource() {
   if (busy.value) return;
   const current = ++generation;
+  const token = ++copyToken;
   busy.value = true;
   feedback.value = null;
   const result = await actions.copy(props.notice.url);
+  // 在途复位只看复制 token：期间即使被导航占用反馈代次，按钮也必须恢复可点。
+  if (token === copyToken) busy.value = false;
   if (generation !== current) return;
   feedback.value = result;
-  busy.value = false;
 }
 
 /**
  * 非 H5（Android）保留来源直达页作为可执行入口，参数仍由承载页重新校验。
  * 与 `copySource` 一样按代次归属反馈：导航回调可能在复制成功或 Notice 切换之后才交付，
  * 无代次校验会把旧失败覆盖新结果，或把旧地址挂到新 Notice 下显示。
+ * 在途复位另按 `openToken` 判定：旧导航迟到不得清掉新导航的 `opening`。
  */
 function openSourcePage() {
   if (opening.value) return;
   const target = source.value;
   if (!target) return;
   const current = ++generation;
+  const token = ++openToken;
   opening.value = true;
   feedback.value = null;
   openPage(
     "source-webview",
     { url: target.url, title: props.notice.title },
     () => {
-      opening.value = false;
+      if (token === openToken) opening.value = false;
       if (generation !== current) return;
       feedback.value = {
         status: "manual",
@@ -101,8 +112,9 @@ function openSourcePage() {
       };
     },
     // 导航成功后组件仍在页面栈内，用户返回时不会走 onBeforeUnmount，必须显式复位。
+    // 成功回调同样校验 token，避免旧导航的迟到成功清掉新导航的在途状态。
     () => {
-      opening.value = false;
+      if (token === openToken) opening.value = false;
     },
   );
 }

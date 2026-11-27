@@ -267,6 +267,163 @@ test("App-Plus 迟到导航失败不得把旧地址挂到切换后的 Notice 下
   }
 });
 
+test("App-Plus 复制在途时点原文，剪贴板返回后复制按钮恢复可点", async () => {
+  const original = globalThis.uni;
+  const calls = [];
+  const navigations = [];
+  globalThis.uni = {
+    // 截留剪贴板回调，模拟复制与导航交错。
+    setClipboardData: (options) => calls.push(options),
+    navigateTo: (options) => navigations.push(options),
+  };
+  const notice = detail().notices[0];
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
+  try {
+    const button = (label) =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes(label),
+      );
+    button("复制链接").props.onClick();
+    await flush();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].data, notice.url);
+    // 宿主节点的 loading 是组件 prop，不进 DOM；按 FormButton 的可达性属性断言。
+    assert.equal(button("复制链接").props["aria-busy"], true);
+    assert.equal(button("复制链接").props.tabindex, -1);
+    // 复制未决时仍可点原文；导航占了反馈代次，但不得锁死复制按钮。
+    button("原文").props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    assert.equal(button("原文").props["aria-busy"], true);
+    calls[0].success();
+    await flush();
+    assert.ok(!button("复制链接").props["aria-busy"]);
+    assert.notEqual(button("复制链接").props.tabindex, -1);
+    // 旧复制结果不得写进已被导航占据的 feedback。
+    assert.doesNotMatch(textOf(app.container), /官方链接已复制/);
+    // 复制动作也不得影响导航自身的在途状态。
+    assert.equal(button("原文").props["aria-busy"], true);
+    button("复制链接").props.onClick();
+    await flush();
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].data, notice.url);
+    calls[1].success();
+    await flush();
+  } finally {
+    app.unmount();
+    globalThis.uni = original;
+  }
+});
+
+test("App-Plus 旧导航迟到成功不得清掉新导航的 opening", async () => {
+  const original = globalThis.uni;
+  const navigations = [];
+  globalThis.uni = {
+    setClipboardData: () => {},
+    navigateTo: (options) => navigations.push(options),
+  };
+  const notice = detail().notices[0];
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
+  try {
+    const openButton = () =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("原文"),
+      );
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    app.render({
+      notice: {
+        ...notice,
+        id: "notice-b",
+        url: "https://news.example.edu.cn/new",
+      },
+      compact: true,
+    });
+    await nextTick();
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 2);
+    assert.equal(openButton().props["aria-busy"], true);
+    // 旧导航的迟到成功不得提前结束新导航的在途状态，否则防重入失效。
+    navigations[0].success();
+    await flush();
+    assert.equal(openButton().props["aria-busy"], true);
+    navigations[1].success();
+    await flush();
+    assert.ok(!openButton().props["aria-busy"]);
+  } finally {
+    app.unmount();
+    globalThis.uni = original;
+  }
+});
+
+test("App-Plus 旧导航迟到失败不得清掉新导航的 opening", async () => {
+  const original = globalThis.uni;
+  const navigations = [];
+  globalThis.uni = {
+    setClipboardData: () => {},
+    navigateTo: (options) => navigations.push(options),
+  };
+  const notice = detail().notices[0];
+  const app = await mount(
+    "../src/components/CompetitionSourceAction.vue",
+    { notice, compact: true },
+    "APP-PLUS",
+  );
+  try {
+    const openButton = () =>
+      app.find(
+        (node) =>
+          (node.type === "button" || node.props.role === "button") &&
+          textOf(node).includes("原文"),
+      );
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 1);
+    app.render({
+      notice: {
+        ...notice,
+        id: "notice-b",
+        url: "https://news.example.edu.cn/new",
+      },
+      compact: true,
+    });
+    await nextTick();
+    openButton().props.onClick();
+    await flush();
+    assert.equal(navigations.length, 2);
+    assert.equal(openButton().props["aria-busy"], true);
+    navigations[0].fail({ errMsg: "navigateTo:fail" });
+    await flush();
+    assert.equal(openButton().props["aria-busy"], true);
+    // 旧导航的迟到失败也不得把旧地址挂到切换后的 Notice 下。
+    assert.doesNotMatch(textOf(app.container), /暂时无法打开原文页面/);
+    assert.doesNotMatch(textOf(app.container), /example\.edu\.cn\/news/);
+    // 当前代次的导航失败仍须给出可取选地址的手动回退。
+    navigations[1].fail({ errMsg: "navigateTo:fail" });
+    await flush();
+    assert.ok(!openButton().props["aria-busy"]);
+    assert.match(textOf(app.container), /暂时无法打开原文页面/);
+    assert.match(textOf(app.container), /news\.example\.edu\.cn\/new/);
+  } finally {
+    app.unmount();
+    globalThis.uni = original;
+  }
+});
+
 test("H5 完整和 compact 来源使用安全原生链接，危险地址没有可点击链接", async () => {
   const notice = detail().notices[0];
   for (const compact of [false, true]) {
