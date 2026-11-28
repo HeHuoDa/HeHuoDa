@@ -51,6 +51,25 @@ test("底栏的普通/选中图标离线可用，PNG 尺寸与静态预算受控
   }
 });
 
+test("Android 云打包可从工程根目录找到各密度启动器图标", () => {
+  const manifest = JSON.parse(read("manifest.template.json"));
+  const icons = manifest["app-plus"].distribute.icons.android;
+  const sizes = {
+    ldpi: 48,
+    mdpi: 48,
+    hdpi: 72,
+    xhdpi: 96,
+    xxhdpi: 144,
+    xxxhdpi: 192,
+  };
+  for (const [density, size] of Object.entries(sizes)) {
+    const png = readFileSync(resolve(root, icons[density]));
+    assert.equal(png.subarray(1, 4).toString(), "PNG");
+    assert.equal(png.readUInt32BE(16), size);
+    assert.equal(png.readUInt32BE(20), size);
+  }
+});
+
 test("学院稳定 ID 和缺徽学院均保留，25 张 PNG 等比且无 Web 运行时导入", () => {
   assert.equal(colleges.length, 27);
   assert.equal(new Set(colleges.map((c) => c.id)).size, 27);

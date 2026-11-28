@@ -15,12 +15,12 @@
     "distribute": {
       "icons": {
         "android": {
-          "ldpi": "app-icons/ldpi.png",
-          "mdpi": "app-icons/mdpi.png",
-          "hdpi": "app-icons/hdpi.png",
-          "xhdpi": "app-icons/xhdpi.png",
-          "xxhdpi": "app-icons/xxhdpi.png",
-          "xxxhdpi": "app-icons/xxxhdpi.png"
+          "ldpi": "src/app-icons/ldpi.png",
+          "mdpi": "src/app-icons/mdpi.png",
+          "hdpi": "src/app-icons/hdpi.png",
+          "xhdpi": "src/app-icons/xhdpi.png",
+          "xxhdpi": "src/app-icons/xxhdpi.png",
+          "xxxhdpi": "src/app-icons/xxxhdpi.png"
         }
       },
       "android": {
