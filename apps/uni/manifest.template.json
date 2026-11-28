@@ -13,6 +13,16 @@
       "androidStyle": "default"
     },
     "distribute": {
+      "icons": {
+        "android": {
+          "ldpi": "static/app-icons/ldpi.png",
+          "mdpi": "static/app-icons/mdpi.png",
+          "hdpi": "static/app-icons/hdpi.png",
+          "xhdpi": "static/app-icons/xhdpi.png",
+          "xxhdpi": "static/app-icons/xxhdpi.png",
+          "xxxhdpi": "static/app-icons/xxxhdpi.png"
+        }
+      },
       "android": {
         "packagename": "com.example.hehuoda",
         "minSdkVersion": 23,
