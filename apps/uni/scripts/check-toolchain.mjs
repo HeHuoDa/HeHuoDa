@@ -31,10 +31,10 @@ const expected = {
   "weapp-tailwindcss": "5.6.3",
   vite: "5.2.8",
   "vue-router": "4.4.4",
-  "@dcloudio/uni-app": "3.0.0-5020420260813003",
-  "@dcloudio/uni-app-plus": "3.0.0-5020420260813003",
-  "@dcloudio/uni-h5": "3.0.0-5020420260813003",
-  "@dcloudio/vite-plugin-uni": "3.0.0-5020420260813003",
+  "@dcloudio/uni-app": "3.0.0-5020620260917001",
+  "@dcloudio/uni-app-plus": "3.0.0-5020620260917001",
+  "@dcloudio/uni-h5": "3.0.0-5020620260917001",
+  "@dcloudio/vite-plugin-uni": "3.0.0-5020620260917001",
 };
 for (const [name, version] of Object.entries(expected)) {
   assert.equal(packageVersion(require, name), version, name);

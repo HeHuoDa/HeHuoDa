@@ -15,7 +15,7 @@ VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni bui
 VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni dev:app
 ```
 
-- 平台标识 `app`（DCloud 普通 uni-app），编译层为 `@dcloudio/uni-app-plus@3.0.0-5020420260813003`，与 `@dcloudio/uni-app`、`uni-h5`、`uni-mp-weixin`、`vite-plugin-uni`、`uni-cli-shared` 完全同版；内嵌运行时为 Vue 3.4.21（区别于应用依赖的 3.5.42）。
+- 平台标识 `app`（DCloud 普通 uni-app），编译层为 `@dcloudio/uni-app-plus@3.0.0-5020620260917001`，与 `@dcloudio/uni-app`、`uni-h5`、`vite-plugin-uni`、`uni-cli-shared` 完全同版；内嵌运行时为 Vue 3.4.21（区别于应用依赖的 3.5.42）。
 - 工程版本：`versionName 0.0.0`、`versionCode 1`（`manifest.template.json`）。**每次对外发布都要在同一提交内同时递增 `versionCode` 并审查 `versionName`**；`versionCode` 只增不减，否则覆盖安装会被系统拒绝。
 - 产物是资源目录，不是 APK：`app-service.js`、`app-config-service.js`、`app-config.js`、`app.css`、`manifest.json`、`static/`、`pages/`、`uni-app-view.umd.js` 等。
 - 脚本固定 `-p app`、`-m production|development` 与 `UNI_INPUT_DIR`/`UNI_OUTPUT_DIR`，**拒绝额外 CLI 参数和同名环境变量覆盖**，因此日志、退出码与实际产物目录同源；不以「目录存在」判定成功，预检失败的启动会保留上一次成功构建的产物。
@@ -56,7 +56,7 @@ VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni dev
 
 ### 路径 A（推荐首轮）：DCloud 离线 SDK 的本机 Android Studio/Gradle 打包
 
-1. 从 DCloud 官方离线 SDK（[App 离线 SDK 文档](https://nativesupport.dcloud.net.cn/AppDocs/)）取得与本仓库编译层（`5.24` / `3.0.0-5020420260813003`）**匹配**的 Android SDK，或按该版本说明在 Android Studio 中打开官方离线工程模板。
+1. 从 DCloud 官方离线 SDK（[App 离线 SDK 文档](https://nativesupport.dcloud.net.cn/AppDocs/)）取得与本仓库编译层（`5.26` / `3.0.0-5020620260917001`）**匹配**的 Android SDK，或按该版本说明在 Android Studio 中打开官方离线工程模板。
 2. **申请 AppKey（3.1.10 及以后的离线 SDK 同样必须）**：用 DCloud 开发者账号在开发者中心「应用管理 → 各平台信息 → 新增 Android」申请离线 AppKey，登记 DCloud 应用 AppID、Android 包名与签名证书 **SHA-1**（[申请 Appkey](https://nativesupport.dcloud.net.cn/AppDocs/usesdk/appkey)）。三者在打包后必须与实际产物一致，否则运行时报「未配置AppKey或配置错误」。这一步依赖 DCloud 账号，属 #58 外部条件，本任务未执行。
 3. 将 `apps/uni/dist/build/app` 作为 www 资源放入工程（各 SDK 版本目录名不同，需按该版本官方文档核对）。
 4. 核对包名：用 `UNI_ANDROID_PACKAGE_NAME` 注入并编译，再回读生成的两份 manifest——`apps/uni/src/manifest.json` 的 `app-plus.distribute.android.packagename`，以及 App 资源 `apps/uni/dist/build/app/manifest.json` 的 `plus.distribute.google.packagename`（两个键是同一段配置的生成前/生成后形态）。把该值写入原生工程 `applicationId`（同时对齐 `AndroidManifest.xml` 的 `package`）。`manifest.template.json` 里的 `com.example.hehuoda` **只是占位**，不是已选定包名。

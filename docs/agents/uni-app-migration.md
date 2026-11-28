@@ -12,7 +12,7 @@
 | Android 工程与真机    | #219 验证 uni-app Android 打包（APK 生成与真机安装）、#220 交付 Android Keystore 安全存储适配与生命周期/返回/安全区、#226 执行 Android 真机全矩阵验收；#83 建立 H5+Android 双端回归门禁                            |
 | 准入、部署与旧端退役  | #58/#140（外部条件与安全开关）、#86/#87/#88/#143/#227/#228 完成产物追溯、H5 切流与正式签名 APK HTTPS 分发；#90（deferred）评估退役 `apps/web`                                                                      |
 
-技术栈沿 [README](../../README.md) 与 `apps/uni/package.json`：Vue/runtime-core 3.5.42（DCloud 内嵌运行时为 3.4.21）、Pinia 3.0.4、Tailwind 4.3.3、DCloud 3.0.0-5020420260813003 / Vite 5.2.8；依赖声明和 H5 编译不等于 Android 原生运行时或真机行为兼容。
+技术栈沿 [README](../../README.md) 与 `apps/uni/package.json`：Vue/runtime-core 3.5.42（DCloud 内嵌运行时为 3.4.21）、Pinia 3.0.4、Tailwind 4.3.3、DCloud 3.0.0-5020620260917001 / Vite 5.2.8；依赖声明和 H5 编译不等于 Android 原生运行时或真机行为兼容。
 
 `source/public-url.ts` 的判定与 H5 `<a>` 打开均保留；小程序内嵌 web-view 承载与 `source/config.ts` 白名单已按 #224 删除。H5 使用同源 `/api/v1`，**Android 正式包必须显式配置受控 HTTPS 完整 API 基址且严禁跳过 TLS 校验**。
 
@@ -101,7 +101,7 @@ VITE_API_BASE_URL=https://api.example.test/api/v1 pnpm --filter @hehuoda/uni bui
 pnpm --filter @hehuoda/uni dev:app
 ```
 
-- 平台标识为 DCloud 普通 uni-app 的 `app`（`-p app`），由 `@dcloudio/uni-app-plus`（与其余 DCloud 包同版 `3.0.0-5020420260813003`）驱动。
+- 平台标识为 DCloud 普通 uni-app 的 `app`（`-p app`），由 `@dcloudio/uni-app-plus`（与其余 DCloud 包同版 `3.0.0-5020620260917001`）驱动。
 - 实际产物目录由 DCloud CLI 依据平台与 `NODE_ENV` 推导：`apps/uni/dist/build/app`（build/production）与 `apps/uni/dist/dev/app`（dev/development）。脚本把 `-p app`、`-m production|development` 与 `UNI_INPUT_DIR`/`UNI_OUTPUT_DIR` 固定为自己的值，拒绝额外 CLI 参数与同名环境变量覆盖，所以报告的输出目录就是真实产物目录；成功与否只看退出码，预检失败的启动会保留上次成功构建的产物。
 - 一次只运行一个会写 `src/manifest.json` 的构建（`build:app`/`dev:app`/`build:h5` 共用该文件）。
 - 产物内容为 `app-service.js`、`app-config-service.js`、`app.css`、`manifest.json`、`static/`、`pages/` 等 HBuilderX/离线打包所需的资源，**不是 APK**。
