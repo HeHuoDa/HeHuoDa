@@ -113,7 +113,7 @@ pnpm dev:admin
 ```
 
 - 根目录 `pnpm dev` 仍同时启动 `@hehuoda/api` 与保留作历史对照的 `@hehuoda/web`（`http://localhost:5173`），不用于新端交付。
-- `apps/uni` 的构建入口只有 `dev:h5`/`build:h5` 与 `dev:app`/`build:app`（#224 已移除 `dev:mp-weixin`/`build:mp-weixin`）；Android 资源构建已由 `dev:app`/`build:app` 提供，签名 APK 与真机调试仍归 #219 后续。
+- `apps/uni` 提供 `dev:h5`/`build:h5` 与 `dev:app`/`build:app`。首轮 Android 签名 APK 和真机首页已验证。云打包流程、复测与剩余验收项见 [Android 资源构建与签名打包说明](docs/android-app-build.md)。
 
 ## 各端关键边界与规则
 

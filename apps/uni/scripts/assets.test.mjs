@@ -70,6 +70,27 @@ test("Android 云打包可从工程根目录找到各密度启动器图标", () 
   }
 });
 
+test("Android 云打包使用可拉伸的静态启动图，关闭等待圈", () => {
+  const manifest = JSON.parse(read("manifest.template.json"));
+  const app = manifest["app-plus"];
+  assert.deepEqual(app.splashscreen, {
+    alwaysShowBeforeRender: false,
+    autoclose: true,
+    waiting: false,
+  });
+  const splash = app.distribute.splashscreen;
+  assert.equal(splash.androidStyle, "default");
+  const sizes = { hdpi: [480, 762], xhdpi: [720, 1242], xxhdpi: [1080, 1882] };
+  for (const [density, [width, height]] of Object.entries(sizes)) {
+    const path = splash.android[density];
+    assert.match(path, /^src\/app-splash\/[a-z]+\.9\.png$/);
+    const png = readFileSync(resolve(root, path));
+    assert.equal(png.subarray(1, 4).toString(), "PNG");
+    assert.equal(png.readUInt32BE(16), width);
+    assert.equal(png.readUInt32BE(20), height);
+  }
+});
+
 test("学院稳定 ID 和缺徽学院均保留，25 张 PNG 等比且无 Web 运行时导入", () => {
   assert.equal(colleges.length, 27);
   assert.equal(new Set(colleges.map((c) => c.id)).size, 27);

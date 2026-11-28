@@ -37,14 +37,14 @@
 
 下表列出当前及 M2–M3 阶段的重点跨端适配清单，由对应任务实施者负责并实测核销：
 
-| 位置/能力                                                                 | H5 影响                                                                                       | Android APP 影响与适配路径                                                                                                                        | 成本 |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 认证凭证与 Refresh Token 持久化（#218/#220/#221/#222）                    | Access 仅内存；Refresh 走 `HttpOnly` Cookie + `Origin` + `X-Refresh-CSRF`，协调多标签并发刷新 | Access 仅内存；Refresh 须使用经验证的 **Android Keystore 加密存储适配**（禁止 `uni.setStorageSync` 明文落盘），不可用时明确降级内存并提示重启重登 | 中   |
-| API 基址、TLS 与超时（`api/config.ts`、`api/http.ts`）                    | 开发同源代理，正式环境同源 `/api/v1` 或完整 HTTPS                                             | 必须配置完整 HTTPS API 地址，禁用明文 HTTP 与忽略证书校验；验证前后台切换、弱网中断及单飞刷新恢复                                                 | 低   |
-| 官方比赛外链打开（`source/policy.ts`、`source/actions.ts`）               | 渲染真实 `<a>` 新标签页打开（仅允许无凭据、无非默认端口的公开 `https://` DNS 链接）           | 验证通过原生能力调用系统浏览器打开外链及复制回退，保留长链接换行与失败提示                                                                        | 低   |
-| 原生导航、硬件返回与系统 UI（`pages.json`、`navigation/`、#220）          | 保留原生标题与三栏 tabBar（方案 B 暂缓提示）；`h5-router` 维持历史同步                        | 核对启动白屏、状态栏高度、底部手势/导航安全区、`onBackPress` 与系统返回键对弹窗/页面栈的行为，避免空栈误退出                                      | 中   |
-| 表单输入、日期/时间选择器与弹层（`forms/`、`FormDialog`、`FormDateTime`） | H5 原生控件适配器、Escape、Tab 循环、背景 `inert` 与 `visualViewport`                         | 验证 Android 原生软键盘弹出对弹窗/输入框的遮挡、`adjustPosition` 策略、系统大字号与长文本换行                                                     | 中   |
-| Android 打包配置、签名与遗留清理（#219/#228）                             | #224 已删除残留 `#ifdef MP-WEIXIN` 分支，H5 构建与页面已回归                                  | `run-uni.mjs`/`platform-config.mjs`/`manifest.template.json` 的 App 资源构建入口已落地；签名 APK、覆盖升级、系统浏览器外链与真机仍待验收          | 中   |
+| 位置/能力                                                                 | H5 影响                                                                                       | Android APP 影响与适配路径                                                                                                                                     | 成本 |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| 认证凭证与 Refresh Token 持久化（#218/#220/#221/#222）                    | Access 仅内存；Refresh 走 `HttpOnly` Cookie + `Origin` + `X-Refresh-CSRF`，协调多标签并发刷新 | Access 仅内存；Refresh 须使用经验证的 **Android Keystore 加密存储适配**（禁止 `uni.setStorageSync` 明文落盘），不可用时明确降级内存并提示重启重登              | 中   |
+| API 基址、TLS 与超时（`api/config.ts`、`api/http.ts`）                    | 开发同源代理，正式环境同源 `/api/v1` 或完整 HTTPS                                             | 必须配置完整 HTTPS API 地址，禁用明文 HTTP 与忽略证书校验；验证前后台切换、弱网中断及单飞刷新恢复                                                              | 低   |
+| 官方比赛外链打开（`source/policy.ts`、`source/actions.ts`）               | 渲染真实 `<a>` 新标签页打开（仅允许无凭据、无非默认端口的公开 `https://` DNS 链接）           | 验证通过原生能力调用系统浏览器打开外链及复制回退，保留长链接换行与失败提示                                                                                     | 低   |
+| 原生导航、硬件返回与系统 UI（`pages.json`、`navigation/`、#220）          | 保留原生标题与三栏 tabBar（方案 B 暂缓提示）；`h5-router` 维持历史同步                        | 核对启动白屏、状态栏高度、底部手势/导航安全区、`onBackPress` 与系统返回键对弹窗/页面栈的行为，避免空栈误退出                                                   | 中   |
+| 表单输入、日期/时间选择器与弹层（`forms/`、`FormDialog`、`FormDateTime`） | H5 原生控件适配器、Escape、Tab 循环、背景 `inert` 与 `visualViewport`                         | 验证 Android 原生软键盘弹出对弹窗/输入框的遮挡、`adjustPosition` 策略、系统大字号与长文本换行                                                                  | 中   |
+| Android 打包配置、签名与遗留清理（#219/#228）                             | #224 已删除残留 `#ifdef MP-WEIXIN` 分支，H5 构建与页面已回归                                  | `run-uni.mjs`/`platform-config.mjs`/`manifest.template.json` 的 App 资源构建入口已落地；已签名装机并验证首台真机首页，覆盖升级、最小权限和系统浏览器外链待验收 | 中   |
 
 ## Issue #224：`apps/uni` 微信小程序遗留清理（现行，2026-12）
 
@@ -88,9 +88,9 @@
 - 跨端影响：H5 与 Android 共用同一套暂缓页面和外链策略；Android 侧仍需实测系统浏览器打开外链与硬件返回键（#220/#226）。`mp-weixin` 分支已由 #224 清理，两端只剩 H5 与 App-Plus 条件分支。
 - 验证边界：单测、`typecheck`、`lint`、`build:h5`、`build` 与 H5 浏览器模拟（320/375/390/430/1440px）在本任务完成；Android 真机与真实官方站点内容分别归 #226 与 #84。#224 清理后 mp-weixin 已不在验证范围内。
 
-## Issue #219：Android 本地资源构建（现行，2026-11-26）
+## Issue #219：Android 资源构建与首轮签名装机（现行，2026-11-28）
 
-本阶段只交付**可重现的 App-Plus 资源构建入口**，不是签名 APK，也不是真机验收。#219 的签名打包、覆盖安装、包名归属与受控测试域名仍开放。
+已验证 App-Plus 资源构建、HBuilderX 云打包和首台 Android 真机的公开比赛首页。当前测试 APK 使用 `hehuoda.app` 和正式 HTTPS API。签名升级、最终 APK 权限收敛、系统浏览器外链和静态开屏新版仍待验收。
 
 ### 入口与产物
 
@@ -113,20 +113,20 @@ pnpm --filter @hehuoda/uni dev:app
 - Android 的 `VITE_API_BASE_URL` 先按**原始输入**做词法限制，再用 Node `new URL()` 取协议、凭据、主机、端口、路径与查询等结构化字段，并回验解析结果未被改写（大小写以外的任何归一化都拒绝）；最后交由 `src/api/config.ts` 的同一纯函数复核，两次结果必须完全一致。拒绝：缺失/空白、非 `https://`、相对与协议相对、`https:///host` 与反斜杠等解析器会自动纠正的输入、凭据、查询串、片段、非法/前导零端口、IP 字面量、单标签与空主机、路径中的重复斜杠与 `..`。错误信息只说明变量与约束，不回显原值。
 - `VITE_API_TIMEOUT_MS` 与地址来自同一份合并 env（`.env` + 进程环境，进程优先）并在预检中校验：非法值直接拒绝启动；子进程拿到校验后的同一份超时，未配置时沿用运行期默认 5000。该纯函数不读 `process.env`。
 - 运行时 `src/api/client.ts` 通过 `#ifdef APP-PLUS` 将 platform 标为 `app`，并保留最小 App-only HTTPS 防护；不关闭证书校验，不做其它平台的运行期校验变更。
-- `UNI_ANDROID_PACKAGE_NAME` 控制包名。留空时资源编译使用占位 `com.example.hehuoda`（仅本地资源构建），`UNI_RELEASE=true` 必须显式注入受控包名，并拒绝示例段、DCloud/Android 保留前缀。正式包名归属仍属 #58/#219 后续验收。
+- `UNI_ANDROID_PACKAGE_NAME` 控制包名。留空时资源编译使用占位 `com.example.hehuoda`（仅本地资源构建），`UNI_RELEASE=true` 必须显式注入受控包名，并拒绝示例段、DCloud/Android 保留前缀。首轮签名 APK 已使用 `hehuoda.app`。
 
 ### 构建文档
 
-签名 APK 路径与核验清单见 [Android 资源构建与签名打包说明](../android-app-build.md)。推荐首轮走**与 DCloud 离线 SDK 匹配的本机 Android Studio/Gradle 打包**（有利于 #87 自动化，且不会把签名证书交给云端打包服务器）；但 3.1.10 起的离线 SDK **同样必须用 DCloud 开发者账号申请 AppKey**（绑定应用 AppID、Android 包名与签名证书 SHA-1），账号属 #58 外部条件。DCloud 云打包同样需要 HBuilderX 与账号。两条路径均**未在本任务验证**。
+首轮选择 HBuilderX 5.26 云打包（快速安心打包、自有证书），已生成并验证签名 APK。离线 SDK/AppKey 为 #87 的后续出包选项。操作步骤和验证记录见 [Android 资源构建与签名打包说明](../android-app-build.md)。
 
 ### 本阶段验证与剩余项
 
 - 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。`build:mp-weixin` 已在 #224 移除。
-- 未验证（明确留给 #219 后续与 #226）：签名 APK 生成与证书、离线 AppKey 申请与生效校验、`apksigner` 与最终 `AndroidManifest.xml` 权限、真机安装/覆盖升级/冷启动、Android 系统浏览器打开官方外链（#224 后 `CompetitionSourceAction.vue` 在 App-Plus 提供「查看官方原文」进入来源直达页与复制，系统浏览器行为仍未实测）、开屏与原生图标在各密度的实际呈现、正式包名与受控测试域名。
+- 首轮真机：OPPO PKR110（Android 16）运行签名 APK 0.0.2，冷启动首页和公开比赛列表正常。0.0.3 静态开屏、签名覆盖流程、比赛详情/系统外链、最终权限及多机型仍需实测。
 - #83 新增 `APP-PLUS` 组件宿主断言时发现 `FormButton` 只有 `#ifdef H5` 与 `#ifdef MP-WEIXIN` 两个分支，App-Plus 下按钮整体不渲染（暂缓页主要操作在 Android 上不可见）。已把 H5 分支改为 `#ifndef MP-WEIXIN`，因为 H5 与 App-Plus 都是 webview 渲染、共用同一套键盘可达写法；微信分支不动。
 - 上述 `FormButton` 改动是 #83 门禁建设过程中发现的既有阻断缺陷，不是主动的视觉改版：**H5 端渲染结果与改动前完全相同，无 UI 视觉变更，H5 视口与交互验收仍归 #84**；Android（App-Plus）端从“按钮完全不渲染”变为渲染 `.hhr-button` 视图按钮，但该效果**未经真机验证**（本机无 Android 设备），当前仅有组件宿主替身中的节点与 `onClick` 断言。Android 真机上的 320/375/390/430px 布局、至少 44px 触控区域、各状态与长文本换行，以及硬件返回键与安全区，统一归 #226 真机矩阵验收，本任务不以编译通过或组件宿主测试替代真机证据。
 - 同类缺陷（#224 已部分减轻）：`FormInput`、`FormPicker` 的 H5 分支在 App-Plus 下不生效；#224 已把非 H5 模板改由 `#ifndef H5` 覆盖，因此这两类控件在 App-Plus 现在会渲染 uni 原生控件，但软键盘、安全区与真机布局仍未验证，归 #220/#226。`FormDialog` 在 App-Plus 只按当前窗口高度设尺寸基准，键盘高度监听已随小程序分支删除。
-- 开屏目前使用 DCloud 默认启动主题（`app-plus.splashscreen.autoclose`），只有 160×160 的产品 Logo（`src/static/hehuoda-logo.png`，4 倍密度的 40px 场景），**没有**按各密度准备的原生启动图与图标，不在本阶段伪造。
+- Android 启动器使用多密度产品 Logo。0.0.3 用与首页同色的静态 NinePatch 替换 DCloud 通用开屏的进度环，首页 WebView 就绪后关闭过渡。Android 12 及以上的系统开屏可短暂显示。
 
 ## 历史迁移记录（2026-10 已闭环 / ADR 0011 前之交付日志）
 

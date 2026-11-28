@@ -315,8 +315,8 @@ const template = () =>
 test("受跟踪模板不含小程序段，Android 应用名、包名、版本、SDK 与仅 INTERNET 权限保持", () => {
   const manifest = template();
   assert.equal(manifest.name, "禾伙搭");
-  assert.equal(manifest.versionName, "0.0.0");
-  assert.equal(manifest.versionCode, "1");
+  assert.equal(manifest.versionName, "0.0.3");
+  assert.equal(manifest.versionCode, "4");
   // DCloud 顶层 appid 是另一身份，不能被写成包名或伪造 AppID。
   assert.equal(manifest.appid, "");
   // 小程序目标已按 ADR 0011 退役：模板不再声明 mp-weixin 段。
