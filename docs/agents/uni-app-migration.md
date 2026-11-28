@@ -90,7 +90,7 @@
 
 ## Issue #219：Android 资源构建与首轮签名装机（现行，2026-11-28）
 
-已验证 App-Plus 资源构建、HBuilderX 云打包和首台 Android 真机的公开比赛首页。当前测试 APK 使用 `hehuoda.app` 和正式 HTTPS API。签名升级、最终 APK 权限收敛、系统浏览器外链和静态开屏新版仍待验收。
+已验证 App-Plus 资源构建、HBuilderX 云打包和首台 Android 真机的公开比赛首页。测试 APK 使用 `hehuoda.app` 和正式 HTTPS API。`0.0.3` 已通过签名与权限清单核验，维护者反馈安装验收无误。覆盖升级、比赛详情和系统浏览器外链仍待逐项记录。
 
 ### 入口与产物
 
@@ -122,7 +122,7 @@ pnpm --filter @hehuoda/uni dev:app
 ### 本阶段验证与剩余项
 
 - 已验证：`test:unit`（含 `platform-config.test.mjs`、`run-config.test.mjs`、`app-entry.test.mjs`、`app-platform.test.mjs`）、`typecheck`、`lint`、`check:toolchain`、`build:h5`、`build:app`，并回读 `dist/build/app/manifest.json` 与 `app-service.js` 确认包名、SDK、权限、API 基址与超时真正编入产物；缺配置或非法 `.env` 超时时 `build:app` 拒绝执行、命令非零且保留上一次构建的产物。`build:mp-weixin` 已在 #224 移除。
-- 首轮真机：OPPO PKR110（Android 16）运行签名 APK 0.0.2，冷启动首页和公开比赛列表正常。0.0.3 静态开屏、签名覆盖流程、比赛详情/系统外链、最终权限及多机型仍需实测。
+- 首轮真机：OPPO PKR110（Android 16）与 Redmi K30 5G（Android 12）运行签名 APK 0.0.2。0.0.3 已打包并由维护者安装验证，包内核对了静态开屏、来源兼容修复及八项权限移除。完整设备矩阵仍归 #226。
 - #83 新增 `APP-PLUS` 组件宿主断言时发现 `FormButton` 只有 `#ifdef H5` 与 `#ifdef MP-WEIXIN` 两个分支，App-Plus 下按钮整体不渲染（暂缓页主要操作在 Android 上不可见）。已把 H5 分支改为 `#ifndef MP-WEIXIN`，因为 H5 与 App-Plus 都是 webview 渲染、共用同一套键盘可达写法；微信分支不动。
 - 上述 `FormButton` 改动是 #83 门禁建设过程中发现的既有阻断缺陷，不是主动的视觉改版：**H5 端渲染结果与改动前完全相同，无 UI 视觉变更，H5 视口与交互验收仍归 #84**；Android（App-Plus）端从“按钮完全不渲染”变为渲染 `.hhr-button` 视图按钮，但该效果**未经真机验证**（本机无 Android 设备），当前仅有组件宿主替身中的节点与 `onClick` 断言。Android 真机上的 320/375/390/430px 布局、至少 44px 触控区域、各状态与长文本换行，以及硬件返回键与安全区，统一归 #226 真机矩阵验收，本任务不以编译通过或组件宿主测试替代真机证据。
 - 同类缺陷（#224 已部分减轻）：`FormInput`、`FormPicker` 的 H5 分支在 App-Plus 下不生效；#224 已把非 H5 模板改由 `#ifndef H5` 覆盖，因此这两类控件在 App-Plus 现在会渲染 uni 原生控件，但软键盘、安全区与真机布局仍未验证，归 #220/#226。`FormDialog` 在 App-Plus 只按当前窗口高度设尺寸基准，键盘高度监听已随小程序分支删除。
