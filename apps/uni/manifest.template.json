@@ -8,7 +8,7 @@
   "h5": { "router": { "mode": "hash" } },
   "app-plus": {
     "splashscreen": {
-      "alwaysShowBeforeRender": true,
+      "alwaysShowBeforeRender": false,
       "autoclose": true,
       "waiting": false,
       "androidStyle": "default"
