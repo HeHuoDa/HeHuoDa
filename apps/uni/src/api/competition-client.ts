@@ -47,7 +47,7 @@ function entry(v: unknown): v is CompetitionEntry {
     strings(s.scope.colleges) &&
     typeof s.scope.note === "string" &&
     typeof s.status === "string" &&
-    Object.hasOwn(statuses, s.status) &&
+    Object.prototype.hasOwnProperty.call(statuses, s.status) &&
     typeof s.conflict === "boolean" &&
     time(s.deadline) &&
     time(s.materialsAt)

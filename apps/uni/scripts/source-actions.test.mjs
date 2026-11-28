@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  parseSourceUrl,
-  resolvePublicSourceUrl,
-} from "../src/source/policy.ts";
+import { parseSourceUrl } from "../src/source/policy.ts";
+import { resolvePublicSourceUrl } from "../src/source/public-url.ts";
 import { createSourceActions } from "../src/source/actions.ts";
 
 test("来源仅接受明确的 HTTP(S) 地址，不修复危险或歧义输入", () => {
@@ -129,6 +127,29 @@ test("H5 复制只在地址合法时生效，拒绝地址既不写入也不提�
   for (const url of ["http://news.example.edu.cn/a", "https://a.test/b"])
     assert.equal((await h5.copy(url)).status, "invalid", url);
   assert.deepEqual(copied, ["https://events.other-university.org/race"]);
+});
+
+test("Android 逻辑层没有全局 URL 时仍接受公开 HTTPS 官方来源", () => {
+  const originalUrl = globalThis.URL;
+  try {
+    globalThis.URL = undefined;
+    const officialUrl =
+      "https://www.sicau.edu.cn:00443/info/123.htm?x=1#notice";
+    assert.equal(resolvePublicSourceUrl(officialUrl)?.url, officialUrl);
+    for (const url of [
+      "http://www.sicau.edu.cn/a",
+      "https://www.sicau.edu.cn:8443/a",
+      "https://www.sicau.edu.cn@192.168.0.1/a",
+      "https://192.168.0.1/a",
+      "https://printer.local/a",
+      "https://www.sicau.edu.cn%2e/a",
+      "javascript:alert(1)",
+    ]) {
+      assert.equal(resolvePublicSourceUrl(url), null, url);
+    }
+  } finally {
+    globalThis.URL = originalUrl;
+  }
 });
 
 test("切换 Notice 后迟到的复制结果不写回旧条目", async () => {

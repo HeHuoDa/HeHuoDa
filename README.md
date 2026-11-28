@@ -45,7 +45,7 @@
 
 | 工作区 / 层次               | 核心技术与声明版本                                                                                                                              | 职责与说明                                                                        |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `@hehuoda/uni`              | 普通 uni-app（DCloud `3.0.0-5020420260813003`）、Vue `3.5.42`（运行映射内嵌 `3.4.21`）、Pinia `3.0.4`、Tailwind CSS `4.3.3`、Vite `5.2.8`       | 用户端 H5 与 Android（APK）同源工程；`check:toolchain` 校验编译层与内嵌运行时宿主 |
+| `@hehuoda/uni`              | 普通 uni-app（DCloud `3.0.0-5020620260917001`）、Vue `3.5.42`（运行映射内嵌 `3.4.21`）、Pinia `3.0.4`、Tailwind CSS `4.3.3`、Vite `5.2.8`       | 用户端 H5 与 Android（APK）同源工程；`check:toolchain` 校验编译层与内嵌运行时宿主 |
 | `@hehuoda/admin`            | Vue `^3.5.42`、Vue Router `5.3.1`、Element Plus `^2.11.5`、Tailwind CSS `4.3.3`、`@lucide/vue` `1.51.0`、Vite `^8.3.0`                          | 独立桌面管理端（1024/1440px），#215 后以 `/admin/` 构建并并入 Web 镜像            |
 | `@hehuoda/api`              | NestJS `^12.0.1`、Fastify `5.12.5`、Drizzle ORM `0.45.3`、PostgreSQL `17`、Joi `18.2.9`、`class-validator` `0.15.1`、`@nestjs/swagger` `12.0.2` | 业务 API、管理员认证与事务审计、采集调度与审核、C `attachment-sandbox`（Linux）   |
 | `@hehuoda/api-types`        | `@nestjs/swagger` + `openapi-typescript` `7.13.0`、TypeScript `5.9.3`                                                                           | 从 `apps/api/openapi.json` 生成只含类型的接口契约（`schema.d.ts`）                |
@@ -113,7 +113,7 @@ pnpm dev:admin
 ```
 
 - 根目录 `pnpm dev` 仍同时启动 `@hehuoda/api` 与保留作历史对照的 `@hehuoda/web`（`http://localhost:5173`），不用于新端交付。
-- `apps/uni` 的构建入口只有 `dev:h5`/`build:h5` 与 `dev:app`/`build:app`（#224 已移除 `dev:mp-weixin`/`build:mp-weixin`）；Android 资源构建已由 `dev:app`/`build:app` 提供，签名 APK 与真机调试仍归 #219 后续。
+- `apps/uni` 提供 `dev:h5`/`build:h5` 与 `dev:app`/`build:app`。首轮 Android 签名 APK 和真机首页已验证。云打包流程、复测与剩余验收项见 [Android 资源构建与签名打包说明](docs/android-app-build.md)。
 
 ## 各端关键边界与规则
 
