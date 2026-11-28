@@ -328,6 +328,23 @@ test("受跟踪模板不含小程序段，Android 应用名、包名、版本、
   assert.deepEqual(android.permissions, [
     '<uses-permission android:name="android.permission.INTERNET"/>',
   ]);
+  assert.deepEqual(android.permissionPhoneState, { request: "none" });
+  assert.deepEqual(android.permissionExternalStorage, { request: "none" });
+  assert.deepEqual(
+    android.excludePermissions,
+    [
+      "READ_PHONE_STATE",
+      "READ_EXTERNAL_STORAGE",
+      "WRITE_EXTERNAL_STORAGE",
+      "READ_MEDIA_IMAGES",
+      "READ_MEDIA_VIDEO",
+      "READ_MEDIA_VISUAL_USER_SELECTED",
+      "INSTALL_PACKAGES",
+      "REQUEST_INSTALL_PACKAGES",
+    ].map(
+      (name) => `<uses-permission android:name="android.permission.${name}"/>`,
+    ),
+  );
   // 不声明签名、证书、密码或渠道，避免把未受控凭据写入模板。
   assert.equal(manifest["app-plus"].distribute.ios, undefined);
   assert.doesNotMatch(

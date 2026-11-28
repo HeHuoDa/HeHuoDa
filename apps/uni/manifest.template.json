@@ -35,8 +35,20 @@
         "packagename": "com.example.hehuoda",
         "minSdkVersion": 23,
         "targetSdkVersion": 34,
+        "permissionPhoneState": { "request": "none" },
+        "permissionExternalStorage": { "request": "none" },
         "permissions": [
           "<uses-permission android:name=\"android.permission.INTERNET\"/>"
+        ],
+        "excludePermissions": [
+          "<uses-permission android:name=\"android.permission.READ_PHONE_STATE\"/>",
+          "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.READ_MEDIA_IMAGES\"/>",
+          "<uses-permission android:name=\"android.permission.READ_MEDIA_VIDEO\"/>",
+          "<uses-permission android:name=\"android.permission.READ_MEDIA_VISUAL_USER_SELECTED\"/>",
+          "<uses-permission android:name=\"android.permission.INSTALL_PACKAGES\"/>",
+          "<uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\"/>"
         ]
       }
     }
