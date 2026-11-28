@@ -10,6 +10,7 @@
     "splashscreen": {
       "alwaysShowBeforeRender": true,
       "autoclose": true,
+      "waiting": false,
       "androidStyle": "default"
     },
     "distribute": {
