@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { colleges } from "@hehuoda/client-domain/colleges";
+import { parseFilters } from "@hehuoda/client-domain/competition-discovery";
+import { parseSourceUrl } from "../src/source/policy.ts";
 import {
   createDiscoveryController,
   initialDiscoveryState,
@@ -54,6 +56,25 @@ function setup() {
   return { state, dirs, lists, controller };
 }
 const flush = () => new Promise((r) => setImmediate(r));
+
+test("Android 旧版 V8 可初始化首页并读取官方链接", () => {
+  const hasOwn = Object.hasOwn;
+  const at = Array.prototype.at;
+  try {
+    Object.hasOwn = undefined;
+    Array.prototype.at = undefined;
+    assert.equal(initialDiscoveryState().filters.hosts, "all");
+    assert.deepEqual(parseFilters({ hosts: "" }).hosts, []);
+    assert.equal(parseFilters({ status: "constructor" }).status, "");
+    assert.equal(
+      parseSourceUrl("https://hehuoda.xyz/")?.hostname,
+      "hehuoda.xyz",
+    );
+  } finally {
+    Object.hasOwn = hasOwn;
+    Array.prototype.at = at;
+  }
+});
 
 test("目录核对后才查询，筛选请求取消与迟到响应隔离，目录在页面内复用", async () => {
   const { state, dirs, lists, controller } = setup();

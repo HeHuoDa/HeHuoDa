@@ -34,7 +34,7 @@ export function parseFilters(query: Query): Filters {
   const page = Number(first(query.page));
   // 缺少 hosts 表示默认全选；显式空值表示未选中任何学院。
   return {
-    hosts: !Object.hasOwn(query, "hosts")
+    hosts: !Object.prototype.hasOwnProperty.call(query, "hosts")
       ? "all"
       : ids.length
         ? ids
@@ -42,7 +42,7 @@ export function parseFilters(query: Query): Filters {
           ? "all"
           : [],
     q: first(query.q).trim().slice(0, 100),
-    status: Object.hasOwn(statuses, first(query.status))
+    status: Object.prototype.hasOwnProperty.call(statuses, first(query.status))
       ? (first(query.status) as Status)
       : "",
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,

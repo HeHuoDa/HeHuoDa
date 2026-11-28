@@ -32,7 +32,7 @@ export function parseSourceUrl(value: unknown): SourceUrl | null {
   if (
     hostname.length > 253 ||
     labels.length < 2 ||
-    !/^[a-z][a-z\d-]*$/i.test(labels.at(-1)!) ||
+    !/^[a-z][a-z\d-]*$/i.test(labels[labels.length - 1]) ||
     labels.some((label) => !/^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label))
   )
     return null;
