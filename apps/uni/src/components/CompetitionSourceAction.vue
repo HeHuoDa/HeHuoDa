@@ -7,7 +7,7 @@ import {
   type SourcePorts,
   type SourceResult,
 } from "../source/actions";
-import { resolvePublicSourceUrl } from "../source/policy";
+import { resolvePublicSourceUrl } from "../source/public-url";
 // #ifdef H5
 import SourceLink from "./SourceLink.h5.vue";
 import { writeH5Clipboard } from "../source/clipboard-h5";

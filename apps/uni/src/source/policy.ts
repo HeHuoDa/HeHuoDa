@@ -51,6 +51,3 @@ export function parseSourceUrl(value: unknown): SourceUrl | null {
     suffix: match[3] || "",
   };
 }
-
-/** H5 公开外链规则见 `./public-url.ts`；它与管理端手工录入通道共用同一份判定。 */
-export { resolvePublicSourceUrl } from "./public-url.ts";

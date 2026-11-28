@@ -1,4 +1,4 @@
-import type { SourceUrl } from "./policy.ts";
+import { parseSourceUrl, type SourceUrl } from "./policy.ts";
 
 /**
  * H5 公开外链规则（ADR 0011 第 2 节），与 `apps/api/src/competitions/source-url.ts`
@@ -83,6 +83,23 @@ function dnsHostOk(hostname: string): boolean {
 /** 返回可用于打开与复制的地址；不合法时返回 null，页面不给可点击或一键复制入口。 */
 export function resolvePublicSourceUrl(value: unknown): SourceUrl | null {
   if (typeof value !== "string") return null;
+  // App-Plus 的独立 JS 逻辑层可能没有浏览器的 URL 构造器。
+  if (typeof URL !== "function") {
+    if (value.length > 2000) return null;
+    const source = parseSourceUrl(value);
+    if (
+      !source ||
+      source.protocol !== "https" ||
+      (source.port && Number(source.port) !== 443) ||
+      !dnsHostOk(source.hostname)
+    )
+      return null;
+    return {
+      ...source,
+      port: "",
+      suffix: source.suffix === "/" ? "" : source.suffix,
+    };
+  }
   const url = parseHttps(value);
   if (!url || !dnsHostOk(url.hostname)) return null;
   const path = `${url.pathname}${url.search}${url.hash}`;
